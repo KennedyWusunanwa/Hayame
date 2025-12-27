@@ -11,8 +11,9 @@ const SheetContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
     side?: "left" | "right";
+    description?: string;
   }
->(({ className, side = "right", children, ...props }, ref) => (
+>(({ className, side = "right", description = "Menu", children, ...props }, ref) => (
   <DialogPrimitive.Portal>
     <DialogPrimitive.Overlay className="fixed inset-0 z-40 bg-black/30" />
     <DialogPrimitive.Content
@@ -24,6 +25,9 @@ const SheetContent = React.forwardRef<
       )}
       {...props}
     >
+      <DialogPrimitive.Description className="sr-only">
+        {description}
+      </DialogPrimitive.Description>
       {children}
     </DialogPrimitive.Content>
   </DialogPrimitive.Portal>
