@@ -1,0 +1,45 @@
+import { NextResponse } from "next/server";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { reviewSchema } from "@/lib/validators";
+
+export async function POST(req: Request) {
+  try {
+    const supabase = await createSupabaseServerClient();
+    const supa = supabase as any;
+    const body = await req.json();
+    const parsed = reviewSchema.parse(body);
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+
+    const { data: booking, error: bookingError } = await supa
+      .from("bookings")
+      .select("renter_id,status,car_id")
+      .eq("id", parsed.bookingId)
+      .single();
+    if (bookingError || !booking) throw bookingError ?? new Error("Booking not found");
+
+    if (booking.renter_id !== user.id || booking.status !== "completed") {
+      return NextResponse.json({ message: "You can only review completed trips" }, { status: 403 });
+    }
+
+    const { data, error } = await supa
+      .from("reviews")
+      .insert({
+        booking_id: parsed.bookingId,
+        car_id: booking.car_id,
+        user_id: user.id,
+        rating: parsed.rating,
+        comment: parsed.comment,
+      })
+      .select()
+      .single();
+    if (error) throw error;
+
+    return NextResponse.json({ data });
+  } catch (error: any) {
+    return NextResponse.json({ message: error.message ?? "Failed to submit review" }, { status: 400 });
+  }
+}

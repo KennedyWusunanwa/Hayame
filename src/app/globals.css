@@ -1,0 +1,56 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #fafafa;
+  --foreground: #0b1220;
+  --muted: #f4f4f5;
+  --border: #e6e9ef;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-feature-settings: "rlig" 1, "calt" 1;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", Inter, Roboto,
+    Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  letter-spacing: -0.01em;
+  color: #0b1220;
+}
+
+p {
+  color: #42526e;
+}
+
+a {
+  color: #0e86d4;
+  transition: color 150ms ease, opacity 150ms ease;
+}
+
+a:hover {
+  color: #0a6aa9;
+}
+
+.gradient-hero {
+  background: radial-gradient(circle at 20% 20%, rgba(14, 134, 212, 0.08), transparent 28%),
+    radial-gradient(circle at 80% 10%, rgba(14, 118, 110, 0.08), transparent 24%),
+    radial-gradient(circle at 10% 80%, rgba(252, 211, 77, 0.1), transparent 24%),
+    linear-gradient(180deg, #f8fbff 0%, #ffffff 50%, #f6f7fb 100%);
+}
+
+.card-hover {
+  transition: all 180ms ease;
+}
+
+.card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.08);
+}
