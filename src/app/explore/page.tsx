@@ -19,8 +19,9 @@ function ExploreContent() {
     maxPrice: undefined,
     features: [],
   });
-  const [cars, setCars] = useState<MockCar[]>(mockCars);
+  const [cars, setCars] = useState<MockCar[]>([]);
   const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const q = searchParams.get("q") || "";
@@ -45,6 +46,7 @@ function ExploreContent() {
   }, []);
 
   useEffect(() => {
+    setLoading(true);
     fetch("/api/cars")
       .then((res) => res.json())
       .then((res) => {
@@ -73,9 +75,14 @@ function ExploreContent() {
               "https://images.unsplash.com/photo-1503736334956-4c8f8e92946d?auto=format&fit=crop&w=1200&q=80",
           }));
           setCars(mapped);
+        } else {
+          setCars([]);
         }
       })
-      .catch(() => {});
+      .catch(() => {
+        setCars([]);
+      })
+      .finally(() => setLoading(false));
   }, []);
 
   const toggleFavorite = (carId: string, nextValue: boolean) => {
@@ -130,24 +137,34 @@ function ExploreContent() {
             <MapPanel markers={markers} className="h-full" />
           </div>
           <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            {filtered.map((car) => (
-              <CarCard
-                key={car.id}
-                car={{
-                  id: car.id,
-                  title: car.name,
-                  city: car.city,
-                  region: car.region,
-                  daily_price: car.daily_price,
-                  rating: car.rating,
-                  car_type: car.car_type,
-                  description: car.description,
-                  image_url: car.image,
-                }}
-                isFavorite={favoriteIds.includes(car.id)}
-                onToggleFavorite={toggleFavorite}
-              />
-            ))}
+            {loading ? (
+              <div className="col-span-full rounded-2xl border border-border bg-white p-6 text-center text-sm text-gray-600">
+                Loading cars...
+              </div>
+            ) : filtered.length === 0 ? (
+              <div className="col-span-full rounded-2xl border border-border bg-white p-6 text-center text-sm text-gray-600">
+                No cars found. Try adjusting your filters.
+              </div>
+            ) : (
+              filtered.map((car) => (
+                <CarCard
+                  key={car.id}
+                  car={{
+                    id: car.id,
+                    title: car.name,
+                    city: car.city,
+                    region: car.region,
+                    daily_price: car.daily_price,
+                    rating: car.rating,
+                    car_type: car.car_type,
+                    description: car.description,
+                    image_url: car.image,
+                  }}
+                  isFavorite={favoriteIds.includes(car.id)}
+                  onToggleFavorite={toggleFavorite}
+                />
+              ))
+            )}
           </div>
         </div>
       </div>
