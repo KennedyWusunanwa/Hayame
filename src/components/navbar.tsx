@@ -96,6 +96,9 @@ export function Navbar() {
               <div className="rounded-full bg-gray-100 px-3 py-1 text-sm font-semibold text-gray-800">
                 {userName}
               </div>
+              <Button asChild variant="outline" className="border-brand text-brand">
+                <Link href="/dashboard">Dashboard</Link>
+              </Button>
               <Button
                 asChild
                 className="bg-brand text-white hover:bg-white hover:text-brand hover:border-brand rounded-full px-5"
@@ -158,6 +161,15 @@ export function Navbar() {
                     <div className="rounded-full bg-gray-100 px-3 py-2 text-sm font-semibold text-gray-800">
                       {userName}
                     </div>
+                    <SheetClose asChild>
+                      <Button
+                        asChild
+                        variant="outline"
+                        className="w-full border-brand text-brand hover:bg-brand hover:text-white"
+                      >
+                        <Link href="/dashboard">Dashboard</Link>
+                      </Button>
+                    </SheetClose>
                     <SheetClose asChild>
                       <Button
                         asChild
