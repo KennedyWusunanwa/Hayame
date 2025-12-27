@@ -74,3 +74,4 @@ Turo-style peer-to-peer car rental marketplace for Ghana. Built with Next.js (Ap
 - `npm run lint` – ESLint/Next rules
 - `npm run typecheck` – TypeScript
 - `npm run build` – production build check
+# Hayame
