@@ -22,10 +22,20 @@ export async function FeaturedCars() {
     image_url: car.image,
     host_name: car.host.name,
     host_avatar: car.host.avatar,
+    isFavorite: false,
   }));
 
   try {
     const supabase = await createSupabaseServerClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    const favoriteIds = new Set<string>();
+    if (user) {
+      const { data: favorites } = await supabase.from("favorites").select("car_id").eq("user_id", user.id);
+      favorites?.forEach((fav: { car_id: string }) => favoriteIds.add(fav.car_id));
+    }
+
     const { data } = await supabase
       .from("cars")
       .select(
@@ -46,6 +56,7 @@ export async function FeaturedCars() {
         image_url: car.car_photos?.[0]?.url ?? "/car-placeholder.jpg",
         host_name: car.owner?.full_name ?? "Host",
         host_avatar: car.owner?.avatar_url ?? "/car-placeholder.jpg",
+        isFavorite: favoriteIds.has(car.id),
       }));
     }
   } catch {
@@ -62,7 +73,24 @@ export async function FeaturedCars() {
       </div>
       <div className="mt-8 grid gap-6 md:grid-cols-2 lg:grid-cols-4">
         {featured.map((car) => (
-          <CarCard key={car.id} car={car} />
+          <CarCard
+            key={car.id}
+            car={{
+              id: car.id,
+              title: car.title,
+              city: car.city,
+              region: car.region,
+              daily_price: car.daily_price,
+              rating: car.rating,
+              reviews: car.reviews,
+              car_type: car.car_type,
+              description: car.description,
+              image_url: car.image_url,
+              host_name: car.host_name,
+              host_avatar: car.host_avatar,
+            }}
+            isFavorite={car.isFavorite}
+          />
         ))}
       </div>
     </section>
