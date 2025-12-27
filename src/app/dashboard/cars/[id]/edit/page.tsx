@@ -63,7 +63,7 @@ export default async function EditCarPage({ params }: PageProps) {
           <CardTitle>Photos</CardTitle>
         </CardHeader>
         <CardContent>
-          <PhotoUploader carId={car.id} />
+          <PhotoUploader carId={typedCar.id} />
         </CardContent>
       </Card>
       <Card>
@@ -71,7 +71,7 @@ export default async function EditCarPage({ params }: PageProps) {
           <CardTitle>Availability</CardTitle>
         </CardHeader>
         <CardContent>
-          <AvailabilityForm carId={car.id} />
+          <AvailabilityForm carId={typedCar.id} />
         </CardContent>
       </Card>
     </div>
