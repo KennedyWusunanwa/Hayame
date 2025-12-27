@@ -3,6 +3,7 @@ import Link from "next/link";
 import { format } from "date-fns";
 import { MapPin, Shield, Star } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { headers } from "next/headers";
 import { BookingWidget } from "@/components/booking-widget";
 import { FavoriteButton } from "@/components/favorite-button";
 import { ImageGallery } from "@/components/image-gallery";
@@ -347,6 +348,42 @@ async function loadCar(id: string): Promise<LoadedCar> {
       }
     } catch {
       // fall back to mock below
+    }
+  }
+
+  // Final fallback: hit our own API route (same runtime/env as working API)
+  if (!car) {
+    try {
+      const host = (await headers()).get("host");
+      const protocol = host?.includes("localhost") ? "http" : "https";
+      const baseUrl = host ? `${protocol}://${host}` : "";
+      const res = await fetch(`${baseUrl}/api/cars/${id}`, { cache: "no-store" });
+      if (res.ok) {
+        const { data } = (await res.json()) as { data?: SupabaseCar };
+        if (data) {
+          car = {
+            id: data.id,
+            title: data.title,
+            description: data.description,
+            daily_price: Number(data.daily_price ?? 0),
+            city: data.city,
+            region: data.region,
+            car_type: data.car_type,
+            seats: data.seats,
+            transmission: data.transmission,
+            fuel: data.fuel,
+            features: data.features,
+            is_available: data.is_available,
+            photos: data.car_photos ?? [],
+            owner: null,
+            rating: 4.8,
+            reviews: 0,
+            created_at: data.created_at,
+          };
+        }
+      }
+    } catch {
+      // ignore
     }
   }
 
