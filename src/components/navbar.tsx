@@ -28,6 +28,7 @@ export function Navbar() {
   const pathname = usePathname();
   const isActive = (href: string) => (pathname || "/").replace(/\/$/, "") === href.replace(/\/$/, "");
   const [userName, setUserName] = useState<string | null>(null);
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   useEffect(() => {
     const supabase = createSupabaseBrowserClient();
@@ -125,13 +126,16 @@ export function Navbar() {
           )}
         </div>
         <div className="md:hidden">
-          <Sheet>
+          <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
             <SheetTrigger asChild>
-              <Button variant="ghost" size="icon">
-                <Menu className="h-5 w-5" />
+              <Button variant="ghost" size="icon" className="text-gray-900">
+                <Menu className="h-6 w-6" />
               </Button>
             </SheetTrigger>
-            <SheetContent side="right">
+            <SheetContent
+              side="right"
+              className="w-full max-w-xs bg-white text-gray-900"
+            >
               <SheetHeader>
                 <SheetTitle>Menu</SheetTitle>
               </SheetHeader>
@@ -140,6 +144,7 @@ export function Navbar() {
                   <SheetClose asChild key={link.href}>
                     <Link
                       href={link.href}
+                      onClick={() => setMobileOpen(false)}
                       className={`rounded-md px-2 py-2 transition-colors hover:text-brand ${
                         isActive(link.href) ? "text-brand" : "text-gray-800"
                       }`}
