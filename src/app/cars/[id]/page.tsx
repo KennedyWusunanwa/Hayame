@@ -229,15 +229,24 @@ async function loadCar(id: string): Promise<LoadedCar> {
       data: { user },
     } = await supabase.auth.getUser();
 
-    const { data: carData } = await supabase
+    const { data: carData, error: carError } = await supabase
       .from("cars")
       .select(
         "*, car_photos(url), owner:profiles!cars_owner_id_fkey(id, full_name, avatar_url, city)",
       )
       .eq("id", id)
-      .single();
+      .maybeSingle();
 
-    const supabaseCar = carData as SupabaseCar | null;
+    let supabaseCar = carData as SupabaseCar | null;
+
+    if (!supabaseCar || carError) {
+      const { data: fallbackCar } = await supabase
+        .from("cars")
+        .select("*, car_photos(url)")
+        .eq("id", id)
+        .maybeSingle();
+      supabaseCar = fallbackCar as SupabaseCar | null;
+    }
 
     if (supabaseCar) {
       car = {
