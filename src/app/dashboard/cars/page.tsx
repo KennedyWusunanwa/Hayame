@@ -6,38 +6,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { CarActions } from "@/components/dashboard/car-actions";
-import { mockCars } from "@/lib/mock-data";
+import { loadOwnerCarsWithFavorites } from "@/lib/owner-cars";
 import { formatCurrency } from "@/lib/utils";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export default async function DashboardCarsPage() {
-  let cars = mockCars.map((car) => ({
-    id: car.id,
-    title: car.name,
-    city: car.city,
-    region: car.region,
-    car_type: car.car_type,
-    daily_price: car.daily_price,
-    is_available: true,
-  }));
-
-  try {
-    const supabase = await createSupabaseServerClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (user) {
-      const { data } = await supabase
-        .from("cars")
-        .select("id,title,city,region,car_type,daily_price,is_available")
-        .eq("owner_id", user.id);
-      if (data) {
-        cars = data as any;
-      }
-    }
-  } catch (error) {
-    // fall back to mock data if Supabase is not configured
-  }
+  const { cars, favoriteCounts } = await loadOwnerCarsWithFavorites();
 
   return (
     <div className="space-y-6">
@@ -63,6 +36,7 @@ export default async function DashboardCarsPage() {
               <TableRow>
                 <TableHead>Title</TableHead>
                 <TableHead>Location</TableHead>
+                <TableHead>Favorites</TableHead>
                 <TableHead>Type</TableHead>
                 <TableHead>Price</TableHead>
                 <TableHead>Status</TableHead>
@@ -76,6 +50,7 @@ export default async function DashboardCarsPage() {
                   <TableCell>
                     {car.city}, {car.region}
                   </TableCell>
+                  <TableCell className="font-semibold">{favoriteCounts[car.id] ?? 0}</TableCell>
                   <TableCell>{car.car_type}</TableCell>
                   <TableCell>{formatCurrency(car.daily_price)}</TableCell>
                   <TableCell>

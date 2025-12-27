@@ -78,19 +78,10 @@ function ExploreContent() {
       .catch(() => {});
   }, []);
 
-  const toggleFavorite = async (carId: string, nextValue: boolean) => {
-    const prev = favoriteIds;
-    const next = nextValue ? Array.from(new Set([...prev, carId])) : prev.filter((id) => id !== carId);
-    setFavoriteIds(next);
-    const res = await fetch("/api/favorites", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ carId, isFavorite: nextValue }),
-    });
-    if (!res.ok) {
-      setFavoriteIds(prev);
-      alert("Sign in to save favorites.");
-    }
+  const toggleFavorite = (carId: string, nextValue: boolean) => {
+    setFavoriteIds((prev) =>
+      nextValue ? Array.from(new Set([...prev, carId])) : prev.filter((id) => id !== carId),
+    );
   };
 
   const filtered = useMemo(() => {

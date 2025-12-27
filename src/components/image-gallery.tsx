@@ -21,7 +21,7 @@ export function ImageGallery({ images }: Props) {
           sizes="(max-width:768px) 100vw, 640px"
         />
       </div>
-      <div className="grid grid-cols-4 gap-2">
+      <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-5">
         {images.map((img, idx) => (
           <button
             key={img}

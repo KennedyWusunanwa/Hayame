@@ -2,40 +2,22 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { Heart, MapPin, Star } from "lucide-react";
-import { useEffect, useState } from "react";
+import { MapPin, Star } from "lucide-react";
+import { FavoriteButton } from "@/components/favorite-button";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { formatCurrency, cn } from "@/lib/utils";
+import { formatCurrency } from "@/lib/utils";
 import type { Car } from "@/lib/types";
 
 type Props = {
   car: Car;
   isFavorite?: boolean;
-  onToggleFavorite?: (carId: string, nextValue: boolean) => Promise<void>;
+  onToggleFavorite?: (carId: string, nextValue: boolean) => void | Promise<void>;
 };
 
 export function CarCard({ car, isFavorite = false, onToggleFavorite }: Props) {
-  const [favorite, setFavorite] = useState(isFavorite);
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    setFavorite(isFavorite);
-  }, [isFavorite]);
-
-  const handleFavorite = async () => {
-    if (!onToggleFavorite) return;
-    try {
-      setLoading(true);
-      const next = !favorite;
-      setFavorite(next);
-      await onToggleFavorite(car.id, next);
-    } catch (error) {
-      setFavorite(favorite);
-      console.error(error);
-    } finally {
-      setLoading(false);
-    }
+  const handleFavorite = (next: boolean) => {
+    onToggleFavorite?.(car.id, next);
   };
 
   return (
@@ -48,28 +30,20 @@ export function CarCard({ car, isFavorite = false, onToggleFavorite }: Props) {
           className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105"
           sizes="(max-width:768px) 100vw, 400px"
         />
-        <button
-          onClick={handleFavorite}
-          disabled={loading || !onToggleFavorite}
-          className={cn(
-            "absolute right-3 top-3 flex h-10 w-10 items-center justify-center rounded-full bg-white/95 text-gray-700 shadow-sm transition hover:text-brand",
-            favorite && "text-brand",
-          )}
-        >
-          <Heart
-            className={cn(
-              "h-5 w-5",
-              favorite ? "fill-brand text-brand" : "text-gray-700",
-            )}
-          />
-        </button>
+        <FavoriteButton
+          carId={car.id}
+          initialIsFavorited={isFavorite}
+          onToggle={handleFavorite}
+          size="sm"
+          className="absolute right-3 top-3 bg-white/95"
+        />
         {car.car_type ? (
           <Badge variant="muted" className="absolute left-3 top-3">
             {car.car_type}
           </Badge>
         ) : null}
       </div>
-        <div className="flex flex-1 flex-col gap-2 p-4">
+      <div className="flex flex-1 flex-col gap-2 p-4">
         <div className="flex items-start justify-between gap-2">
           <div>
             <h3 className="text-lg font-semibold text-foreground">{car.title}</h3>

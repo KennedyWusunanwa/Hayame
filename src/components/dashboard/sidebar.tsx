@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Car, ChartBar, Home, Star, WalletCards } from "lucide-react";
+import { Car, ChartBar, Heart, Home, Star, WalletCards } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const links = [
   { href: "/dashboard", label: "Overview", icon: Home },
   { href: "/dashboard/cars", label: "My Cars", icon: Car },
   { href: "/dashboard/bookings", label: "Bookings", icon: WalletCards },
+  { href: "/dashboard/favorites", label: "Favorites", icon: Heart },
   { href: "/dashboard/earnings", label: "Earnings", icon: ChartBar },
   { href: "/dashboard/reviews", label: "Reviews", icon: Star },
 ];

@@ -12,7 +12,8 @@ All tables are protected with row-level security. Service role key is **only** u
   - Public read.
   - Insert/Update/Delete: owner of the related car (`exists(select 1 from cars where cars.id = car_photos.car_id and cars.owner_id = auth.uid())`).
 - **favorites**
-  - Read/Insert/Delete: `user_id = auth.uid()`.
+  - Select: `user_id = auth.uid() OR owner of the related car`.
+  - Insert/Delete: `user_id = auth.uid()`.
 - **bookings**
   - Select: renter or car owner (`renter_id = auth.uid() OR owner_of_car`).
   - Insert: `renter_id = auth.uid()`.
