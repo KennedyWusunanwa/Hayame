@@ -13,6 +13,7 @@ export function HeroSearchBar() {
   const [location, setLocation] = useState("");
   const [startDate, setStartDate] = useState("");
   const [carType, setCarType] = useState("");
+  const [dateInputType, setDateInputType] = useState<"text" | "date">("text");
 
   const onSearch = () => {
     const params = new URLSearchParams();
@@ -38,9 +39,14 @@ export function HeroSearchBar() {
           <div className="flex items-center gap-2 rounded-full bg-white/10 px-4 py-3">
             <Calendar className="h-5 w-5 text-brand" />
             <Input
-              type="date"
+              type={dateInputType}
+              placeholder="Dates"
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
+              onFocus={() => setDateInputType("date")}
+              onBlur={() => {
+                if (!startDate) setDateInputType("text");
+              }}
               className="h-10 border-0 bg-transparent text-white placeholder:text-white/70 focus-visible:ring-0"
             />
           </div>
