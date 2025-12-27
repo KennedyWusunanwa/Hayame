@@ -23,11 +23,11 @@ export default async function EditCarPage({ params }: PageProps) {
     .from("cars")
     .select("*")
     .eq("id", params.id)
-    .eq("owner_id", user.id)
     .single();
 
   if (error || !car) return notFound();
   const typedCar = car as CarRow;
+  if (typedCar.owner_id !== user.id) return notFound();
 
   return (
     <div className="space-y-6">
