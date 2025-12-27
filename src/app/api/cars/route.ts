@@ -30,6 +30,17 @@ export async function POST(req: Request) {
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
     }
 
+    // Ensure the profile exists for this user to satisfy FK on cars.owner_id
+    await supa
+      .from("profiles")
+      .upsert({
+        id: user.id,
+        full_name: (user.user_metadata as any)?.full_name ?? user.email,
+      })
+      .select("id")
+      .single()
+      .catch(() => null);
+
     const { data, error } = await supa
       .from("cars")
       .insert({ ...parsed, owner_id: user.id })
