@@ -154,33 +154,21 @@ export function Navbar() {
                   </SheetClose>
                 ))}
                 {userName ? (
-                  <div className="rounded-full bg-gray-100 px-3 py-2 text-sm font-semibold text-gray-800">
-                    {userName}
-                  </div>
-                ) : null}
-                {!userName ? (
-                  <>
+                  <div className="flex flex-col gap-2">
+                    <div className="rounded-full bg-gray-100 px-3 py-2 text-sm font-semibold text-gray-800">
+                      {userName}
+                    </div>
                     <SheetClose asChild>
-                      <Link href="/auth/login" className="rounded-md px-2 py-2 text-gray-800 hover:text-brand">
-                        Log in
-                      </Link>
-                    </SheetClose>
-                    <SheetClose asChild>
-                      <Button asChild className="bg-brand text-white hover:bg-[#0c78bb] w-full">
-                        <Link href="/auth/signup">Sign up</Link>
-                      </Button>
-                    </SheetClose>
-                  </>
-                ) : (
-                  <>
-                    <SheetClose asChild>
-                      <Button asChild variant="outline" className="border-brand text-brand w-full">
+                      <Button
+                        asChild
+                        className="w-full bg-brand text-white hover:bg-white hover:text-brand hover:border-brand"
+                      >
                         <Link href="/dashboard/cars/new">List your car</Link>
                       </Button>
                     </SheetClose>
                     <SheetClose asChild>
                       <Button
-                        className="w-full border-brand text-brand"
+                        className="w-full border-brand text-brand hover:bg-brand hover:text-white"
                         variant="outline"
                         onClick={async () => {
                           const supabase = createSupabaseBrowserClient();
@@ -191,7 +179,27 @@ export function Navbar() {
                         Sign out
                       </Button>
                     </SheetClose>
-                  </>
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-2">
+                    <SheetClose asChild>
+                      <Button
+                        asChild
+                        variant="outline"
+                        className="w-full border-brand text-brand hover:bg-brand hover:text-white"
+                      >
+                        <Link href="/auth/login">Log in</Link>
+                      </Button>
+                    </SheetClose>
+                    <SheetClose asChild>
+                      <Button
+                        asChild
+                        className="w-full bg-brand text-white hover:bg-white hover:text-brand hover:border-brand"
+                      >
+                        <Link href="/auth/signup">Sign up</Link>
+                      </Button>
+                    </SheetClose>
+                  </div>
                 )}
               </div>
             </SheetContent>
