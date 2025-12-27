@@ -1,7 +1,5 @@
 "use client";
 
-"use client";
-
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Search } from "lucide-react";
@@ -65,8 +63,14 @@ function ExploreContent() {
             fuel: car.fuel ?? "Petrol",
             features: car.features ?? [],
             description: car.description ?? "",
-            host: { name: "Host", avatar: "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=300&q=80" },
-            image: car.car_photos?.[0]?.url ?? "https://images.unsplash.com/photo-1503736334956-4c8f8e92946d?auto=format&fit=crop&w=1200&q=80",
+            host: {
+              name: "Host",
+              avatar:
+                "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=300&q=80",
+            },
+            image:
+              car.car_photos?.[0]?.url ??
+              "https://images.unsplash.com/photo-1503736334956-4c8f8e92946d?auto=format&fit=crop&w=1200&q=80",
           }));
           setCars(mapped);
         }
@@ -76,9 +80,7 @@ function ExploreContent() {
 
   const toggleFavorite = async (carId: string, nextValue: boolean) => {
     const prev = favoriteIds;
-    const next = nextValue
-      ? Array.from(new Set([...prev, carId]))
-      : prev.filter((id) => id !== carId);
+    const next = nextValue ? Array.from(new Set([...prev, carId])) : prev.filter((id) => id !== carId);
     setFavoriteIds(next);
     const res = await fetch("/api/favorites", {
       method: "POST",
@@ -109,16 +111,16 @@ function ExploreContent() {
           : filters.features.every((f) => car.features.includes(f));
       return matchesQuery && matchesLocation && matchesType && matchesMin && matchesMax && matchesFeatures;
     });
-  }, [filters]);
+  }, [filters, cars]);
 
   const markers = filtered.map((car) => ({
     id: car.id,
-    label: `${car.city} · ${car.name}`,
+    label: `${car.city} • ${car.name}`,
     price: `₵${car.daily_price}`,
   }));
 
   return (
-    <div className="mx-auto max-w-6xl px-6 py-12">
+    <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
       <div className="mb-8 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <p className="text-sm font-semibold text-brand">Explore</p>
@@ -130,13 +132,13 @@ function ExploreContent() {
           New search
         </Button>
       </div>
-      <div className="grid gap-6 lg:grid-cols-[280px,1fr]">
+      <div className="grid gap-6 lg:grid-cols-[320px,1fr]">
         <FiltersSidebar filters={filters} onChange={setFilters} />
-        <div className="grid gap-4">
-          <div className="h-72 w-full rounded-2xl border border-border bg-white shadow-soft">
+        <div className="grid gap-5">
+          <div className="h-64 w-full overflow-hidden rounded-2xl border border-border bg-white shadow-soft sm:h-72">
             <MapPanel markers={markers} className="h-full" />
           </div>
-          <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {filtered.map((car) => (
               <CarCard
                 key={car.id}
@@ -164,7 +166,7 @@ function ExploreContent() {
 
 export default function ExplorePage() {
   return (
-    <Suspense fallback={<div className="px-6 py-10">Loading...</div>}>
+    <Suspense fallback={<div className="px-4 py-10 sm:px-6 lg:px-8">Loading...</div>}>
       <ExploreContent />
     </Suspense>
   );
