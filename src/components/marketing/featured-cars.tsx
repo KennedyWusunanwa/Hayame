@@ -1,8 +1,15 @@
 import { CarCard } from "@/components/car-card";
+import type { Database } from "@/lib/database.types";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { mockCars } from "@/lib/mock-data";
 
-export function FeaturedCars() {
-  const featured = mockCars.slice(0, 4).map((car) => ({
+type FeaturedRow = Database["public"]["Tables"]["cars"]["Row"] & {
+  car_photos?: { url: string }[];
+  owner?: { full_name: string | null; avatar_url: string | null } | null;
+};
+
+export async function FeaturedCars() {
+  let featured = mockCars.slice(0, 4).map((car) => ({
     id: car.id,
     title: car.name,
     city: car.city,
@@ -16,6 +23,34 @@ export function FeaturedCars() {
     host_name: car.host.name,
     host_avatar: car.host.avatar,
   }));
+
+  try {
+    const supabase = await createSupabaseServerClient();
+    const { data } = await supabase
+      .from("cars")
+      .select(
+        "id,title,city,region,daily_price,car_type,description,car_photos(url), owner:profiles!cars_owner_id_fkey(full_name,avatar_url)",
+      )
+      .limit(4);
+    if (data && data.length > 0) {
+      featured = (data as FeaturedRow[]).map((car) => ({
+        id: car.id,
+        title: car.title,
+        city: car.city ?? "",
+        region: car.region ?? "",
+        daily_price: Number(car.daily_price ?? 0),
+        rating: 4.8,
+        reviews: 0,
+        car_type: car.car_type ?? "",
+        description: car.description ?? "",
+        image_url: car.car_photos?.[0]?.url ?? "/car-placeholder.jpg",
+        host_name: car.owner?.full_name ?? "Host",
+        host_avatar: car.owner?.avatar_url ?? "/car-placeholder.jpg",
+      }));
+    }
+  } catch {
+    // fall back to mock data
+  }
 
   return (
     <section className="mx-auto max-w-6xl px-6 py-14">
