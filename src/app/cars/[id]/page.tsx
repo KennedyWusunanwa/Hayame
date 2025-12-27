@@ -226,73 +226,8 @@ async function loadCar(id: string): Promise<LoadedCar> {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  try {
-    const supabase = await createSupabaseServerClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    const { data: carData, error: carError } = await supabase
-      .from("cars")
-      .select(
-        "*, car_photos(url), owner:profiles!cars_owner_id_fkey(id, full_name, avatar_url, city)",
-      )
-      .eq("id", id)
-      .maybeSingle();
-
-    let supabaseCar = carData as SupabaseCar | null;
-
-    if (!supabaseCar || carError) {
-      const { data: fallbackCar } = await supabase
-        .from("cars")
-        .select("*, car_photos(url)")
-        .eq("id", id)
-        .maybeSingle();
-      supabaseCar = fallbackCar as SupabaseCar | null;
-    }
-
-    if (supabaseCar) {
-      car = {
-        id: supabaseCar.id,
-        title: supabaseCar.title,
-        description: supabaseCar.description,
-        daily_price: Number(supabaseCar.daily_price ?? 0),
-        city: supabaseCar.city,
-        region: supabaseCar.region,
-        car_type: supabaseCar.car_type,
-        seats: supabaseCar.seats,
-        transmission: supabaseCar.transmission,
-        fuel: supabaseCar.fuel,
-        features: supabaseCar.features,
-        is_available: supabaseCar.is_available,
-        photos: supabaseCar.car_photos ?? [],
-        owner: supabaseCar.owner ?? null,
-        rating: 4.8,
-        reviews: 0,
-        created_at: supabaseCar.created_at,
-      };
-    }
-
-    const { data: availabilityData } = await supabase
-      .from("car_availability")
-      .select("start_date,end_date,available")
-      .eq("car_id", id);
-    availability = availabilityData ?? [];
-
-    if (user) {
-      const { data: favoriteRow } = await supabase
-        .from("favorites")
-        .select("car_id")
-        .eq("car_id", id)
-        .eq("user_id", user.id)
-        .maybeSingle();
-      isFavorite = Boolean(favoriteRow);
-    }
-  } catch {
-    // try REST fallback below
-  }
-
-  if (!car && supabaseUrl && supabaseAnonKey) {
+  // Prefer REST to avoid any SSR auth/RLS joins blocking public read
+  if (supabaseUrl && supabaseAnonKey) {
     try {
       const params = new URLSearchParams({
         select: "*,car_photos(url)",
@@ -341,6 +276,75 @@ async function loadCar(id: string): Promise<LoadedCar> {
       );
       const availabilityData = (await availabilityRes.json()) as AvailabilityWindow[];
       availability = Array.isArray(availabilityData) ? availabilityData : [];
+    } catch {
+      // ignore and try supabase client below
+    }
+  }
+
+  // If REST failed, try server client (needed for favorites)
+  if (!car) {
+    try {
+      const supabase = await createSupabaseServerClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      const { data: carData, error: carError } = await supabase
+        .from("cars")
+        .select(
+          "*, car_photos(url), owner:profiles!cars_owner_id_fkey(id, full_name, avatar_url, city)",
+        )
+        .eq("id", id)
+        .maybeSingle();
+
+      let supabaseCar = carData as SupabaseCar | null;
+
+      if (!supabaseCar || carError) {
+        const { data: fallbackCar } = await supabase
+          .from("cars")
+          .select("*, car_photos(url)")
+          .eq("id", id)
+          .maybeSingle();
+        supabaseCar = fallbackCar as SupabaseCar | null;
+      }
+
+      if (supabaseCar) {
+        car = {
+          id: supabaseCar.id,
+          title: supabaseCar.title,
+          description: supabaseCar.description,
+          daily_price: Number(supabaseCar.daily_price ?? 0),
+          city: supabaseCar.city,
+          region: supabaseCar.region,
+          car_type: supabaseCar.car_type,
+          seats: supabaseCar.seats,
+          transmission: supabaseCar.transmission,
+          fuel: supabaseCar.fuel,
+          features: supabaseCar.features,
+          is_available: supabaseCar.is_available,
+          photos: supabaseCar.car_photos ?? [],
+          owner: supabaseCar.owner ?? null,
+          rating: 4.8,
+          reviews: 0,
+          created_at: supabaseCar.created_at,
+        };
+      }
+
+      const { data: availabilityData } = await supabase
+        .from("car_availability")
+        .select("start_date,end_date,available")
+        .eq("car_id", id);
+      availability = availabilityData ?? [];
+
+      if (user) {
+        const { data: favoriteRow } = await supabase
+          .from("favorites")
+          .select("car_id")
+          .eq("car_id", id)
+          .eq("user_id", user.id)
+          .maybeSingle();
+        isFavorite = Boolean(favoriteRow);
+      }
     } catch {
       // fall back to mock below
     }
