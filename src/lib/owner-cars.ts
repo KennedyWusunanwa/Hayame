@@ -1,5 +1,4 @@
 import type { Database } from "@/lib/database.types";
-import { mockCars } from "@/lib/mock-data";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export type OwnerCar = {
@@ -24,7 +23,7 @@ export async function loadOwnerCarsWithFavorites(): Promise<{
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) {
-      return fallbackFromMock();
+      return { cars: [], favoriteCounts: {} };
     }
 
     const { data: carData } = await supabase
@@ -59,19 +58,6 @@ export async function loadOwnerCarsWithFavorites(): Promise<{
 
     return { cars, favoriteCounts };
   } catch {
-    return fallbackFromMock();
+    return { cars: [], favoriteCounts: {} };
   }
-}
-
-function fallbackFromMock() {
-  const cars: OwnerCar[] = mockCars.slice(0, 5).map((car) => ({
-    id: car.id,
-    title: car.name,
-    city: car.city,
-    region: car.region,
-    car_type: car.car_type,
-    daily_price: car.daily_price,
-    is_available: true,
-  }));
-  return { cars, favoriteCounts: {} };
 }

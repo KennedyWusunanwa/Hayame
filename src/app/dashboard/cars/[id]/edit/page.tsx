@@ -25,19 +25,14 @@ export default async function EditCarPage({ params }: PageProps) {
     .eq("owner_id", user!.id)
     .maybeSingle<Database["public"]["Tables"]["cars"]["Row"]>();
 
-  if (error) {
-    console.error(error);
-  }
-
-  if (!car) {
-    return notFound();
-  }
+  const hydratedCar = car ?? (await fetchCarFallback(params.id, user.id));
+  if (!hydratedCar) return notFound();
 
   return (
     <div className="space-y-6">
       <div>
         <p className="text-sm font-semibold text-primary">Edit car</p>
-        <h1 className="text-2xl font-semibold text-foreground">{car.title}</h1>
+        <h1 className="text-2xl font-semibold text-foreground">{hydratedCar.title}</h1>
         <p className="text-sm text-gray-600">Update details and save to publish changes.</p>
       </div>
       <Card>
@@ -46,23 +41,51 @@ export default async function EditCarPage({ params }: PageProps) {
         </CardHeader>
         <CardContent>
           <CarForm
-            carId={car.id}
+            carId={hydratedCar.id}
             defaultValues={{
-              title: car.title ?? "",
-              description: car.description ?? "",
-              daily_price: Number(car.daily_price ?? 0),
-              city: car.city ?? "",
-              region: car.region ?? "",
-              car_type: car.car_type ?? "",
-              seats: car.seats ?? undefined,
-              transmission: car.transmission ?? undefined,
-              fuel: car.fuel ?? undefined,
-              features: car.features ?? [],
-              is_available: car.is_available ?? true,
+              title: hydratedCar.title ?? "",
+              description: hydratedCar.description ?? "",
+              daily_price: Number(hydratedCar.daily_price ?? 0),
+              city: hydratedCar.city ?? "",
+              region: hydratedCar.region ?? "",
+              car_type: hydratedCar.car_type ?? "",
+              seats: hydratedCar.seats ?? undefined,
+              transmission: hydratedCar.transmission ?? undefined,
+              fuel: hydratedCar.fuel ?? undefined,
+              features: hydratedCar.features ?? [],
+              is_available: hydratedCar.is_available ?? true,
             }}
           />
         </CardContent>
       </Card>
     </div>
   );
+}
+
+async function fetchCarFallback(id: string, userId: string) {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!supabaseUrl || !supabaseAnonKey) return null;
+
+  try {
+    const params = new URLSearchParams({
+      select: "*",
+      id: `eq.${id}`,
+    });
+    const res = await fetch(`${supabaseUrl}/rest/v1/cars?${params.toString()}`, {
+      headers: {
+        apikey: supabaseAnonKey,
+        Authorization: `Bearer ${supabaseAnonKey}`,
+      },
+      cache: "no-store",
+    });
+    const data = (await res.json()) as Database["public"]["Tables"]["cars"]["Row"][];
+    const car = data?.[0];
+    if (car && car.owner_id === userId) {
+      return car;
+    }
+    return null;
+  } catch {
+    return null;
+  }
 }
