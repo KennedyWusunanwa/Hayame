@@ -31,15 +31,13 @@ export async function POST(req: Request) {
     }
 
     // Ensure the profile exists for this user to satisfy FK on cars.owner_id
-    await supa
-      .from("profiles")
-      .upsert({
+    await supa.from("profiles").upsert(
+      {
         id: user.id,
         full_name: (user.user_metadata as any)?.full_name ?? user.email,
-      })
-      .select("id")
-      .single()
-      .catch(() => null);
+      },
+      { onConflict: "id" },
+    );
 
     const { data, error } = await supa
       .from("cars")

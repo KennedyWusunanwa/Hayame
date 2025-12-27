@@ -36,15 +36,13 @@ export async function PUT(req: Request, context: Params) {
     if (!user) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
 
     // Ensure profile exists to satisfy FK on related operations
-    await supa
-      .from("profiles")
-      .upsert({
+    await supa.from("profiles").upsert(
+      {
         id: user.id,
         full_name: (user.user_metadata as any)?.full_name ?? user.email,
-      })
-      .select("id")
-      .single()
-      .catch(() => null);
+      },
+      { onConflict: "id" },
+    );
 
     const { data: carData } = await supa.from("cars").select("owner_id").eq("id", id).single();
     const car = carData as { owner_id: string } | null;
