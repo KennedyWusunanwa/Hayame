@@ -223,6 +223,9 @@ async function loadCar(id: string): Promise<LoadedCar> {
   let availability: AvailabilityWindow[] = [];
   let isFavorite = false;
 
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
   try {
     const supabase = await createSupabaseServerClient();
     const {
@@ -286,7 +289,61 @@ async function loadCar(id: string): Promise<LoadedCar> {
       isFavorite = Boolean(favoriteRow);
     }
   } catch {
-    // fall back to mock data if Supabase is not configured
+    // try REST fallback below
+  }
+
+  if (!car && supabaseUrl && supabaseAnonKey) {
+    try {
+      const params = new URLSearchParams({
+        select: "*,car_photos(url)",
+        id: `eq.${id}`,
+      });
+      const res = await fetch(`${supabaseUrl}/rest/v1/cars?${params.toString()}`, {
+        headers: {
+          apikey: supabaseAnonKey,
+          Authorization: `Bearer ${supabaseAnonKey}`,
+        },
+        cache: "no-store",
+      });
+      const data = (await res.json()) as SupabaseCar[];
+      const restCar = data?.[0];
+      if (restCar) {
+        car = {
+          id: restCar.id,
+          title: restCar.title,
+          description: restCar.description,
+          daily_price: Number(restCar.daily_price ?? 0),
+          city: restCar.city,
+          region: restCar.region,
+          car_type: restCar.car_type,
+          seats: restCar.seats,
+          transmission: restCar.transmission,
+          fuel: restCar.fuel,
+          features: restCar.features,
+          is_available: restCar.is_available,
+          photos: restCar.car_photos ?? [],
+          owner: null,
+          rating: 4.8,
+          reviews: 0,
+          created_at: restCar.created_at,
+        };
+      }
+
+      const availabilityRes = await fetch(
+        `${supabaseUrl}/rest/v1/car_availability?car_id=eq.${id}&select=start_date,end_date,available`,
+        {
+          headers: {
+            apikey: supabaseAnonKey,
+            Authorization: `Bearer ${supabaseAnonKey}`,
+          },
+          cache: "no-store",
+        },
+      );
+      const availabilityData = (await availabilityRes.json()) as AvailabilityWindow[];
+      availability = Array.isArray(availabilityData) ? availabilityData : [];
+    } catch {
+      // fall back to mock below
+    }
   }
 
   if (!car) {
