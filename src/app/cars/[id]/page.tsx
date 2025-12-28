@@ -230,119 +230,57 @@ async function loadCar(id: string): Promise<LoadedCar> {
     if (vercelUrl.startsWith("http")) return vercelUrl;
     return `https://${vercelUrl}`;
   })();
-  const baseCandidates = [
-    siteBase,
-    "https://hayame.vercel.app",
-    "http://localhost:3000",
-  ].filter(Boolean) as string[];
+  const baseUrl =
+    siteBase ||
+    "https://hayame.vercel.app";
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-  // Supabase REST for public read + availability
-  if (!car && supabaseUrl && supabaseAnonKey) {
-    try {
-      const params = new URLSearchParams({
-        select: "*,car_photos(url)",
-        id: `eq.${id}`,
-      });
-      const res = await fetch(`${supabaseUrl}/rest/v1/cars?${params.toString()}`, {
-        headers: {
-          apikey: supabaseAnonKey,
-          Authorization: `Bearer ${supabaseAnonKey}`,
-        },
-        cache: "no-store",
-      });
-      const data = (await res.json()) as SupabaseCar[];
-      const restCar = data?.[0];
-      if (restCar) {
+  // Fetch car via our own API (known to work in prod)
+  try {
+    const res = await fetch(`${baseUrl}/api/cars/${id}`, { cache: "no-store" });
+    if (res.ok) {
+      const { data } = (await res.json()) as { data?: SupabaseCar };
+      if (data) {
         car = {
-          id: restCar.id,
-          title: restCar.title,
-          description: restCar.description,
-          daily_price: Number(restCar.daily_price ?? 0),
-          city: restCar.city,
-          region: restCar.region,
-          car_type: restCar.car_type,
-          seats: restCar.seats,
-          transmission: restCar.transmission,
-          fuel: restCar.fuel,
-          features: restCar.features,
-          is_available: restCar.is_available,
-          photos: restCar.car_photos ?? [],
+          id: data.id,
+          title: data.title,
+          description: data.description,
+          daily_price: Number(data.daily_price ?? 0),
+          city: data.city,
+          region: data.region,
+          car_type: data.car_type,
+          seats: data.seats,
+          transmission: data.transmission,
+          fuel: data.fuel,
+          features: data.features,
+          is_available: data.is_available,
+          photos: data.car_photos ?? [],
           owner: null,
           rating: 4.8,
           reviews: 0,
-          created_at: restCar.created_at,
+          created_at: data.created_at,
         };
       }
-    } catch (error) {
-      console.warn("Supabase REST fetch failed", error);
     }
+  } catch (error) {
+    console.warn("API car fetch failed", error);
   }
 
-  // Try our API route (self-hosted) as a resilient fallback
-  if (!car) {
-    for (const baseUrl of baseCandidates) {
-      try {
-        const res = await fetch(`${baseUrl}/api/cars/${id}`, { cache: "no-store" });
-        if (!res.ok) continue;
-        const { data } = (await res.json()) as { data?: SupabaseCar };
-        if (data) {
-          car = {
-            id: data.id,
-            title: data.title,
-            description: data.description,
-            daily_price: Number(data.daily_price ?? 0),
-            city: data.city,
-            region: data.region,
-            car_type: data.car_type,
-            seats: data.seats,
-            transmission: data.transmission,
-            fuel: data.fuel,
-            features: data.features,
-            is_available: data.is_available,
-            photos: data.car_photos ?? [],
-            owner: null,
-            rating: 4.8,
-            reviews: 0,
-            created_at: data.created_at,
-          };
-          break;
-        }
-      } catch (error) {
-        console.warn("API fallback failed", { baseUrl, error });
-      }
-    }
-  }
+  // Try server client for availability + favorites
+  try {
+    const supabase = await createSupabaseServerClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-  // Try server client (needed for favorites + owner details)
-  if (!car) {
-    try {
-      const supabase = await createSupabaseServerClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      const { data: carData, error: carError } = await supabase
+    if (!car) {
+      const { data: carData } = await supabase
         .from("cars")
         .select(
           "*, car_photos(url), owner:profiles!cars_owner_id_fkey(id, full_name, avatar_url, city)",
         )
         .eq("id", id)
         .maybeSingle();
-
-      let supabaseCar = carData as SupabaseCar | null;
-
-      if (!supabaseCar || carError) {
-        const { data: fallbackCar } = await supabase
-          .from("cars")
-          .select("*, car_photos(url)")
-          .eq("id", id)
-          .maybeSingle();
-        supabaseCar = fallbackCar as SupabaseCar | null;
-      }
-
+      const supabaseCar = carData as SupabaseCar | null;
       if (supabaseCar) {
         car = {
           id: supabaseCar.id,
@@ -364,45 +302,25 @@ async function loadCar(id: string): Promise<LoadedCar> {
           created_at: supabaseCar.created_at,
         };
       }
-
-      const { data: availabilityData } = await supabase
-        .from("car_availability")
-        .select("start_date,end_date,available")
-        .eq("car_id", id);
-      availability = availabilityData ?? [];
-
-      if (user) {
-        const { data: favoriteRow } = await supabase
-          .from("favorites")
-          .select("car_id")
-          .eq("car_id", id)
-          .eq("user_id", user.id)
-          .maybeSingle();
-        isFavorite = Boolean(favoriteRow);
-      }
-    } catch (error) {
-      console.warn("Supabase client fetch failed", error);
     }
-  }
 
-  // Availability via REST if not already fetched
-  if (availability.length === 0 && supabaseUrl && supabaseAnonKey) {
-    try {
-      const availabilityRes = await fetch(
-        `${supabaseUrl}/rest/v1/car_availability?car_id=eq.${id}&select=start_date,end_date,available`,
-        {
-          headers: {
-            apikey: supabaseAnonKey,
-            Authorization: `Bearer ${supabaseAnonKey}`,
-          },
-          cache: "no-store",
-        },
-      );
-      const availabilityData = (await availabilityRes.json()) as AvailabilityWindow[];
-      availability = Array.isArray(availabilityData) ? availabilityData : [];
-    } catch (error) {
-      console.warn("Availability REST fetch failed", error);
+    const { data: availabilityData } = await supabase
+      .from("car_availability")
+      .select("start_date,end_date,available")
+      .eq("car_id", id);
+    availability = availabilityData ?? [];
+
+    if (user) {
+      const { data: favoriteRow } = await supabase
+        .from("favorites")
+        .select("car_id")
+        .eq("car_id", id)
+        .eq("user_id", user.id)
+        .maybeSingle();
+      isFavorite = Boolean(favoriteRow);
     }
+  } catch (error) {
+    console.warn("Supabase client fetch failed", error);
   }
 
   if (!car) {
