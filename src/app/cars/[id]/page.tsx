@@ -219,161 +219,192 @@ async function loadCar(id: string): Promise<{
   availability: AvailabilityWindow[];
   isFavorite: boolean;
 }> {
-  let car: CarDetail | null = null;
-  let availability: AvailabilityWindow[] = [];
-  let isFavorite = false;
-
-  // 1) Supabase REST for car data (anon key; reliable in prod)
-  if (process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
-    try {
-      const params = new URLSearchParams({
-        select: "*,car_photos(url)",
-        id: `eq.${id}`,
-      });
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/cars?${params.toString()}`,
-        {
-          headers: {
-            apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-            Authorization: `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`,
-          },
-          cache: "no-store",
-        },
-      );
-      if (res.ok) {
-        const data = (await res.json()) as SupabaseCar[];
-        const restCar = data?.[0];
-        if (restCar) {
-          car = mapCar(restCar);
-        }
-      }
-    } catch {
-      // ignore and fallback
-    }
-  }
-
-  // 2) Vehicle-details API as secondary (same runtime/env as prod)
-  if (!car) {
-    try {
-      const base =
-        process.env.NEXT_PUBLIC_SITE_URL?.startsWith("http")
-          ? process.env.NEXT_PUBLIC_SITE_URL
-          : process.env.NEXT_PUBLIC_VERCEL_URL?.startsWith("http")
-            ? process.env.NEXT_PUBLIC_VERCEL_URL
-            : process.env.NEXT_PUBLIC_VERCEL_URL
-              ? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}`
-              : "https://hayame.vercel.app";
-      const res = await fetch(new URL(`/api/vehicle-details/${id}`, base), { cache: "no-store" });
-      if (res.ok) {
-        const { data } = (await res.json()) as { data?: SupabaseCar };
-        if (data) {
-          car = mapCar(data);
-        }
-      }
-    } catch {
-      // continue
-    }
-  }
-
-  // 3) Supabase SSR for availability + favorites and owner (fallback car)
   try {
-    const supabase = await createSupabaseServerClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    let car: CarDetail | null = null;
+    let availability: AvailabilityWindow[] = [];
+    let isFavorite = false;
 
-    if (!car) {
-      const { data: carData } = await supabase
-        .from("cars")
-        .select(
-          "*, car_photos(url), owner:profiles!cars_owner_id_fkey(id, full_name, avatar_url, city)",
-        )
-        .eq("id", id)
-        .maybeSingle();
-      const supabaseCar = carData as SupabaseCar | null;
-      if (supabaseCar) {
-        car = mapCar(supabaseCar);
+    // 1) Supabase REST for car data (anon key; reliable in prod)
+    if (process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+      try {
+        const params = new URLSearchParams({
+          select: "*,car_photos(url)",
+          id: `eq.${id}`,
+        });
+        const res = await fetch(
+          `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/cars?${params.toString()}`,
+          {
+            headers: {
+              apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+              Authorization: `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`,
+            },
+            cache: "no-store",
+          },
+        );
+        if (res.ok) {
+          const data = (await res.json()) as SupabaseCar[];
+          const restCar = data?.[0];
+          if (restCar) {
+            car = mapCar(restCar);
+          }
+        }
+      } catch {
+        // ignore and fallback
       }
     }
 
-    const { data: availabilityData } = await supabase
-      .from("car_availability")
-      .select("start_date,end_date,available")
-      .eq("car_id", id);
-    availability = availabilityData ?? [];
-
-    if (user) {
-      const { data: favoriteRow } = await supabase
-        .from("favorites")
-        .select("car_id")
-        .eq("car_id", id)
-        .eq("user_id", user.id)
-        .maybeSingle();
-      isFavorite = Boolean(favoriteRow);
+    // 2) Vehicle-details API as secondary (same runtime/env as prod)
+    if (!car) {
+      try {
+        const base =
+          process.env.NEXT_PUBLIC_SITE_URL?.startsWith("http")
+            ? process.env.NEXT_PUBLIC_SITE_URL
+            : process.env.NEXT_PUBLIC_VERCEL_URL?.startsWith("http")
+              ? process.env.NEXT_PUBLIC_VERCEL_URL
+              : process.env.NEXT_PUBLIC_VERCEL_URL
+                ? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}`
+                : "https://hayame.vercel.app";
+        const res = await fetch(new URL(`/api/vehicle-details/${id}`, base), { cache: "no-store" });
+        if (res.ok) {
+          const { data } = (await res.json()) as { data?: SupabaseCar };
+          if (data) {
+            car = mapCar(data);
+          }
+        }
+      } catch {
+        // continue
+      }
     }
-  } catch {
-    // ignore
-  }
 
-  // 4) Mock fallback
-  if (!car) {
-    const mock = mockCars.find((c) => c.id === id);
-    if (mock) {
-      car = {
-        id: mock.id,
-        title: mock.name,
-        description: mock.description,
-        daily_price: mock.daily_price,
-        city: mock.city,
-        region: mock.region,
-        car_type: mock.car_type,
-        seats: mock.seats,
-        transmission: mock.transmission,
-        fuel: mock.fuel,
-        features: mock.features,
-        is_available: true,
-        photos: [{ url: mock.image }],
-        owner: {
-          id: "mock-owner",
-          full_name: mock.host.name,
-          avatar_url: mock.host.avatar,
+    // 3) Supabase SSR for availability + favorites and owner (fallback car)
+    try {
+      const supabase = await createSupabaseServerClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!car) {
+        const { data: carData } = await supabase
+          .from("cars")
+          .select(
+            "*, car_photos(url), owner:profiles!cars_owner_id_fkey(id, full_name, avatar_url, city)",
+          )
+          .eq("id", id)
+          .maybeSingle();
+        const supabaseCar = carData as SupabaseCar | null;
+        if (supabaseCar) {
+          car = mapCar(supabaseCar);
+        }
+      }
+
+      const { data: availabilityData } = await supabase
+        .from("car_availability")
+        .select("start_date,end_date,available")
+        .eq("car_id", id);
+      availability = availabilityData ?? [];
+
+      if (user) {
+        const { data: favoriteRow } = await supabase
+          .from("favorites")
+          .select("car_id")
+          .eq("car_id", id)
+          .eq("user_id", user.id)
+          .maybeSingle();
+        isFavorite = Boolean(favoriteRow);
+      }
+    } catch {
+      // ignore
+    }
+
+    // 4) Mock fallback
+    if (!car) {
+      const mock = mockCars.find((c) => c.id === id);
+      if (mock) {
+        car = {
+          id: mock.id,
+          title: mock.name,
+          description: mock.description,
+          daily_price: mock.daily_price,
           city: mock.city,
+          region: mock.region,
+          car_type: mock.car_type,
+          seats: mock.seats,
+          transmission: mock.transmission,
+          fuel: mock.fuel,
+          features: mock.features,
+          is_available: true,
+          photos: [{ url: mock.image }],
+          owner: {
+            id: "mock-owner",
+            full_name: mock.host.name,
+            avatar_url: mock.host.avatar,
+            city: mock.city,
+          },
+          rating: mock.rating,
+          reviews: mock.reviews,
+        };
+      }
+    }
+
+    // 5) Placeholder fallback to always render the page shape
+    if (!car) {
+      car = {
+        id,
+        title: "Sample Vehicle",
+        description: "This is a placeholder car detail. Configure Supabase to load real data.",
+        daily_price: 500,
+        city: "Accra",
+        region: "Greater Accra",
+        car_type: "SUV",
+        seats: 5,
+        transmission: "automatic",
+        fuel: "Petrol",
+        features: ["Air Conditioning", "Automatic", "Bluetooth", "USB Port"],
+        is_available: true,
+        photos: [{ url: "/car-placeholder.jpg" }],
+        owner: {
+          id: "placeholder-owner",
+          full_name: "Host Placeholder",
+          avatar_url: "/car-placeholder.jpg",
+          city: "Accra",
         },
-        rating: mock.rating,
-        reviews: mock.reviews,
+        rating: 4.8,
+        reviews: 12,
+        created_at: new Date().toISOString(),
       };
     }
-  }
 
-  // 5) Placeholder fallback to always render the page shape
-  if (!car) {
-    car = {
-      id,
-      title: "Sample Vehicle",
-      description: "This is a placeholder car detail. Configure Supabase to load real data.",
-      daily_price: 500,
-      city: "Accra",
-      region: "Greater Accra",
-      car_type: "SUV",
-      seats: 5,
-      transmission: "automatic",
-      fuel: "Petrol",
-      features: ["Air Conditioning", "Automatic", "Bluetooth", "USB Port"],
-      is_available: true,
-      photos: [{ url: "/car-placeholder.jpg" }],
-      owner: {
-        id: "placeholder-owner",
-        full_name: "Host Placeholder",
-        avatar_url: "/car-placeholder.jpg",
+    return { car, availability, isFavorite };
+  } catch {
+    return {
+      car: {
+        id,
+        title: "Sample Vehicle",
+        description: "This is a placeholder car detail. Configure Supabase to load real data.",
+        daily_price: 500,
         city: "Accra",
+        region: "Greater Accra",
+        car_type: "SUV",
+        seats: 5,
+        transmission: "automatic",
+        fuel: "Petrol",
+        features: ["Air Conditioning", "Automatic", "Bluetooth", "USB Port"],
+        is_available: true,
+        photos: [{ url: "/car-placeholder.jpg" }],
+        owner: {
+          id: "placeholder-owner",
+          full_name: "Host Placeholder",
+          avatar_url: "/car-placeholder.jpg",
+          city: "Accra",
+        },
+        rating: 4.8,
+        reviews: 12,
+        created_at: new Date().toISOString(),
       },
-      rating: 4.8,
-      reviews: 12,
-      created_at: new Date().toISOString(),
+      availability: [],
+      isFavorite: false,
     };
   }
-
-  return { car, availability, isFavorite };
 }
 
 function mapCar(data: SupabaseCar): CarDetail {
