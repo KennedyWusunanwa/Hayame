@@ -3,16 +3,17 @@ import Link from "next/link";
 import { format } from "date-fns";
 import { MapPin, Shield, Star } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { headers } from "next/headers";
+import { BookingWidget } from "@/components/booking-widget";
+import { FavoriteButton } from "@/components/favorite-button";
+import { ImageGallery } from "@/components/image-gallery";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { FavoriteButton } from "@/components/favorite-button";
-import { BookingWidget } from "@/components/booking-widget";
-import { ImageGallery } from "@/components/image-gallery";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { detailIcons, getFeatureIcon } from "@/lib/feature-icons";
 import type { Database } from "@/lib/database.types";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { mockCars } from "@/lib/mock-data";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { formatCurrency } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -54,6 +55,12 @@ type AvailabilityWindow = {
   available: boolean | null;
 };
 
+type LoadedCar = {
+  car: CarDetail | null;
+  availability: AvailabilityWindow[];
+  isFavorite: boolean;
+};
+
 type SupabaseCar = Database["public"]["Tables"]["cars"]["Row"] & {
   car_photos?: { url: string }[];
   owner?: Owner | null;
@@ -72,10 +79,8 @@ export default async function CarDetailPage({ params }: PageProps) {
       "/car-placeholder.jpg",
     ]),
   );
-
   const addedDate = car.created_at ? new Date(car.created_at) : null;
-  const addedLabel =
-    addedDate && !isNaN(addedDate.getTime()) ? format(addedDate, "MMM d, yyyy") : null;
+  const addedLabel = addedDate && !isNaN(addedDate.getTime()) ? format(addedDate, "MMM d, yyyy") : null;
   const featureItems = (car.features ?? []).map((feature) => ({
     label: feature,
     Icon: getFeatureIcon(feature),
@@ -84,32 +89,32 @@ export default async function CarDetailPage({ params }: PageProps) {
   const details = [
     {
       label: "Location",
-      value: [car.city, car.region].filter(Boolean).join(", ") || "—",
+      value: [car.city, car.region].filter(Boolean).join(", ") || "ΓÇö",
       icon: detailIcons.location,
     },
     {
       label: "Car type",
-      value: car.car_type ?? "—",
+      value: car.car_type ?? "ΓÇö",
       icon: detailIcons.carType,
     },
     {
       label: "Seats",
-      value: car.seats ? `${car.seats} seats` : "—",
+      value: car.seats ? `${car.seats} seats` : "ΓÇö",
       icon: detailIcons.seats,
     },
     {
       label: "Transmission",
-      value: car.transmission ?? "—",
+      value: car.transmission ?? "ΓÇö",
       icon: detailIcons.transmission,
     },
     {
       label: "Fuel",
-      value: car.fuel ?? "—",
+      value: car.fuel ?? "ΓÇö",
       icon: detailIcons.fuel,
     },
     {
       label: "Region",
-      value: car.region ?? car.city ?? "—",
+      value: car.region ?? car.city ?? "ΓÇö",
       icon: detailIcons.location,
     },
   ];
@@ -119,7 +124,7 @@ export default async function CarDetailPage({ params }: PageProps) {
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-3">
-            <p className="text-sm font-semibold text-brand">Car in {car.city ?? "—"}</p>
+            <p className="text-sm font-semibold text-brand">Car in {car.city ?? "ΓÇö"}</p>
             {car.car_type ? <Badge variant="muted">{car.car_type}</Badge> : null}
             {addedLabel ? <Badge variant="outline">Added {addedLabel}</Badge> : null}
           </div>
@@ -130,7 +135,7 @@ export default async function CarDetailPage({ params }: PageProps) {
           <div className="flex flex-wrap items-center gap-3 text-sm text-gray-700">
             <span className="flex items-center gap-1">
               <MapPin className="h-4 w-4 text-brand" />
-              {[car.city, car.region].filter(Boolean).join(", ") || "—"}
+              {[car.city, car.region].filter(Boolean).join(", ") || "ΓÇö"}
             </span>
             {car.rating ? (
               <span className="flex items-center gap-1 text-amber-600">
@@ -214,57 +219,87 @@ export default async function CarDetailPage({ params }: PageProps) {
   );
 }
 
-async function loadCar(id: string): Promise<{
-  car: CarDetail | null;
-  availability: AvailabilityWindow[];
-  isFavorite: boolean;
-}> {
+async function loadCar(id: string): Promise<LoadedCar> {
+  let car: CarDetail | null = null;
+  let availability: AvailabilityWindow[] = [];
+  let isFavorite = false;
+
+  // Fetch car via our own API (relative URL to avoid host/env issues)
+  try {
+    const res = await fetch(`/api/cars/${id}`, { cache: "no-store" });
+    if (res.ok) {
+      const { data } = (await res.json()) as { data?: SupabaseCar };
+      if (data) {
+        car = {
+          id: data.id,
+          title: data.title,
+          description: data.description,
+          daily_price: Number(data.daily_price ?? 0),
+          city: data.city,
+          region: data.region,
+          car_type: data.car_type,
+          seats: data.seats,
+          transmission: data.transmission,
+          fuel: data.fuel,
+          features: data.features,
+          is_available: data.is_available,
+          photos: data.car_photos ?? [],
+          owner: null,
+          rating: 4.8,
+          reviews: 0,
+          created_at: data.created_at,
+        };
+      }
+    }
+  } catch (error) {
+    console.warn("API car fetch failed", error);
+  }
+
+  // Try server client for availability + favorites
   try {
     const supabase = await createSupabaseServerClient();
     const {
       data: { user },
     } = await supabase.auth.getUser();
 
-    const { data: carData } = await supabase
-      .from("cars")
-      .select(
-        "*, car_photos(url), owner:profiles!cars_owner_id_fkey(id, full_name, avatar_url, city)",
-      )
-      .eq("id", id)
-      .maybeSingle();
-
-    const supabaseCar = carData as SupabaseCar | null;
-    let car: CarDetail | null = null;
-    if (supabaseCar) {
-      car = {
-        id: supabaseCar.id,
-        title: supabaseCar.title,
-        description: supabaseCar.description,
-        daily_price: Number(supabaseCar.daily_price ?? 0),
-        city: supabaseCar.city,
-        region: supabaseCar.region,
-        car_type: supabaseCar.car_type,
-        seats: supabaseCar.seats,
-        transmission: supabaseCar.transmission,
-        fuel: supabaseCar.fuel,
-        features: supabaseCar.features,
-        is_available: supabaseCar.is_available,
-        photos: supabaseCar.car_photos ?? [],
-        owner: supabaseCar.owner ?? null,
-        rating: 4.8,
-        reviews: 0,
-        created_at: supabaseCar.created_at,
-      };
+    if (!car) {
+      const { data: carData } = await supabase
+        .from("cars")
+        .select(
+          "*, car_photos(url), owner:profiles!cars_owner_id_fkey(id, full_name, avatar_url, city)",
+        )
+        .eq("id", id)
+        .maybeSingle();
+      const supabaseCar = carData as SupabaseCar | null;
+      if (supabaseCar) {
+        car = {
+          id: supabaseCar.id,
+          title: supabaseCar.title,
+          description: supabaseCar.description,
+          daily_price: Number(supabaseCar.daily_price ?? 0),
+          city: supabaseCar.city,
+          region: supabaseCar.region,
+          car_type: supabaseCar.car_type,
+          seats: supabaseCar.seats,
+          transmission: supabaseCar.transmission,
+          fuel: supabaseCar.fuel,
+          features: supabaseCar.features,
+          is_available: supabaseCar.is_available,
+          photos: supabaseCar.car_photos ?? [],
+          owner: supabaseCar.owner ?? null,
+          rating: 4.8,
+          reviews: 0,
+          created_at: supabaseCar.created_at,
+        };
+      }
     }
 
-    let availability: AvailabilityWindow[] = [];
     const { data: availabilityData } = await supabase
       .from("car_availability")
       .select("start_date,end_date,available")
       .eq("car_id", id);
     availability = availabilityData ?? [];
 
-    let isFavorite = false;
     if (user) {
       const { data: favoriteRow } = await supabase
         .from("favorites")
@@ -274,42 +309,40 @@ async function loadCar(id: string): Promise<{
         .maybeSingle();
       isFavorite = Boolean(favoriteRow);
     }
-
-    // Fallback to mock data if no real car
-    if (!car) {
-      const mock = mockCars.find((c) => c.id === id);
-      if (mock) {
-        car = {
-          id: mock.id,
-          title: mock.name,
-          description: mock.description,
-          daily_price: mock.daily_price,
-          city: mock.city,
-          region: mock.region,
-          car_type: mock.car_type,
-          seats: mock.seats,
-          transmission: mock.transmission,
-          fuel: mock.fuel,
-          features: mock.features,
-          is_available: true,
-          photos: [{ url: mock.image }],
-          owner: {
-            id: "mock-owner",
-            full_name: mock.host.name,
-            avatar_url: mock.host.avatar,
-            city: mock.city,
-          },
-          rating: mock.rating,
-          reviews: mock.reviews,
-        };
-      }
-    }
-
-    return { car, availability, isFavorite };
   } catch (error) {
-    console.warn("Car detail load failed", error);
-    return { car: null, availability: [], isFavorite: false };
+    console.warn("Supabase client fetch failed", error);
   }
+
+  if (!car) {
+    const mock = mockCars.find((c) => c.id === id);
+    if (mock) {
+      car = {
+        id: mock.id,
+        title: mock.name,
+        description: mock.description,
+        daily_price: mock.daily_price,
+        city: mock.city,
+        region: mock.region,
+        car_type: mock.car_type,
+        seats: mock.seats,
+        transmission: mock.transmission,
+        fuel: mock.fuel,
+        features: mock.features,
+        is_available: true,
+        photos: [{ url: mock.image }],
+        owner: {
+          id: "mock-owner",
+          full_name: mock.host.name,
+          avatar_url: mock.host.avatar,
+          city: mock.city,
+        },
+        rating: mock.rating,
+        reviews: mock.reviews,
+      };
+    }
+  }
+
+  return { car, availability, isFavorite };
 }
 
 function DetailRow({
