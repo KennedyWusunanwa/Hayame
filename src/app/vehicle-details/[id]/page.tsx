@@ -3,7 +3,6 @@ import Link from "next/link";
 import { format } from "date-fns";
 import { MapPin, Shield, Star } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { headers } from "next/headers";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,6 +14,7 @@ import type { Database } from "@/lib/database.types";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { mockCars } from "@/lib/mock-data";
 import { formatCurrency } from "@/lib/utils";
+import { headers } from "next/headers";
 
 export const dynamic = "force-dynamic";
 
@@ -211,7 +211,7 @@ async function loadCar(id: string): Promise<{
     if (envSite) return envSite.startsWith("http") ? envSite : `https://${envSite}`;
     const vercel = process.env.NEXT_PUBLIC_VERCEL_URL;
     if (vercel) return vercel.startsWith("http") ? vercel : `https://${vercel}`;
-    const headerHost = headers().get("host");
+    const headerHost = await headers().get("host");
     if (headerHost) {
       const isLocal =
         headerHost.includes("localhost") || headerHost.startsWith("127.") || headerHost.endsWith(".internal");
