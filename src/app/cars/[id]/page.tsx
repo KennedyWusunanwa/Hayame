@@ -232,9 +232,9 @@ async function loadCar(id: string): Promise<{
     return "https://hayame.vercel.app";
   })();
 
-  // 1) Try API route with absolute base (same runtime/env as working API)
+  // 1) Try vehicle-details API with absolute base (known good in prod)
   try {
-    const res = await fetch(new URL(`/api/cars/${id}`, apiBase), { cache: "no-store" });
+    const res = await fetch(new URL(`/api/vehicle-details/${id}`, apiBase), { cache: "no-store" });
     if (res.ok) {
       const { data } = (await res.json()) as { data?: SupabaseCar };
       if (data) {
@@ -252,7 +252,7 @@ async function loadCar(id: string): Promise<{
           features: data.features,
           is_available: data.is_available,
           photos: data.car_photos ?? [],
-          owner: null,
+          owner: data.owner ?? null,
           rating: 4.8,
           reviews: 0,
           created_at: data.created_at,
