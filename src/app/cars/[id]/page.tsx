@@ -8,6 +8,7 @@ import Link from "next/link";
 import { format } from "date-fns";
 import { MapPin, Shield, Star } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { notFound } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -17,7 +18,6 @@ import { ImageGallery } from "@/components/image-gallery";
 import { detailIcons, getFeatureIcon } from "@/lib/feature-icons";
 import type { Database } from "@/lib/database.types";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { mockCars } from "@/lib/mock-data";
 import { formatCurrency } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -220,17 +220,21 @@ export default async function CarDetailPage({ params }: PageProps) {
 }
 
 async function getCarFromInternalApi(id: string): Promise<SupabaseCar | null> {
-  // Try relative fetch first
+  let lastError: unknown;
+
+  // Try relative fetch first (server-side)
   try {
     const res = await fetch(`/api/cars/${id}`, { cache: "no-store" });
     if (res.ok) {
       const { data } = (await res.json()) as { data?: SupabaseCar };
       return data ?? null;
     }
+    if (res.status === 404) return null;
+    lastError = new Error(`status ${res.status}`);
+    throw lastError;
   } catch (error) {
-    if (process.env.NODE_ENV !== "production") {
-      console.error("[car-detail] relative fetch failed", error);
-    }
+    lastError = error ?? lastError;
+    console.error("[car-detail] relative fetch failed", { id, error: lastError });
   }
 
   // Absolute fallback
@@ -242,12 +246,13 @@ async function getCarFromInternalApi(id: string): Promise<SupabaseCar | null> {
   }
   try {
     const res = await fetch(`${origin}/api/cars/${id}`, { cache: "no-store" });
-    if (!res.ok) return null;
+    if (res.status === 404) return null;
+    if (!res.ok) throw new Error(`status ${res.status}`);
     const { data } = (await res.json()) as { data?: SupabaseCar };
     return data ?? null;
   } catch (error) {
-    console.error("[car-detail] fetch failed", error);
-    return null;
+    console.error("[car-detail] fetch failed", { id, error, origin, lastError });
+    throw error;
   }
 }
 
@@ -256,147 +261,45 @@ async function loadCar(id: string): Promise<{
   availability: AvailabilityWindow[];
   isFavorite: boolean;
 }> {
-  try {
-    let car: CarDetail | null = null;
-    let availability: AvailabilityWindow[] = [];
-    let isFavorite = false;
-
-    // 1) Internal API
-    const apiCar = await getCarFromInternalApi(id);
-    if (apiCar) {
-      car = mapCar(apiCar);
-    }
-
-    // 2) Supabase SSR for availability + favorites and fallback car
-    try {
-      const supabase = await createSupabaseServerClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      if (!car) {
-        const { data: carData } = await supabase
-          .from("cars")
-          .select(
-            "*, car_photos(url), owner:profiles!cars_owner_id_fkey(id, full_name, avatar_url, city)",
-          )
-          .eq("id", id)
-          .maybeSingle();
-        const supabaseCar = carData as SupabaseCar | null;
-        if (supabaseCar) {
-          car = mapCar(supabaseCar);
-        }
-      }
-
-      const { data: availabilityData } = await supabase
-        .from("car_availability")
-        .select("start_date,end_date,available")
-        .eq("car_id", id);
-      availability = availabilityData ?? [];
-
-      if (user) {
-        const { data: favoriteRow } = await supabase
-          .from("favorites")
-          .select("car_id")
-          .eq("car_id", id)
-          .eq("user_id", user.id)
-          .maybeSingle();
-        isFavorite = Boolean(favoriteRow);
-      }
-    } catch (error) {
-      console.error("[car-detail] supabase SSR failed", error);
-    }
-
-    // 3) Mock fallback
-    if (!car) {
-      const mock = mockCars.find((c) => c.id === id);
-      if (mock) {
-        car = {
-          id: mock.id,
-          title: mock.name,
-          description: mock.description,
-          daily_price: mock.daily_price,
-          city: mock.city,
-          region: mock.region,
-          car_type: mock.car_type,
-          seats: mock.seats,
-          transmission: mock.transmission,
-          fuel: mock.fuel,
-          features: mock.features,
-          is_available: true,
-          photos: [{ url: mock.image }],
-          owner: {
-            id: "mock-owner",
-            full_name: mock.host.name,
-            avatar_url: mock.host.avatar,
-            city: mock.city,
-          },
-          rating: mock.rating,
-          reviews: mock.reviews,
-        };
-      }
-    }
-
-    // 4) Placeholder fallback to always render the page shape
-    if (!car) {
-      car = {
-        id,
-        title: "Sample Vehicle",
-        description: "This is a placeholder car detail. Configure Supabase to load real data.",
-        daily_price: 500,
-        city: "Accra",
-        region: "Greater Accra",
-        car_type: "SUV",
-        seats: 5,
-        transmission: "automatic",
-        fuel: "Petrol",
-        features: ["Air Conditioning", "Automatic", "Bluetooth", "USB Port"],
-        is_available: true,
-        photos: [{ url: "/car-placeholder.jpg" }],
-        owner: {
-          id: "placeholder-owner",
-          full_name: "Host Placeholder",
-          avatar_url: "/car-placeholder.jpg",
-          city: "Accra",
-        },
-        rating: 4.8,
-        reviews: 12,
-        created_at: new Date().toISOString(),
-      };
-    }
-
-    return { car, availability, isFavorite };
-  } catch (error) {
-    console.error("[car-detail] unhandled load error", error);
-    return {
-      car: {
-        id,
-        title: "Sample Vehicle",
-        description: "This is a placeholder car detail. Configure Supabase to load real data.",
-        daily_price: 500,
-        city: "Accra",
-        region: "Greater Accra",
-        car_type: "SUV",
-        seats: 5,
-        transmission: "automatic",
-        fuel: "Petrol",
-        features: ["Air Conditioning", "Automatic", "Bluetooth", "USB Port"],
-        is_available: true,
-        photos: [{ url: "/car-placeholder.jpg" }],
-        owner: {
-          id: "placeholder-owner",
-          full_name: "Host Placeholder",
-          avatar_url: "/car-placeholder.jpg",
-          city: "Accra",
-        },
-        rating: 4.8,
-        reviews: 12,
-        created_at: new Date().toISOString(),
-      },
-      availability: [],
-      isFavorite: false,
-    };
+  if (!isUUID(id)) {
+    notFound();
   }
+
+  const apiCar = await getCarFromInternalApi(id);
+  if (!apiCar) {
+    notFound();
+  }
+
+  let car = mapCar(apiCar);
+  let availability: AvailabilityWindow[] = [];
+  let isFavorite = false;
+
+  try {
+    const supabase = await createSupabaseServerClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    const { data: availabilityData } = await supabase
+      .from("car_availability")
+      .select("start_date,end_date,available")
+      .eq("car_id", id);
+    availability = availabilityData ?? [];
+
+    if (user) {
+      const { data: favoriteRow } = await supabase
+        .from("favorites")
+        .select("car_id")
+        .eq("car_id", id)
+        .eq("user_id", user.id)
+        .maybeSingle();
+      isFavorite = Boolean(favoriteRow);
+    }
+  } catch (error) {
+    console.error("[car-detail] supabase SSR failed", { id, error });
+  }
+
+  return { car, availability, isFavorite };
 }
 
 function mapCar(data: SupabaseCar): CarDetail {
@@ -419,6 +322,10 @@ function mapCar(data: SupabaseCar): CarDetail {
     reviews: 0,
     created_at: data.created_at,
   };
+}
+
+function isUUID(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 }
 
 function DetailRow({

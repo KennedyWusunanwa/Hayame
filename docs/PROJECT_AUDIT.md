@@ -1,83 +1,59 @@
-# Hayame 2.0 Project Audit
+# Hayame 2.0 Audit (2025-12-27)
 
-Snapshot of how the app is structured, how it works, and how to run it.
+What the project does, how it is wired, and current risk notes.
 
-## Stack & Tooling
-- Next.js 16 (App Router) + TypeScript, Tailwind/shadcn-style UI primitives.
-- Supabase Auth/Postgres/Storage with RLS; SSR/browser clients in `src/lib/supabase`.
-- Forms/validation: react-hook-form + zod; charts: Recharts; icons: lucide.
-- Scripts: `npm run dev/build/start/lint/typecheck/db:seed`.
+## Stack & Runtime
+- Next.js 16 (App Router, RSC) + TypeScript; Tailwind + shadcn-style UI.
+- Supabase (Postgres/Auth/Storage) with SSR client in `src/lib/supabase/server.ts` and browser client in `src/lib/supabase/client.ts`.
+- Forms: react-hook-form + zod; charts: Recharts; icons: lucide-react.
+- Scripts: `npm run dev`, `build`, `start`, `lint`, `typecheck`, `db:seed` (needs service role key).
 
-## Environment
-- Copy `.env.example` → `.env.local` and set: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET` (default `car-photos`), `SUPABASE_SERVICE_ROLE_KEY` (seed only), `SUPABASE_STORAGE_BUCKET`.
-- Remote images allowed from Unsplash/Pexels (`next.config.ts`).
+## Data & APIs
+- Schema/RLS in `db/migration.sql`; favorites select policy patch in `db/patch_favorites_owner_select.sql`.
+- Tables used in app: profiles, cars, car_photos, favorites, bookings, car_availability, reviews; bucket `car-photos` for images.
+- Core API routes:
+  - `GET/POST /api/cars`, `GET/PUT/DELETE /api/cars/[id]`
+  - `POST /api/bookings`
+  - `POST /api/favorites`
+  - `POST /api/availability`
+  - `POST /api/reviews`
+  - `GET /api/debug/car-fetch` (diagnostics)
 
-## Data & Supabase
-- Schema/RLS: `db/migration.sql`; favorites policy patch in `db/patch_favorites_owner_select.sql`.
-- Bucket `car-photos` (public read, owner write); tables: profiles, locations, cars, car_photos, favorites, bookings, car_availability, reviews; enum `booking_status`.
-- Generated types: `src/lib/database.types.ts`; validators: `src/lib/validators.ts`.
-- Seed: `db/seed.ts` (service role key required) creates hosts/guest, locations, cars/photos from `mock-data`, sample booking.
+## App Behavior
+- Marketing pages under `src/app/(marketing)`; navbar/footer in root layout.
+- Explore page (`/explore`) lists cars with filters, map placeholder, favorites toggle.
+- Car detail (`/cars/[id]`) now fetches via internal API first (relative), falls back to env origin, validates UUID, and only shows "Car not found" on true 404/invalid id. Legacy `/vehicle-details/[id]` redirects here.
+- Dashboard pages for overview, cars CRUD, favorites counts, bookings/earnings/reviews (some data static).
+- Auth pages for login/signup via Supabase.
 
-## App Behavior (Routes)
-- Layout: `src/app/layout.tsx` adds `Navbar` + `Footer`; globals in `src/app/globals.css`.
-- Marketing: `src/app/(marketing)/*` hero/search, featured cars (Supabase with mock fallback), how-it-works, prices/blog/contact static content.
-- Explore: `src/app/explore/page.tsx` client filters (query/location/type/price/features), map placeholder (`components/map/map-panel`), favorites toggle via `/api/favorites`, cars fetched from `/api/cars`.
-- Car detail: `src/app/cars/[id]/page.tsx` loads car via Supabase REST → server client → internal API → mock; shows gallery, details, features, reviews stub, availability summary, favorite toggle, booking widget posting to `/api/bookings`.
-- Auth: `src/app/auth/login|signup/page.tsx` email/password Supabase browser client.
-- Dashboard (guarded by `requireUser`): overview/cards; cars list/edit with live Supabase data + favorites count; favorites dashboard shows owner counts and user saves; bookings/earnings/reviews pages currently static. `PhotoUploader` and `AvailabilityForm` exist but not yet mounted on pages.
+## Findings about the "Car not found" bug
+- Root cause: previous loader built `apiBase` using `await headers()` inside a non-async closure and swallowed fetch errors, so production SSR failed and returned null, triggering the "Car not found" UI.
+- Fix applied: deterministic loader that hits `/api/cars/[id]` via relative fetch (no host guessing), UUID guard, explicit error logging, and fallback to env origin (`NEXT_PUBLIC_SITE_URL` -> `https://${VERCEL_URL}` -> `http://localhost:3000`). Vehicle-details route now redirects to `/cars/[id]`.
+- Validation: `npm run typecheck` and `npm run build` succeed locally after the fix.
 
-## API Surface (Supabase-backed)
-- `GET/POST /api/cars` list/create (profile upsert to satisfy FK).
-- `GET/PUT/DELETE /api/cars/[id]` fetch/update/delete with owner checks.
-- `POST /api/bookings` overlap/date validation, total price; `GET /api/bookings` renter + owner-visible bookings.
-- `GET/POST /api/favorites` toggle favorites per user.
-- `POST /api/availability` owners add availability windows.
-- `POST /api/reviews` renter with completed booking can review.
-- `GET /api/debug/car-fetch` Supabase REST/client diagnostics.
-
-## Key Components & Utilities
-- UI primitives in `src/components/ui/*`; domain components: `car-card`, `favorite-button`, `booking-widget`, `filters-sidebar`, `map/map-panel`, `image-gallery`, `date-range-picker`.
-- Forms: `CarForm` (create/update cars), `AvailabilityForm` (not mounted), `PhotoUploader` (not mounted).
-- Helpers: `src/lib/utils.ts` (currency/date/options), `feature-icons.ts`, `owner-cars.ts` for dashboard counts.
-
-## How to Run/Check
+## How to run/check
 1) `npm install`
-2) Apply `db/migration.sql` to Supabase; optional `npm run db:seed` (needs service role key).
+2) Create `.env.local` from `.env.example` with Supabase URL/anon key, bucket names, optional `NEXT_PUBLIC_SITE_URL`.
 3) `npm run dev`
-4) Checks: `npm run lint`, `npm run typecheck`, `npm run build`.
+4) Sanity checks: `npm run lint`, `npm run typecheck`, `npm run build`.
 
-## Gaps / Follow-ups
-- Map is a placeholder; payments stub (“Paystack coming soon”).
-- Dashboard bookings/earnings/reviews use static data—wire to Supabase for production.
-- Attach `PhotoUploader` and `AvailabilityForm` to car edit flow for uploads/availability management.
-
-## Directory Overview
+## Directory overview
 ```
 .
-├── docs/
-│   ├── ARCHITECTURE.md
-│   ├── DEPLOYMENT.md
-│   ├── LOG-2025-12-27.md
-│   ├── PROJECT_AUDIT.md  ← this file
-│   └── RLS.md
-├── db/
-│   ├── migration.sql
-│   ├── patch_favorites_owner_select.sql
-│   └── seed.ts
-├── public/ (assets, logo, hero, placeholders)
-├── src/
-│   ├── app/
-│   │   ├── (marketing)/{page.tsx, prices, blog, contact}
-│   │   ├── auth/{login, signup}
-│   │   ├── explore/page.tsx
-│   │   ├── cars/[id]/page.tsx
-│   │   ├── dashboard/{layout.tsx,page.tsx,bookings,earnings,reviews,favorites,cars}
-│   │   ├── api/{cars, bookings, favorites, availability, reviews, debug/car-fetch}
-│   │   └── privacy/page.tsx
-│   ├── components/ (navbar, footer, marketing, car-card, booking-widget, filters-sidebar, map, dashboard, ui, etc.)
-│   └── lib/ (supabase clients, auth, utils, validators, mock-data, owner-cars, types)
-├── tailwind.config.ts
-├── next.config.ts
-├── package.json
-└── README.md
+|- docs/ (ARCHITECTURE.md, DEPLOYMENT.md, LOG-2025-12-27.md, PROJECT_AUDIT.md, RLS.md)
+|- db/ (migration.sql, patch_favorites_owner_select.sql, seed.ts)
+|- public/ (logo/assets, car-placeholder.jpg)
+|- src/
+|  |- app/
+|  |  |- (marketing)/{page.tsx, blog, contact, prices}
+|  |  |- api/{cars, bookings, favorites, availability, reviews, debug/car-fetch, vehicle-details/[id]}
+|  |  |- auth/{login, signup}
+|  |  |- cars/[id]/page.tsx (car detail)
+|  |  |- vehicle-details/[id]/page.tsx (redirects to cars page)
+|  |  |- explore/page.tsx
+|  |  |- dashboard/{layout.tsx, page.tsx, cars, bookings, earnings, favorites, reviews}
+|  |  |- privacy/page.tsx
+|  |- components/ (ui primitives, navbar/footer, car-card, favorite-button, booking-widget, filters-sidebar, image-gallery, map, dashboard widgets)
+|  |- lib/ (supabase clients, utils, validators, feature-icons, database.types, mock-data, owner-cars)
+|- package.json, tailwind.config.ts, next.config.ts, tsconfig.json
 ```
