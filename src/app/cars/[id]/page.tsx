@@ -14,6 +14,7 @@ import type { Database } from "@/lib/database.types";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { mockCars } from "@/lib/mock-data";
 import { formatCurrency } from "@/lib/utils";
+import { headers } from "next/headers";
 
 export const dynamic = "force-dynamic";
 
