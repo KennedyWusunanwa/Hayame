@@ -223,20 +223,10 @@ async function loadCar(id: string): Promise<LoadedCar> {
   let car: CarDetail | null = null;
   let availability: AvailabilityWindow[] = [];
   let isFavorite = false;
-  const siteBase = (() => {
-    if (process.env.NEXT_PUBLIC_SITE_URL) return process.env.NEXT_PUBLIC_SITE_URL;
-    const vercelUrl = process.env.NEXT_PUBLIC_VERCEL_URL;
-    if (!vercelUrl) return undefined;
-    if (vercelUrl.startsWith("http")) return vercelUrl;
-    return `https://${vercelUrl}`;
-  })();
-  const baseUrl =
-    siteBase ||
-    "https://hayame.vercel.app";
 
-  // Fetch car via our own API (known to work in prod)
+  // Fetch car via our own API (relative URL to avoid host/env issues)
   try {
-    const res = await fetch(`${baseUrl}/api/cars/${id}`, { cache: "no-store" });
+    const res = await fetch(`/api/cars/${id}`, { cache: "no-store" });
     if (res.ok) {
       const { data } = (await res.json()) as { data?: SupabaseCar };
       if (data) {
