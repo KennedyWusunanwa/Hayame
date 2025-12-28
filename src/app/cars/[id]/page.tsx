@@ -223,11 +223,6 @@ async function loadCar(id: string): Promise<LoadedCar> {
   let car: CarDetail | null = null;
   let availability: AvailabilityWindow[] = [];
   let isFavorite = false;
-  const hdrs = await headers();
-  const host = hdrs.get("host");
-  const protocol = host && (host.includes("localhost") || host.startsWith("127.") || host.endsWith(".internal"))
-    ? "http"
-    : "https";
   const siteBase = (() => {
     if (process.env.NEXT_PUBLIC_SITE_URL) return process.env.NEXT_PUBLIC_SITE_URL;
     const vercelUrl = process.env.NEXT_PUBLIC_VERCEL_URL;
@@ -237,46 +232,12 @@ async function loadCar(id: string): Promise<LoadedCar> {
   })();
   const baseCandidates = [
     siteBase,
-    host ? `${protocol}://${host}` : undefined,
     "https://hayame.vercel.app",
     "http://localhost:3000",
   ].filter(Boolean) as string[];
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-  // Prefer our own API route first (works in prod and respects current env)
-  for (const baseUrl of baseCandidates) {
-    try {
-      const res = await fetch(`${baseUrl}/api/cars/${id}`, { cache: "no-store" });
-      if (!res.ok) continue;
-      const { data } = (await res.json()) as { data?: SupabaseCar };
-      if (data) {
-        car = {
-          id: data.id,
-          title: data.title,
-          description: data.description,
-          daily_price: Number(data.daily_price ?? 0),
-          city: data.city,
-          region: data.region,
-          car_type: data.car_type,
-          seats: data.seats,
-          transmission: data.transmission,
-          fuel: data.fuel,
-          features: data.features,
-          is_available: data.is_available,
-          photos: data.car_photos ?? [],
-          owner: null,
-          rating: 4.8,
-          reviews: 0,
-          created_at: data.created_at,
-        };
-        break;
-      }
-    } catch (error) {
-      console.warn("API fallback failed", { baseUrl, error });
-    }
-  }
 
   // Supabase REST for public read + availability
   if (!car && supabaseUrl && supabaseAnonKey) {
@@ -317,6 +278,41 @@ async function loadCar(id: string): Promise<LoadedCar> {
       }
     } catch (error) {
       console.warn("Supabase REST fetch failed", error);
+    }
+  }
+
+  // Try our API route (self-hosted) as a resilient fallback
+  if (!car) {
+    for (const baseUrl of baseCandidates) {
+      try {
+        const res = await fetch(`${baseUrl}/api/cars/${id}`, { cache: "no-store" });
+        if (!res.ok) continue;
+        const { data } = (await res.json()) as { data?: SupabaseCar };
+        if (data) {
+          car = {
+            id: data.id,
+            title: data.title,
+            description: data.description,
+            daily_price: Number(data.daily_price ?? 0),
+            city: data.city,
+            region: data.region,
+            car_type: data.car_type,
+            seats: data.seats,
+            transmission: data.transmission,
+            fuel: data.fuel,
+            features: data.features,
+            is_available: data.is_available,
+            photos: data.car_photos ?? [],
+            owner: null,
+            rating: 4.8,
+            reviews: 0,
+            created_at: data.created_at,
+          };
+          break;
+        }
+      } catch (error) {
+        console.warn("API fallback failed", { baseUrl, error });
+      }
     }
   }
 
