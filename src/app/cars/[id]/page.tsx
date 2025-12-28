@@ -224,74 +224,58 @@ async function loadCar(id: string): Promise<LoadedCar> {
   let availability: AvailabilityWindow[] = [];
   let isFavorite = false;
 
-  // Fetch car via our own API (relative URL to avoid host/env issues)
-  try {
-    const res = await fetch(`/api/cars/${id}`, { cache: "no-store" });
-    if (res.ok) {
-      const { data } = (await res.json()) as { data?: SupabaseCar };
-      if (data) {
-        car = {
-          id: data.id,
-          title: data.title,
-          description: data.description,
-          daily_price: Number(data.daily_price ?? 0),
-          city: data.city,
-          region: data.region,
-          car_type: data.car_type,
-          seats: data.seats,
-          transmission: data.transmission,
-          fuel: data.fuel,
-          features: data.features,
-          is_available: data.is_available,
-          photos: data.car_photos ?? [],
-          owner: null,
-          rating: 4.8,
-          reviews: 0,
-          created_at: data.created_at,
-        };
-      }
-    }
-  } catch (error) {
-    console.warn("API car fetch failed", error);
-  }
+  const hostHeaders = await headers();
+  const host = hostHeaders.get("host");
+  const envBase = (() => {
+    const envSite = process.env.NEXT_PUBLIC_SITE_URL;
+    if (envSite) return envSite.startsWith("http") ? envSite : `https://${envSite}`;
+    const vercel = process.env.NEXT_PUBLIC_VERCEL_URL;
+    if (vercel) return vercel.startsWith("http") ? vercel : `https://${vercel}`;
+    return null;
+  })();
+  const protocol =
+    host && (host.includes("localhost") || host.startsWith("127.") || host.endsWith(".internal"))
+      ? "http"
+      : "https";
+  const requestBase = envBase ?? (host ? `${protocol}://${host}` : null);
 
-  // Try server client for availability + favorites
+  // Fetch car via our own API (relative URL to avoid host/env issues)
+  // Prefer Supabase SSR client (authoritative data, favorites, availability)
   try {
     const supabase = await createSupabaseServerClient();
     const {
       data: { user },
     } = await supabase.auth.getUser();
 
-    if (!car) {
-      const { data: carData } = await supabase
-        .from("cars")
-        .select(
-          "*, car_photos(url), owner:profiles!cars_owner_id_fkey(id, full_name, avatar_url, city)",
-        )
-        .eq("id", id)
-        .maybeSingle();
-      const supabaseCar = carData as SupabaseCar | null;
-      if (supabaseCar) {
-        car = {
-          id: supabaseCar.id,
-          title: supabaseCar.title,
-          description: supabaseCar.description,
-          daily_price: Number(supabaseCar.daily_price ?? 0),
-          city: supabaseCar.city,
-          region: supabaseCar.region,
-          car_type: supabaseCar.car_type,
-          seats: supabaseCar.seats,
-          transmission: supabaseCar.transmission,
-          fuel: supabaseCar.fuel,
-          features: supabaseCar.features,
-          is_available: supabaseCar.is_available,
-          photos: supabaseCar.car_photos ?? [],
-          owner: supabaseCar.owner ?? null,
-          rating: 4.8,
-          reviews: 0,
-          created_at: supabaseCar.created_at,
-        };
-      }
+    const { data: carData } = await supabase
+      .from("cars")
+      .select(
+        "*, car_photos(url), owner:profiles!cars_owner_id_fkey(id, full_name, avatar_url, city)",
+      )
+      .eq("id", id)
+      .maybeSingle();
+
+    const supabaseCar = carData as SupabaseCar | null;
+    if (supabaseCar) {
+      car = {
+        id: supabaseCar.id,
+        title: supabaseCar.title,
+        description: supabaseCar.description,
+        daily_price: Number(supabaseCar.daily_price ?? 0),
+        city: supabaseCar.city,
+        region: supabaseCar.region,
+        car_type: supabaseCar.car_type,
+        seats: supabaseCar.seats,
+        transmission: supabaseCar.transmission,
+        fuel: supabaseCar.fuel,
+        features: supabaseCar.features,
+        is_available: supabaseCar.is_available,
+        photos: supabaseCar.car_photos ?? [],
+        owner: supabaseCar.owner ?? null,
+        rating: 4.8,
+        reviews: 0,
+        created_at: supabaseCar.created_at,
+      };
     }
 
     const { data: availabilityData } = await supabase
@@ -311,6 +295,86 @@ async function loadCar(id: string): Promise<LoadedCar> {
     }
   } catch (error) {
     console.warn("Supabase client fetch failed", error);
+  }
+
+  // Fallback: Supabase REST
+  if (!car && process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+    try {
+      const params = new URLSearchParams({
+        select: "*,car_photos(url)",
+        id: `eq.${id}`,
+      });
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/cars?${params.toString()}`,
+        {
+          headers: {
+            apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+            Authorization: `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`,
+          },
+          cache: "no-store",
+        },
+      );
+      if (res.ok) {
+        const data = (await res.json()) as SupabaseCar[];
+        const restCar = data?.[0];
+        if (restCar) {
+          car = {
+            id: restCar.id,
+            title: restCar.title,
+            description: restCar.description,
+            daily_price: Number(restCar.daily_price ?? 0),
+            city: restCar.city,
+            region: restCar.region,
+            car_type: restCar.car_type,
+            seats: restCar.seats,
+            transmission: restCar.transmission,
+            fuel: restCar.fuel,
+            features: restCar.features,
+            is_available: restCar.is_available,
+            photos: restCar.car_photos ?? [],
+            owner: null,
+            rating: 4.8,
+            reviews: 0,
+            created_at: restCar.created_at,
+          };
+        }
+      }
+    } catch (error) {
+      console.warn("Supabase REST fetch failed", error);
+    }
+  }
+
+  // Fallback: API route via absolute base
+  if (!car && requestBase) {
+    try {
+      const res = await fetch(new URL(`/api/cars/${id}`, requestBase), { cache: "no-store" });
+      if (res.ok) {
+        const { data } = (await res.json()) as { data?: SupabaseCar };
+        if (data) {
+          car = {
+            id: data.id,
+            title: data.title,
+            description: data.description,
+            daily_price: Number(data.daily_price ?? 0),
+            city: data.city,
+            region: data.region,
+            car_type: data.car_type,
+            seats: data.seats,
+            transmission: data.transmission,
+            fuel: data.fuel,
+            features: data.features,
+            is_available: data.is_available,
+            photos: data.car_photos ?? [],
+            owner: null,
+            rating: 4.8,
+            reviews: 0,
+            created_at: data.created_at,
+          };
+        }
+      }
+    } catch (error) {
+      console.warn("API car fetch failed", error);
+    }
   }
 
   if (!car) {
