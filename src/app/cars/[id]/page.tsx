@@ -223,7 +223,7 @@ async function loadCar(id: string): Promise<LoadedCar> {
   let car: CarDetail | null = null;
   let availability: AvailabilityWindow[] = [];
   let isFavorite = false;
-  const hdrs = headers();
+  const hdrs = await headers();
   const host = hdrs.get("host");
   const protocol = host && (host.includes("localhost") || host.startsWith("127.") || host.endsWith(".internal"))
     ? "http"
