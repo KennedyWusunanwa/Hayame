@@ -235,44 +235,46 @@ async function loadCar(id: string): Promise<LoadedCar> {
     if (vercelUrl.startsWith("http")) return vercelUrl;
     return `https://${vercelUrl}`;
   })();
-  const baseUrl =
-    siteBase ||
-    (host ? `${protocol}://${host}` : "") ||
-    "http://localhost:3000";
+  const baseCandidates = [
+    siteBase,
+    host ? `${protocol}://${host}` : undefined,
+    "https://hayame.vercel.app",
+    "http://localhost:3000",
+  ].filter(Boolean) as string[];
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
   // Prefer our own API route first (works in prod and respects current env)
-  if (baseUrl) {
+  for (const baseUrl of baseCandidates) {
     try {
       const res = await fetch(`${baseUrl}/api/cars/${id}`, { cache: "no-store" });
-      if (res.ok) {
-        const { data } = (await res.json()) as { data?: SupabaseCar };
-        if (data) {
-          car = {
-            id: data.id,
-            title: data.title,
-            description: data.description,
-            daily_price: Number(data.daily_price ?? 0),
-            city: data.city,
-            region: data.region,
-            car_type: data.car_type,
-            seats: data.seats,
-            transmission: data.transmission,
-            fuel: data.fuel,
-            features: data.features,
-            is_available: data.is_available,
-            photos: data.car_photos ?? [],
-            owner: null,
-            rating: 4.8,
-            reviews: 0,
-            created_at: data.created_at,
-          };
-        }
+      if (!res.ok) continue;
+      const { data } = (await res.json()) as { data?: SupabaseCar };
+      if (data) {
+        car = {
+          id: data.id,
+          title: data.title,
+          description: data.description,
+          daily_price: Number(data.daily_price ?? 0),
+          city: data.city,
+          region: data.region,
+          car_type: data.car_type,
+          seats: data.seats,
+          transmission: data.transmission,
+          fuel: data.fuel,
+          features: data.features,
+          is_available: data.is_available,
+          photos: data.car_photos ?? [],
+          owner: null,
+          rating: 4.8,
+          reviews: 0,
+          created_at: data.created_at,
+        };
+        break;
       }
     } catch (error) {
-      console.warn("API fallback failed", error);
+      console.warn("API fallback failed", { baseUrl, error });
     }
   }
 
