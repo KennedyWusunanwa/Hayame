@@ -224,41 +224,82 @@ async function loadCar(id: string): Promise<{
   let availability: AvailabilityWindow[] = [];
   let isFavorite = false;
 
-  // Supabase SSR for authoritative data, availability, favorites
+  const apiBase = (() => {
+    const envSite = process.env.NEXT_PUBLIC_SITE_URL;
+    if (envSite) return envSite.startsWith("http") ? envSite : `https://${envSite}`;
+    const vercel = process.env.NEXT_PUBLIC_VERCEL_URL;
+    if (vercel) return vercel.startsWith("http") ? vercel : `https://${vercel}`;
+    return "https://hayame.vercel.app";
+  })();
+
+  // 1) Try API route with absolute base (same runtime/env as working API)
+  try {
+    const res = await fetch(new URL(`/api/cars/${id}`, apiBase), { cache: "no-store" });
+    if (res.ok) {
+      const { data } = (await res.json()) as { data?: SupabaseCar };
+      if (data) {
+        car = {
+          id: data.id,
+          title: data.title,
+          description: data.description,
+          daily_price: Number(data.daily_price ?? 0),
+          city: data.city,
+          region: data.region,
+          car_type: data.car_type,
+          seats: data.seats,
+          transmission: data.transmission,
+          fuel: data.fuel,
+          features: data.features,
+          is_available: data.is_available,
+          photos: data.car_photos ?? [],
+          owner: null,
+          rating: 4.8,
+          reviews: 0,
+          created_at: data.created_at,
+        };
+      }
+    }
+  } catch {
+    // continue
+  }
+
+  // 2) Supabase SSR for authoritative data, availability, favorites
   try {
     const supabase = await createSupabaseServerClient();
     const {
       data: { user },
     } = await supabase.auth.getUser();
 
-    const { data: carData } = await supabase
-      .from("cars")
-      .select(
-        "*, car_photos(url), owner:profiles!cars_owner_id_fkey(id, full_name, avatar_url, city)",
-      )
-      .eq("id", id)
-      .maybeSingle();
-    const supabaseCar = carData as SupabaseCar | null;
-    if (supabaseCar) {
-      car = {
-        id: supabaseCar.id,
-        title: supabaseCar.title,
-        description: supabaseCar.description,
-        daily_price: Number(supabaseCar.daily_price ?? 0),
-        city: supabaseCar.city,
-        region: supabaseCar.region,
-        car_type: supabaseCar.car_type,
-        seats: supabaseCar.seats,
-        transmission: supabaseCar.transmission,
-        fuel: supabaseCar.fuel,
-        features: supabaseCar.features,
-        is_available: supabaseCar.is_available,
-        photos: supabaseCar.car_photos ?? [],
-        owner: supabaseCar.owner ?? null,
-        rating: 4.8,
-        reviews: 0,
-        created_at: supabaseCar.created_at,
-      };
+    if (!car) {
+      const { data: carData } = await supabase
+        .from("cars")
+        .select(
+          "*, car_photos(url), owner:profiles!cars_owner_id_fkey(id, full_name, avatar_url, city)",
+        )
+        .eq("id", id)
+        .maybeSingle();
+      const supabaseCar = carData as SupabaseCar | null;
+      if (supabaseCar) {
+        car = {
+          id: supabaseCar.id,
+          title: supabaseCar.title,
+          description: supabaseCar.description,
+          daily_price: Number(supabaseCar.daily_price ?? 0),
+          city: supabaseCar.city,
+          region: supabaseCar.region,
+          car_type: supabaseCar.car_type,
+          seats: supabaseCar.seats,
+          transmission: supabaseCar.transmission,
+          fuel: supabaseCar.fuel,
+          features: supabaseCar.features,
+          is_available: supabaseCar.is_available,
+          photos: supabaseCar.car_photos ?? [],
+          owner: supabaseCar.owner ?? null,
+          rating: 4.8,
+          reviews: 0,
+          created_at: supabaseCar.created_at,
+        };
+      }
     }
 
     const { data: availabilityData } = await supabase
@@ -276,11 +317,11 @@ async function loadCar(id: string): Promise<{
         .maybeSingle();
       isFavorite = Boolean(favoriteRow);
     }
-  } catch (error) {
+  } catch {
     // ignore and fallback
   }
 
-  // Supabase REST as last resort for car data (anon)
+  // 3) Supabase REST as last resort for car data (anon)
   if (!car && process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
     try {
       const params = new URLSearchParams({
@@ -322,12 +363,12 @@ async function loadCar(id: string): Promise<{
           };
         }
       }
-    } catch (error) {
+    } catch {
       // ignore
     }
   }
 
-  // Mock fallback
+  // 4) Mock fallback
   if (!car) {
     const mock = mockCars.find((c) => c.id === id);
     if (mock) {
