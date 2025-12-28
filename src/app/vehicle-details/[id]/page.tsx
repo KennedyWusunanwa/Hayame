@@ -206,12 +206,12 @@ async function loadCar(id: string): Promise<{
   let availability: AvailabilityWindow[] = [];
   let isFavorite = false;
 
+  const headerHost = (await headers()).get("host");
   const apiBase = (() => {
     const envSite = process.env.NEXT_PUBLIC_SITE_URL;
     if (envSite) return envSite.startsWith("http") ? envSite : `https://${envSite}`;
     const vercel = process.env.NEXT_PUBLIC_VERCEL_URL;
     if (vercel) return vercel.startsWith("http") ? vercel : `https://${vercel}`;
-    const headerHost = await headers().get("host");
     if (headerHost) {
       const isLocal =
         headerHost.includes("localhost") || headerHost.startsWith("127.") || headerHost.endsWith(".internal");
