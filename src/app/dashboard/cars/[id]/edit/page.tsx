@@ -5,10 +5,12 @@ import type { Database } from "@/lib/database.types";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 type PageProps = {
-  params: { id: string };
+  params: { id: string } | Promise<{ id: string }>;
 };
 
 export default async function EditCarPage({ params }: PageProps) {
+  const resolvedParams = await params;
+
   const supabase = await createSupabaseServerClient();
   const {
     data: { user },
@@ -21,11 +23,11 @@ export default async function EditCarPage({ params }: PageProps) {
   const { data: car, error } = await supabase
     .from("cars")
     .select("*")
-    .eq("id", params.id)
+    .eq("id", resolvedParams.id)
     .eq("owner_id", user!.id)
     .maybeSingle<Database["public"]["Tables"]["cars"]["Row"]>();
 
-  const hydratedCar = car ?? (await fetchCarFallback(params.id, user.id));
+  const hydratedCar = car ?? (await fetchCarFallback(resolvedParams.id, user.id));
   if (!hydratedCar) return notFound();
 
   return (

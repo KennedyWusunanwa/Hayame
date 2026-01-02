@@ -6,13 +6,15 @@ create extension if not exists "pgcrypto";
 do $$
 begin
   if not exists (select 1 from pg_type where typname = 'booking_status') then
-    create type booking_status as enum ('pending', 'confirmed', 'cancelled', 'completed');
+    create type booking_status as enum ('pending', 'awaiting_host', 'confirmed', 'rejected', 'cancelled', 'completed', 'refunded');
   end if;
 end$$;
 
 -- Profiles
 create table if not exists profiles (
   id uuid primary key references auth.users(id) on delete cascade,
+  first_name text,
+  last_name text,
   full_name text,
   avatar_url text,
   phone text,
@@ -75,6 +77,14 @@ create table if not exists bookings (
   end_date date not null,
   status booking_status default 'pending'::booking_status,
   total_price numeric,
+  payment_status text default 'pending',
+  payment_reference text,
+  payment_provider text,
+  paid_at timestamptz,
+  approved_at timestamptz,
+  rejected_at timestamptz,
+  rejection_reason text,
+  refund_reference text,
   created_at timestamptz default now()
 );
 create index if not exists idx_bookings_car on bookings(car_id);
@@ -113,6 +123,8 @@ alter table reviews enable row level security;
 -- Profiles: owners can read/update their profile
 create policy if not exists "Users can view their profile" on profiles
   for select using (id = auth.uid());
+create policy if not exists "Users can insert their profile" on profiles
+  for insert with check (id = auth.uid());
 create policy if not exists "Users can update their profile" on profiles
   for update using (id = auth.uid());
 

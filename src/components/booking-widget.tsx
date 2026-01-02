@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { DateRangePicker } from "@/components/date-range-picker";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { formatCurrency, calculateNights } from "@/lib/utils";
 
 type Props = {
@@ -16,6 +17,7 @@ export function BookingWidget({ carId, dailyPrice }: Props) {
   const [endDate, setEndDate] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+  const publicKey = useMemo(() => process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY, []);
 
   const nights = calculateNights(startDate, endDate);
   const billableNights = Math.max(nights, 1);
@@ -23,22 +25,73 @@ export function BookingWidget({ carId, dailyPrice }: Props) {
 
   const submit = async () => {
     if (!startDate || !endDate) return;
+    if (!publicKey) {
+      alert("Paystack is not configured yet.");
+      return;
+    }
     try {
       setLoading(true);
-      const res = await fetch("/api/bookings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ carId, startDate, endDate }),
-      });
-      if (!res.ok) {
-        const error = await res.json().catch(() => ({}));
-        throw new Error(error.message ?? "Could not create booking");
+      await loadPaystackScript();
+      const supabase = createSupabaseBrowserClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) {
+        router.push("/auth/login");
+        return;
       }
-      router.push("/dashboard/bookings");
+
+      const amountInMinorUnit = Math.round(total * 100);
+      const reference = `car-${carId}-${Date.now()}`;
+      const PaystackPop = (window as any).PaystackPop;
+      if (!PaystackPop?.setup) {
+        throw new Error("Paystack failed to load");
+      }
+
+      const handleSuccess = async (tran: any) => {
+        try {
+          const res = await fetch("/api/bookings/paystack", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              carId,
+              startDate,
+              endDate,
+              reference: tran?.reference ?? reference,
+              amount: amountInMinorUnit,
+            }),
+          });
+          if (!res.ok) {
+            const error = await res.json().catch(() => ({}));
+            throw new Error(error.message ?? "Payment verified but booking failed");
+          }
+          router.push("/dashboard/bookings");
+        } catch (err: any) {
+          alert(err.message ?? "Booking failed after payment. Please contact support.");
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      const handler = PaystackPop.setup({
+        key: publicKey,
+        email: user.email ?? `${user.id}@guest.local`,
+        amount: amountInMinorUnit,
+        currency: "GHS",
+        ref: reference,
+        callback: (tran: any) => {
+          void handleSuccess(tran);
+        },
+        onClose: () => {
+          setLoading(false);
+        },
+      });
+      handler.openIframe();
     } catch (error) {
       console.error(error);
-      alert("Please sign in and try again.");
+      alert((error as Error).message ?? "Please sign in and try again.");
     } finally {
+      // loading is cleared in onClose/callback, keep for safety on immediate errors
       setLoading(false);
     }
   };
@@ -50,10 +103,12 @@ export function BookingWidget({ carId, dailyPrice }: Props) {
           <div className="text-2xl font-semibold text-brand">
             {formatCurrency(dailyPrice)} <span className="text-base text-gray-500">/ day</span>
           </div>
-          <div className="text-sm text-gray-600">Pay later · Paystack coming soon</div>
+          <div className="text-sm text-gray-600">
+            Pay now with Paystack; host approval required before pickup.
+          </div>
         </div>
         <div className="rounded-full bg-brand/10 px-3 py-1 text-xs font-medium text-brand">
-          Free cancellation within 24h
+          Refunded if host rejects
         </div>
       </div>
       <DateRangePicker
@@ -73,4 +128,21 @@ export function BookingWidget({ carId, dailyPrice }: Props) {
       </Button>
     </div>
   );
+}
+
+let paystackScriptPromise: Promise<void> | null = null;
+async function loadPaystackScript() {
+  if (typeof window === "undefined") return;
+  if ((window as any).PaystackPop) return;
+  if (!paystackScriptPromise) {
+    paystackScriptPromise = new Promise<void>((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = "https://js.paystack.co/v1/inline.js";
+      script.async = true;
+      script.onload = () => resolve();
+      script.onerror = () => reject(new Error("Failed to load Paystack"));
+      document.body.appendChild(script);
+    });
+  }
+  return paystackScriptPromise;
 }

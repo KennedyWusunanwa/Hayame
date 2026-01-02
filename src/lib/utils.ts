@@ -27,6 +27,16 @@ export function calculateNights(start?: string | null, end?: string | null) {
   return Math.max(differenceInCalendarDays(new Date(end), new Date(start)), 0);
 }
 
+export function getInitials(name?: string | null) {
+  if (!name) return "";
+  return name
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("");
+}
+
 export const carTypes = [
   "SUV",
   "Sedan",
@@ -39,13 +49,38 @@ export const carTypes = [
 
 export const featureOptions = [
   "Air Conditioning",
+  "Airbags",
+  "Alloy Wheels",
+  "AM/FM Radio",
+  "Electric Windows",
+  "Android Auto",
+  "Anti-Lock Brakes",
+  "Armrests",
+  "Blind Spot Monitor",
+  "Bullbar",
+  "Apple CarPlay",
+  "CD Player",
+  "Cruise Control",
+  "Cup Holders",
+  "Electric Mirrors",
+  "Front Fog Lamps",
+  "Leather Seats",
+  "LED Headlights",
+  "Parking Assist",
+  "Parking Sensors",
+  "Roof Rack",
+  "Sidesteps",
+  "Spotlight",
+  "Sunroof",
+  "Traction Control",
+  "Winch",
+  "Xenon Lights",
+  // legacy options kept for backwards compatibility
   "Automatic",
   "Bluetooth",
   "USB Port",
   "4x4",
-  "Leather Seats",
   "Child Seat",
-  "Sunroof",
 ];
 
 export const cities = [

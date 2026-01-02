@@ -12,6 +12,8 @@ export type Database = {
       profiles: {
         Row: {
           id: string;
+          first_name: string | null;
+          last_name: string | null;
           full_name: string | null;
           avatar_url: string | null;
           phone: string | null;
@@ -20,6 +22,8 @@ export type Database = {
         };
         Insert: {
           id: string;
+          first_name?: string | null;
+          last_name?: string | null;
           full_name?: string | null;
           avatar_url?: string | null;
           phone?: string | null;
@@ -28,6 +32,8 @@ export type Database = {
         };
         Update: {
           id?: string;
+          first_name?: string | null;
+          last_name?: string | null;
           full_name?: string | null;
           avatar_url?: string | null;
           phone?: string | null;
@@ -163,6 +169,14 @@ export type Database = {
           end_date: string;
           status: Database["public"]["Enums"]["booking_status"];
           total_price: number | null;
+          payment_status: string | null;
+          payment_reference: string | null;
+          payment_provider: string | null;
+          paid_at: string | null;
+          approved_at: string | null;
+          rejected_at: string | null;
+          rejection_reason: string | null;
+          refund_reference: string | null;
           created_at: string | null;
         };
         Insert: {
@@ -173,6 +187,14 @@ export type Database = {
           end_date: string;
           status?: Database["public"]["Enums"]["booking_status"];
           total_price?: number | null;
+          payment_status?: string | null;
+          payment_reference?: string | null;
+          payment_provider?: string | null;
+          paid_at?: string | null;
+          approved_at?: string | null;
+          rejected_at?: string | null;
+          rejection_reason?: string | null;
+          refund_reference?: string | null;
           created_at?: string | null;
         };
         Update: {
@@ -183,6 +205,14 @@ export type Database = {
           end_date?: string;
           status?: Database["public"]["Enums"]["booking_status"];
           total_price?: number | null;
+          payment_status?: string | null;
+          payment_reference?: string | null;
+          payment_provider?: string | null;
+          paid_at?: string | null;
+          approved_at?: string | null;
+          rejected_at?: string | null;
+          rejection_reason?: string | null;
+          refund_reference?: string | null;
           created_at?: string | null;
         };
       };
@@ -243,7 +273,14 @@ export type Database = {
       };
     };
     Enums: {
-      booking_status: "pending" | "confirmed" | "cancelled" | "completed";
+      booking_status:
+        | "pending"
+        | "awaiting_host"
+        | "confirmed"
+        | "rejected"
+        | "cancelled"
+        | "completed"
+        | "refunded";
     };
     Views: {
       [_ in never]: never;

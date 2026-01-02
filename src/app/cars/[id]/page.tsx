@@ -17,13 +17,15 @@ import { BookingWidget } from "@/components/booking-widget";
 import { ImageGallery } from "@/components/image-gallery";
 import { detailIcons, getFeatureIcon } from "@/lib/feature-icons";
 import type { Database } from "@/lib/database.types";
+import { mockCars, type MockCar } from "@/lib/mock-data";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, getInitials } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
+type PageParams = { id: string };
 type PageProps = {
-  params: { id: string };
+  params: PageParams | Promise<PageParams>;
 };
 
 type Owner = {
@@ -65,7 +67,9 @@ type SupabaseCar = Database["public"]["Tables"]["cars"]["Row"] & {
 };
 
 export default async function CarDetailPage({ params }: PageProps) {
-  const { car, availability, isFavorite } = await loadCar(params.id);
+  const resolvedParams = await params;
+  console.log("[car-detail] start", resolvedParams);
+  const { car, availability, isFavorite } = await loadCar(resolvedParams.id);
 
   if (!car) {
     return <NotFoundState />;
@@ -212,7 +216,7 @@ export default async function CarDetailPage({ params }: PageProps) {
         <div className="space-y-4 lg:sticky lg:top-6">
           <AvailabilitySummary availability={availability} isAvailable={car.is_available} />
           <BookingWidget carId={car.id} dailyPrice={car.daily_price} />
-          <HostCard owner={car.owner} />
+          <HostCard owner={car.owner} rating={car.rating} reviews={car.reviews} />
         </div>
       </div>
     </div>
@@ -261,16 +265,29 @@ async function loadCar(id: string): Promise<{
   availability: AvailabilityWindow[];
   isFavorite: boolean;
 }> {
+  const mock = mockCars.find((c) => c.id === id);
+  if (mock) {
+    console.log("[car-detail] using mock", id);
+    return { car: mapMockCar(mock), availability: [], isFavorite: false };
+  }
+
   if (!isUUID(id)) {
+    console.log("[car-detail] not uuid", id);
     notFound();
   }
 
-  const apiCar = await getCarFromInternalApi(id);
-  if (!apiCar) {
-    notFound();
+  // Fetch directly from Supabase REST first (anon key works in prod)
+  const restCar = await getCarFromSupabaseRest(id);
+  console.log("[car-detail] rest car", { id, found: Boolean(restCar) });
+  let car = restCar ? mapCar(restCar) : null;
+
+  // Fallback: call our internal API
+  if (!car) {
+    const apiCar = await getCarFromInternalApi(id);
+    console.log("[car-detail] api car", { id, found: Boolean(apiCar) });
+    car = apiCar ? mapCar(apiCar) : null;
   }
 
-  let car = mapCar(apiCar);
   let availability: AvailabilityWindow[] = [];
   let isFavorite = false;
 
@@ -279,6 +296,42 @@ async function loadCar(id: string): Promise<{
     const {
       data: { user },
     } = await supabase.auth.getUser();
+
+    if (!car) {
+      const { data: carData } = await supabase
+        .from("cars")
+        .select(
+          "*, car_photos(url), owner:profiles!cars_owner_id_fkey(id, full_name, avatar_url, city)",
+        )
+        .eq("id", id)
+        .maybeSingle();
+      if (carData) {
+        console.log("[car-detail] supabase client car", { id, found: true });
+        car = mapCar(carData as SupabaseCar);
+      }
+    }
+
+    if (!car && process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+      const params = new URLSearchParams({
+        id: `eq.${id}`,
+        select: "*, car_photos(url), owner:profiles!cars_owner_id_fkey(id,full_name,avatar_url,city)",
+      });
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/cars?${params.toString()}`,
+        {
+          headers: {
+            apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+            Authorization: `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`,
+          },
+          cache: "no-store",
+        },
+      );
+      const data = (await res.json()) as SupabaseCar[] | { message?: string };
+      const row = Array.isArray(data) ? data[0] : null;
+      if (row) {
+        car = mapCar(row);
+      }
+    }
 
     const { data: availabilityData } = await supabase
       .from("car_availability")
@@ -299,7 +352,42 @@ async function loadCar(id: string): Promise<{
     console.error("[car-detail] supabase SSR failed", { id, error });
   }
 
+  if (!car) {
+    console.warn("[car-detail] no car after fallbacks", { id });
+    notFound();
+  }
+
   return { car, availability, isFavorite };
+}
+
+async function getCarFromSupabaseRest(id: string): Promise<SupabaseCar | null> {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!supabaseUrl || !supabaseAnonKey) return null;
+
+  const params = new URLSearchParams({
+    id: `eq.${id}`,
+    select: "*, car_photos(url), owner:profiles!cars_owner_id_fkey(id,full_name,avatar_url,city)",
+  });
+
+  try {
+    const res = await fetch(`${supabaseUrl}/rest/v1/cars?${params.toString()}`, {
+      headers: {
+        apikey: supabaseAnonKey,
+        Authorization: `Bearer ${supabaseAnonKey}`,
+      },
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      console.error("[car-detail] supabase REST failed", { id, status: res.status });
+      return null;
+    }
+    const data = (await res.json()) as SupabaseCar[] | { message?: string };
+    return Array.isArray(data) ? data[0] ?? null : null;
+  } catch (error) {
+    console.error("[car-detail] supabase REST error", { id, error });
+    return null;
+  }
 }
 
 function mapCar(data: SupabaseCar): CarDetail {
@@ -321,6 +409,32 @@ function mapCar(data: SupabaseCar): CarDetail {
     rating: 4.8,
     reviews: 0,
     created_at: data.created_at,
+  };
+}
+
+function mapMockCar(mock: MockCar): CarDetail {
+  return {
+    id: mock.id,
+    title: mock.name,
+    description: mock.description,
+    daily_price: mock.daily_price,
+    city: mock.city,
+    region: mock.region,
+    car_type: mock.car_type,
+    seats: mock.seats,
+    transmission: mock.transmission,
+    fuel: mock.fuel,
+    features: mock.features,
+    is_available: true,
+    photos: [{ url: mock.image }],
+    owner: {
+      id: "mock-owner",
+      full_name: mock.host.name,
+      avatar_url: mock.host.avatar,
+      city: mock.city,
+    },
+    rating: mock.rating,
+    reviews: mock.reviews,
   };
 }
 
@@ -418,8 +532,10 @@ function AvailabilitySummary({
   );
 }
 
-function HostCard({ owner }: { owner?: Owner | null }) {
-  const avatar = owner?.avatar_url ?? "/car-placeholder.jpg";
+function HostCard({ owner, rating, reviews }: { owner?: Owner | null; rating?: number; reviews?: number }) {
+  const avatar = owner?.avatar_url;
+  const initials = getInitials(owner?.full_name ?? "Host");
+  const score = rating ?? 4.8;
   return (
     <Card>
       <CardHeader>
@@ -427,13 +543,26 @@ function HostCard({ owner }: { owner?: Owner | null }) {
       </CardHeader>
       <CardContent className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="relative h-12 w-12 overflow-hidden rounded-full border border-border">
-            <Image src={avatar} alt={owner?.full_name ?? "Host"} fill className="object-cover" sizes="60px" />
-          </div>
+          {avatar ? (
+            <div className="relative h-12 w-12 overflow-hidden rounded-full border border-border">
+              <Image src={avatar} alt={owner?.full_name ?? "Host"} fill className="object-cover" sizes="60px" />
+            </div>
+          ) : (
+            <div className="flex h-12 w-12 items-center justify-center rounded-full border border-border bg-primary/10 text-sm font-semibold text-primary">
+              {initials || "H"}
+            </div>
+          )}
           <div>
             <p className="text-sm font-semibold text-foreground">{owner?.full_name ?? "Host"}</p>
-            <p className="flex items-center gap-1 text-xs text-gray-600">
-              <Shield className="h-3 w-3 text-primary" /> {owner?.city ?? "Location TBD"}
+            <p className="flex items-center gap-2 text-xs text-gray-600">
+              <span className="flex items-center gap-1 text-amber-600">
+                <Star className="h-3 w-3 fill-amber-500 text-amber-500" />
+                {score.toFixed(1)}
+              </span>
+              <span className="flex items-center gap-1">
+                <Shield className="h-3 w-3 text-primary" /> {owner?.city ?? "Location TBD"}
+              </span>
+              {typeof reviews === "number" && reviews > 0 ? <span>({reviews} trips)</span> : null}
             </p>
           </div>
         </div>
@@ -443,9 +572,7 @@ function HostCard({ owner }: { owner?: Owner | null }) {
           asChild
           className="shrink-0"
         >
-          <Link href="#" onClick={(e) => e.preventDefault()}>
-            View host
-          </Link>
+          <Link href="#">View host</Link>
         </Button>
       </CardContent>
     </Card>
