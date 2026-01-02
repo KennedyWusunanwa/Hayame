@@ -6,6 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { carFormSchema } from "@/lib/validators";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select } from "@/components/ui/select";
@@ -23,6 +24,8 @@ type Props = {
 export function CarForm({ carId, defaultValues }: Props) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
+  const [uploading, setUploading] = useState(false);
   const {
     register,
     handleSubmit,
@@ -59,9 +62,19 @@ export function CarForm({ carId, defaultValues }: Props) {
         const { message } = await res.json().catch(() => ({ message: "Unknown error" }));
         throw new Error(message);
       }
+      const payload = (await res.json().catch(() => ({}))) as { data?: { id?: string } };
+      const newCarId = carId ?? payload?.data?.id;
+
+      if (newCarId && files.length > 0) {
+        setUploading(true);
+        await uploadPhotos(newCarId, files);
+      }
+
       router.push("/dashboard/cars");
     } catch (err: any) {
       setError(err.message ?? "Unable to save car");
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -149,6 +162,22 @@ export function CarForm({ carId, defaultValues }: Props) {
         </div>
       </div>
 
+      <div className="space-y-2">
+        <label className="text-sm font-semibold text-gray-700">Photos</label>
+        <Input
+          type="file"
+          accept="image/*"
+          multiple
+          onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
+        />
+        <p className="text-xs text-gray-600">
+          Add clear exterior/interior photos. You can upload more later in edit.
+        </p>
+        {files.length > 0 ? (
+          <p className="text-xs text-gray-700">{files.length} file(s) selected</p>
+        ) : null}
+      </div>
+
       <div className="flex items-center justify-between rounded-lg border border-border bg-white p-4">
         <div>
           <p className="text-sm font-semibold text-foreground">Availability</p>
@@ -162,8 +191,8 @@ export function CarForm({ carId, defaultValues }: Props) {
 
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
       <div className="flex items-center gap-3">
-        <Button type="submit" disabled={isSubmitting}>
-          {isSubmitting ? "Saving..." : "Save car"}
+        <Button type="submit" disabled={isSubmitting || uploading}>
+          {isSubmitting || uploading ? "Saving..." : "Save car"}
         </Button>
         <Button type="button" variant="secondary" onClick={() => router.push("/dashboard/cars")}>
           Cancel
@@ -171,4 +200,34 @@ export function CarForm({ carId, defaultValues }: Props) {
       </div>
     </form>
   );
+}
+
+async function uploadPhotos(carId: string, files: File[]) {
+  const supabase = createSupabaseBrowserClient();
+  const supa = supabase as any;
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Please sign in to upload photos");
+  const bucket =
+    process.env.NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET ||
+    process.env.NEXT_PUBLIC_SUPABASE_AVATAR_BUCKET ||
+    "car-photos";
+
+  for (const file of files) {
+    const ext = file.name.split(".").pop();
+    const path = `${user.id}/${carId}/${Date.now()}-${Math.random().toString(16).slice(2)}.${ext}`;
+    const { error: uploadError } = await supabase.storage.from(bucket).upload(path, file, {
+      cacheControl: "3600",
+      upsert: false,
+    });
+    if (uploadError) throw uploadError;
+
+    const {
+      data: { publicUrl },
+    } = supabase.storage.from(bucket).getPublicUrl(path);
+
+    const { error: insertError } = await supa.from("car_photos").insert({ car_id: carId, url: publicUrl });
+    if (insertError) throw insertError;
+  }
 }
