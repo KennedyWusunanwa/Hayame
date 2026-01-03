@@ -13,6 +13,7 @@ import { Select } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { featureOptions, carTypes } from "@/lib/utils";
+import { useLocations } from "@/lib/use-locations";
 
 type FormValues = z.infer<typeof carFormSchema>;
 
@@ -26,6 +27,7 @@ export function CarForm({ carId, defaultValues }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [files, setFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
+  const { regions, citiesByRegion } = useLocations();
   const {
     register,
     handleSubmit,
@@ -92,12 +94,36 @@ export function CarForm({ carId, defaultValues }: Props) {
           <Input type="number" min={50} {...register("daily_price", { valueAsNumber: true })} />
         </div>
         <div className="space-y-2">
-          <label className="text-sm font-semibold text-gray-700">City</label>
-          <Input placeholder="Accra" {...register("city")} />
+          <label className="text-sm font-semibold text-gray-700">Region</label>
+          <Select
+            value={watch("region") ?? ""}
+            onChange={(e) => {
+              setValue("region", e.target.value);
+              setValue("city", "");
+            }}
+          >
+            <option value="">Select region</option>
+            {regions.map((region) => (
+              <option key={region} value={region}>
+                {region}
+              </option>
+            ))}
+          </Select>
         </div>
         <div className="space-y-2">
-          <label className="text-sm font-semibold text-gray-700">Region</label>
-          <Input placeholder="Greater Accra" {...register("region")} />
+          <label className="text-sm font-semibold text-gray-700">City</label>
+          <Select
+            value={watch("city") ?? ""}
+            onChange={(e) => setValue("city", e.target.value)}
+            disabled={!watch("region")}
+          >
+            <option value="">Select city</option>
+            {(citiesByRegion[watch("region") ?? ""] ?? []).map((city) => (
+              <option key={city} value={city}>
+                {city}
+              </option>
+            ))}
+          </Select>
         </div>
         <div className="space-y-2">
           <label className="text-sm font-semibold text-gray-700">Car type</label>

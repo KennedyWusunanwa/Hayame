@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { SlidersHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { featureOptions, carTypes } from "@/lib/utils";
+import { useLocations } from "@/lib/use-locations";
 import {
   Sheet,
   SheetClose,
@@ -18,7 +19,8 @@ import {
 
 export type Filters = {
   query?: string;
-  location?: string;
+  region?: string;
+  city?: string;
   carType?: string;
   minPrice?: number;
   maxPrice?: number;
@@ -31,6 +33,12 @@ type Props = {
 };
 
 export function FiltersSidebar({ filters, onChange }: Props) {
+  const { regions, citiesByRegion } = useLocations();
+  const cities = useMemo(
+    () => (filters.region ? citiesByRegion[filters.region] ?? [] : []),
+    [filters.region, citiesByRegion],
+  );
+
   const content = (
     <div className="flex flex-col gap-5">
       <div className="flex flex-col gap-2">
@@ -42,12 +50,33 @@ export function FiltersSidebar({ filters, onChange }: Props) {
         />
       </div>
       <div className="flex flex-col gap-2">
-        <label className="text-sm font-semibold text-gray-800">Location</label>
-        <Input
-          placeholder="Accra, Kumasi..."
-          value={filters.location ?? ""}
-          onChange={(e) => onChange({ ...filters, location: e.target.value })}
-        />
+        <label className="text-sm font-semibold text-gray-800">Region</label>
+        <Select
+          value={filters.region ?? ""}
+          onChange={(e) => onChange({ ...filters, region: e.target.value, city: "" })}
+        >
+          <option value="">Any</option>
+          {regions.map((region) => (
+            <option value={region} key={region}>
+              {region}
+            </option>
+          ))}
+        </Select>
+      </div>
+      <div className="flex flex-col gap-2">
+        <label className="text-sm font-semibold text-gray-800">City</label>
+        <Select
+          value={filters.city ?? ""}
+          onChange={(e) => onChange({ ...filters, city: e.target.value })}
+          disabled={!filters.region}
+        >
+          <option value="">Any</option>
+          {cities.map((city) => (
+            <option value={city} key={city}>
+              {city}
+            </option>
+          ))}
+        </Select>
       </div>
       <div className="flex flex-col gap-2">
         <label className="text-sm font-semibold text-gray-800">Car type</label>
@@ -123,7 +152,8 @@ export function FiltersSidebar({ filters, onChange }: Props) {
         onClick={() =>
           onChange({
             query: "",
-            location: "",
+            region: "",
+            city: "",
             carType: "",
             minPrice: undefined,
             maxPrice: undefined,

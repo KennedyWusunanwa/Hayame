@@ -8,12 +8,14 @@ import { FiltersSidebar, type Filters } from "@/components/filters-sidebar";
 import { MapPanel } from "@/components/map/map-panel";
 import { Button } from "@/components/ui/button";
 import { mockCars, type MockCar } from "@/lib/mock-data";
+import { formatCurrency } from "@/lib/utils";
 
 function ExploreContent() {
   const searchParams = useSearchParams();
   const [filters, setFilters] = useState<Filters>({
     query: "",
-    location: "",
+    region: "",
+    city: "",
     carType: "",
     minPrice: undefined,
     maxPrice: undefined,
@@ -26,10 +28,13 @@ function ExploreContent() {
   useEffect(() => {
     const q = searchParams.get("q") || "";
     const carType = searchParams.get("carType") || "";
+    const region = searchParams.get("region") || "";
+    const city = searchParams.get("city") || "";
     setFilters((prev) => ({
       ...prev,
       query: q,
-      location: q,
+      region,
+      city,
       carType,
     }));
   }, [searchParams]);
@@ -55,7 +60,7 @@ function ExploreContent() {
             id: car.id,
             name: car.title,
             city: car.city ?? "Accra",
-            region: car.region ?? "Greater Accra",
+            region: car.region ?? "Greater Accra Region",
             daily_price: Number(car.daily_price ?? 0),
             rating: 4.8,
             reviews: 0,
@@ -70,9 +75,7 @@ function ExploreContent() {
               avatar:
                 "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=300&q=80",
             },
-            image:
-              car.car_photos?.[0]?.url ??
-              "https://images.unsplash.com/photo-1503736334956-4c8f8e92946d?auto=format&fit=crop&w=1200&q=80",
+            image: car.car_photos?.[0]?.url ?? "/car-placeholder.jpg",
           }));
           setCars(mapped);
         } else {
@@ -97,9 +100,8 @@ function ExploreContent() {
         !filters.query ||
         car.name.toLowerCase().includes(filters.query.toLowerCase()) ||
         car.city.toLowerCase().includes(filters.query.toLowerCase());
-      const matchesLocation =
-        !filters.location ||
-        `${car.city} ${car.region}`.toLowerCase().includes(filters.location.toLowerCase());
+      const matchesRegion = !filters.region || car.region === filters.region;
+      const matchesCity = !filters.city || car.city === filters.city;
       const matchesType = !filters.carType || car.car_type === filters.carType;
       const matchesMin = !filters.minPrice || car.daily_price >= filters.minPrice;
       const matchesMax = !filters.maxPrice || car.daily_price <= filters.maxPrice;
@@ -107,14 +109,22 @@ function ExploreContent() {
         !filters.features || filters.features.length === 0
           ? true
           : filters.features.every((f) => car.features.includes(f));
-      return matchesQuery && matchesLocation && matchesType && matchesMin && matchesMax && matchesFeatures;
+      return (
+        matchesQuery &&
+        matchesRegion &&
+        matchesCity &&
+        matchesType &&
+        matchesMin &&
+        matchesMax &&
+        matchesFeatures
+      );
     });
   }, [filters, cars]);
 
   const markers = filtered.map((car) => ({
     id: car.id,
-    label: `${car.city} • ${car.name}`,
-    price: `₵${car.daily_price}`,
+    label: `${car.city} - ${car.name}`,
+    price: formatCurrency(car.daily_price),
   }));
 
   return (
@@ -133,7 +143,7 @@ function ExploreContent() {
       <div className="grid gap-6 lg:grid-cols-[320px,1fr]">
         <FiltersSidebar filters={filters} onChange={setFilters} />
         <div className="grid gap-5">
-          <div className="h-64 w-full overflow-hidden rounded-2xl border border-border bg-white shadow-soft sm:h-72">
+          <div className="h-44 w-full overflow-hidden rounded-2xl border border-border bg-white shadow-soft sm:h-56 lg:h-64">
             <MapPanel markers={markers} className="h-full" />
           </div>
           <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">

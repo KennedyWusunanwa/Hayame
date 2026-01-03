@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CarForm } from "@/components/car-form";
+import { AvailabilityForm } from "@/components/availability-form";
 import type { Database } from "@/lib/database.types";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -58,6 +59,14 @@ export default async function EditCarPage({ params }: PageProps) {
               is_available: hydratedCar.is_available ?? true,
             }}
           />
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>Availability</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <AvailabilityForm carId={hydratedCar.id} />
         </CardContent>
       </Card>
     </div>

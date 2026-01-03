@@ -47,6 +47,15 @@ export const carTypes = [
   "Coupe",
 ];
 
+export const fallbackCities = [
+  { city: "Accra", region: "Greater Accra" },
+  { city: "Kumasi", region: "Ashanti" },
+  { city: "Takoradi", region: "Western" },
+  { city: "Tamale", region: "Northern" },
+  { city: "Cape Coast", region: "Central" },
+  { city: "Tema", region: "Greater Accra" },
+];
+
 export const featureOptions = [
   "Air Conditioning",
   "Airbags",
@@ -83,11 +92,4 @@ export const featureOptions = [
   "Child Seat",
 ];
 
-export const cities = [
-  { city: "Accra", region: "Greater Accra" },
-  { city: "Kumasi", region: "Ashanti" },
-  { city: "Takoradi", region: "Western" },
-  { city: "Tamale", region: "Northern" },
-  { city: "Cape Coast", region: "Central" },
-  { city: "Tema", region: "Greater Accra" },
-];
+export const cities = fallbackCities;

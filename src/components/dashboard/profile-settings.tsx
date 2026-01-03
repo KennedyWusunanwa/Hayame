@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { getInitials } from "@/lib/utils";
+import { useLocations } from "@/lib/use-locations";
 
 type Props = {
   userId: string;
@@ -30,10 +31,12 @@ export function ProfileSettings({
   const [firstName, setFirstName] = useState(initialFirstName ?? initialName.split(" ")[0] ?? "");
   const [lastName, setLastName] = useState(initialLastName ?? initialName.split(" ").slice(1).join(" "));
   const [city, setCity] = useState(initialCity ?? "");
+  const [region, setRegion] = useState("");
   const [avatarUrl, setAvatarUrl] = useState(initialAvatar ?? "");
   const [status, setStatus] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const { regions, citiesByRegion } = useLocations();
 
   const bucket =
     process.env.NEXT_PUBLIC_SUPABASE_AVATAR_BUCKET ||
@@ -173,9 +176,39 @@ export function ProfileSettings({
           <label className="text-sm font-semibold text-gray-700">Email</label>
           <Input value={email} disabled />
         </div>
-        <div className="space-y-2 md:col-span-2">
+        <div className="space-y-2">
+          <label className="text-sm font-semibold text-gray-700">Region</label>
+          <select
+            className="w-full rounded-md border border-border bg-white px-3 py-2 text-sm"
+            value={region}
+            onChange={(e) => {
+              setRegion(e.target.value);
+              setCity("");
+            }}
+          >
+            <option value="">Select region</option>
+            {regions.map((r) => (
+              <option key={r} value={r}>
+                {r}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="space-y-2">
           <label className="text-sm font-semibold text-gray-700">City (optional)</label>
-          <Input value={city} onChange={(e) => setCity(e.target.value)} placeholder="Accra, Greater Accra" />
+          <select
+            className="w-full rounded-md border border-border bg-white px-3 py-2 text-sm"
+            value={city}
+            onChange={(e) => setCity(e.target.value)}
+            disabled={!region}
+          >
+            <option value="">Select city</option>
+            {(citiesByRegion[region] ?? []).map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 

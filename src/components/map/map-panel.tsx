@@ -56,7 +56,7 @@ type Props = {
 };
 
 export function MapPanel({ markers, adapter = placeholderAdapter, className }: Props) {
-  return <div className={cn("h-full min-h-[320px]", className)}>{adapter.render(markers)}</div>;
+  return <div className={cn("h-full", className)}>{adapter.render(markers)}</div>;
 }
 
 export const placeholderMapAdapter = placeholderAdapter;

@@ -37,4 +37,5 @@ export const availabilitySchema = z.object({
   startDate: z.string(),
   endDate: z.string(),
   available: z.boolean().optional(),
+  repeatDays: z.array(z.string()).optional(),
 });

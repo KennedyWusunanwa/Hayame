@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { addDays } from "date-fns";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { availabilitySchema } from "@/lib/validators";
 
@@ -19,16 +20,37 @@ export async function POST(req: Request) {
     }
 
     const supa = supabase as any;
-    const { data: availability, error } = await supa
-      .from("car_availability")
-      .insert({
-        car_id: parsed.carId,
-        start_date: parsed.startDate,
-        end_date: parsed.endDate,
-        available: parsed.available ?? true,
-      })
-      .select()
-      .single();
+    const repeatDays = new Set((parsed.repeatDays ?? []).map((d) => d.toLowerCase()));
+    const rows: any[] = [];
+
+    // Always push the explicit range
+    rows.push({
+      car_id: parsed.carId,
+      start_date: parsed.startDate,
+      end_date: parsed.endDate,
+      available: parsed.available ?? true,
+    });
+
+    // If recurring weekdays specified, generate blocks from start to end
+    if (repeatDays.size > 0) {
+      const start = new Date(parsed.startDate);
+      const end = new Date(parsed.endDate);
+      for (let dt = new Date(start); dt <= end; dt = addDays(dt, 1)) {
+        const weekday = dt.toLocaleDateString("en-US", { weekday: "short" }).toLowerCase(); // e.g., mon, tue
+        const weekdayLong = dt.toLocaleDateString("en-US", { weekday: "long" }).toLowerCase();
+        if (repeatDays.has(weekday) || repeatDays.has(weekdayLong)) {
+          const iso = dt.toISOString().slice(0, 10);
+          rows.push({
+            car_id: parsed.carId,
+            start_date: iso,
+            end_date: iso,
+            available: parsed.available ?? false,
+          });
+        }
+      }
+    }
+
+    const { data: availability, error } = await supa.from("car_availability").insert(rows).select();
     if (error) throw error;
     return NextResponse.json({ data: availability });
   } catch (error: any) {
