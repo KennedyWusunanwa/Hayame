@@ -40,8 +40,8 @@ export function HeroSearchBar() {
     <div className="-mt-10 w-full">
       <div className="mx-auto max-w-5xl rounded-2xl border border-white/10 bg-[#0a2137] p-5 text-white shadow-card">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-          <div className="flex w-full min-w-0 flex-nowrap items-center gap-3 overflow-x-auto pb-1 sm:flex-1 sm:overflow-visible">
-            <div className={`${pillBg} min-w-[200px] shrink-0`}>
+          <div className="flex w-full flex-col gap-3 sm:flex-1 sm:flex-row sm:flex-nowrap sm:items-center">
+            <div className={pillBg}>
               <div className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10">
                 <MapPin className="h-5 w-5 text-brand" />
               </div>
@@ -61,7 +61,7 @@ export function HeroSearchBar() {
                 ))}
               </Select>
             </div>
-            <div className={`${pillBg} min-w-[160px] shrink-0`}>
+            <div className={pillBg}>
               <Select
                 value={city}
                 onChange={(e) => setCity(e.target.value)}
@@ -76,7 +76,7 @@ export function HeroSearchBar() {
                 ))}
               </Select>
             </div>
-            <div className={`${pillBg} min-w-[240px] shrink-0`}>
+            <div className={pillBg}>
               <div className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10">
                 <Calendar className="h-5 w-5 text-white" />
               </div>
@@ -108,7 +108,7 @@ export function HeroSearchBar() {
                 />
               </div>
             </div>
-            <div className={`${pillBg} min-w-[160px] shrink-0`}>
+            <div className={pillBg}>
               <div className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10">
                 <CarFront className="h-5 w-5 text-brand" />
               </div>
