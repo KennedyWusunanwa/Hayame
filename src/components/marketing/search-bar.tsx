@@ -13,7 +13,7 @@ export function HeroSearchBar() {
   const pillBg =
     "flex items-center gap-2 rounded-full bg-white/10 px-4 py-3";
   const fieldBase =
-    "h-12 w-full border-0 bg-transparent text-white placeholder:text-white/70 focus-visible:ring-0";
+    "h-12 w-full border-0 bg-transparent text-white placeholder:text-white/70 focus-visible:ring-0 dark-select";
   const router = useRouter();
   const { regions, citiesByRegion } = useLocations();
   const [region, setRegion] = useState("");
