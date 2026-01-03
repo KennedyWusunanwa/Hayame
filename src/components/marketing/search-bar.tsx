@@ -28,12 +28,21 @@ export function HeroSearchBar() {
 
   const onSearch = () => {
     const params = new URLSearchParams();
-    if (city) params.set("q", `${city}, ${region || ""}`.trim());
+    if (city) {
+      params.set("city", city);
+      params.set("q", `${city}, ${region || ""}`.trim());
+    }
     if (!city && region) params.set("q", region);
+    if (region) params.set("region", region);
     if (startDate) params.set("start", startDate);
     if (endDate) params.set("end", endDate);
     if (carType) params.set("carType", carType);
     router.push(`/explore?${params.toString()}`);
+    setRegion("");
+    setCity("");
+    setStartDate("");
+    setEndDate("");
+    setCarType("");
   };
 
   return (
