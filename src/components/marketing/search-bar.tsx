@@ -36,7 +36,7 @@ export function HeroSearchBar() {
     <div className="-mt-10 w-full">
       <div className="mx-auto max-w-5xl rounded-2xl border border-white/10 bg-[#0a2137] p-5 text-white shadow-card">
         <div className="grid items-center gap-4 md:grid-cols-[1.2fr,1fr,1fr,auto]">
-          <div className="flex items-center gap-2 rounded-full bg-white/10 px-4 py-3">
+          <div className="order-1 flex items-center gap-2 rounded-full bg-white/10 px-4 py-3">
             <MapPin className="h-5 w-5 text-brand" />
             <Select
               value={region}
@@ -54,7 +54,7 @@ export function HeroSearchBar() {
               ))}
             </Select>
           </div>
-          <div className="flex items-center gap-2 rounded-full bg-white/10 px-4 py-3">
+          <div className="order-2 flex items-center gap-2 rounded-full bg-white/10 px-4 py-3">
             <Select
               value={city}
               onChange={(e) => setCity(e.target.value)}
@@ -69,7 +69,7 @@ export function HeroSearchBar() {
               ))}
             </Select>
           </div>
-          <div className="flex items-center gap-2 rounded-full bg-white/10 px-4 py-3">
+          <div className="order-3 flex items-center gap-2 rounded-full bg-white/10 px-4 py-3">
             <Calendar className="h-5 w-5 text-white" />
             <div className="flex w-full gap-2">
               <Input
@@ -99,7 +99,7 @@ export function HeroSearchBar() {
               />
             </div>
           </div>
-          <div className="flex items-center gap-2 rounded-full bg-white/10 px-4 py-3">
+          <div className="order-4 flex items-center gap-2 rounded-full bg-white/10 px-4 py-3">
             <CarFront className="h-5 w-5 text-brand" />
             <Select
               value={carType}
@@ -113,7 +113,7 @@ export function HeroSearchBar() {
             </Select>
           </div>
           <Button
-            className="h-12 rounded-full border border-brand bg-brand px-6 text-white hover:bg-white hover:text-brand"
+            className="order-5 h-12 rounded-full border border-brand bg-brand px-6 text-white hover:bg-white hover:text-brand"
             onClick={onSearch}
           >
             Search
