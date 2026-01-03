@@ -55,18 +55,30 @@ export function HeroSearchBar() {
             </Select>
           </div>
           <div className="flex items-center gap-2 rounded-full bg-white/10 px-4 py-3">
-            <Calendar className="h-5 w-5 text-brand" />
+            <Calendar className="h-5 w-5 text-white" />
             <div className="flex w-full gap-2">
               <Input
-                type="date"
+                type="text"
                 value={startDate}
+                placeholder="dd/mm/yy"
+                inputMode="numeric"
+                onFocus={(e) => (e.currentTarget.type = "date")}
+                onBlur={(e) => {
+                  if (!e.currentTarget.value) e.currentTarget.type = "text";
+                }}
                 onChange={(e) => setStartDate(e.target.value)}
                 className="h-10 border-0 bg-transparent text-white placeholder:text-white/70 focus-visible:ring-0"
               />
               <Input
-                type="date"
+                type="text"
                 value={endDate}
                 min={startDate || undefined}
+                placeholder="dd/mm/yy"
+                inputMode="numeric"
+                onFocus={(e) => (e.currentTarget.type = "date")}
+                onBlur={(e) => {
+                  if (!e.currentTarget.value) e.currentTarget.type = "text";
+                }}
                 onChange={(e) => setEndDate(e.target.value)}
                 className="h-10 border-0 bg-transparent text-white placeholder:text-white/70 focus-visible:ring-0"
               />
