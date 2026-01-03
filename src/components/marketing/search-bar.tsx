@@ -55,6 +55,21 @@ export function HeroSearchBar() {
             </Select>
           </div>
           <div className="flex items-center gap-2 rounded-full bg-white/10 px-4 py-3">
+            <Select
+              value={city}
+              onChange={(e) => setCity(e.target.value)}
+              className="h-10 border-0 bg-[#0a2137] text-white focus-visible:ring-0"
+              disabled={!region}
+            >
+              <option value="">City</option>
+              {locationOptions.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div className="flex items-center gap-2 rounded-full bg-white/10 px-4 py-3">
             <Calendar className="h-5 w-5 text-white" />
             <div className="flex w-full gap-2">
               <Input
@@ -84,31 +99,16 @@ export function HeroSearchBar() {
               />
             </div>
           </div>
-            <div className="flex items-center gap-2 rounded-full bg-white/10 px-4 py-3">
-              <CarFront className="h-5 w-5 text-brand" />
-              <Select
-                value={carType}
-                onChange={(e) => setCarType(e.target.value)}
-                className="h-10 border-0 bg-[#0a2137] text-white placeholder:text-white/70 focus-visible:ring-0"
-              >
-                <option value="">Car Type</option>
-                {carTypes.map((type) => (
-                  <option key={type}>{type}</option>
-                ))}
-              </Select>
-            </div>
           <div className="flex items-center gap-2 rounded-full bg-white/10 px-4 py-3">
+            <CarFront className="h-5 w-5 text-brand" />
             <Select
-              value={city}
-              onChange={(e) => setCity(e.target.value)}
-              className="h-10 border-0 bg-[#0a2137] text-white focus-visible:ring-0"
-              disabled={!region}
+              value={carType}
+              onChange={(e) => setCarType(e.target.value)}
+              className="h-10 border-0 bg-[#0a2137] text-white placeholder:text-white/70 focus-visible:ring-0"
             >
-              <option value="">City</option>
-              {locationOptions.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
+              <option value="">Car Type</option>
+              {carTypes.map((type) => (
+                <option key={type}>{type}</option>
               ))}
             </Select>
           </div>
