@@ -1,7 +1,75 @@
 import { NextResponse } from "next/server";
-import { addDays } from "date-fns";
+import { addDays, format, isAfter, parseISO } from "date-fns";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { availabilitySchema } from "@/lib/validators";
+
+const BLOCKING_STATUSES = ["pending", "awaiting_host", "confirmed"];
+
+export async function GET(req: Request) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const carId = searchParams.get("carId");
+    const startDate = searchParams.get("startDate");
+    const endDate = searchParams.get("endDate");
+    if (!carId || !startDate || !endDate) {
+      return NextResponse.json({ message: "Missing carId or date range" }, { status: 400 });
+    }
+
+    const start = parseISO(startDate);
+    const end = parseISO(endDate);
+    if (!startDate || !endDate || isAfter(start, end)) {
+      return NextResponse.json({ message: "Invalid date range" }, { status: 400 });
+    }
+
+    const supabase = await createSupabaseServerClient();
+    const supa = supabase as any;
+    const admin = (() => {
+      try {
+        return createSupabaseAdminClient() as any;
+      } catch {
+        return null;
+      }
+    })();
+
+    const availabilityClient = admin ?? supa;
+    const bookingsClient = admin ?? supa;
+
+    const { data: availabilityRows } = await availabilityClient
+      .from("car_availability")
+      .select("start_date,end_date,available")
+      .eq("car_id", carId)
+      .lte("start_date", endDate)
+      .gte("end_date", startDate);
+
+    const { data: bookingRows } = await bookingsClient
+      .from("bookings")
+      .select("start_date,end_date,status")
+      .eq("car_id", carId)
+      .in("status", BLOCKING_STATUSES)
+      .lte("start_date", endDate)
+      .gte("end_date", startDate);
+
+    const blockedDates = new Set<string>();
+
+    (availabilityRows ?? [])
+      .filter((row: any) => row.available === false)
+      .forEach((row: any) => {
+        addDatesToSet(blockedDates, row.start_date, row.end_date);
+      });
+
+    (bookingRows ?? []).forEach((row: any) => {
+      addDatesToSet(blockedDates, row.start_date, row.end_date);
+    });
+
+    const blocked = Array.from(blockedDates).sort();
+    const isAvailable = !rangeHasBlockedDates(startDate, endDate, blockedDates);
+
+    return NextResponse.json({ blockedDates: blocked, available: isAvailable });
+  } catch (error: any) {
+    return NextResponse.json({ message: error.message ?? "Failed to load availability" }, { status: 400 });
+  }
+}
 
 export async function POST(req: Request) {
   try {
@@ -66,4 +134,25 @@ export async function POST(req: Request) {
   } catch (error: any) {
     return NextResponse.json({ message: error.message ?? "Failed to save availability" }, { status: 400 });
   }
+}
+
+function addDatesToSet(set: Set<string>, startDate: string, endDate: string) {
+  let cursor = parseISO(startDate);
+  const end = parseISO(endDate);
+  while (!isAfter(cursor, end)) {
+    set.add(format(cursor, "yyyy-MM-dd"));
+    cursor = addDays(cursor, 1);
+  }
+}
+
+function rangeHasBlockedDates(startDate: string, endDate: string, blocked: Set<string>) {
+  let cursor = parseISO(startDate);
+  const end = parseISO(endDate);
+  while (!isAfter(cursor, end)) {
+    if (blocked.has(format(cursor, "yyyy-MM-dd"))) {
+      return true;
+    }
+    cursor = addDays(cursor, 1);
+  }
+  return false;
 }

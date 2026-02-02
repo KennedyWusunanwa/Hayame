@@ -18,7 +18,8 @@ Turo-style peer-to-peer car rental marketplace for Ghana. Built with Next.js (Ap
      - `NEXT_PUBLIC_SUPABASE_URL`
      - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
      - `NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET` (default: `car-photos`)
-      - `SUPABASE_SERVICE_ROLE_KEY` (server/seed only, never expose to the client)
+     - `NEXT_PUBLIC_SUPABASE_HOST_ID_BUCKET` (default: `host-ids`)
+     - `SUPABASE_SERVICE_ROLE_KEY` (server/seed only, never expose to the client)
      - `SUPABASE_STORAGE_BUCKET` (default: `car-photos`)
      - `ADMIN_USERNAME` and `ADMIN_PASSWORD` (required for /admin access)
 3) Apply the database schema and RLS (from `db/migration.sql`)

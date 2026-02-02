@@ -42,9 +42,14 @@ export const availabilitySchema = z.object({
 
 export const hostApplicationSchema = z.object({
   full_name: z.string().min(2),
-  phone: z.string().min(6).optional(),
-  city: z.string().min(2).optional(),
+  phone: z.string().min(6),
+  region: z.string().min(2),
+  city: z.string().min(2),
+  id_type: z.enum(["Ghana Card", "NHIS", "Voters ID", "Driving Licence"]),
+  id_number: z.string().min(4),
+  id_front_path: z.string().min(4),
+  id_back_path: z.string().min(4),
+  note: z.string().optional(),
   experience: z.string().min(10),
   fleet_size: z.coerce.number().int().min(0).max(1000).optional(),
-  message: z.string().optional(),
 });

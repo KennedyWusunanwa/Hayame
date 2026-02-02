@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { fallbackCities } from "@/lib/utils";
 
-export async function GET() {
+export async function GET(req: Request) {
+  const strict = new URL(req.url).searchParams.get("strict") === "true";
   try {
     const supabase = await createSupabaseServerClient();
     const { data: regionsData, error: regionError } = await supabase
@@ -39,6 +40,9 @@ export async function GET() {
 
     return NextResponse.json({ data: grouped });
   } catch (error) {
+    if (strict) {
+      return NextResponse.json({ message: "Failed to load locations" }, { status: 500 });
+    }
     // Fallback to static list so UI still works
     const grouped: Record<string, string[]> = {};
     fallbackCities.forEach((c) => {

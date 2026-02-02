@@ -49,24 +49,15 @@ export function Navbar() {
         }
         const name = (user.user_metadata as any)?.full_name || user.email || "Account";
         setUserName(name);
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("is_host")
-          .eq("id", user.id)
-          .maybeSingle();
-        const approvedHost = Boolean((profile as any)?.is_host);
-        setIsHost(approvedHost);
-        if (!approvedHost) {
-          const { data: application } = await supabase
-            .from("host_applications")
-            .select("status")
-            .eq("user_id", user.id)
-            .order("created_at", { ascending: false })
-            .limit(1)
-            .maybeSingle();
-          setHostStatus((application as any)?.status ?? null);
+        const res = await fetch("/api/host-status", { cache: "no-store" });
+        if (res.ok) {
+          const payload = (await res.json()) as { is_host?: boolean; status?: string | null };
+          const approvedHost = Boolean(payload.is_host);
+          setIsHost(approvedHost);
+          setHostStatus(approvedHost ? "approved" : (payload.status as any) ?? null);
         } else {
-          setHostStatus("approved");
+          setIsHost(false);
+          setHostStatus(null);
         }
       } catch (error) {
         setUserName(null);

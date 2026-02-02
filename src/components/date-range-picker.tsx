@@ -9,22 +9,34 @@ import { calculateNights } from "@/lib/utils";
 type Props = {
   startDate?: string;
   endDate?: string;
+  disabledDates?: string[];
   onChange: (range: { startDate: string; endDate: string }) => void;
+  onInvalidRange?: (message: string) => void;
 };
 
-export function DateRangePicker({ startDate, endDate, onChange }: Props) {
+export function DateRangePicker({
+  startDate,
+  endDate,
+  disabledDates = [],
+  onChange,
+  onInvalidRange,
+}: Props) {
   const nights = useMemo(
     () => calculateNights(startDate, endDate),
     [startDate, endDate],
   );
+  const blocked = useMemo(() => new Set(disabledDates), [disabledDates]);
 
   const quickSelect = (days: number) => {
     const start = new Date();
     const end = addDays(start, days);
-    onChange({
-      startDate: format(start, "yyyy-MM-dd"),
-      endDate: format(end, "yyyy-MM-dd"),
-    });
+    const nextStart = format(start, "yyyy-MM-dd");
+    const nextEnd = format(end, "yyyy-MM-dd");
+    if (rangeHasBlockedDates(nextStart, nextEnd, blocked)) {
+      onInvalidRange?.("Those dates include unavailable days.");
+      return;
+    }
+    onChange({ startDate: nextStart, endDate: nextEnd });
   };
 
   return (
@@ -36,10 +48,18 @@ export function DateRangePicker({ startDate, endDate, onChange }: Props) {
             type="date"
             value={startDate ?? ""}
             onChange={(e) =>
-              onChange({
-                startDate: e.target.value,
-                endDate: endDate ?? e.target.value,
-              })
+              (() => {
+                const nextStart = e.target.value;
+                const nextEnd = endDate ?? e.target.value;
+                if (rangeHasBlockedDates(nextStart, nextEnd, blocked)) {
+                  onInvalidRange?.("Start date falls on an unavailable day.");
+                  return;
+                }
+                onChange({
+                  startDate: nextStart,
+                  endDate: nextEnd,
+                });
+              })()
             }
           />
         </div>
@@ -50,10 +70,18 @@ export function DateRangePicker({ startDate, endDate, onChange }: Props) {
             value={endDate ?? ""}
             min={startDate ?? undefined}
             onChange={(e) =>
-              onChange({
-                startDate: startDate ?? e.target.value,
-                endDate: e.target.value,
-              })
+              (() => {
+                const nextStart = startDate ?? e.target.value;
+                const nextEnd = e.target.value;
+                if (rangeHasBlockedDates(nextStart, nextEnd, blocked)) {
+                  onInvalidRange?.("End date range includes unavailable days.");
+                  return;
+                }
+                onChange({
+                  startDate: nextStart,
+                  endDate: nextEnd,
+                });
+              })()
             }
           />
         </div>
@@ -77,4 +105,16 @@ export function DateRangePicker({ startDate, endDate, onChange }: Props) {
       </div>
     </div>
   );
+}
+
+function rangeHasBlockedDates(startDate: string, endDate: string, blocked: Set<string>) {
+  if (!startDate || !endDate || blocked.size === 0) return false;
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return false;
+  for (let dt = new Date(start); dt <= end; dt = addDays(dt, 1)) {
+    const key = format(dt, "yyyy-MM-dd");
+    if (blocked.has(key)) return true;
+  }
+  return false;
 }

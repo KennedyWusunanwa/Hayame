@@ -92,11 +92,19 @@ async function reviewAction(formData: FormData) {
       .update({
         status: "approved",
         reviewed_at: new Date().toISOString(),
-        reviewer,
+        reviewed_by: reviewer,
         rejection_reason: null,
         updated_at: new Date().toISOString(),
       })
       .eq("id", applicationId);
+
+    await admin.from("admin_actions").insert({
+      action: "host_application_approved",
+      target_id: applicationId,
+      target_type: "host_application",
+      performed_by: reviewer,
+      metadata: { user_id: userId },
+    });
   }
 
   if (action === "reject") {
@@ -105,11 +113,19 @@ async function reviewAction(formData: FormData) {
       .update({
         status: "rejected",
         reviewed_at: new Date().toISOString(),
-        reviewer,
+        reviewed_by: reviewer,
         rejection_reason: rejectionReason || "Rejected by admin",
         updated_at: new Date().toISOString(),
       })
       .eq("id", applicationId);
+
+    await admin.from("admin_actions").insert({
+      action: "host_application_rejected",
+      target_id: applicationId,
+      target_type: "host_application",
+      performed_by: reviewer,
+      metadata: { reason: rejectionReason || "Rejected by admin" },
+    });
   }
 
   redirect("/admin");
@@ -118,7 +134,7 @@ async function reviewAction(formData: FormData) {
 export default async function AdminPage({
   searchParams,
 }: {
-  searchParams: { error?: string };
+  searchParams: { error?: string; status?: string; q?: string };
 }) {
   const envReady = Boolean(
     process.env.ADMIN_USERNAME &&
@@ -192,12 +208,73 @@ export default async function AdminPage({
       admin.from("host_applications").select("id", { count: "exact", head: true }).eq("status", "pending"),
     ]);
 
-  const { data: applications } = await admin
+  const statusFilter = searchParams?.status ?? "pending";
+  const query = (searchParams?.q ?? "").trim();
+
+  let applicationsQuery = admin
     .from("host_applications")
     .select(
-      "id,full_name,phone,city,experience,fleet_size,message,status,created_at,reviewed_at,rejection_reason, profiles:profiles!host_applications_user_id_fkey(full_name,avatar_url,phone,city)",
+      "id,full_name,phone,region,city,id_type,id_number,id_front_path,id_back_path,note,experience,fleet_size,status,submitted_at,created_at,reviewed_at,rejection_reason, reviewed_by, profiles:profiles!host_applications_user_id_fkey(full_name,avatar_url,phone,city)",
     )
     .order("created_at", { ascending: false });
+
+  if (["pending", "approved", "rejected"].includes(statusFilter)) {
+    applicationsQuery = applicationsQuery.eq("status", statusFilter);
+  }
+
+  if (query) {
+    applicationsQuery = applicationsQuery.or(
+      `full_name.ilike.%${query}%,phone.ilike.%${query}%,profiles.full_name.ilike.%${query}%`,
+    );
+  }
+
+  const { data: applications } = await applicationsQuery;
+
+  const { data: hosts } = await admin
+    .from("profiles")
+    .select("id,full_name,phone,city,is_host")
+    .eq("is_host", true)
+    .order("created_at", { ascending: false });
+
+  const { data: cars } = await admin
+    .from("cars")
+    .select("id,title,owner_id,city,region,owner:profiles!cars_owner_id_fkey(full_name,phone)")
+    .order("created_at", { ascending: false })
+    .limit(50);
+
+  const carIds = (cars ?? []).map((car: any) => car.id);
+  const carsByOwner = new Map<string, number>();
+  (cars ?? []).forEach((car: any) => {
+    if (!car.owner_id) return;
+    carsByOwner.set(car.owner_id, (carsByOwner.get(car.owner_id) ?? 0) + 1);
+  });
+  const { data: bookingRows } =
+    carIds.length > 0
+      ? await admin.from("bookings").select("car_id,start_date,end_date,status").in("car_id", carIds)
+      : { data: [] };
+
+  const { data: blockRows } =
+    carIds.length > 0
+      ? await admin.from("car_availability").select("car_id,start_date,end_date,available").in("car_id", carIds)
+      : { data: [] };
+
+  const bookingsByCar = new Map<string, any[]>();
+  (bookingRows ?? []).forEach((row: any) => {
+    if (!bookingsByCar.has(row.car_id)) bookingsByCar.set(row.car_id, []);
+    bookingsByCar.get(row.car_id)!.push(row);
+  });
+
+  const blocksByCar = new Map<string, any[]>();
+  (blockRows ?? []).forEach((row: any) => {
+    if (!blocksByCar.has(row.car_id)) blocksByCar.set(row.car_id, []);
+    blocksByCar.get(row.car_id)!.push(row);
+  });
+
+  const { data: auditRows } = await admin
+    .from("admin_actions")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(12);
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-10">
@@ -215,29 +292,131 @@ export default async function AdminPage({
 
       <AdminTabs
         overview={
-          <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="space-y-6">
+            <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <Card>
+                <CardContent className="py-5">
+                  <p className="text-sm text-gray-600">Total users</p>
+                  <p className="text-2xl font-semibold text-foreground">{usersCount ?? 0}</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="py-5">
+                  <p className="text-sm text-gray-600">Total vehicles</p>
+                  <p className="text-2xl font-semibold text-foreground">{carsCount ?? 0}</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="py-5">
+                  <p className="text-sm text-gray-600">Total bookings</p>
+                  <p className="text-2xl font-semibold text-foreground">{bookingsCount ?? 0}</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="py-5">
+                  <p className="text-sm text-gray-600">Pending applications</p>
+                  <p className="text-2xl font-semibold text-foreground">{pendingCount ?? 0}</p>
+                </CardContent>
+              </Card>
+            </div>
+
             <Card>
-              <CardContent className="py-5">
-                <p className="text-sm text-gray-600">Total users</p>
-                <p className="text-2xl font-semibold text-foreground">{usersCount ?? 0}</p>
+              <CardHeader>
+                <CardTitle>Approved hosts</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  {(hosts ?? []).map((host: any) => (
+                    <div key={host.id} className="flex items-center justify-between text-sm">
+                      <div>
+                        <p className="font-semibold text-foreground">{host.full_name ?? "Host"}</p>
+                        <p className="text-xs text-gray-600">{host.phone ?? "No phone"}</p>
+                        <p className="text-[11px] text-gray-500">
+                          Vehicles: {carsByOwner.get(host.id) ?? 0}
+                        </p>
+                      </div>
+                      <span className="text-xs text-gray-500">{host.city ?? "—"}</span>
+                    </div>
+                  ))}
+                  {(hosts ?? []).length === 0 ? (
+                    <p className="text-sm text-gray-600">No approved hosts yet.</p>
+                  ) : null}
+                </div>
               </CardContent>
             </Card>
+
             <Card>
-              <CardContent className="py-5">
-                <p className="text-sm text-gray-600">Total vehicles</p>
-                <p className="text-2xl font-semibold text-foreground">{carsCount ?? 0}</p>
+              <CardHeader>
+                <CardTitle>Vehicles & availability</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {(cars ?? []).map((car: any) => {
+                    const bookings = bookingsByCar.get(car.id) ?? [];
+                    const blocks = (blocksByCar.get(car.id) ?? []).filter((b: any) => b.available === false);
+                    return (
+                      <div key={car.id} className="rounded-lg border border-border p-3">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-semibold text-foreground">{car.title}</p>
+                            <p className="text-[11px] text-gray-500">
+                              Host: {car.owner?.full_name ?? "Host"} {car.owner?.phone ? `• ${car.owner.phone}` : ""}
+                            </p>
+                          </div>
+                          <span className="text-xs text-gray-500">{car.city ?? "—"}</span>
+                        </div>
+                        <div className="mt-2 text-xs text-gray-600">
+                          Bookings: {bookings.length} • Host blocks: {blocks.length}
+                        </div>
+                        {bookings.length > 0 ? (
+                          <div className="mt-2 text-[11px] text-gray-600">
+                            Upcoming bookings:{" "}
+                            {bookings
+                              .slice(0, 2)
+                              .map((b: any) => `${b.start_date} → ${b.end_date}`)
+                              .join(", ")}
+                          </div>
+                        ) : null}
+                        {blocks.length > 0 ? (
+                          <div className="mt-1 text-[11px] text-gray-600">
+                            Host blocks:{" "}
+                            {blocks
+                              .slice(0, 2)
+                              .map((b: any) => `${b.start_date} → ${b.end_date}`)
+                              .join(", ")}
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                  {(cars ?? []).length === 0 ? (
+                    <p className="text-sm text-gray-600">No vehicles yet.</p>
+                  ) : null}
+                </div>
               </CardContent>
             </Card>
+
             <Card>
-              <CardContent className="py-5">
-                <p className="text-sm text-gray-600">Total bookings</p>
-                <p className="text-2xl font-semibold text-foreground">{bookingsCount ?? 0}</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="py-5">
-                <p className="text-sm text-gray-600">Pending applications</p>
-                <p className="text-2xl font-semibold text-foreground">{pendingCount ?? 0}</p>
+              <CardHeader>
+                <CardTitle>Admin audit log</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2 text-sm">
+                  {(auditRows ?? []).map((row: any) => (
+                    <div key={row.id} className="flex items-center justify-between">
+                      <div>
+                        <p className="font-semibold text-foreground">{row.action}</p>
+                        <p className="text-xs text-gray-600">{row.performed_by ?? "admin"}</p>
+                      </div>
+                      <span className="text-xs text-gray-500">
+                        {row.created_at ? new Date(row.created_at).toLocaleString() : "—"}
+                      </span>
+                    </div>
+                  ))}
+                  {(auditRows ?? []).length === 0 ? (
+                    <p className="text-sm text-gray-600">No admin actions yet.</p>
+                  ) : null}
+                </div>
               </CardContent>
             </Card>
           </div>
@@ -248,6 +427,29 @@ export default async function AdminPage({
               <CardTitle>Host applications</CardTitle>
             </CardHeader>
             <CardContent>
+              <div className="mb-4 flex flex-wrap items-center gap-2">
+                {["pending", "approved", "rejected"].map((status) => (
+                  <a
+                    key={status}
+                    className={`rounded-full border px-3 py-1 text-xs font-semibold ${
+                      statusFilter === status ? "border-brand bg-brand text-white" : "border-border text-gray-700"
+                    }`}
+                    href={`/admin?status=${status}&q=${encodeURIComponent(query)}`}
+                  >
+                    {status}
+                  </a>
+                ))}
+                <form className="flex-1 sm:flex-none" action="/admin" method="get">
+                  <input type="hidden" name="status" value={statusFilter} />
+                  <input
+                    name="q"
+                    defaultValue={query}
+                    placeholder="Search name or phone"
+                    className="w-full rounded-md border border-border px-3 py-1 text-xs text-gray-700 sm:w-64"
+                  />
+                </form>
+              </div>
+
               <div className="space-y-3 md:hidden">
                 {applications?.map((app: any) => (
                   <div key={app.id} className="rounded-xl border border-border bg-white p-4">
@@ -261,15 +463,36 @@ export default async function AdminPage({
                       </span>
                     </div>
                     <div className="mt-3 grid gap-2 text-xs text-gray-600">
+                      <div>Region: {app.region ?? "—"}</div>
                       <div>City: {app.city ?? app.profiles?.city ?? "—"}</div>
                       <div>Phone: {app.phone ?? app.profiles?.phone ?? "—"}</div>
+                      <div>ID: {app.id_type ? `${app.id_type} ${app.id_number ?? ""}` : "—"}</div>
+                      <div>
+                        ID Images:{" "}
+                        <a className="text-brand" href={`/api/host-applications/${app.id}/files?type=front`}>
+                          Front
+                        </a>{" "}
+                        /{" "}
+                        <a className="text-brand" href={`/api/host-applications/${app.id}/files?type=back`}>
+                          Back
+                        </a>
+                      </div>
                       <div>Fleet size: {typeof app.fleet_size === "number" ? app.fleet_size : "—"}</div>
                       <div>Experience: {app.experience ?? "—"}</div>
-                      <div>Notes: {app.message ?? "—"}</div>
+                      <div>Notes: {app.note ?? "—"}</div>
+                      <div>Reviewed by: {app.reviewed_by ?? "—"}</div>
+                      <div>Reject reason: {app.rejection_reason ?? "—"}</div>
+                      <div>
+                        Reviewed at: {app.reviewed_at ? new Date(app.reviewed_at).toLocaleDateString() : "—"}
+                      </div>
                     </div>
                     <div className="mt-3 flex items-center justify-between">
                       <span className="text-xs text-gray-500">
-                        {app.created_at ? new Date(app.created_at).toLocaleDateString() : "—"}
+                        {app.submitted_at
+                          ? new Date(app.submitted_at).toLocaleDateString()
+                          : app.created_at
+                            ? new Date(app.created_at).toLocaleDateString()
+                            : "—"}
                       </span>
                       {app.status === "pending" ? (
                         <div className="flex items-center gap-2">
@@ -308,10 +531,12 @@ export default async function AdminPage({
                   <TableHeader>
                     <TableRow>
                       <TableHead>Applicant</TableHead>
+                      <TableHead>Region</TableHead>
                       <TableHead>City</TableHead>
                       <TableHead>Phone</TableHead>
                       <TableHead>Fleet</TableHead>
                       <TableHead>Experience</TableHead>
+                      <TableHead>ID</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Submitted</TableHead>
                       <TableHead>Notes</TableHead>
@@ -325,15 +550,40 @@ export default async function AdminPage({
                           <div className="font-semibold">{app.full_name}</div>
                           <div className="text-xs text-gray-600">{app.profiles?.full_name ?? "User"}</div>
                         </TableCell>
+                        <TableCell>{app.region ?? "—"}</TableCell>
                         <TableCell>{app.city ?? app.profiles?.city ?? "—"}</TableCell>
                         <TableCell>{app.phone ?? app.profiles?.phone ?? "—"}</TableCell>
                         <TableCell>{typeof app.fleet_size === "number" ? app.fleet_size : "—"}</TableCell>
                         <TableCell className="text-xs text-gray-600">{app.experience ?? "—"}</TableCell>
+                        <TableCell className="text-xs text-gray-600">
+                          {app.id_type ?? "—"} {app.id_number ?? ""}
+                          <div className="mt-1 flex gap-2">
+                            <a className="text-brand" href={`/api/host-applications/${app.id}/files?type=front`}>
+                              Front
+                            </a>
+                            <a className="text-brand" href={`/api/host-applications/${app.id}/files?type=back`}>
+                              Back
+                            </a>
+                          </div>
+                        </TableCell>
                         <TableCell className="text-sm font-semibold">{app.status}</TableCell>
                         <TableCell className="text-xs text-gray-600">
-                          {app.created_at ? new Date(app.created_at).toLocaleDateString() : "—"}
+                          {app.submitted_at
+                            ? new Date(app.submitted_at).toLocaleDateString()
+                            : app.created_at
+                              ? new Date(app.created_at).toLocaleDateString()
+                              : "—"}
                         </TableCell>
-                        <TableCell className="text-xs text-gray-600">{app.message ?? "—"}</TableCell>
+                        <TableCell className="text-xs text-gray-600">
+                          {app.note ?? "—"}
+                          <div className="text-[11px] text-gray-500">Reviewed by: {app.reviewed_by ?? "—"}</div>
+                          <div className="text-[11px] text-gray-500">
+                            Reject reason: {app.rejection_reason ?? "—"}
+                          </div>
+                          <div className="text-[11px] text-gray-500">
+                            Reviewed at: {app.reviewed_at ? new Date(app.reviewed_at).toLocaleDateString() : "—"}
+                          </div>
+                        </TableCell>
                         <TableCell className="text-right">
                           {app.status === "pending" ? (
                             <div className="flex items-center justify-end gap-2">
@@ -367,7 +617,7 @@ export default async function AdminPage({
                     ))}
                     {applications?.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={9} className="text-center text-sm text-gray-600">
+                        <TableCell colSpan={11} className="text-center text-sm text-gray-600">
                           No host applications yet.
                         </TableCell>
                       </TableRow>

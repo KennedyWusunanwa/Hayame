@@ -1,8 +1,10 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { useLocations } from "@/lib/use-locations";
 
 type HostApplicationFormProps = {
   disabled?: boolean;
@@ -17,13 +19,47 @@ export function HostApplicationForm({
 }: HostApplicationFormProps) {
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
+  const [region, setRegion] = useState("");
   const [city, setCity] = useState("");
+  const [idType, setIdType] = useState("");
+  const [idNumber, setIdNumber] = useState("");
   const [experience, setExperience] = useState("");
   const [fleetSize, setFleetSize] = useState("");
-  const [message, setMessage] = useState("");
+  const [note, setNote] = useState("");
+  const [idFrontPath, setIdFrontPath] = useState("");
+  const [idBackPath, setIdBackPath] = useState("");
+  const [uploading, setUploading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+
+  const { regions, citiesByRegion, loading: locationsLoading, error: locationsError } = useLocations({
+    strict: true,
+  });
+  const cities = useMemo(() => citiesByRegion[region] ?? [], [citiesByRegion, region]);
+
+  useEffect(() => {
+    const hydrate = async () => {
+      try {
+        const supabase = createSupabaseBrowserClient();
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (!user) return;
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("full_name, phone, city")
+          .eq("id", user.id)
+          .maybeSingle();
+        if (profile?.full_name) setFullName(profile.full_name);
+        if (profile?.phone) setPhone(profile.phone);
+        if (profile?.city) setCity(profile.city);
+      } catch {
+        // ignore
+      }
+    };
+    hydrate();
+  }, []);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -38,11 +74,16 @@ export function HostApplicationForm({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           full_name: fullName,
-          phone: phone || undefined,
-          city: city || undefined,
+          phone,
+          region,
+          city,
+          id_type: idType,
+          id_number: idNumber,
+          id_front_path: idFrontPath,
+          id_back_path: idBackPath,
+          note: note || undefined,
           experience,
           fleet_size: fleetSize ? Number(fleetSize) : undefined,
-          message: message || undefined,
         }),
       });
       if (!res.ok) {
@@ -57,7 +98,18 @@ export function HostApplicationForm({
     }
   };
 
-  const isLocked = disabled || loading;
+  const isLocked = disabled || loading || uploading;
+  const canSubmit =
+    !disabled &&
+    fullName &&
+    phone &&
+    region &&
+    city &&
+    idType &&
+    idNumber &&
+    idFrontPath &&
+    idBackPath &&
+    experience.length >= 10;
 
   return (
     <form className="space-y-4" onSubmit={handleSubmit}>
@@ -91,16 +143,103 @@ export function HostApplicationForm({
             value={phone}
             onChange={(event) => setPhone(event.target.value)}
             disabled={isLocked}
+            required
           />
         </div>
+      <div>
+        <label className="text-sm font-semibold text-foreground">Region</label>
+        <select
+            className="mt-2 w-full rounded-md border border-border bg-white px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
+            value={region}
+            onChange={(event) => {
+              setRegion(event.target.value);
+              setCity("");
+            }}
+          disabled={isLocked || locationsLoading || Boolean(locationsError)}
+          required
+        >
+          <option value="">Select region</option>
+          {regions.map((r) => (
+            <option key={r} value={r}>
+              {r}
+            </option>
+          ))}
+        </select>
+        {locationsError ? <p className="mt-1 text-xs text-red-600">{locationsError}</p> : null}
+      </div>
+      </div>
+
+      <div>
+        <label className="text-sm font-semibold text-foreground">City</label>
+        <select
+          className="mt-2 w-full rounded-md border border-border bg-white px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
+          value={city}
+          onChange={(event) => setCity(event.target.value)}
+          disabled={isLocked || !region}
+          required
+        >
+          <option value="">Select city</option>
+          {cities.map((c) => (
+            <option key={c} value={c}>
+              {c}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2">
         <div>
-          <label className="text-sm font-semibold text-foreground">City</label>
+          <label className="text-sm font-semibold text-foreground">ID type</label>
+          <select
+            className="mt-2 w-full rounded-md border border-border bg-white px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
+            value={idType}
+            onChange={(event) => setIdType(event.target.value)}
+            disabled={isLocked}
+            required
+          >
+            <option value="">Select ID type</option>
+            <option value="Ghana Card">Ghana Card</option>
+            <option value="NHIS">NHIS</option>
+            <option value="Voters ID">Voters ID</option>
+            <option value="Driving Licence">Driving Licence</option>
+          </select>
+        </div>
+        <div>
+          <label className="text-sm font-semibold text-foreground">ID number</label>
           <input
             className="mt-2 w-full rounded-md border border-border bg-white px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
-            value={city}
-            onChange={(event) => setCity(event.target.value)}
+            value={idNumber}
+            onChange={(event) => setIdNumber(event.target.value)}
             disabled={isLocked}
+            required
           />
+        </div>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div>
+          <label className="text-sm font-semibold text-foreground">ID front image</label>
+          <input
+            type="file"
+            accept="image/*"
+            className="mt-2 w-full rounded-md border border-border bg-white px-3 py-2 text-sm shadow-sm"
+            onChange={(event) => handleIdUpload(event.target.files?.[0] ?? null, "front", setIdFrontPath, setError, setUploading)}
+            disabled={isLocked}
+            required
+          />
+          {idFrontPath ? <p className="mt-1 text-xs text-gray-600">Uploaded</p> : null}
+        </div>
+        <div>
+          <label className="text-sm font-semibold text-foreground">ID back image</label>
+          <input
+            type="file"
+            accept="image/*"
+            className="mt-2 w-full rounded-md border border-border bg-white px-3 py-2 text-sm shadow-sm"
+            onChange={(event) => handleIdUpload(event.target.files?.[0] ?? null, "back", setIdBackPath, setError, setUploading)}
+            disabled={isLocked}
+            required
+          />
+          {idBackPath ? <p className="mt-1 text-xs text-gray-600">Uploaded</p> : null}
         </div>
       </div>
 
@@ -133,8 +272,8 @@ export function HostApplicationForm({
           <label className="text-sm font-semibold text-foreground">Notes</label>
           <input
             className="mt-2 w-full rounded-md border border-border bg-white px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
-            value={message}
-            onChange={(event) => setMessage(event.target.value)}
+            value={note}
+            onChange={(event) => setNote(event.target.value)}
             disabled={isLocked}
             placeholder="Anything else to share?"
           />
@@ -144,9 +283,54 @@ export function HostApplicationForm({
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
       {success ? <p className="text-sm text-emerald-600">Application submitted successfully.</p> : null}
 
-      <Button type="submit" disabled={isLocked}>
-        {loading ? "Submitting..." : "Submit application"}
+      <Button type="submit" disabled={!canSubmit || isLocked}>
+        {loading ? "Submitting..." : uploading ? "Uploading..." : "Submit application"}
       </Button>
     </form>
   );
+}
+
+async function handleIdUpload(
+  file: File | null,
+  side: "front" | "back",
+  setPath: (path: string) => void,
+  setError: (msg: string | null) => void,
+  setUploading: (value: boolean) => void,
+) {
+  if (!file) return;
+  const allowed = ["image/jpeg", "image/png", "image/webp"];
+  const maxSize = 5 * 1024 * 1024;
+  if (!allowed.includes(file.type)) {
+    setError("Only JPG, PNG, or WebP images are allowed.");
+    return;
+  }
+  if (file.size > maxSize) {
+    setError("File too large. Max size is 5MB.");
+    return;
+  }
+
+  try {
+    setUploading(true);
+    setError(null);
+    const supabase = createSupabaseBrowserClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) throw new Error("Please sign in to upload files.");
+
+    const bucket = process.env.NEXT_PUBLIC_SUPABASE_HOST_ID_BUCKET || "host-ids";
+    const ext = file.name.split(".").pop() ?? "jpg";
+    const path = `${user.id}/${Date.now()}-${side}.${ext}`;
+    const { error: uploadError } = await supabase.storage.from(bucket).upload(path, file, {
+      cacheControl: "3600",
+      upsert: false,
+      contentType: file.type,
+    });
+    if (uploadError) throw uploadError;
+    setPath(path);
+  } catch (err: any) {
+    setError(err.message ?? "Upload failed.");
+  } finally {
+    setUploading(false);
+  }
 }

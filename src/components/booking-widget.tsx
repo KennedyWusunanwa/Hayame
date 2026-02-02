@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { addDays, format } from "date-fns";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { DateRangePicker } from "@/components/date-range-picker";
@@ -16,12 +17,35 @@ export function BookingWidget({ carId, dailyPrice }: Props) {
   const [startDate, setStartDate] = useState<string>("");
   const [endDate, setEndDate] = useState<string>("");
   const [loading, setLoading] = useState(false);
+  const [blockedDates, setBlockedDates] = useState<string[]>([]);
+  const [message, setMessage] = useState<string | null>(null);
   const router = useRouter();
   const publicKey = useMemo(() => process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY, []);
 
   const nights = calculateNights(startDate, endDate);
   const billableNights = Math.max(nights, 1);
   const total = billableNights * dailyPrice;
+
+  useEffect(() => {
+    const loadAvailability = async () => {
+      try {
+        const start = new Date();
+        const end = addDays(start, 180);
+        const res = await fetch(
+          `/api/availability?carId=${carId}&startDate=${format(start, "yyyy-MM-dd")}&endDate=${format(
+            end,
+            "yyyy-MM-dd",
+          )}`,
+        );
+        if (!res.ok) return;
+        const payload = (await res.json()) as { blockedDates?: string[] };
+        setBlockedDates(payload.blockedDates ?? []);
+      } catch {
+        setBlockedDates([]);
+      }
+    };
+    loadAvailability();
+  }, [carId]);
 
   const submit = async () => {
     if (!startDate || !endDate) return;
@@ -31,6 +55,20 @@ export function BookingWidget({ carId, dailyPrice }: Props) {
     }
     try {
       setLoading(true);
+      setMessage(null);
+
+      const availabilityRes = await fetch(
+        `/api/availability?carId=${carId}&startDate=${startDate}&endDate=${endDate}`,
+      );
+      if (availabilityRes.ok) {
+        const payload = (await availabilityRes.json()) as { available?: boolean };
+        if (payload.available === false) {
+          setMessage("Those dates are no longer available. Please pick new dates.");
+          setLoading(false);
+          return;
+        }
+      }
+
       await loadPaystackScript();
       const supabase = createSupabaseBrowserClient();
       const {
@@ -114,11 +152,15 @@ export function BookingWidget({ carId, dailyPrice }: Props) {
       <DateRangePicker
         startDate={startDate}
         endDate={endDate}
+        disabledDates={blockedDates}
         onChange={({ startDate: start, endDate: end }) => {
+          setMessage(null);
           setStartDate(start);
           setEndDate(end);
         }}
+        onInvalidRange={(msg) => setMessage(msg)}
       />
+      {message ? <p className="text-xs text-amber-700">{message}</p> : null}
       <div className="flex items-center justify-between text-sm text-gray-700">
         <span>{billableNights} day total</span>
         <span className="text-base font-semibold text-foreground">{formatCurrency(total)}</span>

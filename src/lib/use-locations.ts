@@ -5,15 +5,22 @@ import { fallbackCities } from "./utils";
 
 type Locations = Record<string, string[]>;
 
-export function useLocations() {
+type UseLocationsOptions = {
+  strict?: boolean;
+};
+
+export function useLocations(options: UseLocationsOptions = {}) {
+  const { strict = false } = options;
   const [data, setData] = useState<Locations>({});
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const load = async () => {
       setLoading(true);
+      setError(null);
       try {
-        const res = await fetch("/api/locations");
+        const res = await fetch(`/api/locations${strict ? "?strict=true" : ""}`);
         if (!res.ok) throw new Error("Failed to load locations");
         const payload = (await res.json()) as { data?: Locations };
         if (payload.data) {
@@ -22,6 +29,11 @@ export function useLocations() {
           throw new Error("No locations");
         }
       } catch {
+        if (strict) {
+          setData({});
+          setError("Locations unavailable");
+          return;
+        }
         const grouped: Locations = {};
         fallbackCities.forEach((c) => {
           if (!grouped[c.region]) grouped[c.region] = [];
@@ -33,7 +45,7 @@ export function useLocations() {
       }
     };
     load();
-  }, []);
+  }, [strict]);
 
   const regions = useMemo(() => Object.keys(data).sort(), [data]);
   const cities = useMemo(() => {
@@ -44,5 +56,5 @@ export function useLocations() {
     return out;
   }, [data, regions]);
 
-  return { regions, data, citiesByRegion: data, loading, all: cities };
+  return { regions, data, citiesByRegion: data, loading, error, all: cities };
 }

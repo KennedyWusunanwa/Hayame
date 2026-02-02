@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { differenceInCalendarDays } from "date-fns";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { verifyPaystackTransaction } from "@/lib/paystack";
 
 type Body = {
@@ -11,7 +12,7 @@ type Body = {
   amount?: number;
 };
 
-const BLOCKING_STATUSES = ["pending", "awaiting_host", "confirmed", "completed"];
+const BLOCKING_STATUSES = ["pending", "awaiting_host", "confirmed"];
 
 export async function POST(req: Request) {
   try {
@@ -53,7 +54,16 @@ export async function POST(req: Request) {
       return NextResponse.json({ message: "End date must be after start date" }, { status: 400 });
     }
 
-    const { data: conflicts } = await supa
+    const admin = (() => {
+      try {
+        return createSupabaseAdminClient() as any;
+      } catch {
+        return null;
+      }
+    })();
+    const conflictClient = admin ?? supa;
+
+    const { data: conflicts } = await conflictClient
       .from("bookings")
       .select("id,status")
       .eq("car_id", carId)
@@ -62,6 +72,17 @@ export async function POST(req: Request) {
       .gte("end_date", startDate);
 
     if (conflicts && conflicts.length > 0) {
+      return NextResponse.json({ message: "Dates not available" }, { status: 409 });
+    }
+
+    const { data: blocked } = await conflictClient
+      .from("car_availability")
+      .select("id")
+      .eq("car_id", carId)
+      .eq("available", false)
+      .lte("start_date", endDate)
+      .gte("end_date", startDate);
+    if (blocked && blocked.length > 0) {
       return NextResponse.json({ message: "Dates not available" }, { status: 409 });
     }
 

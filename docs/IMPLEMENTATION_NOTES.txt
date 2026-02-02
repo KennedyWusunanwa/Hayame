@@ -1,0 +1,38 @@
+Discovery Summary (Feb 2, 2026)
+
+Stack / Routing
+- Framework: Next.js App Router (src/app).
+- Routing: app directory with server components + route handlers in src/app/api.
+
+Auth
+- Supabase Auth via @supabase/ssr with server/client helpers in src/lib/supabase.
+- Route protection: server-side checks using supabase.auth.getUser() and redirect().
+
+Database / Data Layer
+- Supabase Postgres with RLS policies defined in db/migration.sql.
+- Entities: profiles, cars, car_photos, favorites, bookings, car_availability, reviews, host_applications.
+- Locations data: gh_regions + gh_districts (served via /api/locations with fallback list).
+
+Upload / Storage
+- Supabase Storage used for car photos and avatars.
+- Uploads handled client-side via supabase.storage upload (see car-form, profile-settings, photo-uploader).
+- Host ID images use private bucket `host-ids` with signed URL access via /api/host-applications/[id]/files.
+
+Existing Booking / Availability
+- Bookings created via /api/bookings/paystack.
+- car_availability exists and is written via /api/availability POST (host-only).
+- Booking widget uses a simple DateRangePicker with HTML date inputs.
+- Overlap conflicts enforced in API checks and DB exclusion constraint (bookings_no_overlap_active).
+
+Dashboards
+- /dashboard: renter dashboard.
+- /host: host dashboard with host-only pages.
+- /admin: admin approvals using env-based dummy auth.
+
+Implementation Plan
+1) Extend host application schema to include region/city, ID type/number, ID image refs, note.
+2) Add private storage bucket and signed URL access for ID images.
+3) Add admin audit log and richer admin view (filters, host/vehicle/availability visibility).
+4) Add availability read API (GET) to combine host blocks + booking blocks.
+5) Enforce availability conflicts in booking creation (server-side).
+6) Update booking UI to load blocked dates and prevent selecting unavailable ranges.

@@ -1,6 +1,7 @@
 -- Enable extensions
 create extension if not exists "uuid-ossp";
 create extension if not exists "pgcrypto";
+create extension if not exists "btree_gist";
 
 -- Enums
 do $$
@@ -37,18 +38,57 @@ create table if not exists host_applications (
   user_id uuid not null references profiles(id) on delete cascade,
   full_name text not null,
   phone text,
+  region text,
   city text,
+  id_type text,
+  id_number text,
+  id_front_path text,
+  id_back_path text,
+  note text,
   experience text,
   fleet_size integer,
-  message text,
   status host_application_status default 'pending'::host_application_status,
+  submitted_at timestamptz default now(),
   reviewed_at timestamptz,
-  reviewer text,
+  reviewed_by text,
   rejection_reason text,
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
 create index if not exists idx_host_applications_user on host_applications(user_id);
+
+-- Host application column upgrades (safe for existing tables)
+alter table host_applications add column if not exists id_type text;
+alter table host_applications add column if not exists id_number text;
+alter table host_applications add column if not exists note text;
+alter table host_applications add column if not exists region text;
+alter table host_applications add column if not exists id_front_path text;
+alter table host_applications add column if not exists id_back_path text;
+alter table host_applications add column if not exists submitted_at timestamptz;
+alter table host_applications add column if not exists reviewed_by text;
+do $$
+begin
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_name = 'host_applications' and column_name = 'reviewer'
+  ) then
+    alter table host_applications rename column reviewer to reviewed_by;
+  end if;
+exception when others then
+  -- ignore if rename fails
+end$$;
+
+-- Admin audit log
+create table if not exists admin_actions (
+  id uuid primary key default gen_random_uuid(),
+  action text not null,
+  target_id uuid,
+  target_type text,
+  metadata jsonb,
+  performed_by text,
+  created_at timestamptz default now()
+);
 
 -- Locations
 create table if not exists locations (
@@ -118,6 +158,24 @@ create table if not exists bookings (
 create index if not exists idx_bookings_car on bookings(car_id);
 create index if not exists idx_bookings_renter on bookings(renter_id);
 
+-- Prevent overlapping active bookings for the same car
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'bookings_no_overlap_active'
+  ) then
+    alter table bookings
+      add constraint bookings_no_overlap_active
+      exclude using gist (
+        car_id with =,
+        daterange(start_date, end_date, '[]') with &&
+      )
+      where (status in ('pending', 'awaiting_host', 'confirmed'));
+  end if;
+end$$;
+
 -- Availability windows
 create table if not exists car_availability (
   id uuid primary key default gen_random_uuid(),
@@ -148,6 +206,7 @@ alter table bookings enable row level security;
 alter table car_availability enable row level security;
 alter table reviews enable row level security;
 alter table host_applications enable row level security;
+alter table admin_actions enable row level security;
 
 -- Profiles: owners can read/update their profile
 create policy if not exists "Users can view their profile" on profiles
@@ -250,6 +309,11 @@ insert into storage.buckets (id, name, public)
 values ('car-photos', 'car-photos', true)
 on conflict (id) do nothing;
 
+-- Storage bucket for host ID images (private)
+insert into storage.buckets (id, name, public)
+values ('host-ids', 'host-ids', false)
+on conflict (id) do nothing;
+
 -- Storage RLS
 create policy if not exists "Car photos public read" on storage.objects
   for select using (bucket_id = 'car-photos');
@@ -259,3 +323,13 @@ create policy if not exists "Car photos owner update" on storage.objects
   for update using (bucket_id = 'car-photos' and owner = auth.uid());
 create policy if not exists "Car photos owner delete" on storage.objects
   for delete using (bucket_id = 'car-photos' and owner = auth.uid());
+
+-- Host ID uploads (private bucket)
+create policy if not exists "Host ID owner upload" on storage.objects
+  for insert with check (bucket_id = 'host-ids' and owner = auth.uid());
+create policy if not exists "Host ID owner read" on storage.objects
+  for select using (bucket_id = 'host-ids' and owner = auth.uid());
+create policy if not exists "Host ID owner update" on storage.objects
+  for update using (bucket_id = 'host-ids' and owner = auth.uid());
+create policy if not exists "Host ID owner delete" on storage.objects
+  for delete using (bucket_id = 'host-ids' and owner = auth.uid());

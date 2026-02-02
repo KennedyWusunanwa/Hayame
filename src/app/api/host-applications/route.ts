@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { hostApplicationSchema } from "@/lib/validators";
+import { ZodError } from "zod";
 
 export async function GET() {
   try {
@@ -74,11 +75,17 @@ export async function POST(req: Request) {
         user_id: user.id,
         full_name: parsed.full_name,
         phone: parsed.phone ?? null,
+        region: parsed.region ?? null,
         city: parsed.city ?? null,
+        id_type: parsed.id_type ?? null,
+        id_number: parsed.id_number ?? null,
+        id_front_path: parsed.id_front_path ?? null,
+        id_back_path: parsed.id_back_path ?? null,
+        note: parsed.note ?? null,
         experience: parsed.experience,
         fleet_size: parsed.fleet_size ?? null,
-        message: parsed.message ?? null,
         status: "pending",
+        submitted_at: new Date().toISOString(),
       })
       .select()
       .single();
@@ -86,6 +93,12 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ data });
   } catch (error: any) {
+    if (error instanceof ZodError) {
+      return NextResponse.json(
+        { message: error.issues[0]?.message ?? "Invalid application data", issues: error.issues },
+        { status: 400 },
+      );
+    }
     return NextResponse.json({ message: error.message ?? "Failed to submit application" }, { status: 400 });
   }
 }
