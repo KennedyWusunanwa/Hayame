@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { AdminTabs } from "@/components/admin/admin-tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
@@ -212,110 +213,172 @@ export default async function AdminPage({
         </form>
       </div>
 
-      <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardContent className="py-5">
-            <p className="text-sm text-gray-600">Total users</p>
-            <p className="text-2xl font-semibold text-foreground">{usersCount ?? 0}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="py-5">
-            <p className="text-sm text-gray-600">Total vehicles</p>
-            <p className="text-2xl font-semibold text-foreground">{carsCount ?? 0}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="py-5">
-            <p className="text-sm text-gray-600">Total bookings</p>
-            <p className="text-2xl font-semibold text-foreground">{bookingsCount ?? 0}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="py-5">
-            <p className="text-sm text-gray-600">Pending applications</p>
-            <p className="text-2xl font-semibold text-foreground">{pendingCount ?? 0}</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card className="mt-8">
-        <CardHeader>
-          <CardTitle>Host applications</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Applicant</TableHead>
-                <TableHead>City</TableHead>
-                <TableHead>Phone</TableHead>
-                <TableHead>Fleet</TableHead>
-                <TableHead>Experience</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Submitted</TableHead>
-                <TableHead>Notes</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {applications?.map((app: any) => (
-                <TableRow key={app.id}>
-                  <TableCell>
-                    <div className="font-semibold">{app.full_name}</div>
-                    <div className="text-xs text-gray-600">{app.profiles?.full_name ?? "User"}</div>
-                  </TableCell>
-                  <TableCell>{app.city ?? app.profiles?.city ?? "—"}</TableCell>
-                  <TableCell>{app.phone ?? app.profiles?.phone ?? "—"}</TableCell>
-                  <TableCell>{typeof app.fleet_size === "number" ? app.fleet_size : "—"}</TableCell>
-                  <TableCell className="text-xs text-gray-600">{app.experience ?? "—"}</TableCell>
-                  <TableCell className="text-sm font-semibold">{app.status}</TableCell>
-                  <TableCell className="text-xs text-gray-600">
-                    {app.created_at ? new Date(app.created_at).toLocaleDateString() : "—"}
-                  </TableCell>
-                  <TableCell className="text-xs text-gray-600">{app.message ?? "—"}</TableCell>
-                  <TableCell className="text-right">
-                    {app.status === "pending" ? (
-                      <div className="flex items-center justify-end gap-2">
-                        <form action={reviewAction} className="flex items-center gap-2">
-                          <input type="hidden" name="applicationId" value={app.id} />
-                          <input type="hidden" name="action" value="approve" />
-                          <button className="rounded-md bg-emerald-600 px-3 py-1 text-xs font-semibold text-white">
-                            Approve
-                          </button>
-                        </form>
-                        <form action={reviewAction} className="flex items-center gap-2">
-                          <input type="hidden" name="applicationId" value={app.id} />
-                          <input type="hidden" name="action" value="reject" />
-                          <input
-                            name="rejectionReason"
-                            placeholder="Reason"
-                            className="hidden w-28 rounded-md border border-border px-2 py-1 text-xs text-gray-700 sm:block"
-                          />
-                          <button className="rounded-md bg-red-600 px-3 py-1 text-xs font-semibold text-white">
-                            Reject
-                          </button>
-                        </form>
+      <AdminTabs
+        overview={
+          <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <Card>
+              <CardContent className="py-5">
+                <p className="text-sm text-gray-600">Total users</p>
+                <p className="text-2xl font-semibold text-foreground">{usersCount ?? 0}</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="py-5">
+                <p className="text-sm text-gray-600">Total vehicles</p>
+                <p className="text-2xl font-semibold text-foreground">{carsCount ?? 0}</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="py-5">
+                <p className="text-sm text-gray-600">Total bookings</p>
+                <p className="text-2xl font-semibold text-foreground">{bookingsCount ?? 0}</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="py-5">
+                <p className="text-sm text-gray-600">Pending applications</p>
+                <p className="text-2xl font-semibold text-foreground">{pendingCount ?? 0}</p>
+              </CardContent>
+            </Card>
+          </div>
+        }
+        applications={
+          <Card className="mt-0">
+            <CardHeader>
+              <CardTitle>Host applications</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3 md:hidden">
+                {applications?.map((app: any) => (
+                  <div key={app.id} className="rounded-xl border border-border bg-white p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-foreground">{app.full_name}</p>
+                        <p className="text-xs text-gray-600">{app.profiles?.full_name ?? "User"}</p>
                       </div>
-                    ) : (
-                      <span className="text-xs text-gray-500">
-                        {app.status === "approved" ? "Approved" : "Rejected"}
+                      <span className="rounded-full bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-700">
+                        {app.status}
                       </span>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
-              {applications?.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={9} className="text-center text-sm text-gray-600">
+                    </div>
+                    <div className="mt-3 grid gap-2 text-xs text-gray-600">
+                      <div>City: {app.city ?? app.profiles?.city ?? "—"}</div>
+                      <div>Phone: {app.phone ?? app.profiles?.phone ?? "—"}</div>
+                      <div>Fleet size: {typeof app.fleet_size === "number" ? app.fleet_size : "—"}</div>
+                      <div>Experience: {app.experience ?? "—"}</div>
+                      <div>Notes: {app.message ?? "—"}</div>
+                    </div>
+                    <div className="mt-3 flex items-center justify-between">
+                      <span className="text-xs text-gray-500">
+                        {app.created_at ? new Date(app.created_at).toLocaleDateString() : "—"}
+                      </span>
+                      {app.status === "pending" ? (
+                        <div className="flex items-center gap-2">
+                          <form action={reviewAction}>
+                            <input type="hidden" name="applicationId" value={app.id} />
+                            <input type="hidden" name="action" value="approve" />
+                            <button className="rounded-md bg-emerald-600 px-3 py-1 text-xs font-semibold text-white">
+                              Approve
+                            </button>
+                          </form>
+                          <form action={reviewAction}>
+                            <input type="hidden" name="applicationId" value={app.id} />
+                            <input type="hidden" name="action" value="reject" />
+                            <button className="rounded-md bg-red-600 px-3 py-1 text-xs font-semibold text-white">
+                              Reject
+                            </button>
+                          </form>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-gray-500">
+                          {app.status === "approved" ? "Approved" : "Rejected"}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                {applications?.length === 0 ? (
+                  <p className="rounded-xl border border-border bg-white p-4 text-center text-sm text-gray-600">
                     No host applications yet.
-                  </TableCell>
-                </TableRow>
-              ) : null}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+                  </p>
+                ) : null}
+              </div>
+
+              <div className="hidden md:block">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Applicant</TableHead>
+                      <TableHead>City</TableHead>
+                      <TableHead>Phone</TableHead>
+                      <TableHead>Fleet</TableHead>
+                      <TableHead>Experience</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Submitted</TableHead>
+                      <TableHead>Notes</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {applications?.map((app: any) => (
+                      <TableRow key={app.id}>
+                        <TableCell>
+                          <div className="font-semibold">{app.full_name}</div>
+                          <div className="text-xs text-gray-600">{app.profiles?.full_name ?? "User"}</div>
+                        </TableCell>
+                        <TableCell>{app.city ?? app.profiles?.city ?? "—"}</TableCell>
+                        <TableCell>{app.phone ?? app.profiles?.phone ?? "—"}</TableCell>
+                        <TableCell>{typeof app.fleet_size === "number" ? app.fleet_size : "—"}</TableCell>
+                        <TableCell className="text-xs text-gray-600">{app.experience ?? "—"}</TableCell>
+                        <TableCell className="text-sm font-semibold">{app.status}</TableCell>
+                        <TableCell className="text-xs text-gray-600">
+                          {app.created_at ? new Date(app.created_at).toLocaleDateString() : "—"}
+                        </TableCell>
+                        <TableCell className="text-xs text-gray-600">{app.message ?? "—"}</TableCell>
+                        <TableCell className="text-right">
+                          {app.status === "pending" ? (
+                            <div className="flex items-center justify-end gap-2">
+                              <form action={reviewAction} className="flex items-center gap-2">
+                                <input type="hidden" name="applicationId" value={app.id} />
+                                <input type="hidden" name="action" value="approve" />
+                                <button className="rounded-md bg-emerald-600 px-3 py-1 text-xs font-semibold text-white">
+                                  Approve
+                                </button>
+                              </form>
+                              <form action={reviewAction} className="flex items-center gap-2">
+                                <input type="hidden" name="applicationId" value={app.id} />
+                                <input type="hidden" name="action" value="reject" />
+                                <input
+                                  name="rejectionReason"
+                                  placeholder="Reason"
+                                  className="hidden w-28 rounded-md border border-border px-2 py-1 text-xs text-gray-700 sm:block"
+                                />
+                                <button className="rounded-md bg-red-600 px-3 py-1 text-xs font-semibold text-white">
+                                  Reject
+                                </button>
+                              </form>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-gray-500">
+                              {app.status === "approved" ? "Approved" : "Rejected"}
+                            </span>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {applications?.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={9} className="text-center text-sm text-gray-600">
+                          No host applications yet.
+                        </TableCell>
+                      </TableRow>
+                    ) : null}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        }
+      />
     </div>
   );
 }
