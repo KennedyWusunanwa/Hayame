@@ -26,14 +26,14 @@ export default async function ProfilePage() {
     (user.user_metadata as any)?.last_name ??
     (profile?.full_name ?? "").split(" ").slice(1).join(" ") ??
     "";
-  const name = `${firstName} ${lastName}`.trim() || (user.user_metadata as any)?.full_name || user.email || "User";
+  const name = `${firstName} ${lastName}`.trim() || (user.user_metadata as any)?.full_name || user.email || "Host";
 
   return (
     <div className="space-y-6">
       <div>
         <p className="text-sm font-semibold text-primary">Profile</p>
-        <h1 className="text-2xl font-semibold text-foreground">Your account</h1>
-        <p className="text-sm text-gray-600">Update your photo, name, and contact details.</p>
+        <h1 className="text-2xl font-semibold text-foreground">Your host profile</h1>
+        <p className="text-sm text-gray-600">Update your photo and name. Guests will see this on your listings.</p>
       </div>
       <Card>
         <CardHeader>

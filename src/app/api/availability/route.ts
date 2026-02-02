@@ -13,6 +13,16 @@ export async function POST(req: Request) {
     } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
 
+    const { data: profileData } = await supabase
+      .from("profiles")
+      .select("is_host")
+      .eq("id", user.id)
+      .maybeSingle();
+    const profile = profileData as { is_host?: boolean } | null;
+    if (!profile?.is_host) {
+      return NextResponse.json({ message: "Host approval required" }, { status: 403 });
+    }
+
     const { data: carData } = await supabase.from("cars").select("owner_id").eq("id", parsed.carId).single();
     const car = carData as { owner_id: string } | null;
     if (!car || car.owner_id !== user.id) {

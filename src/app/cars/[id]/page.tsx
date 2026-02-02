@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { FavoriteButton } from "@/components/favorite-button";
 import { BookingWidget } from "@/components/booking-widget";
 import { ImageGallery } from "@/components/image-gallery";
+import { ReviewForm, type ReviewableBooking } from "@/components/review-form";
 import { detailIcons, getFeatureIcon } from "@/lib/feature-icons";
 import type { Database } from "@/lib/database.types";
 import { mockCars, type MockCar } from "@/lib/mock-data";
@@ -61,6 +62,15 @@ type AvailabilityWindow = {
   available: boolean | null;
 };
 
+type ReviewRow = {
+  id: string;
+  rating: number;
+  comment: string | null;
+  created_at: string | null;
+  user_id: string;
+  profiles?: { full_name?: string | null; avatar_url?: string | null } | null;
+};
+
 type SupabaseCar = Database["public"]["Tables"]["cars"]["Row"] & {
   car_photos?: { url: string }[];
   owner?: Owner | null;
@@ -69,7 +79,9 @@ type SupabaseCar = Database["public"]["Tables"]["cars"]["Row"] & {
 export default async function CarDetailPage({ params }: PageProps) {
   const resolvedParams = await params;
   console.log("[car-detail] start", resolvedParams);
-  const { car, availability, isFavorite } = await loadCar(resolvedParams.id);
+  const { car, availability, isFavorite, reviews, userId, reviewableBookings } = await loadCar(
+    resolvedParams.id,
+  );
 
   if (!car) {
     return <NotFoundState />;
@@ -199,15 +211,44 @@ export default async function CarDetailPage({ params }: PageProps) {
               <CardTitle>Latest reviews</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4 text-sm text-gray-700">
-              <ReviewCard
-                name="Adwoa"
-                text="Smooth pickup, clean car, AC was perfect for Accra traffic."
-                rating={5}
-              />
-              <ReviewCard
-                name="Nana"
-                text="Great communication and flexible return time."
-                rating={4}
+              {reviews.length > 0 ? (
+                reviews.map((review) => (
+                  <ReviewCard
+                    key={review.id}
+                    name={review.profiles?.full_name ?? "Guest"}
+                    avatarUrl={review.profiles?.avatar_url ?? null}
+                    text={review.comment ?? "No comment provided."}
+                    rating={review.rating}
+                  />
+                ))
+              ) : (
+                <p className="text-sm text-gray-600">No reviews yet. Be the first to share your experience.</p>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Leave a review</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {!userId ? (
+                <p className="text-sm text-gray-600">
+                  <Link className="font-semibold text-brand" href="/auth/login">
+                    Sign in
+                  </Link>{" "}
+                  to leave a review.
+                </p>
+              ) : null}
+              <ReviewForm
+                carId={car.id}
+                bookings={reviewableBookings}
+                disabled={!userId || reviewableBookings.length === 0}
+                disabledMessage={
+                  !userId
+                    ? "Sign in to leave a review."
+                    : "Only guests with completed trips can review this listing."
+                }
               />
             </CardContent>
           </Card>
@@ -264,11 +305,21 @@ async function loadCar(id: string): Promise<{
   car: CarDetail | null;
   availability: AvailabilityWindow[];
   isFavorite: boolean;
+  reviews: ReviewRow[];
+  userId: string | null;
+  reviewableBookings: ReviewableBooking[];
 }> {
   const mock = mockCars.find((c) => c.id === id);
   if (mock) {
     console.log("[car-detail] using mock", id);
-    return { car: mapMockCar(mock), availability: [], isFavorite: false };
+    return {
+      car: mapMockCar(mock),
+      availability: [],
+      isFavorite: false,
+      reviews: [],
+      userId: null,
+      reviewableBookings: [],
+    };
   }
 
   if (!isUUID(id)) {
@@ -290,12 +341,16 @@ async function loadCar(id: string): Promise<{
 
   let availability: AvailabilityWindow[] = [];
   let isFavorite = false;
+  let reviews: ReviewRow[] = [];
+  let userId: string | null = null;
+  let reviewableBookings: ReviewableBooking[] = [];
 
   try {
     const supabase = await createSupabaseServerClient();
     const {
       data: { user },
     } = await supabase.auth.getUser();
+    userId = user?.id ?? null;
 
     if (!car) {
       const { data: carData } = await supabase
@@ -339,6 +394,13 @@ async function loadCar(id: string): Promise<{
       .eq("car_id", id);
     availability = availabilityData ?? [];
 
+    const { data: reviewData } = await (supabase as any)
+      .from("reviews")
+      .select("id,rating,comment,created_at,user_id, profiles:profiles!reviews_user_id_fkey(full_name,avatar_url)")
+      .eq("car_id", id)
+      .order("created_at", { ascending: false });
+    reviews = (reviewData as ReviewRow[] | null) ?? [];
+
     if (user) {
       const { data: favoriteRow } = await supabase
         .from("favorites")
@@ -347,6 +409,38 @@ async function loadCar(id: string): Promise<{
         .eq("user_id", user.id)
         .maybeSingle();
       isFavorite = Boolean(favoriteRow);
+
+      const { data: completedBookings } = await (supabase as any)
+        .from("bookings")
+        .select("id,start_date,end_date")
+        .eq("car_id", id)
+        .eq("renter_id", user.id)
+        .eq("status", "completed");
+      const bookingRows = (completedBookings as { id: string; start_date: string; end_date: string }[] | null) ?? [];
+      const bookingIds = bookingRows.map((booking) => booking.id);
+
+      if (bookingIds.length > 0) {
+        const { data: reviewedRows } = await (supabase as any)
+          .from("reviews")
+          .select("booking_id")
+          .eq("user_id", user.id)
+          .in("booking_id", bookingIds);
+        const reviewedIds = new Set(
+          ((reviewedRows as { booking_id: string }[] | null) ?? []).map((row) => row.booking_id),
+        );
+
+        reviewableBookings = bookingRows
+          .filter((booking) => !reviewedIds.has(booking.id))
+          .map((booking) => {
+            const start = booking.start_date ? new Date(booking.start_date) : null;
+            const end = booking.end_date ? new Date(booking.end_date) : null;
+            const label =
+              start && end && !Number.isNaN(start.getTime()) && !Number.isNaN(end.getTime())
+                ? `${format(start, "MMM d, yyyy")} - ${format(end, "MMM d, yyyy")}`
+                : "Trip dates";
+            return { id: booking.id, label };
+          });
+      }
     }
   } catch (error) {
     console.error("[car-detail] supabase SSR failed", { id, error });
@@ -357,7 +451,7 @@ async function loadCar(id: string): Promise<{
     notFound();
   }
 
-  return { car, availability, isFavorite };
+  return { car, availability, isFavorite, reviews, userId, reviewableBookings };
 }
 
 async function getCarFromSupabaseRest(id: string): Promise<SupabaseCar | null> {
@@ -579,11 +673,32 @@ function HostCard({ owner, rating, reviews }: { owner?: Owner | null; rating?: n
   );
 }
 
-function ReviewCard({ name, text, rating }: { name: string; text: string; rating: number }) {
+function ReviewCard({
+  name,
+  avatarUrl,
+  text,
+  rating,
+}: {
+  name: string;
+  avatarUrl: string | null;
+  text: string;
+  rating: number;
+}) {
   return (
     <div className="rounded-lg border border-border bg-white p-3">
-      <div className="flex items-center justify-between">
-        <p className="font-semibold text-foreground">{name}</p>
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          {avatarUrl ? (
+            <div className="relative h-9 w-9 overflow-hidden rounded-full border border-border">
+              <Image src={avatarUrl} alt={name} fill className="object-cover" sizes="36px" />
+            </div>
+          ) : (
+            <div className="flex h-9 w-9 items-center justify-center rounded-full border border-border bg-primary/10 text-xs font-semibold text-primary">
+              {getInitials(name) || "G"}
+            </div>
+          )}
+          <p className="font-semibold text-foreground">{name}</p>
+        </div>
         <div className="flex items-center gap-1 text-amber-500">
           {[...Array(rating)].map((_, idx) => (
             <Star key={idx} className="h-4 w-4 fill-amber-500" />

@@ -1,0 +1,91 @@
+import { NextResponse } from "next/server";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { hostApplicationSchema } from "@/lib/validators";
+
+export async function GET() {
+  try {
+    const supabase = await createSupabaseServerClient();
+    const supa = supabase as any;
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+
+    const { data } = await supa
+      .from("host_applications")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    return NextResponse.json({ data: data ?? null });
+  } catch (error: any) {
+    return NextResponse.json({ message: error.message ?? "Failed to load application" }, { status: 400 });
+  }
+}
+
+export async function POST(req: Request) {
+  try {
+    const body = await req.json();
+    const parsed = hostApplicationSchema.parse(body);
+    const supabase = await createSupabaseServerClient();
+    const supa = supabase as any;
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+
+    const { data: profile } = await supa
+      .from("profiles")
+      .select("is_host")
+      .eq("id", user.id)
+      .maybeSingle();
+    if (profile?.is_host) {
+      return NextResponse.json({ message: "You are already an approved host." }, { status: 400 });
+    }
+
+    const { data: latest } = await supa
+      .from("host_applications")
+      .select("id,status")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (latest?.status === "pending") {
+      return NextResponse.json({ message: "Application already pending." }, { status: 409 });
+    }
+
+    await supa
+      .from("profiles")
+      .upsert(
+        {
+          id: user.id,
+          full_name: parsed.full_name,
+          phone: parsed.phone ?? null,
+          city: parsed.city ?? null,
+        },
+        { onConflict: "id" },
+      );
+
+    const { data, error } = await supa
+      .from("host_applications")
+      .insert({
+        user_id: user.id,
+        full_name: parsed.full_name,
+        phone: parsed.phone ?? null,
+        city: parsed.city ?? null,
+        experience: parsed.experience,
+        fleet_size: parsed.fleet_size ?? null,
+        message: parsed.message ?? null,
+        status: "pending",
+      })
+      .select()
+      .single();
+    if (error) throw error;
+
+    return NextResponse.json({ data });
+  } catch (error: any) {
+    return NextResponse.json({ message: error.message ?? "Failed to submit application" }, { status: 400 });
+  }
+}

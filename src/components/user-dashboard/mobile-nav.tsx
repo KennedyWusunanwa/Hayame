@@ -2,22 +2,22 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Car, Home, User, WalletCards } from "lucide-react";
+import { Heart, Home, User, WalletCards } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const links = [
-  { href: "/host", label: "Overview", icon: Home },
-  { href: "/host/cars", label: "Vehicles", icon: Car },
-  { href: "/host/bookings", label: "Bookings", icon: WalletCards },
-  { href: "/host/profile", label: "Settings", icon: User },
+  { href: "/dashboard", label: "Overview", icon: Home },
+  { href: "/dashboard/bookings", label: "Bookings", icon: WalletCards },
+  { href: "/dashboard/favorites", label: "Favorites", icon: Heart },
+  { href: "/dashboard/profile", label: "Profile", icon: User },
 ];
 
-export function DashboardMobileNav() {
+export function UserDashboardMobileNav() {
   const pathname = usePathname();
   return (
     <nav className="sticky top-0 z-20 -mx-4 bg-white/95 px-4 py-2 shadow-sm backdrop-blur lg:hidden">
       <div className="flex items-center justify-between">
-        <p className="text-sm font-semibold text-foreground">Host dashboard</p>
+        <p className="text-sm font-semibold text-foreground">Dashboard</p>
         <span className="text-xs text-gray-500">Quick nav</span>
       </div>
       <div className="mt-2 flex gap-2 overflow-x-auto pb-1">

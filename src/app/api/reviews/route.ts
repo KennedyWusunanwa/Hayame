@@ -25,6 +25,16 @@ export async function POST(req: Request) {
       return NextResponse.json({ message: "You can only review completed trips" }, { status: 403 });
     }
 
+    const { data: existingReview } = await supa
+      .from("reviews")
+      .select("id")
+      .eq("booking_id", parsed.bookingId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (existingReview) {
+      return NextResponse.json({ message: "Review already submitted for this trip" }, { status: 409 });
+    }
+
     const { data, error } = await supa
       .from("reviews")
       .insert({

@@ -1,24 +1,25 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { CarForm } from "@/components/car-form";
+import { redirect } from "next/navigation";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
-export default function NewCarPage() {
-  return (
-    <div className="space-y-6">
-      <div>
-        <p className="text-sm font-semibold text-primary">New car</p>
-        <h1 className="text-2xl font-semibold text-foreground">Create listing</h1>
-        <p className="text-sm text-gray-600">
-          Save the car, then upload photos and set availability from the edit screen.
-        </p>
-      </div>
-      <Card>
-        <CardHeader>
-          <CardTitle>Car details</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <CarForm />
-        </CardContent>
-      </Card>
-    </div>
-  );
+export const dynamic = "force-dynamic";
+
+export default async function DashboardCarsNewRedirect() {
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/auth/login");
+
+  const { data: profileData } = await supabase
+    .from("profiles")
+    .select("is_host")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  const profile = profileData as { is_host?: boolean } | null;
+  if (profile?.is_host) {
+    redirect("/host/cars/new");
+  }
+
+  redirect("/become-host");
 }

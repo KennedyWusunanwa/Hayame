@@ -25,7 +25,7 @@ export function CarActions({ carId }: Props) {
   return (
     <div className="flex items-center gap-2">
       <Button variant="ghost" size="sm" asChild>
-        <Link href={`/dashboard/cars/${carId}/edit`}>
+        <Link href={`/host/cars/${carId}/edit`}>
           <Pencil className="h-4 w-4" />
         </Link>
       </Button>

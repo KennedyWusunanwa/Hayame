@@ -3,46 +3,43 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Car, ChartBar, Heart, Home, Star, User, WalletCards } from "lucide-react";
+import { Heart, Home, User, WalletCards } from "lucide-react";
 import { cn, getInitials } from "@/lib/utils";
 
-type Host = {
+type UserProfile = {
   name: string;
   avatar: string;
 };
 
 const links = [
-  { href: "/host", label: "Overview", icon: Home },
-  { href: "/host/cars", label: "Vehicles", icon: Car },
-  { href: "/host/bookings", label: "Bookings", icon: WalletCards },
-  { href: "/host/favorites", label: "Favorites", icon: Heart },
-  { href: "/host/earnings", label: "Earnings", icon: ChartBar },
-  { href: "/host/reviews", label: "Reviews", icon: Star },
-  { href: "/host/profile", label: "Host settings", icon: User },
+  { href: "/dashboard", label: "Overview", icon: Home },
+  { href: "/dashboard/bookings", label: "Bookings", icon: WalletCards },
+  { href: "/dashboard/favorites", label: "Favorites", icon: Heart },
+  { href: "/dashboard/profile", label: "Profile", icon: User },
 ];
 
-export function DashboardSidebar({ host }: { host: Host }) {
+export function UserDashboardSidebar({ user }: { user: UserProfile }) {
   const pathname = usePathname();
-  const initials = getInitials(host.name);
+  const initials = getInitials(user.name);
   return (
     <aside className="hidden min-h-screen w-60 border-r border-border bg-white px-4 py-6 lg:block">
-      <div className="text-lg font-semibold text-foreground">Host Dashboard</div>
+      <div className="text-lg font-semibold text-foreground">Dashboard</div>
       <Link
-        href="/host/profile"
+        href="/dashboard/profile"
         className="mt-4 flex items-center gap-3 rounded-lg border border-border bg-gray-50 px-3 py-2 transition hover:bg-brand/5"
       >
-        {host.avatar ? (
+        {user.avatar ? (
           <div className="relative h-10 w-10 overflow-hidden rounded-full border border-border">
-            <Image src={host.avatar} alt={host.name} fill className="object-cover" sizes="40px" />
+            <Image src={user.avatar} alt={user.name} fill className="object-cover" sizes="40px" />
           </div>
         ) : (
           <div className="flex h-10 w-10 items-center justify-center rounded-full border border-border bg-primary/10 text-sm font-semibold text-primary">
-            {initials || "H"}
+            {initials || "U"}
           </div>
         )}
         <div>
-          <p className="text-sm font-semibold text-foreground">{host.name}</p>
-          <p className="text-xs text-gray-600">Manage host settings</p>
+          <p className="text-sm font-semibold text-foreground">{user.name}</p>
+          <p className="text-xs text-gray-600">Manage profile</p>
         </div>
       </Link>
       <nav className="mt-6 space-y-1">

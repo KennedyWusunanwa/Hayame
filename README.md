@@ -20,6 +20,7 @@ Turo-style peer-to-peer car rental marketplace for Ghana. Built with Next.js (Ap
      - `NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET` (default: `car-photos`)
       - `SUPABASE_SERVICE_ROLE_KEY` (server/seed only, never expose to the client)
      - `SUPABASE_STORAGE_BUCKET` (default: `car-photos`)
+     - `ADMIN_USERNAME` and `ADMIN_PASSWORD` (required for /admin access)
 3) Apply the database schema and RLS (from `db/migration.sql`)
    - In Supabase SQL editor or CLI: run the contents of `db/migration.sql`.
    - This creates tables, enums, RLS policies, and the `car-photos` storage bucket policies.
@@ -44,7 +45,7 @@ Turo-style peer-to-peer car rental marketplace for Ghana. Built with Next.js (Ap
 - Explore page with filters sidebar + mobile drawer, map panel adapter, and car cards with favorites.
 - Car detail page with gallery, host info, availability picker, booking widget (Paystack stub).
 - Auth: email/password login & signup using Supabase.
-- Dashboard (protected): overview metrics + chart, cars CRUD pages, bookings, earnings, reviews.
+- Dashboards (protected): user dashboard for renters + host dashboard for approved hosts.
 - Supabase integration: typed client helpers, secure route handlers for cars, bookings, favorites, reviews.
 - Database + RLS: public car browsing, owner-only writes, renter/owner booking visibility, review restrictions, storage bucket policies.
 
@@ -52,7 +53,10 @@ Turo-style peer-to-peer car rental marketplace for Ghana. Built with Next.js (Ap
 - `src/app/(marketing)/*` — marketing pages
 - `src/app/auth/*` — login & signup
 - `src/app/explore`, `src/app/cars/[id]` — search & detail
-- `src/app/dashboard/*` — protected host dashboard
+- `src/app/dashboard/*` — protected user dashboard
+- `src/app/host/*` — protected host dashboard
+- `src/app/become-host` — host application page
+- `src/app/admin` — admin approvals (env-protected)
 - `src/app/api/*` — server route handlers for CRUD + booking/favorites/reviews
 - `src/components` — UI primitives, layout, dashboard widgets, map placeholder, forms
 - `src/lib` — supabase clients, types, validators, utils, mock data

@@ -39,3 +39,12 @@ export const availabilitySchema = z.object({
   available: z.boolean().optional(),
   repeatDays: z.array(z.string()).optional(),
 });
+
+export const hostApplicationSchema = z.object({
+  full_name: z.string().min(2),
+  phone: z.string().min(6).optional(),
+  city: z.string().min(2).optional(),
+  experience: z.string().min(10),
+  fleet_size: z.coerce.number().int().min(0).max(1000).optional(),
+  message: z.string().optional(),
+});

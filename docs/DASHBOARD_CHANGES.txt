@@ -1,0 +1,115 @@
+Dashboard Changes (Feb 2, 2026)
+
+Overview
+- Split dashboards into two areas:
+  - User (renter) dashboard: /dashboard
+  - Host dashboard (approved hosts only): /host
+- Added host application flow and admin approvals.
+- Added role flag on profiles (is_host) to gate host-only routes and API actions.
+
+New / Updated Routes
+User dashboard (renter)
+- /dashboard (overview)
+- /dashboard/bookings (renter bookings only)
+- /dashboard/favorites
+- /dashboard/profile
+- Legacy host routes under /dashboard now redirect:
+  - /dashboard/cars
+  - /dashboard/cars/new
+  - /dashboard/cars/[id]/edit
+  - /dashboard/earnings
+  - /dashboard/reviews
+  These redirect to /host/* for approved hosts, or /become-host for non-hosts.
+
+Host dashboard (approved hosts only)
+- /host (overview)
+- /host/cars
+- /host/cars/new
+- /host/cars/[id]/edit
+- /host/bookings
+- /host/earnings
+- /host/favorites
+- /host/reviews
+- /host/profile (host settings)
+
+Host application
+- /become-host (form + status)
+- API: /api/host-applications (POST submit, GET latest for current user)
+
+Admin approvals (env-protected)
+- /admin (dummy auth via env vars)
+  - Lists all host applications with details
+  - Approve or reject applications
+  - On approve, sets profiles.is_host = true and host_approved_at timestamp
+  - Shows platform metrics: total users, total vehicles, total bookings, pending applications
+
+Navigation behavior
+- Signed-in non-hosts:
+  - See “Dashboard” (renter) + “Become a host” in navbar
+  - Host links hidden
+- Approved hosts:
+  - See “Host dashboard” + “List your car” in navbar
+  - Host-only sidebar/nav inside /host
+
+Authorization / Guards
+- Host-only SSR guard in /host/layout.tsx:
+  - Redirects non-hosts to /become-host
+- API guards:
+  - /api/cars (POST) requires profile.is_host
+  - /api/cars/[id] (PUT/DELETE) requires profile.is_host
+  - /api/availability (POST) requires profile.is_host
+- RLS policy updated to only allow car inserts for approved hosts.
+
+Database / Migration Changes
+- profiles table:
+  - Added is_host boolean (default false)
+  - Added host_approved_at timestamptz
+- New enum:
+  - host_application_status ('pending', 'approved', 'rejected')
+- New table: host_applications
+  - user_id, full_name, phone, city, experience, fleet_size, message
+  - status, reviewed_at, reviewer, rejection_reason
+  - created_at, updated_at
+- RLS:
+  - host_applications: users can read/insert their own
+  - cars insert policy now checks profiles.is_host = true
+
+Environment Variables
+- Required for /admin:
+  - ADMIN_USERNAME
+  - ADMIN_PASSWORD
+  - SUPABASE_SERVICE_ROLE_KEY
+
+Files Added
+- src/app/admin/page.tsx
+- src/app/become-host/page.tsx
+- src/app/api/host-applications/route.ts
+- src/app/dashboard/* (new renter pages + redirects)
+- src/app/host/* (moved host dashboard)
+- src/components/host-application-form.tsx
+- src/components/user-dashboard/*
+- src/lib/supabase/admin.ts
+
+Files Updated (key)
+- db/migration.sql
+- src/lib/database.types.ts
+- src/components/navbar.tsx
+- src/app/host/layout.tsx
+- src/app/api/cars/route.ts
+- src/app/api/cars/[id]/route.ts
+- src/app/api/availability/route.ts
+- .env.example, README.md
+
+Manual Test Checklist
+1) Apply db/migration.sql in Supabase
+2) Set ADMIN_USERNAME, ADMIN_PASSWORD, SUPABASE_SERVICE_ROLE_KEY in .env.local
+3) Sign in as regular user:
+   - /dashboard works; host routes redirect to /become-host
+4) Submit /become-host application
+5) Go to /admin and approve
+6) Approved user can access /host and list cars
+7) Non-host cannot POST /api/cars (returns 403)
+
+Notes
+- /admin uses a simple cookie-based dummy auth (env only). No hardcoded secrets.
+- If you want stronger admin auth, replace with Supabase role claims.

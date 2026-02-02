@@ -21,7 +21,7 @@ type BookingRow = {
   cars?: { title?: string; city?: string; region?: string };
 };
 
-export function BookingsTable() {
+export function BookingsTable({ mode = "host" }: { mode?: "host" | "renter" }) {
   const [rows, setRows] = useState<BookingRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -82,6 +82,20 @@ export function BookingsTable() {
     () => rowsSorted.filter((row) => row.role?.includes("owner")),
     [rowsSorted],
   );
+
+  if (mode === "renter") {
+    return (
+      <div className="space-y-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Your bookings</CardTitle>
+            {error ? <p className="text-sm text-red-600">{error}</p> : null}
+          </CardHeader>
+          <CardContent>{renderTable(renterRows, false, updatingId, handleAction, loading)}</CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

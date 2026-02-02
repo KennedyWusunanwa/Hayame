@@ -18,6 +18,8 @@ export type Database = {
           avatar_url: string | null;
           phone: string | null;
           city: string | null;
+          is_host: boolean | null;
+          host_approved_at: string | null;
           created_at: string | null;
         };
         Insert: {
@@ -28,6 +30,8 @@ export type Database = {
           avatar_url?: string | null;
           phone?: string | null;
           city?: string | null;
+          is_host?: boolean | null;
+          host_approved_at?: string | null;
           created_at?: string | null;
         };
         Update: {
@@ -38,7 +42,59 @@ export type Database = {
           avatar_url?: string | null;
           phone?: string | null;
           city?: string | null;
+          is_host?: boolean | null;
+          host_approved_at?: string | null;
           created_at?: string | null;
+        };
+      };
+      host_applications: {
+        Row: {
+          id: string;
+          user_id: string;
+          full_name: string;
+          phone: string | null;
+          city: string | null;
+          experience: string | null;
+          fleet_size: number | null;
+          message: string | null;
+          status: Database["public"]["Enums"]["host_application_status"];
+          reviewed_at: string | null;
+          reviewer: string | null;
+          rejection_reason: string | null;
+          created_at: string | null;
+          updated_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          full_name: string;
+          phone?: string | null;
+          city?: string | null;
+          experience?: string | null;
+          fleet_size?: number | null;
+          message?: string | null;
+          status?: Database["public"]["Enums"]["host_application_status"];
+          reviewed_at?: string | null;
+          reviewer?: string | null;
+          rejection_reason?: string | null;
+          created_at?: string | null;
+          updated_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          full_name?: string;
+          phone?: string | null;
+          city?: string | null;
+          experience?: string | null;
+          fleet_size?: number | null;
+          message?: string | null;
+          status?: Database["public"]["Enums"]["host_application_status"];
+          reviewed_at?: string | null;
+          reviewer?: string | null;
+          rejection_reason?: string | null;
+          created_at?: string | null;
+          updated_at?: string | null;
         };
       };
       locations: {
@@ -273,6 +329,7 @@ export type Database = {
       };
     };
     Enums: {
+      host_application_status: "pending" | "approved" | "rejected";
       booking_status:
         | "pending"
         | "awaiting_host"

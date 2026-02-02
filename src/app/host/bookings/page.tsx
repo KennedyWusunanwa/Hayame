@@ -5,9 +5,9 @@ export default function BookingsPage() {
     <div className="space-y-6">
       <div>
         <p className="text-sm font-semibold text-primary">Bookings</p>
-        <h1 className="text-2xl font-semibold text-foreground">Your trips</h1>
+        <h1 className="text-2xl font-semibold text-foreground">Guest bookings</h1>
       </div>
-      <BookingsTable mode="renter" />
+      <BookingsTable mode="host" />
     </div>
   );
 }

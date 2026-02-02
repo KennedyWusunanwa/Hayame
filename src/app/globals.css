@@ -55,6 +55,42 @@ a:hover {
   box-shadow: 0 12px 34px rgba(0, 0, 0, 0.08);
 }
 
+.loading-overlay {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(2px);
+  z-index: 50;
+  animation: fadePulse 900ms ease-in-out infinite;
+}
+
+.loading-spinner {
+  width: 56px;
+  height: 56px;
+  border-radius: 999px;
+  border: 5px solid rgba(14, 134, 212, 0.2);
+  border-top-color: #0e86d4;
+  animation: spin 850ms linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes fadePulse {
+  0%,
+  100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
 /* Dark dropdown styling for filter selects */
 .dark-select {
   color: #f8fafc;

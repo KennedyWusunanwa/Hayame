@@ -21,7 +21,11 @@ export function CarCard({ car, isFavorite = false, onToggleFavorite }: Props) {
   };
 
   return (
-    <div className="group flex h-full flex-col overflow-hidden rounded-2xl border border-border bg-white shadow-card card-hover">
+    <Link
+      href={`/cars/${car.id}`}
+      className="group flex h-full flex-col overflow-hidden rounded-2xl border border-border bg-white shadow-card card-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-2"
+      aria-label={`View ${car.title}`}
+    >
       <div className="relative h-48 w-full overflow-hidden">
         <Image
           src={car.image_url ?? "/car-placeholder.jpg"}
@@ -30,13 +34,21 @@ export function CarCard({ car, isFavorite = false, onToggleFavorite }: Props) {
           className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105"
           sizes="(max-width:768px) 100vw, 400px"
         />
-        <FavoriteButton
-          carId={car.id}
-          initialIsFavorited={isFavorite}
-          onToggle={handleFavorite}
-          size="sm"
-          className="absolute right-3 top-3 bg-white/95"
-        />
+        <div
+          className="absolute right-3 top-3 z-10"
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+          }}
+        >
+          <FavoriteButton
+            carId={car.id}
+            initialIsFavorited={isFavorite}
+            onToggle={handleFavorite}
+            size="sm"
+            className="bg-white/95"
+          />
+        </div>
         {car.car_type ? (
           <Badge variant="muted" className="absolute left-3 top-3">
             {car.car_type}
@@ -65,10 +77,10 @@ export function CarCard({ car, isFavorite = false, onToggleFavorite }: Props) {
             {formatCurrency(car.daily_price)} <span className="text-sm text-gray-500">/ day</span>
           </div>
           <Button asChild size="sm" className="shadow-soft">
-            <Link href={`/cars/${car.id}`}>Book now</Link>
+            <span>Book now</span>
           </Button>
         </div>
       </div>
-    </div>
+    </Link>
   );
 }

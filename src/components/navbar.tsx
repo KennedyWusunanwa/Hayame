@@ -28,6 +28,8 @@ export function Navbar() {
   const pathname = usePathname();
   const isActive = (href: string) => (pathname || "/").replace(/\/$/, "") === href.replace(/\/$/, "");
   const [userName, setUserName] = useState<string | null>(null);
+  const [isHost, setIsHost] = useState(false);
+  const [hostStatus, setHostStatus] = useState<"pending" | "approved" | "rejected" | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
 
   useEffect(() => {
@@ -41,12 +43,35 @@ export function Navbar() {
         const user = session?.user;
         if (!user) {
           setUserName(null);
+          setIsHost(false);
+          setHostStatus(null);
           return;
         }
         const name = (user.user_metadata as any)?.full_name || user.email || "Account";
         setUserName(name);
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("is_host")
+          .eq("id", user.id)
+          .maybeSingle();
+        const approvedHost = Boolean((profile as any)?.is_host);
+        setIsHost(approvedHost);
+        if (!approvedHost) {
+          const { data: application } = await supabase
+            .from("host_applications")
+            .select("status")
+            .eq("user_id", user.id)
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          setHostStatus((application as any)?.status ?? null);
+        } else {
+          setHostStatus("approved");
+        }
       } catch (error) {
         setUserName(null);
+        setIsHost(false);
+        setHostStatus(null);
       }
     };
     loadUser();
@@ -54,10 +79,13 @@ export function Navbar() {
       const user = session?.user;
       if (!user) {
         setUserName(null);
-      } else {
-        const name = (user.user_metadata as any)?.full_name || user.email || "Account";
-        setUserName(name);
+        setIsHost(false);
+        setHostStatus(null);
+        return;
       }
+      const name = (user.user_metadata as any)?.full_name || user.email || "Account";
+      setUserName(name);
+      loadUser();
     });
     return () => {
       listener?.subscription.unsubscribe();
@@ -96,15 +124,30 @@ export function Navbar() {
               <div className="rounded-full bg-gray-100 px-3 py-1 text-sm font-semibold text-gray-800">
                 {userName}
               </div>
-              <Button asChild variant="outline" className="border-brand text-brand">
-                <Link href="/dashboard">Dashboard</Link>
-              </Button>
-              <Button
-                asChild
-                className="bg-brand text-white hover:bg-white hover:text-brand hover:border-brand rounded-full px-5"
-              >
-                <Link href="/dashboard/cars/new">List your car</Link>
-              </Button>
+              {isHost ? (
+                <>
+                  <Button asChild variant="outline" className="border-brand text-brand">
+                    <Link href="/host">Host dashboard</Link>
+                  </Button>
+                  <Button
+                    asChild
+                    className="bg-brand text-white hover:bg-white hover:text-brand hover:border-brand rounded-full px-5"
+                  >
+                    <Link href="/host/cars/new">List your car</Link>
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button asChild variant="outline" className="border-brand text-brand">
+                    <Link href="/dashboard">Dashboard</Link>
+                  </Button>
+                  <Button asChild className="bg-brand text-white hover:bg-white hover:text-brand hover:border-brand">
+                    <Link href="/become-host">
+                      {hostStatus === "pending" ? "Application pending" : "Become a host"}
+                    </Link>
+                  </Button>
+                </>
+              )}
               <Button
                 variant="outline"
                 className="border-brand text-brand"
@@ -162,21 +205,42 @@ export function Navbar() {
                       {userName}
                     </div>
                     <SheetClose asChild>
-                      <Button
-                        asChild
-                        variant="outline"
-                        className="w-full border-brand text-brand hover:bg-brand hover:text-white"
-                      >
-                        <Link href="/dashboard">Dashboard</Link>
-                      </Button>
+                      {isHost ? (
+                        <Button
+                          asChild
+                          variant="outline"
+                          className="w-full border-brand text-brand hover:bg-brand hover:text-white"
+                        >
+                          <Link href="/host">Host dashboard</Link>
+                        </Button>
+                      ) : (
+                        <Button
+                          asChild
+                          variant="outline"
+                          className="w-full border-brand text-brand hover:bg-brand hover:text-white"
+                        >
+                          <Link href="/dashboard">Dashboard</Link>
+                        </Button>
+                      )}
                     </SheetClose>
                     <SheetClose asChild>
-                      <Button
-                        asChild
-                        className="w-full bg-brand text-white hover:bg-white hover:text-brand hover:border-brand"
-                      >
-                        <Link href="/dashboard/cars/new">List your car</Link>
-                      </Button>
+                      {isHost ? (
+                        <Button
+                          asChild
+                          className="w-full bg-brand text-white hover:bg-white hover:text-brand hover:border-brand"
+                        >
+                          <Link href="/host/cars/new">List your car</Link>
+                        </Button>
+                      ) : (
+                        <Button
+                          asChild
+                          className="w-full bg-brand text-white hover:bg-white hover:text-brand hover:border-brand"
+                        >
+                          <Link href="/become-host">
+                            {hostStatus === "pending" ? "Application pending" : "Become a host"}
+                          </Link>
+                        </Button>
+                      )}
                     </SheetClose>
                     <SheetClose asChild>
                       <Button

@@ -30,6 +30,16 @@ export async function POST(req: Request) {
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
     }
 
+    const { data: profileData } = await supa
+      .from("profiles")
+      .select("is_host")
+      .eq("id", user.id)
+      .maybeSingle();
+    const profile = profileData as { is_host?: boolean } | null;
+    if (!profile?.is_host) {
+      return NextResponse.json({ message: "Host approval required" }, { status: 403 });
+    }
+
     // Ensure the profile exists for this user to satisfy FK on cars.owner_id
     await supa.from("profiles").upsert(
       {

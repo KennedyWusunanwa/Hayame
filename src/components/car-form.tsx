@@ -72,7 +72,7 @@ export function CarForm({ carId, defaultValues }: Props) {
         await uploadPhotos(newCarId, files);
       }
 
-      router.push("/dashboard/cars");
+      router.push("/host/cars");
     } catch (err: any) {
       setError(err.message ?? "Unable to save car");
     } finally {
@@ -220,7 +220,7 @@ export function CarForm({ carId, defaultValues }: Props) {
         <Button type="submit" disabled={isSubmitting || uploading}>
           {isSubmitting || uploading ? "Saving..." : "Save car"}
         </Button>
-        <Button type="button" variant="secondary" onClick={() => router.push("/dashboard/cars")}>
+        <Button type="button" variant="secondary" onClick={() => router.push("/host/cars")}>
           Cancel
         </Button>
       </div>

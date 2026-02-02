@@ -19,8 +19,36 @@ create table if not exists profiles (
   avatar_url text,
   phone text,
   city text,
+  is_host boolean default false,
+  host_approved_at timestamptz,
   created_at timestamptz default now()
 );
+
+-- Host applications
+do $$
+begin
+  if not exists (select 1 from pg_type where typname = 'host_application_status') then
+    create type host_application_status as enum ('pending', 'approved', 'rejected');
+  end if;
+end$$;
+
+create table if not exists host_applications (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references profiles(id) on delete cascade,
+  full_name text not null,
+  phone text,
+  city text,
+  experience text,
+  fleet_size integer,
+  message text,
+  status host_application_status default 'pending'::host_application_status,
+  reviewed_at timestamptz,
+  reviewer text,
+  rejection_reason text,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+create index if not exists idx_host_applications_user on host_applications(user_id);
 
 -- Locations
 create table if not exists locations (
@@ -119,6 +147,7 @@ alter table favorites enable row level security;
 alter table bookings enable row level security;
 alter table car_availability enable row level security;
 alter table reviews enable row level security;
+alter table host_applications enable row level security;
 
 -- Profiles: owners can read/update their profile
 create policy if not exists "Users can view their profile" on profiles
@@ -131,8 +160,12 @@ create policy if not exists "Users can update their profile" on profiles
 -- Cars: public read, owners manage
 create policy if not exists "Cars are readable by anyone" on cars
   for select using (true);
-create policy if not exists "Car owners can insert" on cars
-  for insert with check (owner_id = auth.uid());
+drop policy if exists "Car owners can insert" on cars;
+create policy if not exists "Car owners can insert if host" on cars
+  for insert with check (
+    owner_id = auth.uid()
+    and exists(select 1 from profiles where profiles.id = auth.uid() and profiles.is_host = true)
+  );
 create policy if not exists "Car owners can update" on cars
   for update using (owner_id = auth.uid());
 create policy if not exists "Car owners can delete" on cars
@@ -205,6 +238,12 @@ create policy if not exists "Review author update" on reviews
   for update using (user_id = auth.uid());
 create policy if not exists "Review author delete" on reviews
   for delete using (user_id = auth.uid());
+
+-- Host applications: user-only access
+create policy if not exists "Host applications select own" on host_applications
+  for select using (user_id = auth.uid());
+create policy if not exists "Host applications insert own" on host_applications
+  for insert with check (user_id = auth.uid());
 
 -- Storage bucket for car photos
 insert into storage.buckets (id, name, public)
