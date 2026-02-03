@@ -11,9 +11,9 @@ import { useLocations } from "@/lib/use-locations";
 
 export function HeroSearchBar() {
   const pillBg =
-    "flex items-center gap-2 rounded-full bg-white/10 px-4 py-3";
+    "relative z-10 flex items-center gap-3 rounded-full bg-transparent px-4 h-12 border border-white/20 ring-2 ring-white/15 focus-within:bg-[#12263a]";
   const fieldBase =
-    "h-12 w-full border-0 bg-transparent text-white placeholder:text-white/70 focus-visible:ring-0 dark-select";
+    "h-12 w-full min-w-0 text-sm border-0 bg-transparent text-white placeholder:text-white/50 focus-visible:ring-0 dark-select";
   const router = useRouter();
   const { regions, citiesByRegion } = useLocations();
   const [region, setRegion] = useState("");
@@ -46,12 +46,12 @@ export function HeroSearchBar() {
   };
 
   return (
-    <div className="-mt-10 w-full">
-      <div className="mx-auto max-w-5xl rounded-2xl border border-white/10 bg-[#0a2137] p-5 text-white shadow-card">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-          <div className="flex w-full flex-col gap-3 sm:flex-1 sm:flex-row sm:flex-nowrap sm:items-center">
-            <div className={`${pillBg} flex-1 min-w-[220px]`}>
-              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10">
+    <div className="-mt-4 w-full sm:-mt-6 lg:-mt-8">
+      <div className="mx-auto max-w-5xl rounded-3xl border border-white/10 bg-[#0a2137] px-3 py-3 text-white shadow-xl sm:px-4 sm:py-4 overflow-visible">
+        <div className="flex flex-col gap-3">
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+            <div className={`${pillBg} w-full`}>
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10">
                 <MapPin className="h-5 w-5 text-brand" />
               </div>
               <Select
@@ -70,7 +70,7 @@ export function HeroSearchBar() {
                 ))}
               </Select>
             </div>
-            <div className={`${pillBg} flex-1 min-w-[180px]`}>
+            <div className={`${pillBg} w-full`}>
               <Select
                 value={city}
                 onChange={(e) => setCity(e.target.value)}
@@ -85,40 +85,8 @@ export function HeroSearchBar() {
                 ))}
               </Select>
             </div>
-            <div className={`${pillBg} flex-1 min-w-[260px]`}>
-              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10">
-                <Calendar className="h-5 w-5 text-white" />
-              </div>
-              <div className="flex w-full gap-2">
-                <Input
-                  type="text"
-                  value={startDate}
-                  placeholder="dd/mm/yy"
-                  inputMode="numeric"
-                  onFocus={(e) => (e.currentTarget.type = "date")}
-                  onBlur={(e) => {
-                    if (!e.currentTarget.value) e.currentTarget.type = "text";
-                  }}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  className={`${fieldBase} h-12`}
-                />
-                <Input
-                  type="text"
-                  value={endDate}
-                  min={startDate || undefined}
-                  placeholder="dd/mm/yy"
-                  inputMode="numeric"
-                  onFocus={(e) => (e.currentTarget.type = "date")}
-                  onBlur={(e) => {
-                    if (!e.currentTarget.value) e.currentTarget.type = "text";
-                  }}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  className={`${fieldBase} h-12`}
-                />
-              </div>
-            </div>
-            <div className={`${pillBg} flex-1 min-w-[180px]`}>
-              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10">
+            <div className={`${pillBg} w-full`}>
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10">
                 <CarFront className="h-5 w-5 text-brand" />
               </div>
               <Select
@@ -133,12 +101,47 @@ export function HeroSearchBar() {
               </Select>
             </div>
           </div>
-          <Button
-            className="h-12 w-full rounded-full border border-brand bg-brand px-6 text-white hover:bg-white hover:text-brand sm:w-auto"
-            onClick={onSearch}
-          >
-            Search
-          </Button>
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-3 lg:items-center">
+            <div className={`${pillBg} w-full lg:col-span-2`}>
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10">
+                <Calendar className="h-5 w-5 text-white" />
+              </div>
+              <div className="flex w-full items-center gap-2">
+                <Input
+                  type="text"
+                  value={startDate}
+                  placeholder="dd/mm/yy"
+                  inputMode="numeric"
+                  onFocus={(e) => (e.currentTarget.type = "date")}
+                  onBlur={(e) => {
+                    if (!e.currentTarget.value) e.currentTarget.type = "text";
+                  }}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className={`${fieldBase} min-w-0 flex-1`}
+                />
+                <div className="h-6 w-px bg-white/10" />
+                <Input
+                  type="text"
+                  value={endDate}
+                  min={startDate || undefined}
+                  placeholder="dd/mm/yy"
+                  inputMode="numeric"
+                  onFocus={(e) => (e.currentTarget.type = "date")}
+                  onBlur={(e) => {
+                    if (!e.currentTarget.value) e.currentTarget.type = "text";
+                  }}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className={`${fieldBase} min-w-0 flex-1`}
+                />
+              </div>
+            </div>
+            <Button
+              className="h-12 w-full rounded-full bg-brand px-6 font-semibold text-white hover:bg-brand/90 lg:col-span-1"
+              onClick={onSearch}
+            >
+              Search
+            </Button>
+          </div>
         </div>
       </div>
     </div>

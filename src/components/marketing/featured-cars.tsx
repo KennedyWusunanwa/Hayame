@@ -9,7 +9,7 @@ type FeaturedRow = Database["public"]["Tables"]["cars"]["Row"] & {
 };
 
 export async function FeaturedCars() {
-  let featured = mockCars.slice(0, 4).map((car) => ({
+  let featured = mockCars.slice(0, 12).map((car) => ({
     id: car.id,
     title: car.name,
     city: car.city,
@@ -41,7 +41,7 @@ export async function FeaturedCars() {
       .select(
         "id,title,city,region,daily_price,car_type,description,car_photos(url), owner:profiles!cars_owner_id_fkey(full_name,avatar_url)",
       )
-      .limit(4);
+      .limit(12);
     if (data && data.length > 0) {
       featured = (data as FeaturedRow[]).map((car) => ({
         id: car.id,
@@ -64,14 +64,14 @@ export async function FeaturedCars() {
   }
 
   return (
-    <section className="mx-auto max-w-6xl px-6 py-14">
+    <section className="mx-auto max-w-6xl px-6 pt-14 pb-14 sm:pt-16 lg:pt-18">
       <div className="flex items-center justify-between">
         <div>
           <p className="text-sm font-semibold text-brand">Featured Vehicles</p>
-          <h2 className="text-2xl font-semibold text-foreground">Top picks across Ghana</h2>
+          <h2 className="text-2xl font-semibold text-foreground">Featured cars across Ghana</h2>
         </div>
       </div>
-      <div className="mt-8 grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+      <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {featured.map((car) => (
           <CarCard
             key={car.id}
@@ -92,6 +92,14 @@ export async function FeaturedCars() {
             isFavorite={car.isFavorite}
           />
         ))}
+      </div>
+      <div className="mt-8 flex justify-center">
+        <a
+          href="/explore"
+          className="rounded-full border border-brand bg-brand px-6 py-2 text-sm font-semibold text-white shadow-soft transition hover:bg-white hover:text-brand"
+        >
+          View All Cars
+        </a>
       </div>
     </section>
   );

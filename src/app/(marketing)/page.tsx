@@ -6,7 +6,7 @@ import { WhyChoose } from "@/components/marketing/why-choose";
 
 export default function MarketingHome() {
   return (
-    <div className="bg-white">
+    <div className="bg-[#f6f7fb]">
       <div className="relative">
         <Hero />
         <div className="relative z-10 mx-auto max-w-6xl px-6">

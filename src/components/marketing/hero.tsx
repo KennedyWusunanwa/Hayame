@@ -14,26 +14,25 @@ export function Hero() {
           className="object-cover"
           sizes="100vw"
         />
-        <div className="absolute inset-0 bg-gradient-to-b from-black/55 via-black/45 to-black/65 z-10" />
+        <div className="absolute inset-0 z-10 bg-gradient-to-b from-black/55 via-black/45 to-black/65" />
+        <div className="hero-bottom-fade" />
       </div>
-      <div className="relative z-20 mx-auto flex max-w-6xl flex-col gap-6 px-6 py-20 text-white lg:py-28">
-        <div className="max-w-3xl space-y-4">
-          <p className="text-sm font-semibold text-brand">Online peer-to-peer car rental marketplace</p>
-          <h1 className="text-4xl font-bold leading-tight text-white sm:text-5xl">
+      <div className="relative z-30 mx-auto flex max-w-6xl flex-col items-start gap-4 px-6 py-8 text-left text-white sm:py-10 lg:py-12">
+        <div className="max-w-3xl space-y-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/70">
+            Rent cars across Ghana.
+          </p>
+          <h1 className="text-2xl font-bold leading-tight text-white sm:text-3xl lg:text-4xl">
             Rent a Car, Anytime, Anywhere in Ghana.
           </h1>
-          <p className="max-w-2xl text-lg text-white/80">
-            From Accra to Kumasi, book verified cars from trusted hosts. Flexible pickup, transparent pricing, and
-            Paystack coming soon.
-          </p>
         </div>
         <div>
           <Button
             size="lg"
             asChild
-            className="border border-brand bg-brand text-white hover:bg-white hover:text-brand"
+            className="rounded-full border border-brand bg-brand px-5 text-white hover:bg-white hover:text-brand"
           >
-            <Link href="/explore">Real started</Link>
+            <Link href="/explore">Get started</Link>
           </Button>
         </div>
       </div>
