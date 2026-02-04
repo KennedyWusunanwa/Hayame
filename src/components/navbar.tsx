@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Menu } from "lucide-react";
+import { Menu, MessageCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 import {
   Sheet,
@@ -15,6 +15,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { useMessaging } from "@/components/messages/messaging-provider";
 
 const navLinks = [
   { href: "/", label: "Home" },
@@ -31,6 +32,7 @@ export function Navbar() {
   const [isHost, setIsHost] = useState(false);
   const [hostStatus, setHostStatus] = useState<"pending" | "approved" | "rejected" | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { unreadCount } = useMessaging();
 
   useEffect(() => {
     const supabase = createSupabaseBrowserClient();
@@ -115,6 +117,18 @@ export function Navbar() {
               <div className="rounded-full bg-gray-100 px-3 py-1 text-sm font-semibold text-gray-800">
                 {userName}
               </div>
+              <Link
+                href="/messages"
+                className="relative flex h-10 w-10 items-center justify-center rounded-full border border-border text-gray-700 hover:text-brand"
+                aria-label="Messages"
+              >
+                <MessageCircle className="h-5 w-5" />
+                {unreadCount > 0 ? (
+                  <span className="absolute -right-1 -top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-brand px-1 text-[11px] font-semibold text-white">
+                    {unreadCount > 99 ? "99+" : unreadCount}
+                  </span>
+                ) : null}
+              </Link>
               {isHost ? (
                 <>
                   <Button asChild variant="outline" className="border-brand text-brand">
@@ -195,6 +209,23 @@ export function Navbar() {
                     <div className="rounded-full bg-gray-100 px-3 py-2 text-sm font-semibold text-gray-800">
                       {userName}
                     </div>
+                    <SheetClose asChild>
+                      <Link
+                        href="/messages"
+                        onClick={() => setMobileOpen(false)}
+                        className="flex items-center justify-between rounded-md border border-border px-3 py-2 text-sm text-gray-700"
+                      >
+                        <span className="flex items-center gap-2">
+                          <MessageCircle className="h-4 w-4" />
+                          Messages
+                        </span>
+                        {unreadCount > 0 ? (
+                          <span className="rounded-full bg-brand px-2 py-0.5 text-[11px] font-semibold text-white">
+                            {unreadCount > 99 ? "99+" : unreadCount}
+                          </span>
+                        ) : null}
+                      </Link>
+                    </SheetClose>
                     <SheetClose asChild>
                       {isHost ? (
                         <Button

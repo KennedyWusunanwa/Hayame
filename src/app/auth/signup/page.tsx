@@ -10,12 +10,15 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Select } from "@/components/ui/select";
+import { useLocations } from "@/lib/use-locations";
 
 const schema = z.object({
   firstName: z.string().min(2),
   lastName: z.string().min(2),
   email: z.string().email(),
   password: z.string().min(6),
+  region: z.string().min(2),
   city: z.string().min(2),
 });
 
@@ -27,13 +30,16 @@ export default function SignupPage() {
   const [info, setInfo] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const { regions, citiesByRegion } = useLocations();
   const {
     register,
     handleSubmit,
+    setValue,
+    watch,
     formState: { isSubmitting },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { email: "", password: "", firstName: "", lastName: "", city: "" },
+    defaultValues: { email: "", password: "", firstName: "", lastName: "", region: "", city: "" },
   });
 
   const onSubmit = async (values: FormValues) => {
@@ -46,18 +52,25 @@ export default function SignupPage() {
         email: values.email,
         password: values.password,
         options: {
-          data: { full_name: fullName, first_name: values.firstName, last_name: values.lastName, city: values.city },
+          data: {
+            full_name: fullName,
+            first_name: values.firstName,
+            last_name: values.lastName,
+            city: values.city,
+            region: values.region,
+          },
         },
       });
       if (error) throw error;
       const userId = data.user?.id;
+      const session = data.session;
       let avatarUrl: string | undefined;
       const bucket =
         process.env.NEXT_PUBLIC_SUPABASE_AVATAR_BUCKET ||
         process.env.NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET ||
         "avatars";
 
-      if (userId && avatarFile) {
+      if (userId && session && avatarFile) {
         const ext = avatarFile.name.split(".").pop();
         const path = `${userId}/avatar-${Date.now()}.${ext}`;
         const { error: uploadError } = await supabase.storage.from(bucket).upload(path, avatarFile, {
@@ -71,20 +84,23 @@ export default function SignupPage() {
         avatarUrl = publicUrl;
       }
 
-      if (userId) {
-        const supa = supabase as any;
-        const { error: profileError } = await supa.from("profiles").upsert(
-          {
+      if (userId && session) {
+        const res = await fetch("/api/profiles/upsert", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
             id: userId,
             first_name: values.firstName,
             last_name: values.lastName,
             full_name: fullName,
             city: values.city,
             avatar_url: avatarUrl ?? null,
-          },
-          { onConflict: "id" },
-        );
-        if (profileError) throw profileError;
+          }),
+        });
+        if (!res.ok) {
+          const payload = await res.json().catch(() => ({}));
+          throw new Error(payload.message || "Unable to create profile");
+        }
       }
 
       setInfo("Check your email to verify your account. Verification link sent.");
@@ -116,8 +132,36 @@ export default function SignupPage() {
               <Input type="email" placeholder="you@example.com" {...register("email")} required />
             </div>
             <div className="space-y-2">
+              <label className="text-sm font-semibold text-gray-700">Region</label>
+              <Select
+                value={watch("region") ?? ""}
+                onChange={(e) => {
+                  setValue("region", e.target.value);
+                  setValue("city", "");
+                }}
+              >
+                <option value="">Select region</option>
+                {regions.map((region) => (
+                  <option key={region} value={region}>
+                    {region}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div className="space-y-2">
               <label className="text-sm font-semibold text-gray-700">City / Location</label>
-              <Input placeholder="Accra, Greater Accra" {...register("city")} required />
+              <Select
+                value={watch("city") ?? ""}
+                onChange={(e) => setValue("city", e.target.value)}
+                disabled={!watch("region")}
+              >
+                <option value="">Select city</option>
+                {(citiesByRegion[watch("region") ?? ""] ?? []).map((city) => (
+                  <option key={city} value={city}>
+                    {city}
+                  </option>
+                ))}
+              </Select>
             </div>
             <div className="space-y-2">
               <label className="text-sm font-semibold text-gray-700">Profile photo (optional)</label>

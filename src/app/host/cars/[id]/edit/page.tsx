@@ -52,9 +52,11 @@ export default async function EditCarPage({ params }: PageProps) {
               city: hydratedCar.city ?? "",
               region: hydratedCar.region ?? "",
               car_type: hydratedCar.car_type ?? "",
+              brand: (hydratedCar as any).brand ?? "",
+              model: (hydratedCar as any).model ?? "",
+              fuel_type: (hydratedCar as any).fuel_type ?? undefined,
               seats: hydratedCar.seats ?? undefined,
               transmission: hydratedCar.transmission ?? undefined,
-              fuel: hydratedCar.fuel ?? undefined,
               features: hydratedCar.features ?? [],
               is_available: hydratedCar.is_available ?? true,
             }}

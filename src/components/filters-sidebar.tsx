@@ -6,8 +6,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { featureOptions, carTypes } from "@/lib/utils";
+import { featureOptions, carTypes, fuelTypes } from "@/lib/utils";
 import { useLocations } from "@/lib/use-locations";
+import { useCarCatalog } from "@/lib/use-car-catalog";
 import {
   Sheet,
   SheetClose,
@@ -22,6 +23,9 @@ export type Filters = {
   region?: string;
   city?: string;
   carType?: string;
+  brand?: string;
+  model?: string;
+  fuelType?: string;
   minPrice?: number;
   maxPrice?: number;
   features?: string[];
@@ -34,10 +38,15 @@ type Props = {
 
 export function FiltersSidebar({ filters, onChange }: Props) {
   const { regions, citiesByRegion } = useLocations();
+  const { makes } = useCarCatalog();
   const cities = useMemo(
     () => (filters.region ? citiesByRegion[filters.region] ?? [] : []),
     [filters.region, citiesByRegion],
   );
+  const models = useMemo(() => {
+    if (!filters.brand) return [];
+    return makes.find((make) => make.name === filters.brand)?.models ?? [];
+  }, [filters.brand, makes]);
 
   const content = (
     <div className="flex flex-col gap-5">
@@ -88,6 +97,49 @@ export function FiltersSidebar({ filters, onChange }: Props) {
           {carTypes.map((type) => (
             <option value={type} key={type}>
               {type}
+            </option>
+          ))}
+        </Select>
+      </div>
+      <div className="flex flex-col gap-2">
+        <label className="text-sm font-semibold text-gray-800">Brand</label>
+        <Select
+          value={filters.brand ?? ""}
+          onChange={(e) => onChange({ ...filters, brand: e.target.value, model: "" })}
+        >
+          <option value="">Any</option>
+          {makes.map((make) => (
+            <option key={make.id} value={make.name}>
+              {make.name}
+            </option>
+          ))}
+        </Select>
+      </div>
+      <div className="flex flex-col gap-2">
+        <label className="text-sm font-semibold text-gray-800">Model</label>
+        <Select
+          value={filters.model ?? ""}
+          onChange={(e) => onChange({ ...filters, model: e.target.value })}
+          disabled={!filters.brand}
+        >
+          <option value="">Any</option>
+          {models.map((model) => (
+            <option key={model.id} value={model.name}>
+              {model.name}
+            </option>
+          ))}
+        </Select>
+      </div>
+      <div className="flex flex-col gap-2">
+        <label className="text-sm font-semibold text-gray-800">Fuel</label>
+        <Select
+          value={filters.fuelType ?? ""}
+          onChange={(e) => onChange({ ...filters, fuelType: e.target.value })}
+        >
+          <option value="">Any</option>
+          {fuelTypes.map((fuel) => (
+            <option key={fuel} value={fuel}>
+              {fuel.charAt(0).toUpperCase() + fuel.slice(1)}
             </option>
           ))}
         </Select>
@@ -155,6 +207,9 @@ export function FiltersSidebar({ filters, onChange }: Props) {
             region: "",
             city: "",
             carType: "",
+            brand: "",
+            model: "",
+            fuelType: "",
             minPrice: undefined,
             maxPrice: undefined,
             features: [],

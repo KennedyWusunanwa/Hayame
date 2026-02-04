@@ -12,22 +12,26 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
-import { featureOptions, carTypes } from "@/lib/utils";
+import { featureOptions, carTypes, fuelTypes } from "@/lib/utils";
 import { useLocations } from "@/lib/use-locations";
+import { useCarCatalog } from "@/lib/use-car-catalog";
 
 type FormValues = z.infer<typeof carFormSchema>;
 
 type Props = {
   carId?: string;
   defaultValues?: Partial<FormValues>;
+  redirectTo?: string;
 };
 
-export function CarForm({ carId, defaultValues }: Props) {
+export function CarForm({ carId, defaultValues, redirectTo }: Props) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [files, setFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
+  const redirectPath = redirectTo ?? "/host/cars";
   const { regions, citiesByRegion } = useLocations();
+  const { makes } = useCarCatalog();
   const {
     register,
     handleSubmit,
@@ -43,9 +47,11 @@ export function CarForm({ carId, defaultValues }: Props) {
       city: "",
       region: "",
       car_type: "",
+      brand: "",
+      model: "",
       seats: 4,
       transmission: "automatic",
-      fuel: "Petrol",
+      fuel_type: "petrol",
       features: [],
       is_available: true,
       ...defaultValues,
@@ -72,7 +78,7 @@ export function CarForm({ carId, defaultValues }: Props) {
         await uploadPhotos(newCarId, files);
       }
 
-      router.push("/host/cars");
+      router.push(redirectPath);
     } catch (err: any) {
       setError(err.message ?? "Unable to save car");
     } finally {
@@ -137,6 +143,38 @@ export function CarForm({ carId, defaultValues }: Props) {
           </Select>
         </div>
         <div className="space-y-2">
+          <label className="text-sm font-semibold text-gray-700">Brand</label>
+          <Select
+            value={watch("brand") ?? ""}
+            onChange={(e) => {
+              setValue("brand", e.target.value);
+              setValue("model", "");
+            }}
+          >
+            <option value="">Select brand</option>
+            {makes.map((make) => (
+              <option key={make.id} value={make.name}>
+                {make.name}
+              </option>
+            ))}
+          </Select>
+        </div>
+        <div className="space-y-2">
+          <label className="text-sm font-semibold text-gray-700">Model</label>
+          <Select
+            value={watch("model") ?? ""}
+            onChange={(e) => setValue("model", e.target.value)}
+            disabled={!watch("brand")}
+          >
+            <option value="">Select model</option>
+            {(makes.find((make) => make.name === watch("brand"))?.models ?? []).map((model) => (
+              <option key={model.id} value={model.name}>
+                {model.name}
+              </option>
+            ))}
+          </Select>
+        </div>
+        <div className="space-y-2">
           <label className="text-sm font-semibold text-gray-700">Seats</label>
           <Input type="number" min={2} max={8} {...register("seats", { valueAsNumber: true })} />
         </div>
@@ -149,10 +187,13 @@ export function CarForm({ carId, defaultValues }: Props) {
         </div>
         <div className="space-y-2">
           <label className="text-sm font-semibold text-gray-700">Fuel</label>
-          <Select {...register("fuel")}>
-            <option value="Petrol">Petrol</option>
-            <option value="Diesel">Diesel</option>
-            <option value="Hybrid">Hybrid</option>
+          <Select {...register("fuel_type")}>
+            <option value="">Select fuel</option>
+            {fuelTypes.map((fuel) => (
+              <option key={fuel} value={fuel}>
+                {fuel.charAt(0).toUpperCase() + fuel.slice(1)}
+              </option>
+            ))}
           </Select>
         </div>
       </div>
@@ -220,7 +261,7 @@ export function CarForm({ carId, defaultValues }: Props) {
         <Button type="submit" disabled={isSubmitting || uploading}>
           {isSubmitting || uploading ? "Saving..." : "Save car"}
         </Button>
-        <Button type="button" variant="secondary" onClick={() => router.push("/host/cars")}>
+        <Button type="button" variant="secondary" onClick={() => router.push(redirectPath)}>
           Cancel
         </Button>
       </div>

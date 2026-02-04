@@ -1,6 +1,8 @@
 export type MockCar = {
   id: string;
   name: string;
+  brand?: string;
+  model?: string;
   city: string;
   region: string;
   daily_price: number;
@@ -11,6 +13,7 @@ export type MockCar = {
   seats: number;
   transmission: "automatic" | "manual";
   fuel: string;
+  fuel_type?: string;
   features: string[];
   description: string;
   host: {
@@ -23,6 +26,8 @@ export const mockCars: MockCar[] = [
   {
     id: "car-accra-1",
     name: "Toyota RAV4 2022",
+    brand: "Toyota",
+    model: "RAV4",
     city: "Accra",
     region: "Greater Accra",
     daily_price: 820,
@@ -32,6 +37,7 @@ export const mockCars: MockCar[] = [
     seats: 5,
     transmission: "automatic",
     fuel: "Petrol",
+    fuel_type: "petrol",
     image:
       "https://images.unsplash.com/photo-1503736334956-4c8f8e92946d?auto=format&fit=crop&w=1200&q=80",
     features: ["Air Conditioning", "Automatic", "Bluetooth", "USB Port", "4x4"],
@@ -45,6 +51,8 @@ export const mockCars: MockCar[] = [
   {
     id: "car-accra-2",
     name: "Mercedes C300 2021",
+    brand: "Mercedes-Benz",
+    model: "C-Class (C300)",
     city: "Accra",
     region: "Greater Accra",
     daily_price: 1350,
@@ -54,6 +62,7 @@ export const mockCars: MockCar[] = [
     seats: 5,
     transmission: "automatic",
     fuel: "Petrol",
+    fuel_type: "petrol",
     image:
       "https://images.unsplash.com/photo-1503736334956-4c8f8e92946d?auto=format&fit=crop&w=1200&q=80",
     features: ["Leather Seats", "Bluetooth", "Automatic", "Sunroof"],
@@ -67,6 +76,8 @@ export const mockCars: MockCar[] = [
   {
     id: "car-kumasi-1",
     name: "Toyota Corolla 2020",
+    brand: "Toyota",
+    model: "Corolla",
     city: "Kumasi",
     region: "Ashanti",
     daily_price: 480,
@@ -76,6 +87,7 @@ export const mockCars: MockCar[] = [
     seats: 5,
     transmission: "automatic",
     fuel: "Petrol",
+    fuel_type: "petrol",
     image:
       "https://images.unsplash.com/photo-1503736334956-4c8f8e92946d?auto=format&fit=crop&w=1200&q=80",
     features: ["Bluetooth", "Automatic", "USB Port", "Air Conditioning"],
@@ -89,6 +101,8 @@ export const mockCars: MockCar[] = [
   {
     id: "car-takoradi-1",
     name: "Hyundai Tucson 2021",
+    brand: "Hyundai",
+    model: "Tucson",
     city: "Takoradi",
     region: "Western",
     daily_price: 760,
@@ -98,6 +112,7 @@ export const mockCars: MockCar[] = [
     seats: 5,
     transmission: "automatic",
     fuel: "Diesel",
+    fuel_type: "diesel",
     image:
       "https://images.unsplash.com/photo-1503736334956-4c8f8e92946d?auto=format&fit=crop&w=1200&q=80",
     features: ["4x4", "Automatic", "Bluetooth", "Air Conditioning"],
@@ -111,6 +126,8 @@ export const mockCars: MockCar[] = [
   {
     id: "car-tamale-1",
     name: "Nissan Patrol 2019",
+    brand: "Nissan",
+    model: "Patrol",
     city: "Tamale",
     region: "Northern",
     daily_price: 980,
@@ -120,6 +137,7 @@ export const mockCars: MockCar[] = [
     seats: 7,
     transmission: "automatic",
     fuel: "Diesel",
+    fuel_type: "diesel",
     image:
       "https://images.unsplash.com/photo-1503736334956-4c8f8e92946d?auto=format&fit=crop&w=1200&q=80",
     features: ["4x4", "Leather Seats", "Automatic", "Air Conditioning"],
@@ -133,6 +151,8 @@ export const mockCars: MockCar[] = [
   {
     id: "car-accra-3",
     name: "Honda Fit 2018",
+    brand: "Honda",
+    model: "Fit/Jazz",
     city: "Accra",
     region: "Greater Accra",
     daily_price: 310,
@@ -142,6 +162,7 @@ export const mockCars: MockCar[] = [
     seats: 4,
     transmission: "automatic",
     fuel: "Petrol",
+    fuel_type: "petrol",
     image:
       "https://images.unsplash.com/photo-1503736334956-4c8f8e92946d?auto=format&fit=crop&w=1200&q=80",
     features: ["Automatic", "Bluetooth", "USB Port"],
@@ -155,6 +176,8 @@ export const mockCars: MockCar[] = [
   {
     id: "car-kumasi-2",
     name: "Ford Ranger 2022",
+    brand: "Ford",
+    model: "Ranger",
     city: "Kumasi",
     region: "Ashanti",
     daily_price: 890,
@@ -164,6 +187,7 @@ export const mockCars: MockCar[] = [
     seats: 5,
     transmission: "automatic",
     fuel: "Diesel",
+    fuel_type: "diesel",
     image:
       "https://images.unsplash.com/photo-1503736334956-4c8f8e92946d?auto=format&fit=crop&w=1200&q=80",
     features: ["4x4", "Bluetooth", "Automatic", "USB Port"],
@@ -177,6 +201,8 @@ export const mockCars: MockCar[] = [
   {
     id: "car-takoradi-2",
     name: "Kia Carnival 2021",
+    brand: "Kia",
+    model: "Carnival/Sedona",
     city: "Takoradi",
     region: "Western",
     daily_price: 920,
@@ -186,6 +212,7 @@ export const mockCars: MockCar[] = [
     seats: 7,
     transmission: "automatic",
     fuel: "Diesel",
+    fuel_type: "diesel",
     image:
       "https://images.unsplash.com/photo-1503736334956-4c8f8e92946d?auto=format&fit=crop&w=1200&q=80",
     features: ["Automatic", "Bluetooth", "USB Port", "Leather Seats"],

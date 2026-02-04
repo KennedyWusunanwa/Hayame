@@ -17,6 +17,9 @@ function ExploreContent() {
     region: "",
     city: "",
     carType: "",
+    brand: "",
+    model: "",
+    fuelType: "",
     minPrice: undefined,
     maxPrice: undefined,
     features: [],
@@ -28,6 +31,9 @@ function ExploreContent() {
   useEffect(() => {
     const q = searchParams.get("q") || "";
     const carType = searchParams.get("carType") || "";
+    const brand = searchParams.get("brand") || "";
+    const model = searchParams.get("model") || "";
+    const fuelType = searchParams.get("fuelType") || "";
     const region = searchParams.get("region") || "";
     const city = searchParams.get("city") || "";
     setFilters((prev) => ({
@@ -36,6 +42,9 @@ function ExploreContent() {
       region,
       city,
       carType,
+      brand,
+      model,
+      fuelType,
     }));
   }, [searchParams]);
 
@@ -60,11 +69,14 @@ function ExploreContent() {
             id: car.id,
             name: car.title,
             city: car.city ?? "Accra",
-            region: car.region ?? "Greater Accra Region",
+            region: car.region ?? "Greater Accra",
             daily_price: Number(car.daily_price ?? 0),
             rating: 4.8,
             reviews: 0,
             car_type: car.car_type ?? "SUV",
+            brand: car.brand ?? "",
+            model: car.model ?? "",
+            fuel_type: car.fuel_type ?? car.fuel ?? "",
             seats: car.seats ?? 5,
             transmission: car.transmission ?? "automatic",
             fuel: car.fuel ?? "Petrol",
@@ -99,10 +111,15 @@ function ExploreContent() {
       const matchesQuery =
         !filters.query ||
         car.name.toLowerCase().includes(filters.query.toLowerCase()) ||
-        car.city.toLowerCase().includes(filters.query.toLowerCase());
+        car.city.toLowerCase().includes(filters.query.toLowerCase()) ||
+        (car.brand ?? "").toLowerCase().includes(filters.query.toLowerCase()) ||
+        (car.model ?? "").toLowerCase().includes(filters.query.toLowerCase());
       const matchesRegion = !filters.region || car.region === filters.region;
       const matchesCity = !filters.city || car.city === filters.city;
       const matchesType = !filters.carType || car.car_type === filters.carType;
+      const matchesBrand = !filters.brand || car.brand === filters.brand;
+      const matchesModel = !filters.model || car.model === filters.model;
+      const matchesFuel = !filters.fuelType || car.fuel_type === filters.fuelType;
       const matchesMin = !filters.minPrice || car.daily_price >= filters.minPrice;
       const matchesMax = !filters.maxPrice || car.daily_price <= filters.maxPrice;
       const matchesFeatures =
@@ -114,6 +131,9 @@ function ExploreContent() {
         matchesRegion &&
         matchesCity &&
         matchesType &&
+        matchesBrand &&
+        matchesModel &&
+        matchesFuel &&
         matchesMin &&
         matchesMax &&
         matchesFeatures
@@ -126,6 +146,18 @@ function ExploreContent() {
     label: `${car.city} - ${car.name}`,
     price: formatCurrency(car.daily_price),
   }));
+  const hasActiveFilters = Boolean(
+    filters.query ||
+      filters.region ||
+      filters.city ||
+      filters.carType ||
+      filters.brand ||
+      filters.model ||
+      filters.fuelType ||
+      filters.minPrice ||
+      filters.maxPrice ||
+      (filters.features && filters.features.length > 0),
+  );
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
@@ -143,10 +175,12 @@ function ExploreContent() {
       <div className="grid gap-6 lg:grid-cols-[320px,1fr]">
         <FiltersSidebar filters={filters} onChange={setFilters} />
         <div className="grid gap-5">
-          <div className="h-44 w-full overflow-hidden rounded-2xl border border-border bg-white shadow-soft sm:h-56 lg:h-64">
-            <MapPanel markers={markers} className="h-full" />
-          </div>
-          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          {!hasActiveFilters ? (
+            <div className="h-44 w-full overflow-hidden rounded-2xl border border-border bg-white shadow-soft sm:h-56 lg:h-64">
+              <MapPanel markers={markers} className="h-full" />
+            </div>
+          ) : null}
+          <div className="grid items-start gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {loading ? (
               <div className="col-span-full rounded-2xl border border-border bg-white p-6 text-center text-sm text-gray-600">
                 Loading cars...

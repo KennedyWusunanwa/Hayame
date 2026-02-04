@@ -5,6 +5,7 @@ import "./globals.css";
 import { Navbar } from "@/components/navbar";
 import { Footer } from "@/components/footer";
 import { NavigationLoader } from "@/components/navigation-loader";
+import { MessagingProvider } from "@/components/messages/messaging-provider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -32,14 +33,16 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}
       >
-        <div className="flex min-h-screen flex-col">
-          <Navbar />
-          <Suspense fallback={null}>
-            <NavigationLoader />
-          </Suspense>
-          <main className="flex-1">{children}</main>
-          <Footer />
-        </div>
+        <MessagingProvider>
+          <div className="flex min-h-screen flex-col">
+            <Navbar />
+            <Suspense fallback={null}>
+              <NavigationLoader />
+            </Suspense>
+            <main className="flex-1">{children}</main>
+            <Footer />
+          </div>
+        </MessagingProvider>
       </body>
     </html>
   );

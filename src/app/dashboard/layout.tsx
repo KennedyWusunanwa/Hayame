@@ -26,9 +26,9 @@ export default async function UserDashboardLayout({ children }: { children: Reac
   };
 
   return (
-    <div className="mx-auto flex max-w-6xl gap-0 px-4 pb-4 lg:px-0">
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-0 px-4 pb-4 lg:flex-row lg:px-0">
       <UserDashboardSidebar user={userProfile} />
-      <div className="flex-1 border-l border-border bg-gray-50/60 px-0 py-4 sm:px-4 lg:px-8">
+      <div className="flex-1 bg-gray-50/60 px-0 py-4 sm:px-4 lg:border-l lg:border-border lg:px-8">
         <div className="mb-4 lg:hidden">
           <UserDashboardMobileNav />
         </div>

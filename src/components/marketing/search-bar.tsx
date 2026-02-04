@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { carTypes } from "@/lib/utils";
 import { useLocations } from "@/lib/use-locations";
+import { useCarCatalog } from "@/lib/use-car-catalog";
 
 export function HeroSearchBar() {
   const pillBg =
@@ -16,24 +17,32 @@ export function HeroSearchBar() {
     "h-12 w-full min-w-0 text-sm border-0 bg-transparent text-white placeholder:text-white/50 focus-visible:ring-0 dark-select";
   const router = useRouter();
   const { regions, citiesByRegion } = useLocations();
+  const { makes } = useCarCatalog();
   const [region, setRegion] = useState("");
   const [city, setCity] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [carType, setCarType] = useState("");
+  const [brand, setBrand] = useState("");
+  const [model, setModel] = useState("");
   const locationOptions = useMemo(() => {
     if (!region) return [];
     return (citiesByRegion[region] ?? []).map((c) => ({ value: c, label: c }));
   }, [citiesByRegion, region]);
+  const modelOptions = useMemo(() => {
+    if (!brand) return [];
+    return makes.find((make) => make.name === brand)?.models ?? [];
+  }, [brand, makes]);
 
   const onSearch = () => {
     const params = new URLSearchParams();
     if (city) {
       params.set("city", city);
-      params.set("q", `${city}, ${region || ""}`.trim());
+      params.set("q", city);
     }
-    if (!city && region) params.set("q", region);
     if (region) params.set("region", region);
+    if (brand) params.set("brand", brand);
+    if (model) params.set("model", model);
     if (startDate) params.set("start", startDate);
     if (endDate) params.set("end", endDate);
     if (carType) params.set("carType", carType);
@@ -43,13 +52,15 @@ export function HeroSearchBar() {
     setStartDate("");
     setEndDate("");
     setCarType("");
+    setBrand("");
+    setModel("");
   };
 
   return (
     <div className="-mt-4 w-full sm:-mt-6 lg:-mt-8">
       <div className="mx-auto max-w-5xl rounded-3xl border border-white/10 bg-[#0a2137] px-3 py-3 text-white shadow-xl sm:px-4 sm:py-4 overflow-visible">
         <div className="flex flex-col gap-3">
-          <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-5">
             <div className={`${pillBg} w-full`}>
               <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10">
                 <MapPin className="h-5 w-5 text-brand" />
@@ -97,6 +108,38 @@ export function HeroSearchBar() {
                 <option value="">Car Type</option>
                 {carTypes.map((type) => (
                   <option key={type}>{type}</option>
+                ))}
+              </Select>
+            </div>
+            <div className={`${pillBg} w-full`}>
+              <Select
+                value={brand}
+                onChange={(e) => {
+                  setBrand(e.target.value);
+                  setModel("");
+                }}
+                className={fieldBase}
+              >
+                <option value="">Brand</option>
+                {makes.map((make) => (
+                  <option key={make.id} value={make.name}>
+                    {make.name}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div className={`${pillBg} w-full`}>
+              <Select
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                className={fieldBase}
+                disabled={!brand}
+              >
+                <option value="">Model</option>
+                {modelOptions.map((opt) => (
+                  <option key={opt.id} value={opt.name}>
+                    {opt.name}
+                  </option>
                 ))}
               </Select>
             </div>

@@ -1,6 +1,25 @@
 import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { carFormSchema } from "@/lib/validators";
+
+const COOKIE_NAME = "admin_auth";
+
+function adminToken() {
+  const username = process.env.ADMIN_USERNAME ?? "";
+  const password = process.env.ADMIN_PASSWORD ?? "";
+  if (!username || !password) return null;
+  return Buffer.from(`${username}:${password}`).toString("base64");
+}
+
+async function isAdmin() {
+  const token = adminToken();
+  if (!token) return false;
+  const cookieStore = await cookies();
+  const cookie = cookieStore.get(COOKIE_NAME)?.value;
+  return cookie === token;
+}
 
 type Params = {
   params: Promise<{ id: string }>;
@@ -28,6 +47,19 @@ export async function PUT(req: Request, context: Params) {
   try {
     const body = await req.json();
     const parsed = carFormSchema.parse(body);
+    const admin = await isAdmin();
+    if (admin) {
+      const adminClient = createSupabaseAdminClient() as any;
+      const { data, error } = await adminClient
+        .from("cars")
+        .update({ ...parsed, updated_at: new Date().toISOString() })
+        .eq("id", id)
+        .select()
+        .single();
+      if (error) throw error;
+      return NextResponse.json({ data });
+    }
+
     const supabase = await createSupabaseServerClient();
     const supa = supabase as any;
     const {
@@ -76,6 +108,14 @@ export async function PUT(req: Request, context: Params) {
 export async function DELETE(_: Request, context: Params) {
   const { id } = await context.params;
   try {
+    const admin = await isAdmin();
+    if (admin) {
+      const adminClient = createSupabaseAdminClient() as any;
+      const { error } = await adminClient.from("cars").delete().eq("id", id);
+      if (error) throw error;
+      return NextResponse.json({ ok: true });
+    }
+
     const supabase = await createSupabaseServerClient();
     const supa = supabase as any;
     const {

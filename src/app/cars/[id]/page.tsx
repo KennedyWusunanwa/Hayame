@@ -16,6 +16,7 @@ import { FavoriteButton } from "@/components/favorite-button";
 import { BookingWidget } from "@/components/booking-widget";
 import { ImageGallery } from "@/components/image-gallery";
 import { ReviewForm, type ReviewableBooking } from "@/components/review-form";
+import { HostMessageCard } from "@/components/messages/host-message-card";
 import { detailIcons, getFeatureIcon } from "@/lib/feature-icons";
 import type { Database } from "@/lib/database.types";
 import { mockCars, type MockCar } from "@/lib/mock-data";
@@ -44,6 +45,9 @@ type CarDetail = {
   city?: string | null;
   region?: string | null;
   car_type?: string | null;
+  brand?: string | null;
+  model?: string | null;
+  fuel_type?: string | null;
   seats?: number | null;
   transmission?: string | null;
   fuel?: string | null;
@@ -109,6 +113,16 @@ export default async function CarDetailPage({ params }: PageProps) {
       icon: detailIcons.location,
     },
     {
+      label: "Brand",
+      value: car.brand ?? "—",
+      icon: detailIcons.carType,
+    },
+    {
+      label: "Model",
+      value: car.model ?? "—",
+      icon: detailIcons.carType,
+    },
+    {
       label: "Car type",
       value: car.car_type ?? "—",
       icon: detailIcons.carType,
@@ -125,7 +139,7 @@ export default async function CarDetailPage({ params }: PageProps) {
     },
     {
       label: "Fuel",
-      value: car.fuel ?? "—",
+      value: car.fuel_type ?? car.fuel ?? "—",
       icon: detailIcons.fuel,
     },
     {
@@ -258,6 +272,7 @@ export default async function CarDetailPage({ params }: PageProps) {
           <AvailabilitySummary availability={availability} isAvailable={car.is_available} />
           <BookingWidget carId={car.id} dailyPrice={car.daily_price} />
           <HostCard owner={car.owner} rating={car.rating} reviews={car.reviews} />
+          <HostMessageCard hostId={car.owner?.id} hostName={car.owner?.full_name} carId={car.id} />
         </div>
       </div>
     </div>
@@ -493,6 +508,9 @@ function mapCar(data: SupabaseCar): CarDetail {
     city: data.city,
     region: data.region,
     car_type: data.car_type,
+    brand: (data as any).brand ?? null,
+    model: (data as any).model ?? null,
+    fuel_type: (data as any).fuel_type ?? null,
     seats: data.seats,
     transmission: data.transmission,
     fuel: data.fuel,
@@ -515,6 +533,9 @@ function mapMockCar(mock: MockCar): CarDetail {
     city: mock.city,
     region: mock.region,
     car_type: mock.car_type,
+    brand: null,
+    model: null,
+    fuel_type: null,
     seats: mock.seats,
     transmission: mock.transmission,
     fuel: mock.fuel,
@@ -666,7 +687,7 @@ function HostCard({ owner, rating, reviews }: { owner?: Owner | null; rating?: n
           asChild
           className="shrink-0"
         >
-          <Link href="#">View host</Link>
+          <Link href={owner?.id ? `/hosts/${owner.id}` : "#"}>View host</Link>
         </Button>
       </CardContent>
     </Card>
@@ -725,3 +746,5 @@ function NotFoundState() {
     </div>
   );
 }
+
+

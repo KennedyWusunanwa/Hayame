@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { AdminTabs } from "@/components/admin/admin-tabs";
@@ -283,11 +284,19 @@ export default async function AdminPage({
           <p className="text-sm font-semibold text-primary">Admin</p>
           <h1 className="text-2xl font-semibold text-foreground">Platform overview</h1>
         </div>
-        <form action={logoutAction}>
-          <button className="rounded-md border border-border px-3 py-2 text-sm font-semibold text-gray-700">
-            Sign out
-          </button>
-        </form>
+        <div className="flex items-center gap-2">
+          <Link
+            href="/admin/filters"
+            className="rounded-md border border-border px-3 py-2 text-sm font-semibold text-gray-700"
+          >
+            Manage filters
+          </Link>
+          <form action={logoutAction}>
+            <button className="rounded-md border border-border px-3 py-2 text-sm font-semibold text-gray-700">
+              Sign out
+            </button>
+          </form>
+        </div>
       </div>
 
       <AdminTabs
@@ -356,14 +365,22 @@ export default async function AdminPage({
                     const blocks = (blocksByCar.get(car.id) ?? []).filter((b: any) => b.available === false);
                     return (
                       <div key={car.id} className="rounded-lg border border-border p-3">
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-between gap-4">
                           <div>
                             <p className="text-sm font-semibold text-foreground">{car.title}</p>
                             <p className="text-[11px] text-gray-500">
                               Host: {car.owner?.full_name ?? "Host"} {car.owner?.phone ? `• ${car.owner.phone}` : ""}
                             </p>
                           </div>
-                          <span className="text-xs text-gray-500">{car.city ?? "—"}</span>
+                          <div className="flex items-center gap-3">
+                            <span className="text-xs text-gray-500">{car.city ?? "—"}</span>
+                            <Link
+                              href={`/admin/cars/${car.id}/edit`}
+                              className="rounded-md border border-border px-2 py-1 text-[11px] font-semibold text-gray-700 hover:bg-gray-50"
+                            >
+                              Edit
+                            </Link>
+                          </div>
                         </div>
                         <div className="mt-2 text-xs text-gray-600">
                           Bookings: {bookings.length} • Host blocks: {blocks.length}

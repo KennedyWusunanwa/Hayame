@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { featureOptions } from "./utils";
+import { featureOptions, fuelTypes } from "./utils";
 
 export const carFormSchema = z.object({
   title: z.string().min(2),
@@ -10,7 +10,9 @@ export const carFormSchema = z.object({
   car_type: z.string().optional(),
   seats: z.coerce.number().min(2).max(8).optional(),
   transmission: z.string().optional(),
-  fuel: z.string().optional(),
+  fuel_type: z.enum(fuelTypes as [string, ...string[]]).optional(),
+  brand: z.string().optional(),
+  model: z.string().optional(),
   features: z.array(z.string().refine((f) => featureOptions.includes(f))).optional(),
   is_available: z.boolean().optional(),
 });

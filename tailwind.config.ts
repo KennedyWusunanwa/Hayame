@@ -11,8 +11,9 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        brand: "#0e86d4",
-        brandMuted: "#0e86d4",
+        brand: "var(--brand)",
+        brandHover: "var(--brand-hover)",
+        brandMuted: "var(--brand)",
         border: "#e5e7eb",
         input: "#e5e7eb",
         ring: "#0ea5e9",

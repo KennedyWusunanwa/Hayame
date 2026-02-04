@@ -23,7 +23,7 @@ export function CarCard({ car, isFavorite = false, onToggleFavorite }: Props) {
   return (
     <Link
       href={`/cars/${car.id}`}
-      className="group flex h-full flex-col overflow-hidden rounded-2xl border border-border bg-white shadow-card card-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-2"
+      className="group flex flex-col overflow-hidden rounded-2xl border border-border bg-white shadow-card card-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-2"
       aria-label={`View ${car.title}`}
     >
       <div className="relative h-48 w-full overflow-hidden">

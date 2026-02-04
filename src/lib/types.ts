@@ -7,6 +7,9 @@ export type Car = {
   rating?: number;
   reviews?: number;
   car_type?: string;
+  brand?: string;
+  model?: string;
+  fuel_type?: string;
   seats?: number;
   transmission?: string;
   fuel?: string;

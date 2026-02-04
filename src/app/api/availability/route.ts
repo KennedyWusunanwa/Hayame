@@ -1,10 +1,27 @@
 import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import { addDays, format, isAfter, parseISO } from "date-fns";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { availabilitySchema } from "@/lib/validators";
 
 const BLOCKING_STATUSES = ["pending", "awaiting_host", "confirmed"];
+const COOKIE_NAME = "admin_auth";
+
+function adminToken() {
+  const username = process.env.ADMIN_USERNAME ?? "";
+  const password = process.env.ADMIN_PASSWORD ?? "";
+  if (!username || !password) return null;
+  return Buffer.from(`${username}:${password}`).toString("base64");
+}
+
+async function isAdmin() {
+  const token = adminToken();
+  if (!token) return false;
+  const cookieStore = await cookies();
+  const cookie = cookieStore.get(COOKIE_NAME)?.value;
+  return cookie === token;
+}
 
 export async function GET(req: Request) {
   try {
@@ -75,29 +92,33 @@ export async function POST(req: Request) {
   try {
     const body = await req.json();
     const parsed = availabilitySchema.parse(body);
+    const admin = await isAdmin();
     const supabase = await createSupabaseServerClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+    const supa = admin ? (createSupabaseAdminClient() as any) : (supabase as any);
 
-    const { data: profileData } = await supabase
-      .from("profiles")
-      .select("is_host")
-      .eq("id", user.id)
-      .maybeSingle();
-    const profile = profileData as { is_host?: boolean } | null;
-    if (!profile?.is_host) {
-      return NextResponse.json({ message: "Host approval required" }, { status: 403 });
+    if (!admin) {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+
+      const { data: profileData } = await supabase
+        .from("profiles")
+        .select("is_host")
+        .eq("id", user.id)
+        .maybeSingle();
+      const profile = profileData as { is_host?: boolean } | null;
+      if (!profile?.is_host) {
+        return NextResponse.json({ message: "Host approval required" }, { status: 403 });
+      }
+
+      const { data: carData } = await supabase.from("cars").select("owner_id").eq("id", parsed.carId).single();
+      const car = carData as { owner_id: string } | null;
+      if (!car || car.owner_id !== user.id) {
+        return NextResponse.json({ message: "Forbidden" }, { status: 403 });
+      }
     }
 
-    const { data: carData } = await supabase.from("cars").select("owner_id").eq("id", parsed.carId).single();
-    const car = carData as { owner_id: string } | null;
-    if (!car || car.owner_id !== user.id) {
-      return NextResponse.json({ message: "Forbidden" }, { status: 403 });
-    }
-
-    const supa = supabase as any;
     const repeatDays = new Set((parsed.repeatDays ?? []).map((d) => d.toLowerCase()));
     const rows: any[] = [];
 

@@ -47,6 +47,8 @@ export const carTypes = [
   "Coupe",
 ];
 
+export const fuelTypes = ["petrol", "diesel", "electric", "lpg", "hybrid"];
+
 export const fallbackCities = [
   { city: "Accra", region: "Greater Accra" },
   { city: "Kumasi", region: "Ashanti" },
