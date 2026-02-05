@@ -51,14 +51,6 @@ export function FiltersSidebar({ filters, onChange }: Props) {
   const content = (
     <div className="flex flex-col gap-5">
       <div className="flex flex-col gap-2">
-        <label className="text-sm font-semibold text-gray-800">Search</label>
-        <Input
-          placeholder="Search by car or city"
-          value={filters.query ?? ""}
-          onChange={(e) => onChange({ ...filters, query: e.target.value })}
-        />
-      </div>
-      <div className="flex flex-col gap-2">
         <label className="text-sm font-semibold text-gray-800">Region</label>
         <Select
           value={filters.region ?? ""}

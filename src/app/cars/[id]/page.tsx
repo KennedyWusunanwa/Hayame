@@ -181,11 +181,13 @@ export default async function CarDetailPage({ params }: PageProps) {
         </div>
       </div>
 
-      <div className="mt-8 grid gap-8 lg:grid-cols-[1fr,360px]">
-        <div className="space-y-6">
-          <ImageGallery images={galleryImages} />
+      <div className="mt-8 grid gap-x-8 gap-y-6 lg:grid-cols-[1fr,360px]">
+        <div className="contents lg:block lg:space-y-6">
+          <div className="order-1 lg:order-none">
+            <ImageGallery images={galleryImages} />
+          </div>
 
-          <Card>
+          <Card className="order-3 lg:order-none">
             <CardHeader>
               <CardTitle>Details</CardTitle>
             </CardHeader>
@@ -196,7 +198,7 @@ export default async function CarDetailPage({ params }: PageProps) {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="order-5 lg:order-none">
             <CardHeader>
               <CardTitle>Description</CardTitle>
             </CardHeader>
@@ -205,7 +207,7 @@ export default async function CarDetailPage({ params }: PageProps) {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="order-6 lg:order-none">
             <CardHeader>
               <CardTitle>Features</CardTitle>
             </CardHeader>
@@ -220,7 +222,7 @@ export default async function CarDetailPage({ params }: PageProps) {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="order-7 lg:order-none">
             <CardHeader>
               <CardTitle>Latest reviews</CardTitle>
             </CardHeader>
@@ -241,7 +243,7 @@ export default async function CarDetailPage({ params }: PageProps) {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="order-8 lg:order-none">
             <CardHeader>
               <CardTitle>Leave a review</CardTitle>
             </CardHeader>
@@ -268,11 +270,19 @@ export default async function CarDetailPage({ params }: PageProps) {
           </Card>
         </div>
 
-        <div className="space-y-4 lg:sticky lg:top-6">
-          <AvailabilitySummary availability={availability} isAvailable={car.is_available} />
-          <BookingWidget carId={car.id} dailyPrice={car.daily_price} />
-          <HostCard owner={car.owner} rating={car.rating} reviews={car.reviews} />
-          <HostMessageCard hostId={car.owner?.id} hostName={car.owner?.full_name} carId={car.id} />
+        <div className="contents lg:sticky lg:top-6 lg:block lg:space-y-4">
+          <div className="order-2 lg:order-none">
+            <AvailabilitySummary availability={availability} isAvailable={car.is_available} />
+          </div>
+          <div className="order-4 lg:order-none">
+            <BookingWidget carId={car.id} dailyPrice={car.daily_price} />
+          </div>
+          <div className="order-9 lg:order-none">
+            <HostCard owner={car.owner} rating={car.rating} reviews={car.reviews} />
+          </div>
+          <div className="order-10 lg:order-none">
+            <HostMessageCard hostId={car.owner?.id} hostName={car.owner?.full_name} carId={car.id} />
+          </div>
         </div>
       </div>
     </div>

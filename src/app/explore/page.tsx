@@ -7,11 +7,13 @@ import { CarCard } from "@/components/car-card";
 import { FiltersSidebar, type Filters } from "@/components/filters-sidebar";
 import { MapPanel } from "@/components/map/map-panel";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { mockCars, type MockCar } from "@/lib/mock-data";
 import { formatCurrency } from "@/lib/utils";
 
 function ExploreContent() {
   const searchParams = useSearchParams();
+  const searchKey = searchParams.toString();
   const [filters, setFilters] = useState<Filters>({
     query: "",
     region: "",
@@ -27,15 +29,17 @@ function ExploreContent() {
   const [cars, setCars] = useState<MockCar[]>([]);
   const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchDraft, setSearchDraft] = useState("");
 
   useEffect(() => {
-    const q = searchParams.get("q") || "";
-    const carType = searchParams.get("carType") || "";
-    const brand = searchParams.get("brand") || "";
-    const model = searchParams.get("model") || "";
-    const fuelType = searchParams.get("fuelType") || "";
-    const region = searchParams.get("region") || "";
-    const city = searchParams.get("city") || "";
+    const params = new URLSearchParams(searchKey);
+    const q = params.get("q") || "";
+    const carType = params.get("carType") || "";
+    const brand = params.get("brand") || "";
+    const model = params.get("model") || "";
+    const fuelType = params.get("fuelType") || "";
+    const region = params.get("region") || "";
+    const city = params.get("city") || "";
     setFilters((prev) => ({
       ...prev,
       query: q,
@@ -46,7 +50,11 @@ function ExploreContent() {
       model,
       fuelType,
     }));
-  }, [searchParams]);
+  }, [searchKey]);
+
+  useEffect(() => {
+    setSearchDraft(filters.query ?? "");
+  }, [filters.query]);
 
   useEffect(() => {
     fetch("/api/favorites")
@@ -104,6 +112,14 @@ function ExploreContent() {
     setFavoriteIds((prev) =>
       nextValue ? Array.from(new Set([...prev, carId])) : prev.filter((id) => id !== carId),
     );
+  };
+
+  const applySearch = () => {
+    const nextQuery = searchDraft.trim();
+    setFilters((prev) => ({
+      ...prev,
+      query: nextQuery,
+    }));
   };
 
   const filtered = useMemo(() => {
@@ -167,14 +183,52 @@ function ExploreContent() {
           <h1 className="text-3xl font-semibold text-foreground">Find your next ride</h1>
           <p className="text-gray-700">Search by city, car type, budget, or features.</p>
         </div>
-        <Button variant="outline" className="w-full md:w-auto">
-          <Search className="mr-2 h-4 w-4" />
-          New search
-        </Button>
+        <div className="w-full md:hidden">
+          <form
+            className="flex h-12 items-center gap-2 rounded-full border border-border bg-white px-3 shadow-soft"
+            onSubmit={(e) => {
+              e.preventDefault();
+              applySearch();
+            }}
+          >
+            <Search className="h-4 w-4 text-gray-500" />
+            <Input
+              placeholder="Search cars or cities"
+              value={searchDraft}
+              onChange={(e) => setSearchDraft(e.target.value)}
+              className="h-8 flex-1 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
+            />
+            <Button
+              size="sm"
+              className="h-8 rounded-full px-4"
+              type="submit"
+            >
+              Search
+            </Button>
+          </form>
+        </div>
       </div>
       <div className="grid gap-6 lg:grid-cols-[320px,1fr]">
         <FiltersSidebar filters={filters} onChange={setFilters} />
         <div className="grid gap-5">
+          <form
+            className="hidden h-14 items-center gap-3 rounded-2xl border border-border bg-white px-4 shadow-soft md:flex"
+            onSubmit={(e) => {
+              e.preventDefault();
+              applySearch();
+            }}
+          >
+            <Search className="h-5 w-5 text-gray-500" />
+            <Input
+              placeholder="Search cars or cities"
+              value={searchDraft}
+              onChange={(e) => setSearchDraft(e.target.value)}
+              className="h-10 flex-1 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
+            />
+            <Button type="submit" className="h-10 rounded-full px-5">
+              Search
+            </Button>
+          </form>
           {!hasActiveFilters ? (
             <div className="h-44 w-full overflow-hidden rounded-2xl border border-border bg-white shadow-soft sm:h-56 lg:h-64">
               <MapPanel markers={markers} className="h-full" />

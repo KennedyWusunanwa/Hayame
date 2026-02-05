@@ -39,7 +39,7 @@ export default function RootLayout({
             <Suspense fallback={null}>
               <NavigationLoader />
             </Suspense>
-            <main className="flex-1">{children}</main>
+            <main className="flex-1 page-fade">{children}</main>
             <Footer />
           </div>
         </MessagingProvider>
