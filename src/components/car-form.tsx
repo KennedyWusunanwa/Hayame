@@ -54,6 +54,7 @@ export function CarForm({ carId, defaultValues, redirectTo }: Props) {
       fuel_type: "petrol",
       features: [],
       is_available: true,
+      instant_book: false,
       ...defaultValues,
     },
   });
@@ -253,6 +254,17 @@ export function CarForm({ carId, defaultValues, redirectTo }: Props) {
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" {...register("is_available")} />
           Available
+        </label>
+      </div>
+
+      <div className="flex items-center justify-between rounded-lg border border-border bg-white p-4">
+        <div>
+          <p className="text-sm font-semibold text-foreground">Instant book</p>
+          <p className="text-xs text-gray-600">Enable to auto-confirm bookings after payment.</p>
+        </div>
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" {...register("instant_book")} />
+          Instant
         </label>
       </div>
 

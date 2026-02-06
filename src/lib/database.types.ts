@@ -186,6 +186,7 @@ export type Database = {
           fuel: string | null;
           features: string[] | null;
           is_available: boolean | null;
+          instant_book: boolean | null;
           created_at: string | null;
           updated_at: string | null;
         };
@@ -204,6 +205,7 @@ export type Database = {
           fuel?: string | null;
           features?: string[] | null;
           is_available?: boolean | null;
+          instant_book?: boolean | null;
           created_at?: string | null;
           updated_at?: string | null;
         };
@@ -222,6 +224,7 @@ export type Database = {
           fuel?: string | null;
           features?: string[] | null;
           is_available?: boolean | null;
+          instant_book?: boolean | null;
           created_at?: string | null;
           updated_at?: string | null;
         };
@@ -276,6 +279,7 @@ export type Database = {
           payment_reference: string | null;
           payment_provider: string | null;
           paid_at: string | null;
+          hold_expires_at: string | null;
           approved_at: string | null;
           rejected_at: string | null;
           rejection_reason: string | null;
@@ -294,6 +298,7 @@ export type Database = {
           payment_reference?: string | null;
           payment_provider?: string | null;
           paid_at?: string | null;
+          hold_expires_at?: string | null;
           approved_at?: string | null;
           rejected_at?: string | null;
           rejection_reason?: string | null;
@@ -312,6 +317,7 @@ export type Database = {
           payment_reference?: string | null;
           payment_provider?: string | null;
           paid_at?: string | null;
+          hold_expires_at?: string | null;
           approved_at?: string | null;
           rejected_at?: string | null;
           rejection_reason?: string | null;

@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getHostStatus } from "@/lib/host-status";
 
 export const dynamic = "force-dynamic";
 
@@ -10,14 +11,8 @@ export default async function DashboardCarsNewRedirect() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login");
 
-  const { data: profileData } = await supabase
-    .from("profiles")
-    .select("is_host")
-    .eq("id", user.id)
-    .maybeSingle();
-
-  const profile = profileData as { is_host?: boolean } | null;
-  if (profile?.is_host) {
+  const { isHost } = await getHostStatus(supabase as any, user.id);
+  if (isHost) {
     redirect("/host/cars/new");
   }
 

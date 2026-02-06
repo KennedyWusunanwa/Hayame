@@ -31,6 +31,10 @@ export function AvailabilityForm({ carId }: Props) {
 
   const submitRange = async () => {
     if (!startDate || !endDate) return;
+    if (new Date(endDate) <= new Date(startDate)) {
+      setMessage("End date must be after start date.");
+      return;
+    }
     setSaving(true);
     setMessage(null);
     try {

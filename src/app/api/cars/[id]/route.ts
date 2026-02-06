@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { carFormSchema } from "@/lib/validators";
+import { getHostStatus } from "@/lib/host-status";
 
 const COOKIE_NAME = "admin_auth";
 
@@ -67,13 +68,8 @@ export async function PUT(req: Request, context: Params) {
     } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
 
-    const { data: profileData } = await supa
-      .from("profiles")
-      .select("is_host")
-      .eq("id", user.id)
-      .maybeSingle();
-    const profile = profileData as { is_host?: boolean } | null;
-    if (!profile?.is_host) {
+    const { isHost } = await getHostStatus(supa, user.id);
+    if (!isHost) {
       return NextResponse.json({ message: "Host approval required" }, { status: 403 });
     }
 
@@ -122,13 +118,8 @@ export async function DELETE(_: Request, context: Params) {
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
-    const { data: profileData } = await supa
-      .from("profiles")
-      .select("is_host")
-      .eq("id", user.id)
-      .maybeSingle();
-    const profile = profileData as { is_host?: boolean } | null;
-    if (!profile?.is_host) {
+    const { isHost } = await getHostStatus(supa, user.id);
+    if (!isHost) {
       return NextResponse.json({ message: "Host approval required" }, { status: 403 });
     }
     const { data: carData } = await supa.from("cars").select("owner_id").eq("id", id).single();

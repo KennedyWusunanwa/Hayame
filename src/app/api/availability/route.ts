@@ -4,6 +4,7 @@ import { addDays, format, isAfter, parseISO } from "date-fns";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { availabilitySchema } from "@/lib/validators";
+import { getHostStatus } from "@/lib/host-status";
 
 const BLOCKING_STATUSES = ["pending", "awaiting_host", "confirmed"];
 const COOKIE_NAME = "admin_auth";
@@ -35,7 +36,7 @@ export async function GET(req: Request) {
 
     const start = parseISO(startDate);
     const end = parseISO(endDate);
-    if (!startDate || !endDate || isAfter(start, end)) {
+    if (!startDate || !endDate || Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || !isAfter(end, start)) {
       return NextResponse.json({ message: "Invalid date range" }, { status: 400 });
     }
 
@@ -52,22 +53,47 @@ export async function GET(req: Request) {
     const availabilityClient = admin ?? supa;
     const bookingsClient = admin ?? supa;
 
+    if (admin) {
+      const nowIso = new Date().toISOString();
+      await admin
+        .from("bookings")
+        .update({ status: "cancelled", payment_status: "failed", hold_expires_at: null })
+        .eq("status", "pending")
+        .lt("hold_expires_at", nowIso);
+    }
+
+    const { data: car, error: carError } = await supa
+      .from("cars")
+      .select("is_available")
+      .eq("id", carId)
+      .maybeSingle();
+    if (carError || !car) {
+      return NextResponse.json({ message: "Car not found" }, { status: 404 });
+    }
+    if (car.is_available === false) {
+      const blockedDates = new Set<string>();
+      addDatesToSet(blockedDates, startDate, endDate);
+      const blocked = Array.from(blockedDates).sort();
+      return NextResponse.json({ blockedDates: blocked, available: false, reason: "car_unavailable" });
+    }
+
     const { data: availabilityRows } = await availabilityClient
       .from("car_availability")
       .select("start_date,end_date,available")
       .eq("car_id", carId)
-      .lte("start_date", endDate)
-      .gte("end_date", startDate);
+      .lt("start_date", endDate)
+      .gt("end_date", startDate);
 
     const { data: bookingRows } = await bookingsClient
       .from("bookings")
-      .select("start_date,end_date,status")
+      .select("start_date,end_date,status,hold_expires_at")
       .eq("car_id", carId)
       .in("status", BLOCKING_STATUSES)
-      .lte("start_date", endDate)
-      .gte("end_date", startDate);
+      .lt("start_date", endDate)
+      .gt("end_date", startDate);
 
     const blockedDates = new Set<string>();
+    const now = new Date();
 
     (availabilityRows ?? [])
       .filter((row: any) => row.available === false)
@@ -75,9 +101,11 @@ export async function GET(req: Request) {
         addDatesToSet(blockedDates, row.start_date, row.end_date);
       });
 
-    (bookingRows ?? []).forEach((row: any) => {
-      addDatesToSet(blockedDates, row.start_date, row.end_date);
-    });
+    (bookingRows ?? [])
+      .filter((row: any) => row.status !== "pending" || !row.hold_expires_at || new Date(row.hold_expires_at) > now)
+      .forEach((row: any) => {
+        addDatesToSet(blockedDates, row.start_date, row.end_date);
+      });
 
     const blocked = Array.from(blockedDates).sort();
     const isAvailable = !rangeHasBlockedDates(startDate, endDate, blockedDates);
@@ -92,6 +120,11 @@ export async function POST(req: Request) {
   try {
     const body = await req.json();
     const parsed = availabilitySchema.parse(body);
+    const start = parseISO(parsed.startDate);
+    const end = parseISO(parsed.endDate);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || !isAfter(end, start)) {
+      return NextResponse.json({ message: "Invalid date range" }, { status: 400 });
+    }
     const admin = await isAdmin();
     const supabase = await createSupabaseServerClient();
     const supa = admin ? (createSupabaseAdminClient() as any) : (supabase as any);
@@ -102,13 +135,8 @@ export async function POST(req: Request) {
       } = await supabase.auth.getUser();
       if (!user) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
 
-      const { data: profileData } = await supabase
-        .from("profiles")
-        .select("is_host")
-        .eq("id", user.id)
-        .maybeSingle();
-      const profile = profileData as { is_host?: boolean } | null;
-      if (!profile?.is_host) {
+      const { isHost } = await getHostStatus(supabase as any, user.id);
+      if (!isHost) {
         return NextResponse.json({ message: "Host approval required" }, { status: 403 });
       }
 
@@ -122,31 +150,32 @@ export async function POST(req: Request) {
     const repeatDays = new Set((parsed.repeatDays ?? []).map((d) => d.toLowerCase()));
     const rows: any[] = [];
 
-    // Always push the explicit range
-    rows.push({
-      car_id: parsed.carId,
-      start_date: parsed.startDate,
-      end_date: parsed.endDate,
-      available: parsed.available ?? true,
-    });
-
-    // If recurring weekdays specified, generate blocks from start to end
-    if (repeatDays.size > 0) {
-      const start = new Date(parsed.startDate);
-      const end = new Date(parsed.endDate);
-      for (let dt = new Date(start); dt <= end; dt = addDays(dt, 1)) {
+    if (repeatDays.size === 0) {
+      rows.push({
+        car_id: parsed.carId,
+        start_date: parsed.startDate,
+        end_date: parsed.endDate,
+        available: parsed.available ?? true,
+      });
+    } else {
+      for (let dt = new Date(start); dt < end; dt = addDays(dt, 1)) {
         const weekday = dt.toLocaleDateString("en-US", { weekday: "short" }).toLowerCase(); // e.g., mon, tue
         const weekdayLong = dt.toLocaleDateString("en-US", { weekday: "long" }).toLowerCase();
         if (repeatDays.has(weekday) || repeatDays.has(weekdayLong)) {
           const iso = dt.toISOString().slice(0, 10);
+          const nextIso = addDays(dt, 1).toISOString().slice(0, 10);
           rows.push({
             car_id: parsed.carId,
             start_date: iso,
-            end_date: iso,
-            available: parsed.available ?? false,
+            end_date: nextIso,
+            available: false,
           });
         }
       }
+    }
+
+    if (rows.length === 0) {
+      return NextResponse.json({ message: "No matching dates to save." }, { status: 400 });
     }
 
     const { data: availability, error } = await supa.from("car_availability").insert(rows).select();
@@ -160,7 +189,7 @@ export async function POST(req: Request) {
 function addDatesToSet(set: Set<string>, startDate: string, endDate: string) {
   let cursor = parseISO(startDate);
   const end = parseISO(endDate);
-  while (!isAfter(cursor, end)) {
+  while (cursor < end) {
     set.add(format(cursor, "yyyy-MM-dd"));
     cursor = addDays(cursor, 1);
   }
@@ -169,7 +198,7 @@ function addDatesToSet(set: Set<string>, startDate: string, endDate: string) {
 function rangeHasBlockedDates(startDate: string, endDate: string, blocked: Set<string>) {
   let cursor = parseISO(startDate);
   const end = parseISO(endDate);
-  while (!isAfter(cursor, end)) {
+  while (cursor < end) {
     if (blocked.has(format(cursor, "yyyy-MM-dd"))) {
       return true;
     }

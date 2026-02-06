@@ -5,6 +5,8 @@ All tables are protected with row-level security. Service role key is **only** u
 ## Tables & policies
 - **profiles**
   - `select/update`: `id = auth.uid()`.
+  - `select` (host contact reveal): renters can read host profile when a qualifying booking exists
+    (`awaiting_host`, `confirmed`, `completed`, `refunded`).
 - **cars**
   - Public read: `select true`.
   - Insert/Update/Delete: `owner_id = auth.uid()`.

@@ -75,6 +75,7 @@ export default async function AdminEditCarPage({ params }: PageProps) {
               transmission: car.transmission ?? undefined,
               features: car.features ?? [],
               is_available: car.is_available ?? true,
+              instant_book: (car as any).instant_book ?? false,
             }}
           />
         </CardContent>

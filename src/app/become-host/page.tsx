@@ -1,7 +1,7 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { HostApplicationForm } from "@/components/host-application-form";
+import { HostDashboardLink } from "@/components/host-dashboard-link";
 import type { Database } from "@/lib/database.types";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -15,16 +15,6 @@ export default async function BecomeHostPage() {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login?next=/become-host");
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("is_host")
-    .eq("id", user.id)
-    .maybeSingle<Database["public"]["Tables"]["profiles"]["Row"]>();
-
-  if (profile?.is_host) {
-    redirect("/host");
-  }
 
   const { data: application } = await supabase
     .from("host_applications")
@@ -55,9 +45,7 @@ export default async function BecomeHostPage() {
           {status === "approved" ? (
             <div className="space-y-3 text-sm text-gray-700">
               <p>Your host application is approved.</p>
-              <Link className="font-semibold text-brand" href="/host">
-                Go to host dashboard
-              </Link>
+              <HostDashboardLink />
             </div>
           ) : (
             <HostApplicationForm

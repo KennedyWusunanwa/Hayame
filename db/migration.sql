@@ -1,7 +1,8 @@
 -- Enable extensions
-create extension if not exists "uuid-ossp";
-create extension if not exists "pgcrypto";
-create extension if not exists "btree_gist";
+create schema if not exists extensions;
+create extension if not exists "uuid-ossp" with schema extensions;
+create extension if not exists "pgcrypto" with schema extensions;
+create extension if not exists "btree_gist" with schema extensions;
 
 -- Enums
 do $$
@@ -115,10 +116,11 @@ create table if not exists cars (
   transmission text,
   fuel text,
   features text[],
-  is_available boolean default true,
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
+alter table cars add column if not exists is_available boolean default true;
+alter table cars add column if not exists instant_book boolean default false;
 
 -- Car photos
 create table if not exists car_photos (
@@ -155,26 +157,68 @@ create table if not exists bookings (
   refund_reference text,
   created_at timestamptz default now()
 );
+alter table bookings add column if not exists hold_expires_at timestamptz;
 create index if not exists idx_bookings_car on bookings(car_id);
 create index if not exists idx_bookings_renter on bookings(renter_id);
 
--- Prevent overlapping active bookings for the same car
-do $$
-begin
-  if not exists (
+-- Prevent overlapping active bookings for the same car (end_date is checkout/exclusive)
+-- Supabase-safe approach: trigger-based overlap guard (no GiST UUID opclass needed)
+alter table bookings drop constraint if exists bookings_no_overlap_active;
+
+-- Clean up any overlapping active bookings so the guard can be created safely
+update bookings b
+set
+  status = 'cancelled',
+  payment_status = coalesce(b.payment_status, 'pending'),
+  rejection_reason = coalesce(b.rejection_reason, 'auto-cancelled: overlap cleanup')
+where b.status in ('awaiting_host', 'confirmed')
+  and exists (
     select 1
-    from pg_constraint
-    where conname = 'bookings_no_overlap_active'
-  ) then
-    alter table bookings
-      add constraint bookings_no_overlap_active
-      exclude using gist (
-        car_id with =,
-        daterange(start_date, end_date, '[]') with &&
-      )
-      where (status in ('pending', 'awaiting_host', 'confirmed'));
+    from bookings b2
+    where b2.car_id = b.car_id
+      and b2.status in ('awaiting_host', 'confirmed')
+      and b2.id <> b.id
+      and daterange(b2.start_date, b2.end_date, '[)') && daterange(b.start_date, b.end_date, '[)')
+      and (coalesce(b2.created_at, 'epoch'::timestamptz), b2.id)
+          < (coalesce(b.created_at, 'epoch'::timestamptz), b.id)
+  );
+
+create or replace function public.prevent_overlapping_active_bookings()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, extensions, pg_catalog
+as $$
+begin
+  -- Only enforce for real active bookings (NOT pending holds)
+  if (new.status in ('awaiting_host', 'confirmed')) then
+    -- Serialize per car to reduce race conditions.
+    perform pg_advisory_xact_lock(hashtext(new.car_id::text)::bigint);
+
+    if exists (
+      select 1
+      from bookings b
+      where b.car_id = new.car_id
+        and b.id <> coalesce(new.id, '00000000-0000-0000-0000-000000000000'::uuid)
+        and b.status in ('awaiting_host', 'confirmed')
+        and daterange(b.start_date, b.end_date, '[)') && daterange(new.start_date, new.end_date, '[)')
+    ) then
+      raise exception 'Overlapping booking exists for car %', new.car_id
+        using errcode = '23514';
+    end if;
   end if;
-end$$;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_prevent_overlapping_active_bookings on bookings;
+
+create trigger trg_prevent_overlapping_active_bookings
+before insert or update of car_id, start_date, end_date, status
+on bookings
+for each row
+execute function public.prevent_overlapping_active_bookings();
 
 -- Availability windows
 create table if not exists car_availability (
@@ -209,71 +253,103 @@ alter table host_applications enable row level security;
 alter table admin_actions enable row level security;
 
 -- Profiles: owners can read/update their profile
-create policy if not exists "Users can view their profile" on profiles
+drop policy if exists "Users can view their profile" on profiles;
+create policy "Users can view their profile" on profiles
   for select using (id = auth.uid());
-create policy if not exists "Users can insert their profile" on profiles
+drop policy if exists "Users can view host profile after booking" on profiles;
+create policy "Users can view host profile after booking" on profiles
+  for select using (
+    exists (
+      select 1
+      from bookings b
+      join cars c on c.id = b.car_id
+      where b.renter_id = auth.uid()
+        and c.owner_id = profiles.id
+        and b.status in ('awaiting_host', 'confirmed', 'completed', 'refunded')
+    )
+  );
+drop policy if exists "Users can insert their profile" on profiles;
+create policy "Users can insert their profile" on profiles
   for insert with check (id = auth.uid());
-create policy if not exists "Users can update their profile" on profiles
+drop policy if exists "Users can update their profile" on profiles;
+create policy "Users can update their profile" on profiles
   for update using (id = auth.uid());
 
 -- Cars: public read, owners manage
-create policy if not exists "Cars are readable by anyone" on cars
+drop policy if exists "Cars are readable by anyone" on cars;
+create policy "Cars are readable by anyone" on cars
   for select using (true);
 drop policy if exists "Car owners can insert" on cars;
-create policy if not exists "Car owners can insert if host" on cars
+drop policy if exists "Car owners can insert if host" on cars;
+create policy "Car owners can insert if host" on cars
   for insert with check (
     owner_id = auth.uid()
     and exists(select 1 from profiles where profiles.id = auth.uid() and profiles.is_host = true)
   );
-create policy if not exists "Car owners can update" on cars
+drop policy if exists "Car owners can update" on cars;
+create policy "Car owners can update" on cars
   for update using (owner_id = auth.uid());
-create policy if not exists "Car owners can delete" on cars
+drop policy if exists "Car owners can delete" on cars;
+create policy "Car owners can delete" on cars
   for delete using (owner_id = auth.uid());
 
 -- Car photos: public read, owners write
-create policy if not exists "Car photos readable" on car_photos
+drop policy if exists "Car photos readable" on car_photos;
+create policy "Car photos readable" on car_photos
   for select using (true);
-create policy if not exists "Car photo owner write" on car_photos
+drop policy if exists "Car photo owner write" on car_photos;
+create policy "Car photo owner write" on car_photos
   for insert with check (
     exists(select 1 from cars where cars.id = car_photos.car_id and cars.owner_id = auth.uid())
   );
-create policy if not exists "Car photo owner update" on car_photos
+drop policy if exists "Car photo owner update" on car_photos;
+create policy "Car photo owner update" on car_photos
   for update using (
     exists(select 1 from cars where cars.id = car_photos.car_id and cars.owner_id = auth.uid())
   );
-create policy if not exists "Car photo owner delete" on car_photos
+drop policy if exists "Car photo owner delete" on car_photos;
+create policy "Car photo owner delete" on car_photos
   for delete using (
     exists(select 1 from cars where cars.id = car_photos.car_id and cars.owner_id = auth.uid())
   );
 
 -- Favorites: user-only
-create policy if not exists "User favorites select" on favorites
+drop policy if exists "User favorites select" on favorites;
+create policy "User favorites select" on favorites
   for select using (user_id = auth.uid());
-create policy if not exists "User favorites insert" on favorites
+drop policy if exists "User favorites insert" on favorites;
+create policy "User favorites insert" on favorites
   for insert with check (user_id = auth.uid());
-create policy if not exists "User favorites delete" on favorites
+drop policy if exists "User favorites delete" on favorites;
+create policy "User favorites delete" on favorites
   for delete using (user_id = auth.uid());
 
 -- Bookings: renter read/write, owner read
-create policy if not exists "Bookings select for renter or owner" on bookings
+drop policy if exists "Bookings select for renter or owner" on bookings;
+create policy "Bookings select for renter or owner" on bookings
   for select using (
     renter_id = auth.uid()
     or exists(select 1 from cars where cars.id = bookings.car_id and cars.owner_id = auth.uid())
   );
-create policy if not exists "Renter can insert booking" on bookings
+drop policy if exists "Renter can insert booking" on bookings;
+create policy "Renter can insert booking" on bookings
   for insert with check (renter_id = auth.uid());
-create policy if not exists "Renter or owner can update booking" on bookings
+drop policy if exists "Renter or owner can update booking" on bookings;
+create policy "Renter or owner can update booking" on bookings
   for update using (
     renter_id = auth.uid()
     or exists(select 1 from cars where cars.id = bookings.car_id and cars.owner_id = auth.uid())
   );
-create policy if not exists "Renter can delete booking" on bookings
+drop policy if exists "Renter can delete booking" on bookings;
+create policy "Renter can delete booking" on bookings
   for delete using (renter_id = auth.uid());
 
 -- Availability: owner only
-create policy if not exists "Availability readable" on car_availability
+drop policy if exists "Availability readable" on car_availability;
+create policy "Availability readable" on car_availability
   for select using (true);
-create policy if not exists "Owner manages availability" on car_availability
+drop policy if exists "Owner manages availability" on car_availability;
+create policy "Owner manages availability" on car_availability
   for all using (
     exists(select 1 from cars where cars.id = car_availability.car_id and cars.owner_id = auth.uid())
   ) with check (
@@ -281,9 +357,11 @@ create policy if not exists "Owner manages availability" on car_availability
   );
 
 -- Reviews: public read, renters with completed booking can write
-create policy if not exists "Reviews readable" on reviews
+drop policy if exists "Reviews readable" on reviews;
+create policy "Reviews readable" on reviews
   for select using (true);
-create policy if not exists "Review author insert" on reviews
+drop policy if exists "Review author insert" on reviews;
+create policy "Review author insert" on reviews
   for insert with check (
     user_id = auth.uid()
     and exists(
@@ -293,15 +371,19 @@ create policy if not exists "Review author insert" on reviews
         and bookings.status = 'completed'
     )
   );
-create policy if not exists "Review author update" on reviews
+drop policy if exists "Review author update" on reviews;
+create policy "Review author update" on reviews
   for update using (user_id = auth.uid());
-create policy if not exists "Review author delete" on reviews
+drop policy if exists "Review author delete" on reviews;
+create policy "Review author delete" on reviews
   for delete using (user_id = auth.uid());
 
 -- Host applications: user-only access
-create policy if not exists "Host applications select own" on host_applications
+drop policy if exists "Host applications select own" on host_applications;
+create policy "Host applications select own" on host_applications
   for select using (user_id = auth.uid());
-create policy if not exists "Host applications insert own" on host_applications
+drop policy if exists "Host applications insert own" on host_applications;
+create policy "Host applications insert own" on host_applications
   for insert with check (user_id = auth.uid());
 
 -- Storage bucket for car photos
@@ -315,21 +397,29 @@ values ('host-ids', 'host-ids', false)
 on conflict (id) do nothing;
 
 -- Storage RLS
-create policy if not exists "Car photos public read" on storage.objects
+drop policy if exists "Car photos public read" on storage.objects;
+create policy "Car photos public read" on storage.objects
   for select using (bucket_id = 'car-photos');
-create policy if not exists "Car photos owner upload" on storage.objects
+drop policy if exists "Car photos owner upload" on storage.objects;
+create policy "Car photos owner upload" on storage.objects
   for insert with check (bucket_id = 'car-photos' and owner = auth.uid());
-create policy if not exists "Car photos owner update" on storage.objects
+drop policy if exists "Car photos owner update" on storage.objects;
+create policy "Car photos owner update" on storage.objects
   for update using (bucket_id = 'car-photos' and owner = auth.uid());
-create policy if not exists "Car photos owner delete" on storage.objects
+drop policy if exists "Car photos owner delete" on storage.objects;
+create policy "Car photos owner delete" on storage.objects
   for delete using (bucket_id = 'car-photos' and owner = auth.uid());
 
 -- Host ID uploads (private bucket)
-create policy if not exists "Host ID owner upload" on storage.objects
+drop policy if exists "Host ID owner upload" on storage.objects;
+create policy "Host ID owner upload" on storage.objects
   for insert with check (bucket_id = 'host-ids' and owner = auth.uid());
-create policy if not exists "Host ID owner read" on storage.objects
+drop policy if exists "Host ID owner read" on storage.objects;
+create policy "Host ID owner read" on storage.objects
   for select using (bucket_id = 'host-ids' and owner = auth.uid());
-create policy if not exists "Host ID owner update" on storage.objects
+drop policy if exists "Host ID owner update" on storage.objects;
+create policy "Host ID owner update" on storage.objects
   for update using (bucket_id = 'host-ids' and owner = auth.uid());
-create policy if not exists "Host ID owner delete" on storage.objects
+drop policy if exists "Host ID owner delete" on storage.objects;
+create policy "Host ID owner delete" on storage.objects
   for delete using (bucket_id = 'host-ids' and owner = auth.uid());

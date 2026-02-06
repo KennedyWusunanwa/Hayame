@@ -37,15 +37,6 @@ export async function POST(req: Request) {
     } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
 
-    const { data: profile } = await supa
-      .from("profiles")
-      .select("is_host")
-      .eq("id", user.id)
-      .maybeSingle();
-    if (profile?.is_host) {
-      return NextResponse.json({ message: "You are already an approved host." }, { status: 400 });
-    }
-
     const { data: latest } = await supa
       .from("host_applications")
       .select("id,status")
@@ -53,6 +44,9 @@ export async function POST(req: Request) {
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
+    if (latest?.status === "approved") {
+      return NextResponse.json({ message: "You are already an approved host." }, { status: 400 });
+    }
     if (latest?.status === "pending") {
       return NextResponse.json({ message: "Application already pending." }, { status: 409 });
     }

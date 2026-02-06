@@ -54,13 +54,16 @@ export function MessagingProvider({ children }: ProviderProps) {
       const { data } = await supabase
         .from("conversations")
         .select(
-          "id,host_id,user_id,car_id,booking_id,last_message_at,last_message_preview,created_at,host:profiles!conversations_host_id_fkey(id,full_name,avatar_url),user:profiles!conversations_user_id_fkey(id,full_name,avatar_url),car:cars(title)",
+          "id,host_id,user_id,car_id,booking_id,last_message_at,last_message_preview,created_at,host:profiles!conversations_host_id_fkey(id,full_name,avatar_url,phone,city),user:profiles!conversations_user_id_fkey(id,full_name,avatar_url,phone,city),car:cars(title,city,region)",
         )
         .or(`host_id.eq.${currentUserId},user_id.eq.${currentUserId}`);
 
       const summaries: ConversationSummary[] = (data ?? []).map((row: any) => {
         const isHost = row.host_id === currentUserId;
         const other = isHost ? row.user : row.host;
+        const host = row.host;
+        const renter = row.user;
+        const carLocation = [row.car?.city, row.car?.region].filter(Boolean).join(", ") || null;
         return {
           id: row.id,
           host_id: row.host_id,
@@ -75,7 +78,26 @@ export function MessagingProvider({ children }: ProviderProps) {
             name: other?.full_name ?? "User",
             avatar: other?.avatar_url ?? null,
           },
+          hostProfile: host
+            ? {
+                id: host.id ?? "",
+                name: host.full_name ?? "Host",
+                avatar: host.avatar_url ?? null,
+                phone: host.phone ?? null,
+                city: host.city ?? null,
+              }
+            : undefined,
+          userProfile: renter
+            ? {
+                id: renter.id ?? "",
+                name: renter.full_name ?? "User",
+                avatar: renter.avatar_url ?? null,
+                phone: renter.phone ?? null,
+                city: renter.city ?? null,
+              }
+            : undefined,
           carTitle: row.car?.title ?? null,
+          carLocation,
           unreadCount: 0,
         };
       });
@@ -274,13 +296,16 @@ export function MessagingProvider({ children }: ProviderProps) {
   const sendMessage = useCallback(
     async (conversationId: string, body: string) => {
       if (!userId) return;
-      const { data, error } = await supabase
-        .from("messages")
-        .insert({ conversation_id: conversationId, sender_id: userId, body })
-        .select()
-        .single();
-      if (error) throw error;
-      const message = data as Message;
+      const res = await fetch("/api/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ conversationId, body }),
+      });
+      const payload = (await res.json()) as { data?: Message; message?: string };
+      if (!res.ok || !payload.data) {
+        throw new Error(payload.message || "Failed to send message");
+      }
+      const message = payload.data;
       setMessagesByConversation((prev) => {
         const current = prev[conversationId] ?? [];
         if (current.some((item) => item.id === message.id)) return prev;
@@ -290,7 +315,7 @@ export function MessagingProvider({ children }: ProviderProps) {
         };
       });
     },
-    [supabase, userId],
+    [userId],
   );
 
   const loadOlderMessages = useCallback(

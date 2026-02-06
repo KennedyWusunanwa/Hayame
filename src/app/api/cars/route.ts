@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { carFormSchema } from "@/lib/validators";
+import { getHostStatus } from "@/lib/host-status";
 
 export async function GET() {
   try {
@@ -30,13 +31,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
     }
 
-    const { data: profileData } = await supa
-      .from("profiles")
-      .select("is_host")
-      .eq("id", user.id)
-      .maybeSingle();
-    const profile = profileData as { is_host?: boolean } | null;
-    if (!profile?.is_host) {
+    const { isHost } = await getHostStatus(supa, user.id);
+    if (!isHost) {
       return NextResponse.json({ message: "Host approval required" }, { status: 403 });
     }
 

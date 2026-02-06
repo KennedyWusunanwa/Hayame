@@ -205,6 +205,8 @@ function renderTable(
 
 function statusLabel(status?: string) {
   switch (status) {
+    case "pending":
+      return "Pending hold";
     case "awaiting_host":
       return "Awaiting host";
     case "confirmed":
@@ -224,6 +226,8 @@ function statusLabel(status?: string) {
 
 function statusVariant(status?: string): "default" | "secondary" | "outline" | "muted" {
   switch (status) {
+    case "pending":
+      return "muted";
     case "awaiting_host":
       return "secondary";
     case "confirmed":

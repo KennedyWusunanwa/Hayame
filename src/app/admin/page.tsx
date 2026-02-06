@@ -5,6 +5,7 @@ import { AdminTabs } from "@/components/admin/admin-tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { buildHostApplicationDecisionEmail, sendEmailSafe } from "@/lib/email";
 
 const COOKIE_NAME = "admin_auth";
 
@@ -76,17 +77,13 @@ async function reviewAction(formData: FormData) {
   if (action === "approve") {
     const { data: application } = await admin
       .from("host_applications")
-      .select("user_id")
+      .select("user_id,full_name")
       .eq("id", applicationId)
       .single();
 
     const userId = (application as { user_id?: string } | null)?.user_id;
-    if (userId) {
-      await admin
-        .from("profiles")
-        .update({ is_host: true, host_approved_at: new Date().toISOString() })
-        .eq("id", userId);
-    }
+    const hostName = (application as { full_name?: string | null } | null)?.full_name ?? "Host";
+    // No profile updates needed here; host approval is derived from applications.
 
     await admin
       .from("host_applications")
@@ -106,6 +103,19 @@ async function reviewAction(formData: FormData) {
       performed_by: reviewer,
       metadata: { user_id: userId },
     });
+
+    if (userId) {
+      const { data: authUser } = await admin.auth.admin.getUserById(userId);
+      const email = authUser?.user?.email ?? null;
+      if (email) {
+        const template = buildHostApplicationDecisionEmail({ approved: true, hostName });
+        await sendEmailSafe({
+          to: email,
+          ...template,
+          idempotencyKey: `host-application:${applicationId}:approved`,
+        });
+      }
+    }
   }
 
   if (action === "reject") {
@@ -127,6 +137,30 @@ async function reviewAction(formData: FormData) {
       performed_by: reviewer,
       metadata: { reason: rejectionReason || "Rejected by admin" },
     });
+
+    const { data: application } = await admin
+      .from("host_applications")
+      .select("user_id,full_name")
+      .eq("id", applicationId)
+      .single();
+    const userId = (application as { user_id?: string } | null)?.user_id;
+    const hostName = (application as { full_name?: string | null } | null)?.full_name ?? "Host";
+    if (userId) {
+      const { data: authUser } = await admin.auth.admin.getUserById(userId);
+      const email = authUser?.user?.email ?? null;
+      if (email) {
+        const template = buildHostApplicationDecisionEmail({
+          approved: false,
+          hostName,
+          reason: rejectionReason || "Rejected by admin",
+        });
+        await sendEmailSafe({
+          to: email,
+          ...template,
+          idempotencyKey: `host-application:${applicationId}:rejected`,
+        });
+      }
+    }
   }
 
   redirect("/admin");
@@ -231,11 +265,20 @@ export default async function AdminPage({
 
   const { data: applications } = await applicationsQuery;
 
-  const { data: hosts } = await admin
-    .from("profiles")
-    .select("id,full_name,phone,city,is_host")
-    .eq("is_host", true)
+  const { data: hostApplications } = await admin
+    .from("host_applications")
+    .select(
+      "id,user_id,full_name,phone,city,created_at,profiles:profiles!host_applications_user_id_fkey(full_name,phone,city)",
+    )
+    .eq("status", "approved")
     .order("created_at", { ascending: false });
+
+  const approvedHosts = new Map<string, any>();
+  (hostApplications ?? []).forEach((app: any) => {
+    if (!app.user_id || approvedHosts.has(app.user_id)) return;
+    approvedHosts.set(app.user_id, app);
+  });
+  const hosts = Array.from(approvedHosts.values());
 
   const { data: cars } = await admin
     .from("cars")
@@ -336,15 +379,15 @@ export default async function AdminPage({
               <CardContent>
                 <div className="space-y-2">
                   {(hosts ?? []).map((host: any) => (
-                    <div key={host.id} className="flex items-center justify-between text-sm">
+                    <div key={host.user_id ?? host.id} className="flex items-center justify-between text-sm">
                       <div>
-                        <p className="font-semibold text-foreground">{host.full_name ?? "Host"}</p>
-                        <p className="text-xs text-gray-600">{host.phone ?? "No phone"}</p>
+                        <p className="font-semibold text-foreground">{host.profiles?.full_name ?? host.full_name ?? "Host"}</p>
+                        <p className="text-xs text-gray-600">{host.profiles?.phone ?? host.phone ?? "No phone"}</p>
                         <p className="text-[11px] text-gray-500">
-                          Vehicles: {carsByOwner.get(host.id) ?? 0}
+                          Vehicles: {carsByOwner.get(host.user_id ?? host.id) ?? 0}
                         </p>
                       </div>
-                      <span className="text-xs text-gray-500">{host.city ?? "—"}</span>
+                      <span className="text-xs text-gray-500">{host.profiles?.city ?? host.city ?? "—"}</span>
                     </div>
                   ))}
                   {(hosts ?? []).length === 0 ? (

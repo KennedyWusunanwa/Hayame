@@ -19,6 +19,8 @@ export function BookingWidget({ carId, dailyPrice }: Props) {
   const [loading, setLoading] = useState(false);
   const [blockedDates, setBlockedDates] = useState<string[]>([]);
   const [message, setMessage] = useState<string | null>(null);
+  const [hold, setHold] = useState<{ id: string; expiresAt: string } | null>(null);
+  const [holdRemaining, setHoldRemaining] = useState<string | null>(null);
   const router = useRouter();
   const publicKey = useMemo(() => process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY, []);
 
@@ -47,8 +49,39 @@ export function BookingWidget({ carId, dailyPrice }: Props) {
     loadAvailability();
   }, [carId]);
 
+  useEffect(() => {
+    setHold(null);
+    setHoldRemaining(null);
+  }, [carId, startDate, endDate]);
+
+  useEffect(() => {
+    if (!hold) {
+      setHoldRemaining(null);
+      return;
+    }
+    const updateRemaining = () => {
+      const diff = new Date(hold.expiresAt).getTime() - Date.now();
+      if (diff <= 0) {
+        setHold(null);
+        setHoldRemaining(null);
+        setMessage("Reservation expired. Please select dates again.");
+        return;
+      }
+      const minutes = Math.floor(diff / 60000);
+      const seconds = Math.floor((diff % 60000) / 1000);
+      setHoldRemaining(`${minutes}:${seconds.toString().padStart(2, "0")}`);
+    };
+    updateRemaining();
+    const timer = window.setInterval(updateRemaining, 1000);
+    return () => window.clearInterval(timer);
+  }, [hold]);
+
   const submit = async () => {
     if (!startDate || !endDate) return;
+    if (nights <= 0) {
+      setMessage("End date must be after start date.");
+      return;
+    }
     if (!publicKey) {
       alert("Paystack is not configured yet.");
       return;
@@ -56,17 +89,26 @@ export function BookingWidget({ carId, dailyPrice }: Props) {
     try {
       setLoading(true);
       setMessage(null);
-
-      const availabilityRes = await fetch(
-        `/api/availability?carId=${carId}&startDate=${startDate}&endDate=${endDate}`,
-      );
-      if (availabilityRes.ok) {
-        const payload = (await availabilityRes.json()) as { available?: boolean };
-        if (payload.available === false) {
-          setMessage("Those dates are no longer available. Please pick new dates.");
-          setLoading(false);
-          return;
+      const now = new Date();
+      let bookingId = hold?.id ?? null;
+      let holdExpiresAt = hold?.expiresAt ?? null;
+      if (!hold || !holdExpiresAt || new Date(holdExpiresAt) <= now) {
+        const holdRes = await fetch("/api/bookings/hold", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ carId, startDate, endDate }),
+        });
+        if (!holdRes.ok) {
+          const error = await holdRes.json().catch(() => ({}));
+          throw new Error(error.message ?? "Unable to reserve dates");
         }
+        const payload = (await holdRes.json()) as { bookingId?: string; hold_expires_at?: string };
+        if (!payload.bookingId || !payload.hold_expires_at) {
+          throw new Error("Unable to reserve dates");
+        }
+        bookingId = payload.bookingId;
+        holdExpiresAt = payload.hold_expires_at;
+        setHold({ id: bookingId, expiresAt: holdExpiresAt });
       }
 
       await loadPaystackScript();
@@ -92,6 +134,7 @@ export function BookingWidget({ carId, dailyPrice }: Props) {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
+              bookingId,
               carId,
               startDate,
               endDate,
@@ -103,6 +146,7 @@ export function BookingWidget({ carId, dailyPrice }: Props) {
             const error = await res.json().catch(() => ({}));
             throw new Error(error.message ?? "Payment verified but booking failed");
           }
+          setHold(null);
           router.push("/dashboard/bookings");
         } catch (err: any) {
           alert(err.message ?? "Booking failed after payment. Please contact support.");
@@ -160,6 +204,9 @@ export function BookingWidget({ carId, dailyPrice }: Props) {
         }}
         onInvalidRange={(msg) => setMessage(msg)}
       />
+      {holdRemaining ? (
+        <p className="text-xs text-emerald-700">Reserved for {holdRemaining}. Complete payment to confirm.</p>
+      ) : null}
       {message ? <p className="text-xs text-amber-700">{message}</p> : null}
       <div className="flex items-center justify-between text-sm text-gray-700">
         <span>{billableNights} day total</span>

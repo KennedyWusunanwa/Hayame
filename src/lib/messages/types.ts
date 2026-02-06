@@ -24,6 +24,21 @@ export type ConversationSummary = Conversation & {
     name: string;
     avatar: string | null;
   };
+  hostProfile?: {
+    id: string;
+    name: string;
+    avatar: string | null;
+    phone: string | null;
+    city: string | null;
+  };
+  userProfile?: {
+    id: string;
+    name: string;
+    avatar: string | null;
+    phone: string | null;
+    city: string | null;
+  };
   carTitle?: string | null;
+  carLocation?: string | null;
   unreadCount: number;
 };

@@ -50,7 +50,11 @@ export function DateRangePicker({
             onChange={(e) =>
               (() => {
                 const nextStart = e.target.value;
-                const nextEnd = endDate ?? e.target.value;
+                const endCandidate =
+                  endDate && new Date(endDate) > new Date(nextStart)
+                    ? endDate
+                    : format(addDays(new Date(nextStart), 1), "yyyy-MM-dd");
+                const nextEnd = endCandidate;
                 if (rangeHasBlockedDates(nextStart, nextEnd, blocked)) {
                   onInvalidRange?.("Start date falls on an unavailable day.");
                   return;
@@ -68,7 +72,11 @@ export function DateRangePicker({
           <Input
             type="date"
             value={endDate ?? ""}
-            min={startDate ?? undefined}
+            min={
+              startDate
+                ? format(addDays(new Date(startDate), 1), "yyyy-MM-dd")
+                : undefined
+            }
             onChange={(e) =>
               (() => {
                 const nextStart = startDate ?? e.target.value;
@@ -112,7 +120,7 @@ function rangeHasBlockedDates(startDate: string, endDate: string, blocked: Set<s
   const start = new Date(startDate);
   const end = new Date(endDate);
   if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return false;
-  for (let dt = new Date(start); dt <= end; dt = addDays(dt, 1)) {
+  for (let dt = new Date(start); dt < end; dt = addDays(dt, 1)) {
     const key = format(dt, "yyyy-MM-dd");
     if (blocked.has(key)) return true;
   }

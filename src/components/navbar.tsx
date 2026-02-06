@@ -5,7 +5,7 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Menu, MessageCircle } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Sheet,
   SheetClose,
@@ -34,41 +34,15 @@ export function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const { unreadCount } = useMessaging();
 
-  useEffect(() => {
-    const supabase = createSupabaseBrowserClient();
+  const supabaseRef = useRef<ReturnType<typeof createSupabaseBrowserClient> | null>(null);
 
-    const loadUser = async () => {
-      try {
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
-        const user = session?.user;
-        if (!user) {
-          setUserName(null);
-          setIsHost(false);
-          setHostStatus(null);
-          return;
-        }
-        const name = (user.user_metadata as any)?.full_name || user.email || "Account";
-        setUserName(name);
-        const res = await fetch("/api/host-status", { cache: "no-store" });
-        if (res.ok) {
-          const payload = (await res.json()) as { is_host?: boolean; status?: string | null };
-          const approvedHost = Boolean(payload.is_host);
-          setIsHost(approvedHost);
-          setHostStatus(approvedHost ? "approved" : (payload.status as any) ?? null);
-        } else {
-          setIsHost(false);
-          setHostStatus(null);
-        }
-      } catch (error) {
-        setUserName(null);
-        setIsHost(false);
-        setHostStatus(null);
-      }
-    };
-    loadUser();
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+  const loadUser = useCallback(async () => {
+    try {
+      const supabase = supabaseRef.current ?? createSupabaseBrowserClient();
+      supabaseRef.current = supabase;
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       const user = session?.user;
       if (!user) {
         setUserName(null);
@@ -78,12 +52,38 @@ export function Navbar() {
       }
       const name = (user.user_metadata as any)?.full_name || user.email || "Account";
       setUserName(name);
+      const res = await fetch("/api/host-status", { cache: "no-store" });
+      if (res.ok) {
+        const payload = (await res.json()) as { is_host?: boolean; status?: string | null };
+        const approvedHost = Boolean(payload.is_host);
+        setIsHost(approvedHost);
+        setHostStatus(approvedHost ? "approved" : (payload.status as any) ?? null);
+      } else {
+        setIsHost(false);
+        setHostStatus(null);
+      }
+    } catch {
+      setUserName(null);
+      setIsHost(false);
+      setHostStatus(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    const supabase = createSupabaseBrowserClient();
+    supabaseRef.current = supabase;
+    loadUser();
+    const { data: listener } = supabase.auth.onAuthStateChange(() => {
       loadUser();
     });
     return () => {
       listener?.subscription.unsubscribe();
     };
-  }, []);
+  }, [loadUser]);
+
+  useEffect(() => {
+    loadUser();
+  }, [loadUser, pathname]);
 
   return (
     <header className="sticky top-0 z-30 border-b border-border bg-white/90 backdrop-blur-md shadow-sm">

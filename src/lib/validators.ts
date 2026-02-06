@@ -15,6 +15,7 @@ export const carFormSchema = z.object({
   model: z.string().optional(),
   features: z.array(z.string().refine((f) => featureOptions.includes(f))).optional(),
   is_available: z.boolean().optional(),
+  instant_book: z.boolean().optional(),
 });
 
 export const bookingSchema = z.object({

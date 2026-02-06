@@ -59,6 +59,7 @@ export default async function EditCarPage({ params }: PageProps) {
               transmission: hydratedCar.transmission ?? undefined,
               features: hydratedCar.features ?? [],
               is_available: hydratedCar.is_available ?? true,
+              instant_book: (hydratedCar as any).instant_book ?? false,
             }}
           />
         </CardContent>
