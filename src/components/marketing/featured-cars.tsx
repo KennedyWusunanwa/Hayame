@@ -4,8 +4,11 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { mockCars } from "@/lib/mock-data";
 
 type FeaturedRow = Database["public"]["Tables"]["cars"]["Row"] & {
-  car_photos?: { url: string }[];
-  owner?: { full_name: string | null; avatar_url: string | null } | null;
+  image_url?: string | null;
+  avg_rating?: number | null;
+  reviews_count?: number | null;
+  host_name?: string | null;
+  host_avatar?: string | null;
 };
 
 type FeaturedCar = {
@@ -52,11 +55,11 @@ export async function FeaturedCars() {
       favorites?.forEach((fav: { car_id: string }) => favoriteIds.add(fav.car_id));
     }
 
-    const { data } = await supabase
-      .from("cars")
-      .select(
-        "id,title,city,region,daily_price,car_type,description,car_photos(url), owner:profiles!cars_owner_id_fkey(full_name,avatar_url)",
-      )
+    const { data } = await (supabase as any)
+      .from("car_search_view")
+      .select("*")
+      .eq("approval_status", "approved")
+      .order("created_at", { ascending: false })
       .limit(12);
     if (data && data.length > 0) {
       featured = (data as FeaturedRow[]).map((car) => ({
@@ -65,13 +68,13 @@ export async function FeaturedCars() {
         city: car.city ?? "",
         region: car.region ?? "",
         daily_price: Number(car.daily_price ?? 0),
-        rating: typeof (car as any).avg_rating === "number" ? Number((car as any).avg_rating) : undefined,
-        reviews: 0,
+        rating: typeof car.avg_rating === "number" ? Number(car.avg_rating) : undefined,
+        reviews: Number(car.reviews_count ?? 0),
         car_type: car.car_type ?? "",
         description: car.description ?? "",
-        image_url: car.car_photos?.[0]?.url ?? "/car-placeholder.jpg",
-        host_name: car.owner?.full_name ?? "Host",
-        host_avatar: car.owner?.avatar_url ?? "/car-placeholder.jpg",
+        image_url: car.image_url ?? "/car-placeholder.jpg",
+        host_name: car.host_name ?? "Host",
+        host_avatar: car.host_avatar ?? "/car-placeholder.jpg",
         isFavorite: favoriteIds.has(car.id),
       }));
     }

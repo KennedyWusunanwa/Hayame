@@ -22,7 +22,7 @@ export default async function HostProfilePage({ params }: PageProps) {
   const supa = supabase as any;
   const { data: profile } = await supa
     .from("profiles")
-    .select("id, full_name, avatar_url, city")
+    .select("id, full_name, avatar_url, city, id_verified, phone_verified, email_verified, host_level")
     .eq("id", resolved.id)
     .maybeSingle();
 
@@ -66,7 +66,7 @@ export default async function HostProfilePage({ params }: PageProps) {
             <p className="text-sm font-semibold text-brand">Host profile</p>
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-2xl font-semibold text-foreground">{profile.full_name ?? "Host"}</h1>
-              <Badge variant="outline">{(profile as any).host_level ?? "New Host"}</Badge>
+              <Badge variant="outline">{computeHostLevel(profile)}</Badge>
             </div>
             <p className="text-sm text-gray-600">{profile.city ?? "Location TBD"}</p>
             <VerificationBadges
@@ -100,4 +100,14 @@ export default async function HostProfilePage({ params }: PageProps) {
       </Card>
     </div>
   );
+}
+
+function computeHostLevel(profile: any) {
+  const explicitLevel = String(profile?.host_level ?? "").toLowerCase();
+  if (explicitLevel === "super_host") return "Super Host";
+  if (explicitLevel === "top_host") return "Top Host";
+  if (explicitLevel === "verified_host") return "Verified Host";
+  const verified = Boolean(profile?.id_verified && profile?.phone_verified && profile?.email_verified);
+  if (verified) return "Verified Host";
+  return "New Host";
 }

@@ -31,12 +31,23 @@ export async function GET(_: Request, context: Params) {
   try {
     const supabase = await createSupabaseServerClient();
     const supa = supabase as any;
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    const admin = await isAdmin();
+
     const { data, error } = await supa
       .from("cars")
-      .select("*, car_photos(url)")
+      .select(
+        "*, car_photos(url), owner:profiles!cars_owner_id_fkey(id,full_name,avatar_url,city,id_verified,phone_verified,email_verified,host_level)",
+      )
       .eq("id", id)
       .single();
     if (error) throw error;
+    const isOwner = Boolean(user?.id && data.owner_id === user.id);
+    if (!admin && !isOwner && data.approval_status && data.approval_status !== "approved") {
+      return NextResponse.json({ message: "Car not found" }, { status: 404 });
+    }
     return NextResponse.json({ data });
   } catch (error: any) {
     return NextResponse.json({ message: error.message }, { status: 404 });
@@ -49,11 +60,23 @@ export async function PUT(req: Request, context: Params) {
     const body = await req.json();
     const parsed = carFormSchema.parse(body);
     const admin = await isAdmin();
+    const hasAirConditioning =
+      Boolean(parsed.air_conditioning) ||
+      Boolean(parsed.features?.some((feature) => feature.toLowerCase() === "air conditioning"));
+
     if (admin) {
       const adminClient = createSupabaseAdminClient() as any;
       const { data, error } = await adminClient
         .from("cars")
-        .update({ ...parsed, updated_at: new Date().toISOString() })
+        .update({
+          ...parsed,
+          air_conditioning: hasAirConditioning,
+          approval_status: "approved",
+          reviewed_at: new Date().toISOString(),
+          reviewed_by: process.env.ADMIN_USERNAME ?? "admin",
+          rejection_reason: null,
+          updated_at: new Date().toISOString(),
+        })
         .eq("id", id)
         .select()
         .single();
@@ -90,7 +113,15 @@ export async function PUT(req: Request, context: Params) {
 
     const { data, error } = await supa
       .from("cars")
-      .update({ ...parsed, updated_at: new Date().toISOString() })
+      .update({
+        ...parsed,
+        air_conditioning: hasAirConditioning,
+        approval_status: "pending",
+        reviewed_at: null,
+        reviewed_by: null,
+        rejection_reason: null,
+        updated_at: new Date().toISOString(),
+      })
       .eq("id", id)
       .select()
       .single();

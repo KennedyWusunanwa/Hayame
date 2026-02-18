@@ -68,12 +68,19 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotoCount =
       car_type: "",
       brand: "",
       model: "",
+      car_year: new Date().getFullYear(),
       seats: 4,
       transmission: "automatic",
       fuel_type: "petrol",
       features: [],
       is_available: true,
       instant_book: false,
+      delivery_available: false,
+      air_conditioning: false,
+      delivery_fee: 0,
+      insurance_fee: 0,
+      deposit_amount: 0,
+      cancellation_policy: "moderate",
       ...defaultValues,
     },
   });
@@ -207,6 +214,15 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotoCount =
           <Input type="number" min={2} max={8} {...register("seats", { valueAsNumber: true })} />
         </div>
         <div className="space-y-2">
+          <label className="text-sm font-semibold text-gray-700">Car year</label>
+          <Input
+            type="number"
+            min={2000}
+            max={new Date().getFullYear() + 1}
+            {...register("car_year", { valueAsNumber: true })}
+          />
+        </div>
+        <div className="space-y-2">
           <label className="text-sm font-semibold text-gray-700">Transmission</label>
           <Select {...register("transmission")}>
             <option value="automatic">Automatic</option>
@@ -223,6 +239,26 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotoCount =
               </option>
             ))}
           </Select>
+        </div>
+        <div className="space-y-2">
+          <label className="text-sm font-semibold text-gray-700">Cancellation policy</label>
+          <Select {...register("cancellation_policy")}>
+            <option value="flexible">Flexible</option>
+            <option value="moderate">Moderate</option>
+            <option value="strict">Strict</option>
+          </Select>
+        </div>
+        <div className="space-y-2">
+          <label className="text-sm font-semibold text-gray-700">Delivery fee (GHS)</label>
+          <Input type="number" min={0} {...register("delivery_fee", { valueAsNumber: true })} />
+        </div>
+        <div className="space-y-2">
+          <label className="text-sm font-semibold text-gray-700">Insurance fee (GHS)</label>
+          <Input type="number" min={0} {...register("insurance_fee", { valueAsNumber: true })} />
+        </div>
+        <div className="space-y-2">
+          <label className="text-sm font-semibold text-gray-700">Deposit amount (GHS)</label>
+          <Input type="number" min={0} {...register("deposit_amount", { valueAsNumber: true })} />
         </div>
       </div>
 
@@ -331,6 +367,28 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotoCount =
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" {...register("instant_book")} />
           Instant Book
+        </label>
+      </div>
+
+      <div className="flex items-center justify-between rounded-lg border border-border bg-white p-4">
+        <div>
+          <p className="text-sm font-semibold text-foreground">Delivery available</p>
+          <p className="text-xs text-gray-600">Allow guests to request delivery for this car.</p>
+        </div>
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" {...register("delivery_available")} />
+          Delivery
+        </label>
+      </div>
+
+      <div className="flex items-center justify-between rounded-lg border border-border bg-white p-4">
+        <div>
+          <p className="text-sm font-semibold text-foreground">Air conditioning</p>
+          <p className="text-xs text-gray-600">Flag this listing as air-conditioned.</p>
+        </div>
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" {...register("air_conditioning")} />
+          AC
         </label>
       </div>
 

@@ -62,15 +62,15 @@ type Props = {
 };
 
 const DEFAULT_CAPABILITIES: FilterCapabilities = {
-  instantBook: false,
-  deliveryAvailable: false,
+  instantBook: true,
+  deliveryAvailable: true,
   transmission: true,
   fuelType: true,
   seats: true,
-  year: false,
-  airConditioning: false,
-  rating: false,
-  hostType: false,
+  year: true,
+  airConditioning: true,
+  rating: true,
+  hostType: true,
 };
 
 export function FiltersSidebar({ filters, onChange, capabilities = {} }: Props) {

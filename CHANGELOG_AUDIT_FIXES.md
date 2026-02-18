@@ -2,118 +2,107 @@
 
 ## Search & Discovery
 - Implemented:
-  - Refactored `src/app/explore/page.tsx` so URL query params are the source of truth for filters/sort.
-  - Added smart filter controls in `src/components/filters-sidebar.tsx`:
-    - Price range (slider + min/max inputs)
-    - Instant Book
-    - Delivery available
-    - Transmission
-    - Fuel type
-    - Seats capacity
-    - Car year range
-    - Air conditioning
-    - Rating minimum
-    - Host type
-  - Added `sort` query param with options:
-    - Price (Low -> High)
-    - Price (High -> Low)
-    - Most booked
-    - Top rated
-    - New listings
-  - Added mobile sort dropdown and schema-aware disabled options with "Coming soon" labels.
-  - Added availability preview widget (`src/components/availability-preview.tsx`) to car detail page to check dates before booking.
+  - URL query params are the single source of truth for Explore filters and sort.
+  - Smart filters wired end-to-end: price range, instant book, delivery, transmission, fuel, seats, year, air conditioning, rating, host type, features.
+  - Server-side filter/sort support in `src/app/api/cars/route.ts` via `car_search_view`.
+  - Sort options enabled: `price_low`, `price_high`, `most_booked`, `top_rated`, `new_listings`.
+  - Availability preview checker remains active on vehicle detail (`src/components/availability-preview.tsx`).
+  - Listing approval gating applied so only approved listings appear publicly.
 - Placeholder/TODO due schema:
-  - `delivery_available` filter requires a real `cars.delivery_available` field for full support.
-  - Car year range requires `cars.year` or `cars.car_year`.
-  - Host type filter requires host-level/verification schema (example: `profiles.host_level`).
-  - Top rated and most booked sort rely on aggregate fields (example: `cars.avg_rating`, `cars.bookings_count`).
+  - None after running `db/platform_audit_activation.sql`.
 
 ## Trust & Safety
 - Implemented:
-  - Added `src/components/verification-badges.tsx` and integrated badges in:
-    - Host snippet on car detail page
-    - Booking box on car detail page
-    - Host profile page
-    - Host dashboard overview
-  - Added dedicated protection route: `src/app/protection/page.tsx`.
-  - Linked protection page from:
-    - Footer (`src/components/footer.tsx`)
-    - Homepage trust strip (`src/components/marketing/trust-strip.tsx`)
-    - Booking box (`src/components/booking-widget.tsx`)
-  - Added homepage trust/metrics area:
-    - Real aggregate counts when admin metrics are available (`src/components/marketing/home-metrics.tsx`)
-    - Safe fallback statements when metrics cannot be loaded.
+  - Verification badges now use real flags (`id_verified`, `phone_verified`, `email_verified`).
+  - Badges applied in host snippet, booking box, host profile, and host dashboard.
+  - Added and linked `/protection` page from footer, trust strip, and booking box.
+  - Homepage trust/metrics section shows real aggregates when available with safe fallback messaging.
+  - Host approval flow updates profile verification and host level metadata.
 - Placeholder/TODO due schema:
-  - Verification states need dedicated profile flags (example: `profiles.id_verified`, `profiles.phone_verified`, `profiles.email_verified`).
-  - Protection sections are informational placeholders until policy-backed coverage is implemented.
+  - Protection coverage copy is informational by design (no fake insurance/support claims).
 
 ## Host Improvements
 - Implemented:
-  - Added host earnings calculator component (`src/components/host/earnings-calculator.tsx`) to `/host`.
-  - Updated `/host` dashboard (`src/app/host/page.tsx`) with:
-    - total earnings
-    - monthly earnings
-    - booking rate
-    - reviews
-    - trip history table
-    - host level badge area
-    - verification badge area
-  - Added "Start Earning Today" CTA on host overview.
+  - Interactive earnings calculator on `/host` using configurable platform fee.
+  - Host performance dashboard now includes real views, conversion rate, earnings, booking rate, reviews, and trip history.
+  - Host level badges now map from explicit `profiles.host_level` (with computed fallback).
+  - Listing view tracking added via `/api/listing-views` + `listing_views` table.
 - Placeholder/TODO due schema:
-  - Views and conversion rate are UI placeholders pending schema support.
-  - Host level mapping currently defaults to "New Host" without a dedicated level field.
-  - Platform fee default in calculator falls back to 10% unless env config is added (`NEXT_PUBLIC_PLATFORM_FEE_PERCENT` / `PLATFORM_FEE_PERCENT`).
+  - None after running `db/platform_audit_activation.sql`.
 
 ## Listing Quality
 - Implemented:
-  - Enforced minimum 5-photo validation in listing form (`src/components/car-form.tsx`).
-  - Added listing quality checklist UI and "Plate blur automatically: Coming soon" note.
-  - Wired existing photo counts into edit forms:
-    - `src/app/host/cars/[id]/edit/page.tsx`
-    - `src/app/admin/cars/[id]/edit/page.tsx`
-  - Expanded feature options to include requested items (Bluetooth, Reverse Camera, Leather Seats, Sunroof, GPS, Apple CarPlay, Android Auto).
-  - Added feature icon mapping for Reverse Camera.
+  - Listing submission enforces minimum 5 photos in client validation.
+  - Listing quality checklist UI added in car form.
+  - New fields added to listing form and persistence:
+    - `car_year`
+    - `delivery_available`
+    - `air_conditioning`
+    - `delivery_fee`
+    - `insurance_fee`
+    - `deposit_amount`
+    - `cancellation_policy`
+  - Feature selection (Bluetooth, Reverse Camera, Leather Seats, Sunroof, GPS, Apple CarPlay, Android Auto) is saved and rendered.
+  - New and edited listings now flow through admin approval.
 - Placeholder/TODO due schema:
-  - Server-side 5-photo enforcement is not transactional yet because photo upload is separate from car create/update request.
+  - Plate blur automation is still labeled "Coming soon" (feature not implemented in current codebase).
 
 ## Booking Experience
 - Implemented:
-  - Added pricing breakdown in booking widget (`src/components/booking-widget.tsx`) including:
+  - Booking breakdown now charges and displays:
     - daily rate
-    - number of days
+    - days
     - platform fee
     - insurance fee
     - delivery fee
     - deposit
-    - total charged now
-  - Ensured non-implemented fees are labeled "Coming soon" and not included in charged total.
-  - Added cancellation placeholder link in booking widget and bookings table to `/cancellation`.
-  - Added trip status tracker (`src/components/trip-status-tracker.tsx`) in bookings table.
-  - Added mobile sticky "Book Now" jump button on car detail.
-  - Added cancellation route: `src/app/cancellation/page.tsx`.
+    - total
+  - Paystack verification now validates against full charged total and stores fee breakdown columns on bookings.
+  - Cancellation policy is now listing-backed (`flexible` / `moderate` / `strict`) and shown in booking flow + dashboard table.
+  - Trip status tracker remains active and mapped to booking statuses.
+  - Disputes flow implemented:
+    - open dispute from renter bookings
+    - `/api/disputes` with ownership checks and duplicate-open protection
+    - admin resolution workflow in `/admin/platform`
 - Placeholder/TODO due schema:
-  - Per-listing cancellation policy badge requires a dedicated policy field (example: `cars.cancellation_policy`).
-  - Insurance, delivery, and deposit lines are placeholders unless backed by charged fields and checkout logic.
+  - None after running `db/platform_audit_activation.sql`.
 
 ## SEO Pages
 - Implemented:
-  - Added SEO landing pages with metadata, human-readable content, FAQs, and internal links:
+  - Added content pages with metadata, FAQ, and internal links:
     - `/rent-a-car-accra`
     - `/cheap-car-rental-ghana`
     - `/suv-rental-ghana`
     - `/airport-car-rental-accra`
     - `/list-your-car-ghana`
     - `/peer-to-peer-car-rental-ghana`
-  - Added shared template component: `src/components/seo/landing-template.tsx`.
+  - Shared reusable template in `src/components/seo/landing-template.tsx`.
+- Placeholder/TODO due schema:
+  - None.
 
 ## Admin Placeholders
 - Implemented:
-  - Enhanced existing authenticated admin overview (`src/app/admin/page.tsx`) with a "Platform controls (placeholders)" section.
-  - Added placeholders/TODO notes for:
-    - Listing approvals
-    - Refund control
-    - Review moderation
-    - Disputes
-    - Host approvals status note
+  - Added fully functional admin controls route: `/admin/platform`.
+  - Listing approvals:
+    - approve/reject pending listings
+    - write moderation status/reviewer/reason fields
+  - Refund control:
+    - refund paid bookings (including Paystack refund call when available)
+  - Review moderation:
+    - hide/unhide reviews with reasons and moderation metadata
+  - Disputes:
+    - status workflow (`open`, `under_review`, `resolved`, `closed`)
+    - resolution note updates
+  - Added admin action audit entries for listing review, refunds, review moderation, and dispute updates.
+  - Added quick navigation to platform controls from `/admin`.
 - Placeholder/TODO due schema:
-  - Requires moderation/dispute/refund workflow tables and states for full implementation.
+  - None after running `db/platform_audit_activation.sql`.
+
+## Activation SQL
+- Supabase migration file added:
+  - `db/platform_audit_activation.sql`
+- This migration provisions all required schema objects for the new functionality:
+  - new columns and constraints
+  - `platform_settings`, `listing_views`, `disputes` tables
+  - `car_search_view` view
+  - RLS policies and grants

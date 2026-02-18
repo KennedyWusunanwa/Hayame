@@ -10,10 +10,27 @@ export async function GET() {
     } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
 
+    const today = new Date().toISOString().slice(0, 10);
+    await supa
+      .from("bookings")
+      .update({ status: "completed" })
+      .eq("renter_id", user.id)
+      .eq("status", "confirmed")
+      .lt("end_date", today);
+
     const { data: ownedCars } = await supa.from("cars").select("id").eq("owner_id", user.id);
     const ownerCarIds = (ownedCars as any)?.map((c: any) => c.id) ?? [];
 
-    const bookingSelect = "*, cars(title, city, region, owner_id)";
+    if (ownerCarIds.length > 0) {
+      await supa
+        .from("bookings")
+        .update({ status: "completed" })
+        .in("car_id", ownerCarIds)
+        .eq("status", "confirmed")
+        .lt("end_date", today);
+    }
+
+    const bookingSelect = "*, cars(title, city, region, owner_id, cancellation_policy)";
 
     const renterBookings = await supa
       .from("bookings")

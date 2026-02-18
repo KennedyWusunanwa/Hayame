@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { FavoriteButton } from "@/components/favorite-button";
 import { BookingWidget } from "@/components/booking-widget";
 import { ImageGallery } from "@/components/image-gallery";
+import { ListingViewTracker } from "@/components/listing-view-tracker";
 import { ReviewForm, type ReviewableBooking } from "@/components/review-form";
 import { HostMessageCard } from "@/components/messages/host-message-card";
 import { VerificationBadges } from "@/components/verification-badges";
@@ -64,6 +65,7 @@ type CarDetail = {
   insurance_fee?: number | null;
   deposit_amount?: number | null;
   cancellation_policy?: string | null;
+  approval_status?: string | null;
   photos: { url: string }[];
   owner?: Owner | null;
   rating?: number;
@@ -94,7 +96,7 @@ type SupabaseCar = Database["public"]["Tables"]["cars"]["Row"] & {
 export default async function CarDetailPage({ params }: PageProps) {
   const resolvedParams = await params;
   console.log("[car-detail] start", resolvedParams);
-  const { car, availability, isFavorite, reviews, userId, reviewableBookings } = await loadCar(
+  const { car, availability, isFavorite, reviews, userId, reviewableBookings, platformFeePercent } = await loadCar(
     resolvedParams.id,
   );
 
@@ -162,6 +164,7 @@ export default async function CarDetailPage({ params }: PageProps) {
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-10">
+      <ListingViewTracker carId={car.id} />
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-3">
@@ -293,6 +296,7 @@ export default async function CarDetailPage({ params }: PageProps) {
               <BookingWidget
                 carId={car.id}
                 dailyPrice={car.daily_price}
+                platformFeePercent={platformFeePercent}
                 instantBook={car.instant_book}
                 deliveryFee={car.delivery_fee}
                 insuranceFee={car.insurance_fee}
@@ -363,6 +367,7 @@ async function loadCar(id: string): Promise<{
   reviews: ReviewRow[];
   userId: string | null;
   reviewableBookings: ReviewableBooking[];
+  platformFeePercent: number;
 }> {
   const mock = mockCars.find((c) => c.id === id);
   if (mock) {
@@ -374,6 +379,7 @@ async function loadCar(id: string): Promise<{
       reviews: [],
       userId: null,
       reviewableBookings: [],
+      platformFeePercent: 10,
     };
   }
 
@@ -399,6 +405,7 @@ async function loadCar(id: string): Promise<{
   let reviews: ReviewRow[] = [];
   let userId: string | null = null;
   let reviewableBookings: ReviewableBooking[] = [];
+  let platformFeePercent = 10;
 
   try {
     const supabase = await createSupabaseServerClient();
@@ -411,7 +418,7 @@ async function loadCar(id: string): Promise<{
       const { data: carData } = await supabase
         .from("cars")
         .select(
-          "*, car_photos(url), owner:profiles!cars_owner_id_fkey(id, full_name, avatar_url, city)",
+          "*, car_photos(url), owner:profiles!cars_owner_id_fkey(id, full_name, avatar_url, city, id_verified, phone_verified, email_verified, host_level)",
         )
         .eq("id", id)
         .maybeSingle();
@@ -424,7 +431,8 @@ async function loadCar(id: string): Promise<{
     if (!car && process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
       const params = new URLSearchParams({
         id: `eq.${id}`,
-        select: "*, car_photos(url), owner:profiles!cars_owner_id_fkey(id,full_name,avatar_url,city)",
+        select:
+          "*, car_photos(url), owner:profiles!cars_owner_id_fkey(id,full_name,avatar_url,city,id_verified,phone_verified,email_verified,host_level)",
       });
       const res = await fetch(
         `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/cars?${params.toString()}`,
@@ -453,8 +461,26 @@ async function loadCar(id: string): Promise<{
       .from("reviews")
       .select("id,rating,comment,created_at,user_id, profiles:profiles!reviews_user_id_fkey(full_name,avatar_url)")
       .eq("car_id", id)
+      .eq("is_hidden", false)
       .order("created_at", { ascending: false });
     reviews = (reviewData as ReviewRow[] | null) ?? [];
+
+    if (reviews.length > 0 && car) {
+      const total = reviews.reduce((sum, review) => sum + Number(review.rating ?? 0), 0);
+      car.rating = Number((total / reviews.length).toFixed(1));
+      car.reviews = reviews.length;
+    }
+
+    const { data: feeSettings } = await (supabase as any)
+      .from("platform_settings")
+      .select("platform_fee_percent")
+      .eq("id", 1)
+      .maybeSingle();
+    const envPlatformFee = Number(
+      process.env.NEXT_PUBLIC_PLATFORM_FEE_PERCENT ?? process.env.PLATFORM_FEE_PERCENT ?? "10",
+    );
+    const fallback = Number.isFinite(envPlatformFee) ? envPlatformFee : 10;
+    platformFeePercent = Number(feeSettings?.platform_fee_percent ?? fallback);
 
     if (user) {
       const { data: favoriteRow } = await supabase
@@ -506,7 +532,11 @@ async function loadCar(id: string): Promise<{
     notFound();
   }
 
-  return { car, availability, isFavorite, reviews, userId, reviewableBookings };
+  if (car.approval_status && car.approval_status !== "approved" && car.owner?.id !== userId) {
+    notFound();
+  }
+
+  return { car, availability, isFavorite, reviews, userId, reviewableBookings, platformFeePercent };
 }
 
 async function getCarFromSupabaseRest(id: string): Promise<SupabaseCar | null> {
@@ -516,7 +546,8 @@ async function getCarFromSupabaseRest(id: string): Promise<SupabaseCar | null> {
 
   const params = new URLSearchParams({
     id: `eq.${id}`,
-    select: "*, car_photos(url), owner:profiles!cars_owner_id_fkey(id,full_name,avatar_url,city)",
+    select:
+      "*, car_photos(url), owner:profiles!cars_owner_id_fkey(id,full_name,avatar_url,city,id_verified,phone_verified,email_verified,host_level)",
   });
 
   try {
@@ -564,6 +595,7 @@ function mapCar(data: SupabaseCar): CarDetail {
     insurance_fee: typeof (data as any).insurance_fee === "number" ? Number((data as any).insurance_fee) : null,
     deposit_amount: typeof (data as any).deposit_amount === "number" ? Number((data as any).deposit_amount) : null,
     cancellation_policy: (data as any).cancellation_policy ?? null,
+    approval_status: (data as any).approval_status ?? "approved",
     photos: data.car_photos ?? [],
     owner: data.owner ?? null,
     rating: avgRating,
@@ -594,6 +626,7 @@ function mapMockCar(mock: MockCar): CarDetail {
     insurance_fee: null,
     deposit_amount: null,
     cancellation_policy: null,
+    approval_status: "approved",
     photos: [{ url: mock.image }],
     owner: {
       id: "mock-owner",
@@ -704,7 +737,7 @@ function HostCard({ owner, rating, reviews }: { owner?: Owner | null; rating?: n
   const avatar = owner?.avatar_url;
   const initials = getInitials(owner?.full_name ?? "Host");
   const score = typeof rating === "number" ? rating : null;
-  const hostLevel = owner?.host_level ?? "New Host";
+  const hostLevel = formatHostLevel(owner?.host_level);
   return (
     <Card>
       <CardHeader>
@@ -748,7 +781,7 @@ function HostCard({ owner, rating, reviews }: { owner?: Owner | null; rating?: n
           emailVerified={owner?.email_verified}
         />
         <div className="flex items-center justify-between gap-2">
-          <p className="text-xs text-amber-700">Host level defaults to New Host until ranking fields are added.</p>
+          <p className="text-xs text-gray-600">Host level updates as verification and trip performance grow.</p>
           <Button variant="outline" size="sm" asChild className="shrink-0">
             <Link href={owner?.id ? `/hosts/${owner.id}` : "#"}>View host</Link>
           </Button>
@@ -793,6 +826,14 @@ function ReviewCard({
       <p className="text-gray-700">{text}</p>
     </div>
   );
+}
+
+function formatHostLevel(level?: string | null) {
+  const normalized = String(level ?? "").toLowerCase();
+  if (normalized === "super_host") return "Super Host";
+  if (normalized === "top_host") return "Top Host";
+  if (normalized === "verified_host") return "Verified Host";
+  return "New Host";
 }
 
 function MobileBookNow() {

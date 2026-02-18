@@ -20,7 +20,12 @@ type BookingRow = {
   payment_reference?: string | null;
   total_price: number;
   role?: string;
-  cars?: { title?: string; city?: string; region?: string };
+  cars?: {
+    title?: string;
+    city?: string;
+    region?: string;
+    cancellation_policy?: "flexible" | "moderate" | "strict" | string | null;
+  };
 };
 
 export function BookingsTable({ mode = "host" }: { mode?: "host" | "renter" }) {
@@ -28,6 +33,7 @@ export function BookingsTable({ mode = "host" }: { mode?: "host" | "renter" }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [disputingId, setDisputingId] = useState<string | null>(null);
 
   const load = async () => {
     try {
@@ -72,6 +78,28 @@ export function BookingsTable({ mode = "host" }: { mode?: "host" | "renter" }) {
     }
   };
 
+  const openDispute = async (bookingId: string) => {
+    const reason = window.prompt("Describe the dispute (minimum 5 characters):");
+    if (!reason || reason.trim().length < 5) return;
+    try {
+      setDisputingId(bookingId);
+      const res = await fetch("/api/disputes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bookingId, reason: reason.trim() }),
+      });
+      if (!res.ok) {
+        const payload = await res.json().catch(() => ({}));
+        throw new Error(payload.message ?? "Unable to open dispute");
+      }
+      alert("Dispute opened. Admin will review it.");
+    } catch (err: any) {
+      alert(err.message ?? "Unable to open dispute");
+    } finally {
+      setDisputingId(null);
+    }
+  };
+
   const rowsSorted = useMemo(
     () => [...rows].sort((a, b) => (a.start_date < b.start_date ? 1 : -1)),
     [rows],
@@ -93,7 +121,9 @@ export function BookingsTable({ mode = "host" }: { mode?: "host" | "renter" }) {
             <CardTitle>Your bookings</CardTitle>
             {error ? <p className="text-sm text-red-600">{error}</p> : null}
           </CardHeader>
-          <CardContent>{renderTable(renterRows, false, updatingId, handleAction, loading)}</CardContent>
+          <CardContent>
+            {renderTable(renterRows, false, updatingId, disputingId, handleAction, openDispute, loading)}
+          </CardContent>
         </Card>
       </div>
     );
@@ -106,7 +136,9 @@ export function BookingsTable({ mode = "host" }: { mode?: "host" | "renter" }) {
           <CardTitle>Your bookings</CardTitle>
           {error ? <p className="text-sm text-red-600">{error}</p> : null}
         </CardHeader>
-        <CardContent>{renderTable(renterRows, false, updatingId, handleAction, loading)}</CardContent>
+        <CardContent>
+          {renderTable(renterRows, false, updatingId, disputingId, handleAction, openDispute, loading)}
+        </CardContent>
       </Card>
 
       <Card>
@@ -114,7 +146,9 @@ export function BookingsTable({ mode = "host" }: { mode?: "host" | "renter" }) {
           <CardTitle>Bookings on your cars</CardTitle>
           <p className="text-sm text-gray-600">Approve or reject guest requests after payment.</p>
         </CardHeader>
-        <CardContent>{renderTable(ownerRows, true, updatingId, handleAction, loading)}</CardContent>
+        <CardContent>
+          {renderTable(ownerRows, true, updatingId, disputingId, handleAction, openDispute, loading)}
+        </CardContent>
       </Card>
     </div>
   );
@@ -124,7 +158,9 @@ function renderTable(
   rows: BookingRow[],
   isOwnerView: boolean,
   updatingId: string | null,
+  disputingId: string | null,
   handleAction: (id: string, action: "approve" | "reject") => void,
+  openDispute: (id: string) => void,
   loading: boolean,
 ) {
   return (
@@ -162,10 +198,27 @@ function renderTable(
                   endDate={booking.end_date}
                 />
                 <div className="mt-1 text-[11px] text-gray-600">
-                  <Link href="/cancellation" className="font-semibold text-brand">
-                    Cancellation policy coming soon
-                  </Link>
+                  {booking.cars?.cancellation_policy ? (
+                    <span className="rounded-full bg-gray-100 px-2 py-1 font-semibold capitalize text-gray-700">
+                      {booking.cars.cancellation_policy} cancellation
+                    </span>
+                  ) : (
+                    <Link href="/cancellation" className="font-semibold text-brand">
+                      View cancellation policy
+                    </Link>
+                  )}
                 </div>
+                {!isOwnerView && booking.payment_status === "paid" ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="mt-2 h-7 px-2 text-xs"
+                    disabled={disputingId === booking.id}
+                    onClick={() => openDispute(booking.id)}
+                  >
+                    {disputingId === booking.id ? "Opening..." : "Open dispute"}
+                  </Button>
+                ) : null}
               </TableCell>
               <TableCell>
                 <Badge variant={paymentVariant(booking.payment_status)}>

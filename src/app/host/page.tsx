@@ -20,11 +20,15 @@ export default async function DashboardHome() {
   const hostId = user?.id ?? "";
   const { data: profile } = await supabase
     .from("profiles")
-    .select("full_name, city")
+    .select("full_name, city, id_verified, phone_verified, email_verified, host_level")
     .eq("id", hostId)
     .maybeSingle();
   const hostName = (profile as any)?.full_name ?? "Host";
   const hostCity = (profile as any)?.city ?? "Ghana";
+  const idVerified = Boolean((profile as any)?.id_verified);
+  const phoneVerified = Boolean((profile as any)?.phone_verified);
+  const emailVerified = Boolean((profile as any)?.email_verified);
+  const explicitHostLevel = String((profile as any)?.host_level ?? "");
 
   const { data: cars } = await (supabase as any)
     .from("cars")
@@ -45,6 +49,15 @@ export default async function DashboardHome() {
     carIds.length > 0
       ? await (supabase as any)
           .from("reviews")
+          .select("id,rating")
+          .eq("is_hidden", false)
+          .in("car_id", carIds)
+      : { data: [] as any[] };
+
+  const { data: views } =
+    carIds.length > 0
+      ? await (supabase as any)
+          .from("listing_views")
           .select("id")
           .in("car_id", carIds)
       : { data: [] as any[] };
@@ -68,9 +81,35 @@ export default async function DashboardHome() {
 
   const bookingRate = carIds.length > 0 ? Math.round((paidBookings.length / carIds.length) * 100) : 0;
   const totalReviews = (reviews ?? []).length;
-  const defaultFeeValue = Number(process.env.NEXT_PUBLIC_PLATFORM_FEE_PERCENT ?? process.env.PLATFORM_FEE_PERCENT);
-  const platformFeePercent = Number.isFinite(defaultFeeValue) ? defaultFeeValue : 10;
-  const isPlaceholderFee = !Number.isFinite(defaultFeeValue);
+  const averageRating =
+    totalReviews > 0
+      ? Number(
+          (
+            (reviews ?? []).reduce((sum: number, row: any) => sum + Number(row.rating ?? 0), 0) /
+            totalReviews
+          ).toFixed(1),
+        )
+      : 0;
+  const totalViews = (views ?? []).length;
+  const conversionRate = totalViews > 0 ? Number(((paidBookings.length / totalViews) * 100).toFixed(1)) : 0;
+
+  const { data: platformSettings } = await (supabase as any)
+    .from("platform_settings")
+    .select("platform_fee_percent")
+    .eq("id", 1)
+    .maybeSingle();
+  const envFee = Number(process.env.NEXT_PUBLIC_PLATFORM_FEE_PERCENT ?? process.env.PLATFORM_FEE_PERCENT);
+  const fallbackFee = Number.isFinite(envFee) ? envFee : 10;
+  const platformFeePercent = Number(platformSettings?.platform_fee_percent ?? fallbackFee);
+  const isPlaceholderFee = !platformSettings?.platform_fee_percent && !Number.isFinite(envFee);
+  const hostLevel = computeHostLevel({
+    explicitLevel: explicitHostLevel,
+    idVerified,
+    phoneVerified,
+    emailVerified,
+    trips: paidBookings.length,
+    rating: averageRating,
+  });
 
   return (
     <div className="space-y-6">
@@ -89,15 +128,12 @@ export default async function DashboardHome() {
         <CardHeader className="pb-3">
           <CardTitle className="flex flex-wrap items-center gap-2">
             Host profile
-            <Badge variant="outline">New Host</Badge>
+            <Badge variant="outline">{hostLevel}</Badge>
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
           <p className="text-sm text-gray-700">{hostName} - {hostCity}</p>
-          <VerificationBadges />
-          <p className="text-xs text-amber-700">
-            TODO: map host level and verification badges to real schema fields when available.
-          </p>
+          <VerificationBadges idVerified={idVerified} phoneVerified={phoneVerified} emailVerified={emailVerified} />
         </CardContent>
       </Card>
 
@@ -105,7 +141,7 @@ export default async function DashboardHome() {
         <StatCard title="Total earnings" value={formatCurrency(totalEarnings)} />
         <StatCard title="Monthly earnings" value={formatCurrency(monthlyEarnings)} />
         <StatCard title="Booking rate" value={`${bookingRate}%`} />
-        <StatCard title="Reviews" value={String(totalReviews)} />
+        <StatCard title="Reviews" value={`${totalReviews} (${averageRating || 0}/5)`} />
       </div>
 
       <Card>
@@ -117,16 +153,8 @@ export default async function DashboardHome() {
           <PerformanceItem label="Monthly earnings" value={formatCurrency(monthlyEarnings)} />
           <PerformanceItem label="Booking rate" value={`${bookingRate}%`} />
           <PerformanceItem label="Reviews" value={String(totalReviews)} />
-          <PerformanceItem
-            label="Views"
-            value="Coming soon"
-            note="TODO: requires listing views schema."
-          />
-          <PerformanceItem
-            label="Conversion rate"
-            value="Coming soon"
-            note="TODO: requires view-to-booking attribution."
-          />
+          <PerformanceItem label="Views" value={String(totalViews)} />
+          <PerformanceItem label="Conversion rate" value={`${conversionRate}%`} />
         </CardContent>
       </Card>
 
@@ -195,4 +223,30 @@ function PerformanceItem({
       {note ? <p className="text-xs text-amber-700">{note}</p> : null}
     </div>
   );
+}
+
+function computeHostLevel({
+  explicitLevel,
+  idVerified,
+  phoneVerified,
+  emailVerified,
+  trips,
+  rating,
+}: {
+  explicitLevel?: string;
+  idVerified: boolean;
+  phoneVerified: boolean;
+  emailVerified: boolean;
+  trips: number;
+  rating: number;
+}) {
+  const normalized = String(explicitLevel ?? "").toLowerCase();
+  if (normalized === "super_host") return "Super Host";
+  if (normalized === "top_host") return "Top Host";
+  if (normalized === "verified_host") return "Verified Host";
+  const verified = idVerified && phoneVerified && emailVerified;
+  if (verified && trips >= 50 && rating >= 4.8) return "Super Host";
+  if (verified && trips >= 20 && rating >= 4.6) return "Top Host";
+  if (verified) return "Verified Host";
+  return "New Host";
 }

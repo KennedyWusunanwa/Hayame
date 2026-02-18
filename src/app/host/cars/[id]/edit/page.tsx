@@ -60,11 +60,18 @@ export default async function EditCarPage({ params }: PageProps) {
               brand: (hydratedCar as any).brand ?? "",
               model: (hydratedCar as any).model ?? "",
               fuel_type: (hydratedCar as any).fuel_type ?? undefined,
+              car_year: (hydratedCar as any).car_year ?? undefined,
               seats: hydratedCar.seats ?? undefined,
               transmission: hydratedCar.transmission ?? undefined,
               features: hydratedCar.features ?? [],
               is_available: hydratedCar.is_available ?? true,
               instant_book: (hydratedCar as any).instant_book ?? false,
+              delivery_available: (hydratedCar as any).delivery_available ?? false,
+              air_conditioning: (hydratedCar as any).air_conditioning ?? false,
+              delivery_fee: Number((hydratedCar as any).delivery_fee ?? 0),
+              insurance_fee: Number((hydratedCar as any).insurance_fee ?? 0),
+              deposit_amount: Number((hydratedCar as any).deposit_amount ?? 0),
+              cancellation_policy: (hydratedCar as any).cancellation_policy ?? "moderate",
             }}
           />
         </CardContent>

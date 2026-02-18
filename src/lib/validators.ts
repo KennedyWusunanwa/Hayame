@@ -13,9 +13,16 @@ export const carFormSchema = z.object({
   fuel_type: z.enum(fuelTypes as [string, ...string[]]).optional(),
   brand: z.string().optional(),
   model: z.string().optional(),
+  car_year: z.coerce.number().int().min(2000).max(new Date().getFullYear() + 1).optional(),
   features: z.array(z.string().refine((f) => featureOptions.includes(f))).optional(),
   is_available: z.boolean().optional(),
   instant_book: z.boolean().optional(),
+  delivery_available: z.boolean().optional(),
+  air_conditioning: z.boolean().optional(),
+  delivery_fee: z.coerce.number().min(0).optional(),
+  insurance_fee: z.coerce.number().min(0).optional(),
+  deposit_amount: z.coerce.number().min(0).optional(),
+  cancellation_policy: z.enum(["flexible", "moderate", "strict"]).optional(),
 });
 
 export const bookingSchema = z.object({
@@ -33,6 +40,11 @@ export const reviewSchema = z.object({
   bookingId: z.string(),
   rating: z.number().min(1).max(5),
   comment: z.string().optional(),
+});
+
+export const disputeSchema = z.object({
+  bookingId: z.string().uuid().or(z.string()),
+  reason: z.string().min(5),
 });
 
 export const availabilitySchema = z.object({

@@ -3,16 +3,162 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { carFormSchema } from "@/lib/validators";
 import { getHostStatus } from "@/lib/host-status";
 
-export async function GET() {
+function parseNumber(value: string | null) {
+  if (!value) return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function parseBoolean(value: string | null) {
+  if (!value) return undefined;
+  if (value === "1" || value === "true") return true;
+  if (value === "0" || value === "false") return false;
+  return undefined;
+}
+
+async function getPlatformFeePercent(supa: any) {
+  const envValue = Number(
+    process.env.NEXT_PUBLIC_PLATFORM_FEE_PERCENT ?? process.env.PLATFORM_FEE_PERCENT ?? "10",
+  );
+  const fallback = Number.isFinite(envValue) ? envValue : 10;
+  const { data } = await supa
+    .from("platform_settings")
+    .select("platform_fee_percent")
+    .eq("id", 1)
+    .maybeSingle();
+  const value = Number(data?.platform_fee_percent ?? fallback);
+  return Number.isFinite(value) ? value : fallback;
+}
+
+export async function GET(req: Request) {
   try {
     const supabase = await createSupabaseServerClient();
     const supa = supabase as any;
-    const { data, error } = await supa
-      .from("cars")
-      .select("*, car_photos(url)")
-      .limit(24);
-    if (error) throw error;
-    return NextResponse.json({ data });
+    const { searchParams } = new URL(req.url);
+    const limit = Math.min(Number(searchParams.get("limit") ?? 48), 100);
+    const q = (searchParams.get("q") ?? "").trim();
+    const sort = (searchParams.get("sort") ?? "").trim();
+
+    let query = supa
+      .from("car_search_view")
+      .select("*")
+      .eq("approval_status", "approved")
+      .limit(Number.isFinite(limit) ? limit : 48);
+
+    const region = searchParams.get("region");
+    const city = searchParams.get("city");
+    const carType = searchParams.get("carType");
+    const brand = searchParams.get("brand");
+    const model = searchParams.get("model");
+    const fuelType = searchParams.get("fuelType");
+    const transmission = searchParams.get("transmission");
+    const seats = searchParams.get("seats");
+    const hostType = searchParams.get("hostType");
+    const minPrice = parseNumber(searchParams.get("minPrice"));
+    const maxPrice = parseNumber(searchParams.get("maxPrice"));
+    const minYear = parseNumber(searchParams.get("minYear"));
+    const maxYear = parseNumber(searchParams.get("maxYear"));
+    const minRating = parseNumber(searchParams.get("minRating"));
+    const instantBook = parseBoolean(searchParams.get("instantBook"));
+    const deliveryAvailable = parseBoolean(searchParams.get("deliveryAvailable"));
+    const airConditioning = parseBoolean(searchParams.get("airConditioning"));
+
+    if (region) query = query.eq("region", region);
+    if (city) query = query.eq("city", city);
+    if (carType) query = query.eq("car_type", carType);
+    if (brand) query = query.eq("brand", brand);
+    if (model) query = query.eq("model", model);
+    if (fuelType) query = query.eq("fuel_type", fuelType.toLowerCase());
+    if (transmission) query = query.eq("transmission", transmission.toLowerCase());
+    if (hostType) query = query.eq("host_type", hostType);
+    if (typeof minPrice === "number") query = query.gte("daily_price", minPrice);
+    if (typeof maxPrice === "number") query = query.lte("daily_price", maxPrice);
+    if (typeof minYear === "number") query = query.gte("year", minYear);
+    if (typeof maxYear === "number") query = query.lte("year", maxYear);
+    if (typeof minRating === "number") query = query.gte("avg_rating", minRating);
+    if (instantBook === true) query = query.eq("instant_book", true);
+    if (deliveryAvailable === true) query = query.eq("delivery_available", true);
+    if (airConditioning === true) query = query.eq("air_conditioning", true);
+
+    if (seats) {
+      if (seats === "8+") {
+        query = query.gte("seats", 8);
+      } else {
+        const seatsValue = Number(seats);
+        if (Number.isFinite(seatsValue)) {
+          query = query.eq("seats", seatsValue);
+        }
+      }
+    }
+
+    if (q) {
+      const safe = q.replace(/,/g, " ");
+      query = query.or(
+        `title.ilike.%${safe}%,city.ilike.%${safe}%,brand.ilike.%${safe}%,model.ilike.%${safe}%`,
+      );
+    }
+
+    const featureFilters = searchParams.getAll("feature");
+    for (const feature of featureFilters) {
+      if (feature.trim()) {
+        query = query.contains("features", [feature.trim()]);
+      }
+    }
+
+    switch (sort) {
+      case "price_low":
+        query = query.order("daily_price", { ascending: true });
+        break;
+      case "price_high":
+        query = query.order("daily_price", { ascending: false });
+        break;
+      case "most_booked":
+        query = query.order("bookings_count", { ascending: false });
+        break;
+      case "top_rated":
+        query = query.order("avg_rating", { ascending: false });
+        break;
+      case "new_listings":
+      default:
+        query = query.order("created_at", { ascending: false });
+        break;
+    }
+
+    let { data, error } = await query;
+    if (error) {
+      // Backward-compatible fallback if migration view is not yet applied.
+      const fallback = await supa.from("cars").select("*, car_photos(url)").limit(24);
+      if (fallback.error) throw fallback.error;
+      data = fallback.data;
+      error = null;
+    }
+
+    const platformFeePercent = await getPlatformFeePercent(supa).catch(() => 10);
+
+    return NextResponse.json({
+      data,
+      meta: {
+        platform_fee_percent: platformFeePercent,
+        capabilities: {
+          instantBook: true,
+          deliveryAvailable: true,
+          transmission: true,
+          fuelType: true,
+          seats: true,
+          year: true,
+          airConditioning: true,
+          rating: true,
+          hostType: true,
+          sorts: {
+            price_low: true,
+            price_high: true,
+            most_booked: true,
+            top_rated: true,
+            new_listings: true,
+          },
+        },
+      },
+    });
   } catch (error: any) {
     return NextResponse.json({ message: error.message }, { status: 500 });
   }
@@ -36,7 +182,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ message: "Host approval required" }, { status: 403 });
     }
 
-    // Ensure the profile exists for this user to satisfy FK on cars.owner_id
     await supa.from("profiles").upsert(
       {
         id: user.id,
@@ -45,11 +190,21 @@ export async function POST(req: Request) {
       { onConflict: "id" },
     );
 
-    const { data, error } = await supa
-      .from("cars")
-      .insert({ ...parsed, owner_id: user.id })
-      .select()
-      .single();
+    const hasAirConditioning =
+      Boolean(parsed.air_conditioning) ||
+      Boolean(parsed.features?.some((feature) => feature.toLowerCase() === "air conditioning"));
+
+    const payload = {
+      ...parsed,
+      owner_id: user.id,
+      approval_status: "pending",
+      reviewed_at: null,
+      reviewed_by: null,
+      rejection_reason: null,
+      air_conditioning: hasAirConditioning,
+    };
+
+    const { data, error } = await supa.from("cars").insert(payload).select().single();
     if (error) throw error;
     return NextResponse.json({ data });
   } catch (error: any) {

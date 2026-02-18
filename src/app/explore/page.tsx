@@ -48,6 +48,12 @@ type SortCapabilities = {
   newListings: boolean;
 };
 
+type CarsResponseMeta = {
+  capabilities?: Partial<FilterCapabilities> & {
+    sorts?: Partial<Record<SortBy, boolean>>;
+  };
+};
+
 function parseBoolean(value: string | null) {
   if (value === "1" || value === "true") return true;
   if (value === "0" || value === "false") return false;
@@ -169,11 +175,12 @@ function mapApiCars(rows: any[]): ExploreCar[] {
       features: Array.isArray(car.features) ? car.features : [],
       description: car.description ?? "",
       host: {
-        name: "Host",
+        name: car.host_name ?? "Host",
         avatar:
+          car.host_avatar ??
           "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=300&q=80",
       },
-      image: car.car_photos?.[0]?.url ?? "/car-placeholder.jpg",
+      image: car.image_url ?? car.car_photos?.[0]?.url ?? "/car-placeholder.jpg",
       instant_book: typeof car.instant_book === "boolean" ? car.instant_book : undefined,
       delivery_available:
         typeof car.delivery_available === "boolean" ? car.delivery_available : undefined,
@@ -212,6 +219,7 @@ function ExploreContent() {
   const filters = useMemo(() => parseFilters(new URLSearchParams(searchKey)), [searchKey]);
 
   const [cars, setCars] = useState<ExploreCar[]>([]);
+  const [meta, setMeta] = useState<CarsResponseMeta>({});
   const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchDraft, setSearchDraft] = useState("");
@@ -233,9 +241,10 @@ function ExploreContent() {
 
   useEffect(() => {
     setLoading(true);
-    fetch("/api/cars")
+    fetch(searchKey ? `/api/cars?${searchKey}` : "/api/cars")
       .then((res) => res.json())
       .then((res) => {
+        setMeta(res.meta ?? {});
         if (Array.isArray(res.data)) {
           setCars(mapApiCars(res.data));
         } else {
@@ -244,13 +253,14 @@ function ExploreContent() {
       })
       .catch(() => {
         setCars(fallbackCars());
+        setMeta({});
       })
       .finally(() => setLoading(false));
-  }, []);
+  }, [searchKey]);
 
   const capabilities = useMemo<FilterCapabilities>(() => {
     const hasAirConditioningFlag = cars.some((car) => typeof car.air_conditioning === "boolean");
-    return {
+    const inferred: FilterCapabilities = {
       instantBook: cars.some((car) => typeof car.instant_book === "boolean"),
       deliveryAvailable: cars.some((car) => typeof car.delivery_available === "boolean"),
       transmission: cars.some((car) => Boolean(car.transmission)),
@@ -265,17 +275,21 @@ function ExploreContent() {
       rating: cars.some((car) => typeof getComparableRating(car) === "number"),
       hostType: cars.some((car) => Boolean(car.host_type)),
     };
-  }, [cars]);
+    return { ...inferred, ...(meta.capabilities ?? {}) };
+  }, [cars, meta.capabilities]);
 
   const sortCapabilities = useMemo<SortCapabilities>(
     () => ({
-      mostBooked: cars.some(
+      mostBooked:
+        meta.capabilities?.sorts?.most_booked ??
+        cars.some(
         (car) => typeof car.bookings_count === "number" || typeof car.trips_count === "number",
       ),
-      topRated: capabilities.rating,
-      newListings: cars.some((car) => Boolean(car.created_at)),
+      topRated: meta.capabilities?.sorts?.top_rated ?? capabilities.rating,
+      newListings:
+        meta.capabilities?.sorts?.new_listings ?? cars.some((car) => Boolean(car.created_at)),
     }),
-    [cars, capabilities.rating],
+    [cars, capabilities.rating, meta.capabilities?.sorts],
   );
 
   const updateFilters = (nextFilters: Filters) => {

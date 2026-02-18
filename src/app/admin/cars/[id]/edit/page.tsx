@@ -76,11 +76,18 @@ export default async function AdminEditCarPage({ params }: PageProps) {
               brand: (car as any).brand ?? "",
               model: (car as any).model ?? "",
               fuel_type: (car as any).fuel_type ?? undefined,
+              car_year: (car as any).car_year ?? undefined,
               seats: car.seats ?? undefined,
               transmission: car.transmission ?? undefined,
               features: car.features ?? [],
               is_available: car.is_available ?? true,
               instant_book: (car as any).instant_book ?? false,
+              delivery_available: (car as any).delivery_available ?? false,
+              air_conditioning: (car as any).air_conditioning ?? false,
+              delivery_fee: Number((car as any).delivery_fee ?? 0),
+              insurance_fee: Number((car as any).insurance_fee ?? 0),
+              deposit_amount: Number((car as any).deposit_amount ?? 0),
+              cancellation_policy: (car as any).cancellation_policy ?? "moderate",
             }}
           />
         </CardContent>

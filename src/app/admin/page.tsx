@@ -77,13 +77,32 @@ async function reviewAction(formData: FormData) {
   if (action === "approve") {
     const { data: application } = await admin
       .from("host_applications")
-      .select("user_id,full_name")
+      .select("user_id,full_name,phone")
       .eq("id", applicationId)
       .single();
 
     const userId = (application as { user_id?: string } | null)?.user_id;
+    const hostPhone = (application as { phone?: string | null } | null)?.phone ?? null;
     const hostName = (application as { full_name?: string | null } | null)?.full_name ?? "Host";
-    // No profile updates needed here; host approval is derived from applications.
+
+    if (userId) {
+      await admin
+        .from("profiles")
+        .upsert(
+          {
+            id: userId,
+            full_name: hostName,
+            phone: hostPhone,
+            is_host: true,
+            host_approved_at: new Date().toISOString(),
+            id_verified: true,
+            phone_verified: Boolean(hostPhone),
+            email_verified: true,
+            host_level: "verified_host",
+          },
+          { onConflict: "id" },
+        );
+    }
 
     await admin
       .from("host_applications")
@@ -334,6 +353,12 @@ export default async function AdminPage({
           >
             Manage filters
           </Link>
+          <Link
+            href="/admin/platform"
+            className="rounded-md border border-border px-3 py-2 text-sm font-semibold text-gray-700"
+          >
+            Platform controls
+          </Link>
           <form action={logoutAction}>
             <button className="rounded-md border border-border px-3 py-2 text-sm font-semibold text-gray-700">
               Sign out
@@ -482,7 +507,7 @@ export default async function AdminPage({
 
             <Card>
               <CardHeader>
-                <CardTitle>Platform controls (placeholders)</CardTitle>
+                <CardTitle>Platform controls</CardTitle>
               </CardHeader>
               <CardContent className="grid gap-3 sm:grid-cols-2">
                 {[
@@ -492,26 +517,34 @@ export default async function AdminPage({
                   },
                   {
                     title: "Listing approvals",
-                    note: "TODO: requires listing moderation status field.",
+                    note: "Review pending listings and approve/reject from Platform controls.",
                   },
                   {
                     title: "Refund control",
-                    note: "TODO: requires admin refund queue with booking/payment metadata.",
+                    note: "Process paid booking refunds and keep an audit trail.",
                   },
                   {
                     title: "Review moderation",
-                    note: "TODO: requires review moderation actions and flags.",
+                    note: "Hide/unhide reviews with moderation reasons.",
                   },
                   {
                     title: "Disputes",
-                    note: "TODO: requires disputes table and workflow state.",
+                    note: "Track open, under review, resolved, and closed disputes.",
                   },
                 ].map((item) => (
                   <div key={item.title} className="rounded-lg border border-border bg-gray-50 p-3">
                     <p className="text-sm font-semibold text-foreground">{item.title}</p>
-                    <p className="text-xs text-amber-700">{item.note}</p>
+                    <p className="text-xs text-gray-700">{item.note}</p>
                   </div>
                 ))}
+                <div className="sm:col-span-2">
+                  <Link
+                    href="/admin/platform"
+                    className="inline-flex rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white"
+                  >
+                    Open platform controls
+                  </Link>
+                </div>
               </CardContent>
             </Card>
           </div>

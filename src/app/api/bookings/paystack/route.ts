@@ -78,7 +78,9 @@ export async function POST(req: Request) {
 
     const { data: carData, error: carError } = await supa
       .from("cars")
-      .select("id,title,daily_price,owner_id,instant_book,is_available")
+      .select(
+        "id,title,daily_price,owner_id,instant_book,is_available,delivery_fee,insurance_fee,deposit_amount",
+      )
       .eq("id", carId)
       .single();
     const car = carData as any;
@@ -157,7 +159,24 @@ export async function POST(req: Request) {
       differenceInCalendarDays(new Date(endDate), new Date(startDate)),
       1,
     );
-    const total = Number(car.daily_price ?? 0) * nights;
+    const subtotal = Number(car.daily_price ?? 0) * nights;
+
+    const { data: settings } = await supa
+      .from("platform_settings")
+      .select("platform_fee_percent")
+      .eq("id", 1)
+      .maybeSingle();
+    const envPlatformFee = Number(
+      process.env.NEXT_PUBLIC_PLATFORM_FEE_PERCENT ?? process.env.PLATFORM_FEE_PERCENT ?? "10",
+    );
+    const platformFeePercent = Number(
+      settings?.platform_fee_percent ?? (Number.isFinite(envPlatformFee) ? envPlatformFee : 10),
+    );
+    const platformFee = subtotal * (Math.max(platformFeePercent, 0) / 100);
+    const insuranceFee = Math.max(Number(car.insurance_fee ?? 0), 0);
+    const deliveryFee = Math.max(Number(car.delivery_fee ?? 0), 0);
+    const depositAmount = Math.max(Number(car.deposit_amount ?? 0), 0);
+    const total = subtotal + platformFee + insuranceFee + deliveryFee + depositAmount;
     const expectedAmount = Math.round(total * 100);
 
     const tx = await verifyPaystackTransaction(reference);
@@ -246,6 +265,13 @@ export async function POST(req: Request) {
         .update({
           status: finalStatus,
           total_price: total,
+          subtotal,
+          nights,
+          daily_rate: Number(car.daily_price ?? 0),
+          platform_fee: platformFee,
+          insurance_fee: insuranceFee,
+          delivery_fee: deliveryFee,
+          deposit_amount: depositAmount,
           payment_status: "paid",
           payment_reference: reference,
           payment_provider: "paystack",
@@ -280,6 +306,13 @@ export async function POST(req: Request) {
         end_date: endDate,
         status: finalStatus,
         total_price: total,
+        subtotal,
+        nights,
+        daily_rate: Number(car.daily_price ?? 0),
+        platform_fee: platformFee,
+        insurance_fee: insuranceFee,
+        delivery_fee: deliveryFee,
+        deposit_amount: depositAmount,
         payment_status: "paid",
         payment_reference: reference,
         payment_provider: "paystack",

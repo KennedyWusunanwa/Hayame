@@ -45,6 +45,7 @@ export default async function DashboardCarsPage() {
                   <TableHead>Favorites</TableHead>
                   <TableHead>Type</TableHead>
                   <TableHead>Price</TableHead>
+                  <TableHead>Approval</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead></TableHead>
                 </TableRow>
@@ -59,6 +60,19 @@ export default async function DashboardCarsPage() {
                     <TableCell className="font-semibold">{favoriteCounts[car.id] ?? 0}</TableCell>
                     <TableCell>{car.car_type}</TableCell>
                     <TableCell>{formatCurrency(car.daily_price)}</TableCell>
+                    <TableCell>
+                      <span
+                        className={
+                          car.approval_status === "approved"
+                            ? "rounded-full bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700"
+                            : car.approval_status === "rejected"
+                              ? "rounded-full bg-red-50 px-2 py-1 text-xs font-semibold text-red-700"
+                              : "rounded-full bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700"
+                        }
+                      >
+                        {car.approval_status ?? "pending"}
+                      </span>
+                    </TableCell>
                     <TableCell>
                       {car.is_available ? (
                         <span className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700">
@@ -103,6 +117,17 @@ export default async function DashboardCarsPage() {
                     }
                   >
                     {car.is_available ? "Available" : "Unavailable"}
+                  </span>
+                  <span
+                    className={
+                      car.approval_status === "approved"
+                        ? "rounded-full bg-emerald-50 px-2 py-1 font-semibold text-emerald-700"
+                        : car.approval_status === "rejected"
+                          ? "rounded-full bg-red-50 px-2 py-1 font-semibold text-red-700"
+                          : "rounded-full bg-amber-50 px-2 py-1 font-semibold text-amber-700"
+                    }
+                  >
+                    {car.approval_status ?? "pending"}
                   </span>
                 </div>
               </div>

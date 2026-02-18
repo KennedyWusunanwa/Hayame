@@ -17,10 +17,16 @@ export type Database = {
           full_name: string | null;
           avatar_url: string | null;
           phone: string | null;
+          region: string | null;
           city: string | null;
           is_host: boolean | null;
           host_approved_at: string | null;
+          id_verified: boolean | null;
+          phone_verified: boolean | null;
+          email_verified: boolean | null;
+          host_level: string | null;
           created_at: string | null;
+          updated_at: string | null;
         };
         Insert: {
           id: string;
@@ -29,10 +35,16 @@ export type Database = {
           full_name?: string | null;
           avatar_url?: string | null;
           phone?: string | null;
+          region?: string | null;
           city?: string | null;
           is_host?: boolean | null;
           host_approved_at?: string | null;
+          id_verified?: boolean | null;
+          phone_verified?: boolean | null;
+          email_verified?: boolean | null;
+          host_level?: string | null;
           created_at?: string | null;
+          updated_at?: string | null;
         };
         Update: {
           id?: string;
@@ -41,10 +53,16 @@ export type Database = {
           full_name?: string | null;
           avatar_url?: string | null;
           phone?: string | null;
+          region?: string | null;
           city?: string | null;
           is_host?: boolean | null;
           host_approved_at?: string | null;
+          id_verified?: boolean | null;
+          phone_verified?: boolean | null;
+          email_verified?: boolean | null;
+          host_level?: string | null;
           created_at?: string | null;
+          updated_at?: string | null;
         };
       };
       host_applications: {
@@ -181,12 +199,26 @@ export type Database = {
           region: string | null;
           location_id: number | null;
           car_type: string | null;
+          brand: string | null;
+          model: string | null;
           seats: number | null;
           transmission: string | null;
           fuel: string | null;
+          fuel_type: string | null;
+          car_year: number | null;
           features: string[] | null;
           is_available: boolean | null;
           instant_book: boolean | null;
+          delivery_available: boolean | null;
+          air_conditioning: boolean | null;
+          delivery_fee: number | null;
+          insurance_fee: number | null;
+          deposit_amount: number | null;
+          cancellation_policy: string | null;
+          approval_status: string | null;
+          reviewed_at: string | null;
+          reviewed_by: string | null;
+          rejection_reason: string | null;
           created_at: string | null;
           updated_at: string | null;
         };
@@ -200,12 +232,26 @@ export type Database = {
           region?: string | null;
           location_id?: number | null;
           car_type?: string | null;
+          brand?: string | null;
+          model?: string | null;
           seats?: number | null;
           transmission?: string | null;
           fuel?: string | null;
+          fuel_type?: string | null;
+          car_year?: number | null;
           features?: string[] | null;
           is_available?: boolean | null;
           instant_book?: boolean | null;
+          delivery_available?: boolean | null;
+          air_conditioning?: boolean | null;
+          delivery_fee?: number | null;
+          insurance_fee?: number | null;
+          deposit_amount?: number | null;
+          cancellation_policy?: string | null;
+          approval_status?: string | null;
+          reviewed_at?: string | null;
+          reviewed_by?: string | null;
+          rejection_reason?: string | null;
           created_at?: string | null;
           updated_at?: string | null;
         };
@@ -219,12 +265,26 @@ export type Database = {
           region?: string | null;
           location_id?: number | null;
           car_type?: string | null;
+          brand?: string | null;
+          model?: string | null;
           seats?: number | null;
           transmission?: string | null;
           fuel?: string | null;
+          fuel_type?: string | null;
+          car_year?: number | null;
           features?: string[] | null;
           is_available?: boolean | null;
           instant_book?: boolean | null;
+          delivery_available?: boolean | null;
+          air_conditioning?: boolean | null;
+          delivery_fee?: number | null;
+          insurance_fee?: number | null;
+          deposit_amount?: number | null;
+          cancellation_policy?: string | null;
+          approval_status?: string | null;
+          reviewed_at?: string | null;
+          reviewed_by?: string | null;
+          rejection_reason?: string | null;
           created_at?: string | null;
           updated_at?: string | null;
         };
@@ -274,6 +334,13 @@ export type Database = {
           start_date: string;
           end_date: string;
           status: Database["public"]["Enums"]["booking_status"];
+          nights: number | null;
+          daily_rate: number | null;
+          subtotal: number | null;
+          platform_fee: number | null;
+          insurance_fee: number | null;
+          delivery_fee: number | null;
+          deposit_amount: number | null;
           total_price: number | null;
           payment_status: string | null;
           payment_reference: string | null;
@@ -285,6 +352,7 @@ export type Database = {
           rejection_reason: string | null;
           refund_reference: string | null;
           created_at: string | null;
+          updated_at: string | null;
         };
         Insert: {
           id?: string;
@@ -293,6 +361,13 @@ export type Database = {
           start_date: string;
           end_date: string;
           status?: Database["public"]["Enums"]["booking_status"];
+          nights?: number | null;
+          daily_rate?: number | null;
+          subtotal?: number | null;
+          platform_fee?: number | null;
+          insurance_fee?: number | null;
+          delivery_fee?: number | null;
+          deposit_amount?: number | null;
           total_price?: number | null;
           payment_status?: string | null;
           payment_reference?: string | null;
@@ -304,6 +379,7 @@ export type Database = {
           rejection_reason?: string | null;
           refund_reference?: string | null;
           created_at?: string | null;
+          updated_at?: string | null;
         };
         Update: {
           id?: string;
@@ -312,6 +388,13 @@ export type Database = {
           start_date?: string;
           end_date?: string;
           status?: Database["public"]["Enums"]["booking_status"];
+          nights?: number | null;
+          daily_rate?: number | null;
+          subtotal?: number | null;
+          platform_fee?: number | null;
+          insurance_fee?: number | null;
+          delivery_fee?: number | null;
+          deposit_amount?: number | null;
           total_price?: number | null;
           payment_status?: string | null;
           payment_reference?: string | null;
@@ -323,6 +406,7 @@ export type Database = {
           rejection_reason?: string | null;
           refund_reference?: string | null;
           created_at?: string | null;
+          updated_at?: string | null;
         };
       };
       car_availability: {
@@ -359,6 +443,10 @@ export type Database = {
           user_id: string;
           rating: number;
           comment: string | null;
+          is_hidden: boolean | null;
+          moderated_at: string | null;
+          moderated_by: string | null;
+          moderation_reason: string | null;
           created_at: string | null;
         };
         Insert: {
@@ -368,6 +456,10 @@ export type Database = {
           user_id: string;
           rating: number;
           comment?: string | null;
+          is_hidden?: boolean | null;
+          moderated_at?: string | null;
+          moderated_by?: string | null;
+          moderation_reason?: string | null;
           created_at?: string | null;
         };
         Update: {
@@ -377,7 +469,89 @@ export type Database = {
           user_id?: string;
           rating?: number;
           comment?: string | null;
+          is_hidden?: boolean | null;
+          moderated_at?: string | null;
+          moderated_by?: string | null;
+          moderation_reason?: string | null;
           created_at?: string | null;
+        };
+      };
+      platform_settings: {
+        Row: {
+          id: number;
+          platform_fee_percent: number;
+          created_at: string | null;
+          updated_at: string | null;
+        };
+        Insert: {
+          id?: number;
+          platform_fee_percent?: number;
+          created_at?: string | null;
+          updated_at?: string | null;
+        };
+        Update: {
+          id?: number;
+          platform_fee_percent?: number;
+          created_at?: string | null;
+          updated_at?: string | null;
+        };
+      };
+      listing_views: {
+        Row: {
+          id: string;
+          car_id: string;
+          viewer_id: string | null;
+          session_key: string | null;
+          created_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          car_id: string;
+          viewer_id?: string | null;
+          session_key?: string | null;
+          created_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          car_id?: string;
+          viewer_id?: string | null;
+          session_key?: string | null;
+          created_at?: string | null;
+        };
+      };
+      disputes: {
+        Row: {
+          id: string;
+          booking_id: string;
+          car_id: string;
+          opened_by: string;
+          reason: string;
+          status: string;
+          resolution_note: string | null;
+          created_at: string | null;
+          updated_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          booking_id: string;
+          car_id: string;
+          opened_by: string;
+          reason: string;
+          status?: string;
+          resolution_note?: string | null;
+          created_at?: string | null;
+          updated_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          booking_id?: string;
+          car_id?: string;
+          opened_by?: string;
+          reason?: string;
+          status?: string;
+          resolution_note?: string | null;
+          created_at?: string | null;
+          updated_at?: string | null;
         };
       };
     };
@@ -393,7 +567,49 @@ export type Database = {
         | "refunded";
     };
     Views: {
-      [_ in never]: never;
+      car_search_view: {
+        Row: {
+          id: string | null;
+          owner_id: string | null;
+          title: string | null;
+          description: string | null;
+          daily_price: number | null;
+          city: string | null;
+          region: string | null;
+          car_type: string | null;
+          brand: string | null;
+          model: string | null;
+          seats: number | null;
+          transmission: string | null;
+          fuel_type: string | null;
+          features: string[] | null;
+          is_available: boolean | null;
+          instant_book: boolean | null;
+          delivery_available: boolean | null;
+          air_conditioning: boolean | null;
+          year: number | null;
+          car_year: number | null;
+          delivery_fee: number | null;
+          insurance_fee: number | null;
+          deposit_amount: number | null;
+          cancellation_policy: string | null;
+          approval_status: string | null;
+          created_at: string | null;
+          updated_at: string | null;
+          avg_rating: number | null;
+          reviews_count: number | null;
+          bookings_count: number | null;
+          trips_count: number | null;
+          host_name: string | null;
+          host_avatar: string | null;
+          id_verified: boolean | null;
+          phone_verified: boolean | null;
+          email_verified: boolean | null;
+          host_level: string | null;
+          host_type: string | null;
+          image_url: string | null;
+        };
+      };
     };
     Functions: {
       [_ in never]: never;

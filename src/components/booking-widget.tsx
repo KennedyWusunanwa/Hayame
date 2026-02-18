@@ -14,6 +14,7 @@ import { formatCurrency, calculateNights } from "@/lib/utils";
 type Props = {
   carId: string;
   dailyPrice: number;
+  platformFeePercent?: number;
   instantBook?: boolean | null;
   deliveryFee?: number | null;
   insuranceFee?: number | null;
@@ -29,6 +30,7 @@ type Props = {
 export function BookingWidget({
   carId,
   dailyPrice,
+  platformFeePercent = 10,
   instantBook,
   deliveryFee,
   insuranceFee,
@@ -49,8 +51,11 @@ export function BookingWidget({
   const nights = calculateNights(startDate, endDate);
   const billableNights = Math.max(nights, 1);
   const baseTotal = billableNights * dailyPrice;
-  const platformFeeAmount = 0;
-  const total = baseTotal;
+  const platformFeeAmount = baseTotal * (Math.max(platformFeePercent, 0) / 100);
+  const insuranceFeeAmount = Math.max(Number(insuranceFee ?? 0), 0);
+  const deliveryFeeAmount = Math.max(Number(deliveryFee ?? 0), 0);
+  const depositAmountValue = Math.max(Number(depositAmount ?? 0), 0);
+  const total = baseTotal + platformFeeAmount + insuranceFeeAmount + deliveryFeeAmount + depositAmountValue;
 
   useEffect(() => {
     const loadAvailability = async () => {
@@ -241,7 +246,7 @@ export function BookingWidget({
           </Badge>
         ) : (
           <Link href="/cancellation" className="font-semibold text-brand">
-            Policy coming soon
+            View policy details
           </Link>
         )}
       </div>
@@ -262,39 +267,23 @@ export function BookingWidget({
       {message ? <p className="text-xs text-amber-700">{message}</p> : null}
       <div className="space-y-2 rounded-xl border border-border bg-white p-3 text-sm">
         <PriceRow label={`Daily rate x ${billableNights} day(s)`} value={formatCurrency(baseTotal)} />
-        <PriceRow
-          label="Platform fee"
-          value={platformFeeAmount > 0 ? formatCurrency(platformFeeAmount) : "Coming soon (not charged)"}
-          muted={platformFeeAmount === 0}
-        />
+        <PriceRow label={`Platform fee (${platformFeePercent}%)`} value={formatCurrency(platformFeeAmount)} />
         <PriceRow
           label="Insurance fee"
-          value={
-            typeof insuranceFee === "number"
-              ? `${formatCurrency(insuranceFee)} (not charged)`
-              : "Coming soon"
-          }
-          muted={typeof insuranceFee !== "number"}
+          value={formatCurrency(insuranceFeeAmount)}
         />
         <PriceRow
           label="Delivery fee"
-          value={
-            typeof deliveryFee === "number"
-              ? `${formatCurrency(deliveryFee)} (not charged)`
-              : "Coming soon"
-          }
-          muted={typeof deliveryFee !== "number"}
+          value={formatCurrency(deliveryFeeAmount)}
         />
         <PriceRow
           label="Deposit"
-          value={typeof depositAmount === "number" ? formatCurrency(depositAmount) : "Shown at checkout"}
-          muted={typeof depositAmount !== "number"}
+          value={formatCurrency(depositAmountValue)}
         />
         <div className="flex items-center justify-between border-t border-border pt-2 text-sm font-semibold text-foreground">
           <span>Total charged now</span>
           <span className="text-base">{formatCurrency(total)}</span>
         </div>
-        <p className="text-xs text-gray-500">Fees marked as coming soon are not included in the total above.</p>
       </div>
       <Link href="/protection" className="block text-xs font-semibold text-brand">
         View protection details
