@@ -391,7 +391,7 @@ select
   c.model,
   c.seats,
   lower(coalesce(c.transmission, '')) as transmission,
-  lower(coalesce(c.fuel_type, c.fuel, '')) as fuel_type,
+  lower(coalesce(c.fuel_type::text, c.fuel::text, '')) as fuel_type,
   c.features,
   c.is_available,
   c.instant_book,
