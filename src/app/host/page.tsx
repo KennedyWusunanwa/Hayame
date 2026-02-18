@@ -167,40 +167,65 @@ export default async function DashboardHome() {
         <CardHeader>
           <CardTitle>Trip history</CardTitle>
         </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Car</TableHead>
-                <TableHead>Dates</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Amount</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {bookingRows.slice(0, 8).map((booking) => (
-                <TableRow key={booking.id}>
-                  <TableCell>{booking.cars?.title ?? "Car"}</TableCell>
-                  <TableCell>{booking.start_date} - {booking.end_date}</TableCell>
-                  <TableCell>
-                    <span className="rounded-full bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-700">
-                      {booking.status}
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-right font-semibold">
-                    {formatCurrency(Number(booking.total_price ?? 0))}
-                  </TableCell>
-                </TableRow>
-              ))}
-              {bookingRows.length === 0 ? (
+        <CardContent className="space-y-3">
+          <div className="hidden overflow-x-auto md:block">
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center text-sm text-gray-600">
-                    No trip history yet. Create your first listing to start earning.
-                  </TableCell>
+                  <TableHead>Car</TableHead>
+                  <TableHead>Dates</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Amount</TableHead>
                 </TableRow>
-              ) : null}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {bookingRows.slice(0, 8).map((booking) => (
+                  <TableRow key={booking.id}>
+                    <TableCell>{booking.cars?.title ?? "Car"}</TableCell>
+                    <TableCell>{booking.start_date} - {booking.end_date}</TableCell>
+                    <TableCell>
+                      <span className="rounded-full bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-700">
+                        {booking.status}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-right font-semibold">
+                      {formatCurrency(Number(booking.total_price ?? 0))}
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {bookingRows.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={4} className="text-center text-sm text-gray-600">
+                      No trip history yet. Create your first listing to start earning.
+                    </TableCell>
+                  </TableRow>
+                ) : null}
+              </TableBody>
+            </Table>
+          </div>
+          <div className="space-y-2 md:hidden">
+            {bookingRows.slice(0, 8).map((booking) => (
+              <div key={booking.id} className="rounded-lg border border-border bg-white p-3">
+                <p className="text-sm font-semibold text-foreground">{booking.cars?.title ?? "Car"}</p>
+                <p className="text-xs text-gray-600">
+                  {booking.start_date} - {booking.end_date}
+                </p>
+                <div className="mt-2 flex items-center justify-between">
+                  <span className="rounded-full bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-700">
+                    {booking.status}
+                  </span>
+                  <span className="text-sm font-semibold text-foreground">
+                    {formatCurrency(Number(booking.total_price ?? 0))}
+                  </span>
+                </div>
+              </div>
+            ))}
+            {bookingRows.length === 0 ? (
+              <p className="rounded-lg border border-border bg-gray-50 p-3 text-center text-sm text-gray-600">
+                No trip history yet. Create your first listing to start earning.
+              </p>
+            ) : null}
+          </div>
         </CardContent>
       </Card>
     </div>

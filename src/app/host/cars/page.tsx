@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import Link from "next/link";
+import Image from "next/image";
 import { PlusCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,12 +15,12 @@ export default async function DashboardCarsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-sm font-semibold text-primary">Inventory</p>
           <h1 className="text-2xl font-semibold text-foreground">My cars</h1>
         </div>
-        <Button asChild className="shrink-0">
+        <Button asChild className="w-full shrink-0 sm:w-auto">
           <Link href="/host/cars/new">
             <PlusCircle className="mr-2 h-4 w-4" />
             List Your Car &amp; Earn
@@ -53,7 +54,20 @@ export default async function DashboardCarsPage() {
               <TableBody>
                 {cars.map((car) => (
                   <TableRow key={car.id}>
-                    <TableCell className="font-semibold">{car.title}</TableCell>
+                    <TableCell className="font-semibold">
+                      <div className="flex items-center gap-3">
+                        <div className="relative h-12 w-16 overflow-hidden rounded-md border border-border bg-gray-100">
+                          <Image
+                            src={car.image_url ?? "/car-placeholder.jpg"}
+                            alt={car.title}
+                            fill
+                            className="object-cover"
+                            sizes="64px"
+                          />
+                        </div>
+                        <span className="line-clamp-2">{car.title}</span>
+                      </div>
+                    </TableCell>
                     <TableCell>
                       {car.city}, {car.region}
                     </TableCell>
@@ -96,15 +110,26 @@ export default async function DashboardCarsPage() {
           <div className="space-y-3 sm:hidden">
             {cars.map((car) => (
               <div key={car.id} className="rounded-lg border border-border bg-white p-3 shadow-sm">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-base font-semibold text-foreground">{car.title}</p>
+                <div className="flex items-start gap-3">
+                  <div className="relative h-20 w-28 shrink-0 overflow-hidden rounded-md border border-border bg-gray-100">
+                    <Image
+                      src={car.image_url ?? "/car-placeholder.jpg"}
+                      alt={car.title}
+                      fill
+                      className="object-cover"
+                      sizes="112px"
+                    />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-base font-semibold text-foreground line-clamp-2">{car.title}</p>
                     <p className="text-sm text-gray-600">
                       {car.city}, {car.region}
                     </p>
                     <p className="text-sm text-gray-700">{formatCurrency(car.daily_price)} / day</p>
                   </div>
-                  <CarActions carId={car.id} />
+                  <div className="shrink-0">
+                    <CarActions carId={car.id} />
+                  </div>
                 </div>
                 <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-gray-600">
                   <span className="rounded-full bg-gray-100 px-2 py-1">Favorites {favoriteCounts[car.id] ?? 0}</span>

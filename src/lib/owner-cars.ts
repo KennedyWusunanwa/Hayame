@@ -10,6 +10,7 @@ export type OwnerCar = {
   daily_price: number;
   is_available: boolean | null;
   approval_status: string | null;
+  image_url: string | null;
 };
 
 type OwnerCarRow = Database["public"]["Tables"]["cars"]["Row"];
@@ -29,7 +30,7 @@ export async function loadOwnerCarsWithFavorites(): Promise<{
 
     const { data: carData } = await supabase
       .from("cars")
-      .select("id,title,city,region,car_type,daily_price,is_available,approval_status")
+      .select("id,title,city,region,car_type,daily_price,is_available,approval_status,car_photos(url)")
       .eq("owner_id", user.id);
 
     const cars: OwnerCar[] =
@@ -42,6 +43,7 @@ export async function loadOwnerCarsWithFavorites(): Promise<{
         daily_price: Number(car.daily_price ?? 0),
         is_available: car.is_available,
         approval_status: (car as any).approval_status ?? null,
+        image_url: (car as any).car_photos?.[0]?.url ?? null,
       })) ?? [];
 
     const favoriteCounts: Record<string, number> = {};

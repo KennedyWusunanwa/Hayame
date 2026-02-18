@@ -43,6 +43,9 @@ const priorityFeatures = [
   "Android Auto",
 ];
 
+const MIN_PHOTOS = 5;
+const MAX_PHOTOS = 7;
+
 export function CarForm({ carId, defaultValues, redirectTo, existingPhotoCount = 0 }: Props) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
@@ -88,10 +91,14 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotoCount =
   const onSubmit = async (values: FormValues) => {
     setError(null);
     const totalPhotos = existingPhotoCount + files.length;
-    if (totalPhotos < 5) {
+    if (totalPhotos < MIN_PHOTOS) {
       setError(
-        `At least 5 photos are required before submission. Current total: ${totalPhotos}.`,
+        `At least ${MIN_PHOTOS} photos are required before submission. Current total: ${totalPhotos}.`,
       );
+      return;
+    }
+    if (files.length > 0 && totalPhotos > MAX_PHOTOS) {
+      setError(`Maximum ${MAX_PHOTOS} photos allowed. Current total: ${totalPhotos}.`);
       return;
     }
     try {
@@ -109,7 +116,7 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotoCount =
 
       if (newCarId && files.length > 0) {
         setUploading(true);
-        await uploadPhotos(newCarId, files);
+        await uploadPhotos(newCarId, files, existingPhotoCount);
       }
 
       router.push(redirectPath);
@@ -122,6 +129,38 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotoCount =
 
   const selectedFeatures = watch("features") || [];
   const totalPhotos = existingPhotoCount + files.length;
+  const remainingSlots = Math.max(MAX_PHOTOS - existingPhotoCount - files.length, 0);
+
+  const handleFileSelection = (selected: File[]) => {
+    if (selected.length === 0) return;
+    const room = Math.max(MAX_PHOTOS - existingPhotoCount - files.length, 0);
+    if (room <= 0) {
+      setError(`You already have ${MAX_PHOTOS} photos. Remove one before adding another.`);
+      return;
+    }
+
+    const deduped = selected.filter(
+      (file) =>
+        !files.some(
+          (current) =>
+            current.name === file.name &&
+            current.size === file.size &&
+            current.lastModified === file.lastModified,
+        ),
+    );
+
+    const nextFiles = [...files, ...deduped.slice(0, room)];
+    setFiles(nextFiles);
+    if (deduped.length > room) {
+      setError(`Only ${MAX_PHOTOS} photos are allowed. Extra files were ignored.`);
+    } else {
+      setError(null);
+    }
+  };
+
+  const removeSelectedFile = (index: number) => {
+    setFiles((prev) => prev.filter((_, fileIndex) => fileIndex !== index));
+  };
 
   return (
     <form className="space-y-4" onSubmit={handleSubmit(onSubmit)}>
@@ -321,10 +360,14 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotoCount =
           type="file"
           accept="image/*"
           multiple
-          onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
+          onChange={(e) => {
+            handleFileSelection(Array.from(e.target.files ?? []));
+            e.target.value = "";
+          }}
         />
         <p className="text-xs text-gray-600">
-          At least 5 photos are required. Add clear exterior/interior photos before saving.
+          Upload between {MIN_PHOTOS} and {MAX_PHOTOS} photos. Add clear exterior/interior photos
+          before saving.
         </p>
         <div className="rounded-lg border border-border bg-gray-50 p-3">
           <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Listing quality checklist</p>
@@ -341,10 +384,34 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotoCount =
           </div>
         </div>
         <p className="text-xs font-semibold text-gray-700">
-          Photos total: {totalPhotos} / 5 minimum
+          Photos total: {totalPhotos} / {MIN_PHOTOS} minimum / {MAX_PHOTOS} max
         </p>
+        {remainingSlots > 0 ? (
+          <p className="text-xs text-gray-600">You can add {remainingSlots} more photo(s).</p>
+        ) : (
+          <p className="text-xs text-amber-700">Photo limit reached.</p>
+        )}
         {files.length > 0 ? (
-          <p className="text-xs text-gray-700">{files.length} file(s) selected</p>
+          <div className="space-y-1">
+            <p className="text-xs text-gray-700">{files.length} new file(s) selected</p>
+            <div className="space-y-1">
+              {files.map((file, index) => (
+                <div
+                  key={`${file.name}-${file.lastModified}-${index}`}
+                  className="flex items-center justify-between rounded border border-border bg-white px-2 py-1 text-xs text-gray-700"
+                >
+                  <span className="truncate pr-2">{file.name}</span>
+                  <button
+                    type="button"
+                    onClick={() => removeSelectedFile(index)}
+                    className="shrink-0 font-semibold text-red-600"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
         ) : null}
       </div>
 
@@ -405,7 +472,10 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotoCount =
   );
 }
 
-async function uploadPhotos(carId: string, files: File[]) {
+async function uploadPhotos(carId: string, files: File[], existingPhotoCount = 0) {
+  if (existingPhotoCount + files.length > MAX_PHOTOS) {
+    throw new Error(`Maximum ${MAX_PHOTOS} photos allowed per listing.`);
+  }
   const supabase = createSupabaseBrowserClient();
   const supa = supabase as any;
   const {

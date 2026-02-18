@@ -194,8 +194,8 @@ export default async function AdminPlatformPage() {
   ]);
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 px-6 py-8">
-      <div className="flex items-center justify-between">
+    <div className="mx-auto max-w-6xl space-y-6 px-4 py-6 sm:px-6 sm:py-8">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-sm font-semibold text-primary">Admin platform controls</p>
           <h1 className="text-2xl font-semibold text-foreground">Moderation & controls</h1>
@@ -210,7 +210,8 @@ export default async function AdminPlatformPage() {
           <CardTitle>Listing approvals</CardTitle>
         </CardHeader>
         <CardContent>
-          <Table>
+          <div className="overflow-x-auto">
+            <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Listing</TableHead>
@@ -261,7 +262,8 @@ export default async function AdminPlatformPage() {
                 </TableRow>
               ) : null}
             </TableBody>
-          </Table>
+            </Table>
+          </div>
         </CardContent>
       </Card>
 
@@ -270,7 +272,8 @@ export default async function AdminPlatformPage() {
           <CardTitle>Refund control</CardTitle>
         </CardHeader>
         <CardContent>
-          <Table>
+          <div className="overflow-x-auto">
+            <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Booking</TableHead>
@@ -313,7 +316,8 @@ export default async function AdminPlatformPage() {
                 </TableRow>
               ) : null}
             </TableBody>
-          </Table>
+            </Table>
+          </div>
         </CardContent>
       </Card>
 
@@ -322,7 +326,8 @@ export default async function AdminPlatformPage() {
           <CardTitle>Review moderation</CardTitle>
         </CardHeader>
         <CardContent>
-          <Table>
+          <div className="overflow-x-auto">
+            <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Review</TableHead>
@@ -335,7 +340,7 @@ export default async function AdminPlatformPage() {
               {(reviews.data ?? []).map((review: any) => (
                 <TableRow key={review.id}>
                   <TableCell>
-                    <p className="font-semibold">{review.profiles?.full_name ?? "Guest"} · {review.rating}/5</p>
+                    <p className="font-semibold">{review.profiles?.full_name ?? "Guest"} - {review.rating}/5</p>
                     <p className="text-xs text-gray-600">{review.comment ?? "No comment"}</p>
                   </TableCell>
                   <TableCell>{review.cars?.title ?? "Car"}</TableCell>
@@ -370,7 +375,8 @@ export default async function AdminPlatformPage() {
                 </TableRow>
               ) : null}
             </TableBody>
-          </Table>
+            </Table>
+          </div>
         </CardContent>
       </Card>
 
@@ -379,7 +385,8 @@ export default async function AdminPlatformPage() {
           <CardTitle>Disputes</CardTitle>
         </CardHeader>
         <CardContent>
-          <Table>
+          <div className="overflow-x-auto">
+            <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Booking</TableHead>
@@ -430,9 +437,11 @@ export default async function AdminPlatformPage() {
                 </TableRow>
               ) : null}
             </TableBody>
-          </Table>
+            </Table>
+          </div>
         </CardContent>
       </Card>
     </div>
   );
 }
+

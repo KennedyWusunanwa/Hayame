@@ -33,6 +33,7 @@
 ## Listing Quality
 - Implemented:
   - Listing submission enforces minimum 5 photos in client validation.
+  - Listing form now supports adding photos incrementally and enforces a hard maximum of 7 photos.
   - Listing quality checklist UI added in car form.
   - New fields added to listing form and persistence:
     - `car_year`
@@ -46,6 +47,13 @@
   - New and edited listings now flow through admin approval.
 - Placeholder/TODO due schema:
   - Plate blur automation is still labeled "Coming soon" (feature not implemented in current codebase).
+
+## Mobile Responsiveness
+- Implemented:
+  - Improved host inventory layout with mobile-friendly stacked cards and thumbnails.
+  - Added photo thumbnails in host "My cars" list (desktop table + mobile cards).
+  - Improved host dashboard trip history with dedicated mobile card rendering.
+  - Added horizontal overflow guards on admin platform moderation tables for smaller screens.
 
 ## Booking Experience
 - Implemented:

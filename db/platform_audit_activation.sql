@@ -158,6 +158,30 @@ create index if not exists idx_cars_car_year on public.cars(car_year);
 create index if not exists idx_cars_delivery_available on public.cars(delivery_available);
 create index if not exists idx_cars_air_conditioning on public.cars(air_conditioning);
 
+-- Enforce at most 7 photos per listing.
+create or replace function public.enforce_max_car_photos()
+returns trigger
+language plpgsql
+as $$
+begin
+  if (
+    select count(*)
+    from public.car_photos
+    where car_id = new.car_id
+  ) >= 7 then
+    raise exception 'Maximum 7 photos allowed per listing'
+      using errcode = '23514';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_enforce_max_car_photos on public.car_photos;
+create trigger trg_enforce_max_car_photos
+before insert on public.car_photos
+for each row
+execute function public.enforce_max_car_photos();
+
 -- -----------------------------------------------------------------------------
 -- Bookings: charged fee breakdown
 -- -----------------------------------------------------------------------------
