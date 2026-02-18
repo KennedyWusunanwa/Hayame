@@ -56,7 +56,6 @@ alter table public.cars add column if not exists rejection_reason text;
 
 update public.cars
 set
-  fuel_type = coalesce(fuel_type, lower(fuel), 'petrol'),
   car_year = coalesce(car_year, greatest(2000, extract(year from coalesce(created_at, now()))::int)),
   delivery_available = coalesce(delivery_available, false),
   air_conditioning = coalesce(
@@ -73,6 +72,47 @@ set
   deposit_amount = coalesce(deposit_amount, 0),
   cancellation_policy = coalesce(cancellation_policy, 'moderate'),
   approval_status = coalesce(approval_status, 'approved');
+
+-- Handle both enum-backed and text-backed fuel_type columns safely.
+do $$
+declare
+  fuel_type_udt text;
+begin
+  select c.udt_name
+  into fuel_type_udt
+  from information_schema.columns c
+  where c.table_schema = 'public'
+    and c.table_name = 'cars'
+    and c.column_name = 'fuel_type';
+
+  if fuel_type_udt = 'fuel_type' then
+    execute $sql$
+      update public.cars
+      set fuel_type = coalesce(
+        fuel_type,
+        case
+          when lower(coalesce(fuel::text, '')) in ('petrol', 'diesel', 'hybrid', 'electric')
+            then lower(fuel::text)::fuel_type
+          else null
+        end,
+        'petrol'::fuel_type
+      )
+    $sql$;
+  else
+    execute $sql$
+      update public.cars
+      set fuel_type = coalesce(
+        nullif(lower(fuel_type::text), ''),
+        case
+          when lower(coalesce(fuel::text, '')) in ('petrol', 'diesel', 'hybrid', 'electric')
+            then lower(fuel::text)
+          else null
+        end,
+        'petrol'
+      )
+    $sql$;
+  end if;
+end $$;
 
 do $$
 begin
