@@ -250,8 +250,17 @@ create table if not exists public.listing_views (
   car_id uuid not null references public.cars(id) on delete cascade,
   viewer_id uuid references public.profiles(id) on delete set null,
   session_key text,
-  created_at timestamptz default now()
+  created_at timestamptz default now(),
+  view_date date default ((now() at time zone 'utc')::date)
 );
+
+alter table public.listing_views add column if not exists view_date date;
+
+update public.listing_views
+set view_date = coalesce(view_date, (created_at at time zone 'utc')::date);
+
+alter table public.listing_views alter column view_date set default ((now() at time zone 'utc')::date);
+alter table public.listing_views alter column view_date set not null;
 
 create index if not exists idx_listing_views_car_id on public.listing_views(car_id);
 create index if not exists idx_listing_views_viewer_id on public.listing_views(viewer_id);
@@ -259,7 +268,7 @@ create index if not exists idx_listing_views_created_at on public.listing_views(
 
 -- Avoid duplicate view inflation from repeated refreshes in the same day.
 create unique index if not exists idx_listing_views_unique_daily
-on public.listing_views (car_id, coalesce(viewer_id::text, session_key), (created_at::date));
+on public.listing_views (car_id, coalesce(viewer_id::text, session_key), view_date);
 
 -- -----------------------------------------------------------------------------
 -- Disputes workflow
