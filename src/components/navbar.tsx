@@ -138,7 +138,7 @@ export function Navbar() {
                     asChild
                     className="bg-brand text-white hover:bg-white hover:text-brand hover:border-brand rounded-full px-5"
                   >
-                    <Link href="/host/cars/new">List your car</Link>
+                    <Link href="/host/cars/new">List Your Car &amp; Earn</Link>
                   </Button>
                 </>
               ) : (
@@ -148,7 +148,7 @@ export function Navbar() {
                   </Button>
                   <Button asChild className="bg-brand text-white hover:bg-white hover:text-brand hover:border-brand">
                     <Link href="/become-host">
-                      {hostStatus === "pending" ? "Application pending" : "Become a host"}
+                      {hostStatus === "pending" ? "Application pending" : "Become a Host"}
                     </Link>
                   </Button>
                 </>
@@ -251,7 +251,7 @@ export function Navbar() {
                           asChild
                           className="w-full bg-brand text-white hover:bg-white hover:text-brand hover:border-brand"
                         >
-                          <Link href="/host/cars/new">List your car</Link>
+                          <Link href="/host/cars/new">List Your Car &amp; Earn</Link>
                         </Button>
                       ) : (
                         <Button
@@ -259,7 +259,7 @@ export function Navbar() {
                           className="w-full bg-brand text-white hover:bg-white hover:text-brand hover:border-brand"
                         >
                           <Link href="/become-host">
-                            {hostStatus === "pending" ? "Application pending" : "Become a host"}
+                            {hostStatus === "pending" ? "Application pending" : "Become a Host"}
                           </Link>
                         </Button>
                       )}

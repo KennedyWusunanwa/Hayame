@@ -9,6 +9,7 @@ import { format } from "date-fns";
 import { MapPin, Shield, Star } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { notFound } from "next/navigation";
+import { AvailabilityPreview } from "@/components/availability-preview";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -17,6 +18,7 @@ import { BookingWidget } from "@/components/booking-widget";
 import { ImageGallery } from "@/components/image-gallery";
 import { ReviewForm, type ReviewableBooking } from "@/components/review-form";
 import { HostMessageCard } from "@/components/messages/host-message-card";
+import { VerificationBadges } from "@/components/verification-badges";
 import { detailIcons, getFeatureIcon } from "@/lib/feature-icons";
 import type { Database } from "@/lib/database.types";
 import { mockCars, type MockCar } from "@/lib/mock-data";
@@ -35,6 +37,10 @@ type Owner = {
   full_name?: string | null;
   avatar_url?: string | null;
   city?: string | null;
+  id_verified?: boolean | null;
+  phone_verified?: boolean | null;
+  email_verified?: boolean | null;
+  host_level?: string | null;
 };
 
 type CarDetail = {
@@ -53,6 +59,11 @@ type CarDetail = {
   fuel?: string | null;
   features?: string[] | null;
   is_available?: boolean | null;
+  instant_book?: boolean | null;
+  delivery_fee?: number | null;
+  insurance_fee?: number | null;
+  deposit_amount?: number | null;
+  cancellation_policy?: string | null;
   photos: { url: string }[];
   owner?: Owner | null;
   rating?: number;
@@ -274,8 +285,26 @@ export default async function CarDetailPage({ params }: PageProps) {
           <div className="order-2 lg:order-none">
             <AvailabilitySummary availability={availability} isAvailable={car.is_available} />
           </div>
+          <div className="order-3 lg:order-none">
+            <AvailabilityPreview carId={car.id} />
+          </div>
           <div className="order-4 lg:order-none">
-            <BookingWidget carId={car.id} dailyPrice={car.daily_price} />
+            <div id="booking-widget">
+              <BookingWidget
+                carId={car.id}
+                dailyPrice={car.daily_price}
+                instantBook={car.instant_book}
+                deliveryFee={car.delivery_fee}
+                insuranceFee={car.insurance_fee}
+                depositAmount={car.deposit_amount}
+                cancellationPolicy={car.cancellation_policy}
+                hostVerification={{
+                  idVerified: car.owner?.id_verified,
+                  phoneVerified: car.owner?.phone_verified,
+                  emailVerified: car.owner?.email_verified,
+                }}
+              />
+            </div>
           </div>
           <div className="order-9 lg:order-none">
             <HostCard owner={car.owner} rating={car.rating} reviews={car.reviews} />
@@ -285,6 +314,7 @@ export default async function CarDetailPage({ params }: PageProps) {
           </div>
         </div>
       </div>
+      <MobileBookNow />
     </div>
   );
 }
@@ -510,6 +540,9 @@ async function getCarFromSupabaseRest(id: string): Promise<SupabaseCar | null> {
 }
 
 function mapCar(data: SupabaseCar): CarDetail {
+  const avgRating = typeof (data as any).avg_rating === "number" ? Number((data as any).avg_rating) : undefined;
+  const reviewCount =
+    typeof (data as any).reviews_count === "number" ? Number((data as any).reviews_count) : undefined;
   return {
     id: data.id,
     title: data.title,
@@ -526,10 +559,15 @@ function mapCar(data: SupabaseCar): CarDetail {
     fuel: data.fuel,
     features: data.features,
     is_available: data.is_available,
+    instant_book: data.instant_book,
+    delivery_fee: typeof (data as any).delivery_fee === "number" ? Number((data as any).delivery_fee) : null,
+    insurance_fee: typeof (data as any).insurance_fee === "number" ? Number((data as any).insurance_fee) : null,
+    deposit_amount: typeof (data as any).deposit_amount === "number" ? Number((data as any).deposit_amount) : null,
+    cancellation_policy: (data as any).cancellation_policy ?? null,
     photos: data.car_photos ?? [],
     owner: data.owner ?? null,
-    rating: 4.8,
-    reviews: 0,
+    rating: avgRating,
+    reviews: reviewCount ?? 0,
     created_at: data.created_at,
   };
 }
@@ -551,6 +589,11 @@ function mapMockCar(mock: MockCar): CarDetail {
     fuel: mock.fuel,
     features: mock.features,
     is_available: true,
+    instant_book: false,
+    delivery_fee: null,
+    insurance_fee: null,
+    deposit_amount: null,
+    cancellation_policy: null,
     photos: [{ url: mock.image }],
     owner: {
       id: "mock-owner",
@@ -660,45 +703,56 @@ function AvailabilitySummary({
 function HostCard({ owner, rating, reviews }: { owner?: Owner | null; rating?: number; reviews?: number }) {
   const avatar = owner?.avatar_url;
   const initials = getInitials(owner?.full_name ?? "Host");
-  const score = rating ?? 4.8;
+  const score = typeof rating === "number" ? rating : null;
+  const hostLevel = owner?.host_level ?? "New Host";
   return (
     <Card>
       <CardHeader>
         <CardTitle>Host</CardTitle>
       </CardHeader>
-      <CardContent className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          {avatar ? (
-            <div className="relative h-12 w-12 overflow-hidden rounded-full border border-border">
-              <Image src={avatar} alt={owner?.full_name ?? "Host"} fill className="object-cover" sizes="60px" />
+      <CardContent className="space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            {avatar ? (
+              <div className="relative h-12 w-12 overflow-hidden rounded-full border border-border">
+                <Image src={avatar} alt={owner?.full_name ?? "Host"} fill className="object-cover" sizes="60px" />
+              </div>
+            ) : (
+              <div className="flex h-12 w-12 items-center justify-center rounded-full border border-border bg-primary/10 text-sm font-semibold text-primary">
+                {initials || "H"}
+              </div>
+            )}
+            <div>
+              <p className="text-sm font-semibold text-foreground">{owner?.full_name ?? "Host"}</p>
+              <p className="flex items-center gap-2 text-xs text-gray-600">
+                {score !== null ? (
+                  <span className="flex items-center gap-1 text-amber-600">
+                    <Star className="h-3 w-3 fill-amber-500 text-amber-500" />
+                    {score.toFixed(1)}
+                  </span>
+                ) : null}
+                <span className="flex items-center gap-1">
+                  <Shield className="h-3 w-3 text-primary" /> {owner?.city ?? "Location TBD"}
+                </span>
+                {typeof reviews === "number" && reviews > 0 ? <span>({reviews} trips)</span> : null}
+              </p>
             </div>
-          ) : (
-            <div className="flex h-12 w-12 items-center justify-center rounded-full border border-border bg-primary/10 text-sm font-semibold text-primary">
-              {initials || "H"}
-            </div>
-          )}
-          <div>
-            <p className="text-sm font-semibold text-foreground">{owner?.full_name ?? "Host"}</p>
-            <p className="flex items-center gap-2 text-xs text-gray-600">
-              <span className="flex items-center gap-1 text-amber-600">
-                <Star className="h-3 w-3 fill-amber-500 text-amber-500" />
-                {score.toFixed(1)}
-              </span>
-              <span className="flex items-center gap-1">
-                <Shield className="h-3 w-3 text-primary" /> {owner?.city ?? "Location TBD"}
-              </span>
-              {typeof reviews === "number" && reviews > 0 ? <span>({reviews} trips)</span> : null}
-            </p>
           </div>
+          <Badge variant="outline" className="capitalize">
+            {hostLevel}
+          </Badge>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          asChild
-          className="shrink-0"
-        >
-          <Link href={owner?.id ? `/hosts/${owner.id}` : "#"}>View host</Link>
-        </Button>
+        <VerificationBadges
+          idVerified={owner?.id_verified}
+          phoneVerified={owner?.phone_verified}
+          emailVerified={owner?.email_verified}
+        />
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs text-amber-700">Host level defaults to New Host until ranking fields are added.</p>
+          <Button variant="outline" size="sm" asChild className="shrink-0">
+            <Link href={owner?.id ? `/hosts/${owner.id}` : "#"}>View host</Link>
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );
@@ -737,6 +791,19 @@ function ReviewCard({
         </div>
       </div>
       <p className="text-gray-700">{text}</p>
+    </div>
+  );
+}
+
+function MobileBookNow() {
+  return (
+    <div className="pointer-events-none fixed inset-x-0 bottom-3 z-30 px-4 lg:hidden">
+      <a
+        href="#booking-widget"
+        className="pointer-events-auto flex h-12 items-center justify-center rounded-full bg-brand text-sm font-semibold text-white shadow-lg"
+      >
+        Book Now
+      </a>
     </div>
   );
 }

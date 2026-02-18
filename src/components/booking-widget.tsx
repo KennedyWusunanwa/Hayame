@@ -2,18 +2,40 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { addDays, format } from "date-fns";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { DateRangePicker } from "@/components/date-range-picker";
+import { VerificationBadges } from "@/components/verification-badges";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { formatCurrency, calculateNights } from "@/lib/utils";
 
 type Props = {
   carId: string;
   dailyPrice: number;
+  instantBook?: boolean | null;
+  deliveryFee?: number | null;
+  insuranceFee?: number | null;
+  depositAmount?: number | null;
+  cancellationPolicy?: string | null;
+  hostVerification?: {
+    idVerified?: boolean | null;
+    phoneVerified?: boolean | null;
+    emailVerified?: boolean | null;
+  };
 };
 
-export function BookingWidget({ carId, dailyPrice }: Props) {
+export function BookingWidget({
+  carId,
+  dailyPrice,
+  instantBook,
+  deliveryFee,
+  insuranceFee,
+  depositAmount,
+  cancellationPolicy,
+  hostVerification,
+}: Props) {
   const [startDate, setStartDate] = useState<string>("");
   const [endDate, setEndDate] = useState<string>("");
   const [loading, setLoading] = useState(false);
@@ -26,7 +48,9 @@ export function BookingWidget({ carId, dailyPrice }: Props) {
 
   const nights = calculateNights(startDate, endDate);
   const billableNights = Math.max(nights, 1);
-  const total = billableNights * dailyPrice;
+  const baseTotal = billableNights * dailyPrice;
+  const platformFeeAmount = 0;
+  const total = baseTotal;
 
   useEffect(() => {
     const loadAvailability = async () => {
@@ -186,12 +210,40 @@ export function BookingWidget({ carId, dailyPrice }: Props) {
             {formatCurrency(dailyPrice)} <span className="text-base text-gray-500">/ day</span>
           </div>
           <div className="text-sm text-gray-600">
-            Pay now with Paystack; host approval required before pickup.
+            {instantBook
+              ? "Pay now with Paystack. Instant Book confirms the trip right away."
+              : "Pay now with Paystack; host approval required before pickup."}
           </div>
         </div>
-        <div className="rounded-full bg-brand/10 px-3 py-1 text-xs font-medium text-brand">
-          Refunded if host rejects
-        </div>
+        {instantBook ? (
+          <div className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
+            Instant Book
+          </div>
+        ) : (
+          <div className="rounded-full bg-brand/10 px-3 py-1 text-xs font-medium text-brand">
+            Refunded if host rejects
+          </div>
+        )}
+      </div>
+      <div className="space-y-2 rounded-xl border border-border bg-gray-50 p-3">
+        <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Host verification</p>
+        <VerificationBadges
+          idVerified={hostVerification?.idVerified}
+          phoneVerified={hostVerification?.phoneVerified}
+          emailVerified={hostVerification?.emailVerified}
+        />
+      </div>
+      <div className="flex items-center justify-between rounded-xl border border-border bg-gray-50 px-3 py-2 text-xs">
+        <span className="font-semibold text-gray-700">Cancellation</span>
+        {cancellationPolicy ? (
+          <Badge variant="secondary" className="capitalize">
+            {cancellationPolicy}
+          </Badge>
+        ) : (
+          <Link href="/cancellation" className="font-semibold text-brand">
+            Policy coming soon
+          </Link>
+        )}
       </div>
       <DateRangePicker
         startDate={startDate}
@@ -208,13 +260,67 @@ export function BookingWidget({ carId, dailyPrice }: Props) {
         <p className="text-xs text-emerald-700">Reserved for {holdRemaining}. Complete payment to confirm.</p>
       ) : null}
       {message ? <p className="text-xs text-amber-700">{message}</p> : null}
-      <div className="flex items-center justify-between text-sm text-gray-700">
-        <span>{billableNights} day total</span>
-        <span className="text-base font-semibold text-foreground">{formatCurrency(total)}</span>
+      <div className="space-y-2 rounded-xl border border-border bg-white p-3 text-sm">
+        <PriceRow label={`Daily rate x ${billableNights} day(s)`} value={formatCurrency(baseTotal)} />
+        <PriceRow
+          label="Platform fee"
+          value={platformFeeAmount > 0 ? formatCurrency(platformFeeAmount) : "Coming soon (not charged)"}
+          muted={platformFeeAmount === 0}
+        />
+        <PriceRow
+          label="Insurance fee"
+          value={
+            typeof insuranceFee === "number"
+              ? `${formatCurrency(insuranceFee)} (not charged)`
+              : "Coming soon"
+          }
+          muted={typeof insuranceFee !== "number"}
+        />
+        <PriceRow
+          label="Delivery fee"
+          value={
+            typeof deliveryFee === "number"
+              ? `${formatCurrency(deliveryFee)} (not charged)`
+              : "Coming soon"
+          }
+          muted={typeof deliveryFee !== "number"}
+        />
+        <PriceRow
+          label="Deposit"
+          value={typeof depositAmount === "number" ? formatCurrency(depositAmount) : "Shown at checkout"}
+          muted={typeof depositAmount !== "number"}
+        />
+        <div className="flex items-center justify-between border-t border-border pt-2 text-sm font-semibold text-foreground">
+          <span>Total charged now</span>
+          <span className="text-base">{formatCurrency(total)}</span>
+        </div>
+        <p className="text-xs text-gray-500">Fees marked as coming soon are not included in the total above.</p>
       </div>
+      <Link href="/protection" className="block text-xs font-semibold text-brand">
+        View protection details
+      </Link>
       <Button className="w-full shadow-soft" onClick={submit} disabled={loading || !startDate || !endDate}>
-        {loading ? "Processing..." : "Book now"}
+        {loading ? "Processing..." : instantBook ? "Instant Book" : "Book Now"}
       </Button>
+    </div>
+  );
+}
+
+function PriceRow({
+  label,
+  value,
+  muted,
+}: {
+  label: string;
+  value: string;
+  muted?: boolean;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4 text-sm">
+      <span className="text-gray-700">{label}</span>
+      <span className={muted ? "text-xs font-medium text-gray-500" : "font-semibold text-foreground"}>
+        {value}
+      </span>
     </div>
   );
 }

@@ -2,7 +2,9 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { CarCard } from "@/components/car-card";
+import { VerificationBadges } from "@/components/verification-badges";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getInitials } from "@/lib/utils";
 import type { Car } from "@/lib/types";
@@ -62,8 +64,17 @@ export default async function HostProfilePage({ params }: PageProps) {
           )}
           <div>
             <p className="text-sm font-semibold text-brand">Host profile</p>
-            <h1 className="text-2xl font-semibold text-foreground">{profile.full_name ?? "Host"}</h1>
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-2xl font-semibold text-foreground">{profile.full_name ?? "Host"}</h1>
+              <Badge variant="outline">{(profile as any).host_level ?? "New Host"}</Badge>
+            </div>
             <p className="text-sm text-gray-600">{profile.city ?? "Location TBD"}</p>
+            <VerificationBadges
+              className="mt-2"
+              idVerified={(profile as any).id_verified}
+              phoneVerified={(profile as any).phone_verified}
+              emailVerified={(profile as any).email_verified}
+            />
           </div>
         </div>
         <Link className="text-sm font-semibold text-brand" href="/explore">

@@ -1,10 +1,12 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { TripStatusTracker } from "@/components/trip-status-tracker";
 import { formatCurrency } from "@/lib/utils";
 
 type BookingRow = {
@@ -154,6 +156,16 @@ function renderTable(
               </TableCell>
               <TableCell>
                 <Badge variant={statusVariant(booking.status)}>{statusLabel(booking.status)}</Badge>
+                <TripStatusTracker
+                  status={booking.status}
+                  startDate={booking.start_date}
+                  endDate={booking.end_date}
+                />
+                <div className="mt-1 text-[11px] text-gray-600">
+                  <Link href="/cancellation" className="font-semibold text-brand">
+                    Cancellation policy coming soon
+                  </Link>
+                </div>
               </TableCell>
               <TableCell>
                 <Badge variant={paymentVariant(booking.payment_status)}>

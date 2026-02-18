@@ -32,7 +32,7 @@ export function Hero() {
             asChild
             className="rounded-full border border-brand bg-brand px-5 text-white hover:bg-white hover:text-brand"
           >
-            <Link href="/explore">Get started</Link>
+            <Link href="/explore">Book Now</Link>
           </Button>
         </div>
       </div>

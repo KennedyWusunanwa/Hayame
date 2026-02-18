@@ -8,7 +8,7 @@ export default function NewCarPage() {
         <p className="text-sm font-semibold text-primary">New car</p>
         <h1 className="text-2xl font-semibold text-foreground">Create listing</h1>
         <p className="text-sm text-gray-600">
-          Save the car, then upload photos and set availability from the edit screen.
+          Add at least 5 photos and complete key details before saving your listing.
         </p>
       </div>
       <Card>

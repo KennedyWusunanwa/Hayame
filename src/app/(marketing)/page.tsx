@@ -2,6 +2,8 @@ import { FeaturedCars } from "@/components/marketing/featured-cars";
 import { Hero } from "@/components/marketing/hero";
 import { HeroSearchBar } from "@/components/marketing/search-bar";
 import { HowItWorks } from "@/components/marketing/how-it-works";
+import { HomeMetrics } from "@/components/marketing/home-metrics";
+import { TrustStrip } from "@/components/marketing/trust-strip";
 import { WhyChoose } from "@/components/marketing/why-choose";
 
 export default function MarketingHome() {
@@ -13,6 +15,8 @@ export default function MarketingHome() {
           <HeroSearchBar />
         </div>
       </div>
+      <HomeMetrics />
+      <TrustStrip />
       <FeaturedCars />
       <HowItWorks />
       <WhyChoose />

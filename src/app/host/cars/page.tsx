@@ -22,7 +22,7 @@ export default async function DashboardCarsPage() {
         <Button asChild className="shrink-0">
           <Link href="/host/cars/new">
             <PlusCircle className="mr-2 h-4 w-4" />
-            Add car
+            List Your Car &amp; Earn
           </Link>
         </Button>
       </div>

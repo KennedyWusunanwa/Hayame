@@ -58,6 +58,7 @@ const featureIconMap: Record<string, LucideIcon> = {
   "led headlights": Lightbulb,
   "parking assist": Radar,
   "parking sensors": Waves,
+  "reverse camera": Camera,
   "roof rack": Package,
   sidesteps: GripHorizontal,
   spotlight: Flashlight,

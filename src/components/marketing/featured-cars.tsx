@@ -8,8 +8,24 @@ type FeaturedRow = Database["public"]["Tables"]["cars"]["Row"] & {
   owner?: { full_name: string | null; avatar_url: string | null } | null;
 };
 
+type FeaturedCar = {
+  id: string;
+  title: string;
+  city: string;
+  region: string;
+  daily_price: number;
+  rating?: number;
+  reviews: number;
+  car_type: string;
+  description: string;
+  image_url: string;
+  host_name: string;
+  host_avatar: string;
+  isFavorite: boolean;
+};
+
 export async function FeaturedCars() {
-  let featured = mockCars.slice(0, 12).map((car) => ({
+  let featured: FeaturedCar[] = mockCars.slice(0, 12).map((car) => ({
     id: car.id,
     title: car.name,
     city: car.city,
@@ -49,7 +65,7 @@ export async function FeaturedCars() {
         city: car.city ?? "",
         region: car.region ?? "",
         daily_price: Number(car.daily_price ?? 0),
-        rating: 4.8,
+        rating: typeof (car as any).avg_rating === "number" ? Number((car as any).avg_rating) : undefined,
         reviews: 0,
         car_type: car.car_type ?? "",
         description: car.description ?? "",

@@ -29,7 +29,7 @@ export default async function BecomeHostPage() {
   return (
     <div className="mx-auto max-w-3xl px-6 py-10">
       <div className="space-y-2">
-        <p className="text-sm font-semibold text-primary">Become a host</p>
+        <p className="text-sm font-semibold text-primary">Become a Host</p>
         <h1 className="text-3xl font-semibold text-foreground">Apply to list your cars</h1>
         <p className="text-sm text-gray-600">
           We verify every host to keep the marketplace safe. Applications are typically reviewed within 1-2 business

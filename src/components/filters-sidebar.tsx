@@ -18,6 +18,8 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 
+export type SortBy = "price_low" | "price_high" | "most_booked" | "top_rated" | "new_listings";
+
 export type Filters = {
   query?: string;
   region?: string;
@@ -29,16 +31,56 @@ export type Filters = {
   minPrice?: number;
   maxPrice?: number;
   features?: string[];
+  instantBook?: boolean;
+  deliveryAvailable?: boolean;
+  transmission?: "automatic" | "manual" | "";
+  seatsCapacity?: "2" | "4" | "5" | "7" | "8+" | "";
+  minYear?: number;
+  maxYear?: number;
+  airConditioning?: boolean;
+  minRating?: number;
+  hostType?: "verified" | "top_host" | "";
+  sort?: SortBy | "";
+};
+
+export type FilterCapabilities = {
+  instantBook: boolean;
+  deliveryAvailable: boolean;
+  transmission: boolean;
+  fuelType: boolean;
+  seats: boolean;
+  year: boolean;
+  airConditioning: boolean;
+  rating: boolean;
+  hostType: boolean;
 };
 
 type Props = {
   filters: Filters;
   onChange: (filters: Filters) => void;
+  capabilities?: Partial<FilterCapabilities>;
 };
 
-export function FiltersSidebar({ filters, onChange }: Props) {
+const DEFAULT_CAPABILITIES: FilterCapabilities = {
+  instantBook: false,
+  deliveryAvailable: false,
+  transmission: true,
+  fuelType: true,
+  seats: true,
+  year: false,
+  airConditioning: false,
+  rating: false,
+  hostType: false,
+};
+
+export function FiltersSidebar({ filters, onChange, capabilities = {} }: Props) {
   const { regions, citiesByRegion } = useLocations();
   const { makes } = useCarCatalog();
+  const support = { ...DEFAULT_CAPABILITIES, ...capabilities };
+  const currentYear = new Date().getFullYear();
+  const maxPriceFallback = 5000;
+  const maxPriceValue = filters.maxPrice ?? maxPriceFallback;
+
   const cities = useMemo(
     () => (filters.region ? citiesByRegion[filters.region] ?? [] : []),
     [filters.region, citiesByRegion],
@@ -47,6 +89,10 @@ export function FiltersSidebar({ filters, onChange }: Props) {
     if (!filters.brand) return [];
     return makes.find((make) => make.name === filters.brand)?.models ?? [];
   }, [filters.brand, makes]);
+
+  const updateCheckbox = (key: keyof Filters, checked: boolean) => {
+    onChange({ ...filters, [key]: checked });
+  };
 
   const content = (
     <div className="flex flex-col gap-5">
@@ -127,6 +173,7 @@ export function FiltersSidebar({ filters, onChange }: Props) {
         <Select
           value={filters.fuelType ?? ""}
           onChange={(e) => onChange({ ...filters, fuelType: e.target.value })}
+          disabled={!support.fuelType}
         >
           <option value="">Any</option>
           {fuelTypes.map((fuel) => (
@@ -135,37 +182,188 @@ export function FiltersSidebar({ filters, onChange }: Props) {
             </option>
           ))}
         </Select>
+        {!support.fuelType ? <p className="text-xs text-amber-700">Fuel filter wiring coming soon.</p> : null}
       </div>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="space-y-3 rounded-lg border border-border bg-gray-50 p-3">
+        <label className="text-sm font-semibold text-gray-800">Price range (GHS)</label>
+        <input
+          type="range"
+          min={50}
+          max={maxPriceFallback}
+          step={50}
+          value={maxPriceValue}
+          onChange={(e) =>
+            onChange({
+              ...filters,
+              maxPrice: e.target.value ? Number(e.target.value) : undefined,
+            })
+          }
+          className="w-full accent-brand"
+          aria-label="Maximum daily price"
+        />
+        <div className="grid grid-cols-2 gap-3">
+          <div className="flex flex-col gap-2">
+            <label className="text-sm font-semibold text-gray-800">Min price</label>
+            <Input
+              type="number"
+              placeholder="200"
+              value={filters.minPrice ?? ""}
+              onChange={(e) =>
+                onChange({
+                  ...filters,
+                  minPrice: e.target.value ? Number(e.target.value) : undefined,
+                })
+              }
+            />
+          </div>
+          <div className="flex flex-col gap-2">
+            <label className="text-sm font-semibold text-gray-800">Max price</label>
+            <Input
+              type="number"
+              placeholder="1500"
+              value={filters.maxPrice ?? ""}
+              onChange={(e) =>
+                onChange({
+                  ...filters,
+                  maxPrice: e.target.value ? Number(e.target.value) : undefined,
+                })
+              }
+            />
+          </div>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-3 rounded-lg border border-border bg-white p-3">
         <div className="flex flex-col gap-2">
-          <label className="text-sm font-semibold text-gray-800">Min price</label>
+          <label className="text-sm font-semibold text-gray-800">Transmission</label>
+          <Select
+            value={filters.transmission ?? ""}
+            onChange={(e) => onChange({ ...filters, transmission: e.target.value as Filters["transmission"] })}
+            disabled={!support.transmission}
+          >
+            <option value="">Any</option>
+            <option value="automatic">Automatic</option>
+            <option value="manual">Manual</option>
+          </Select>
+        </div>
+        <div className="flex flex-col gap-2">
+          <label className="text-sm font-semibold text-gray-800">Seats</label>
+          <Select
+            value={filters.seatsCapacity ?? ""}
+            onChange={(e) => onChange({ ...filters, seatsCapacity: e.target.value as Filters["seatsCapacity"] })}
+            disabled={!support.seats}
+          >
+            <option value="">Any</option>
+            <option value="2">2</option>
+            <option value="4">4</option>
+            <option value="5">5</option>
+            <option value="7">7</option>
+            <option value="8+">8+</option>
+          </Select>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-3 rounded-lg border border-border bg-white p-3">
+        <div className="flex flex-col gap-2">
+          <label className="text-sm font-semibold text-gray-800">Min year</label>
           <Input
             type="number"
-            placeholder="200"
-            value={filters.minPrice ?? ""}
+            min={2000}
+            max={currentYear}
+            value={filters.minYear ?? ""}
             onChange={(e) =>
               onChange({
                 ...filters,
-                minPrice: e.target.value ? Number(e.target.value) : undefined,
+                minYear: e.target.value ? Number(e.target.value) : undefined,
               })
             }
+            disabled={!support.year}
           />
         </div>
         <div className="flex flex-col gap-2">
-          <label className="text-sm font-semibold text-gray-800">Max price</label>
+          <label className="text-sm font-semibold text-gray-800">Max year</label>
           <Input
             type="number"
-            placeholder="1500"
-            value={filters.maxPrice ?? ""}
+            min={2000}
+            max={currentYear}
+            value={filters.maxYear ?? ""}
             onChange={(e) =>
               onChange({
                 ...filters,
-                maxPrice: e.target.value ? Number(e.target.value) : undefined,
+                maxYear: e.target.value ? Number(e.target.value) : undefined,
               })
             }
+            disabled={!support.year}
           />
         </div>
       </div>
+      {!support.year ? <p className="-mt-3 text-xs text-amber-700">Car year filter coming soon.</p> : null}
+      <div className="grid gap-2 rounded-lg border border-border bg-white p-3">
+        <label className="flex items-center justify-between gap-3 text-sm text-gray-700">
+          <span className="font-semibold text-gray-800">Instant Book</span>
+          <Checkbox
+            checked={Boolean(filters.instantBook)}
+            onChange={(e) => updateCheckbox("instantBook", e.target.checked)}
+            disabled={!support.instantBook}
+          />
+        </label>
+        <label className="flex items-center justify-between gap-3 text-sm text-gray-700">
+          <span className="font-semibold text-gray-800">Delivery available</span>
+          <Checkbox
+            checked={Boolean(filters.deliveryAvailable)}
+            onChange={(e) => updateCheckbox("deliveryAvailable", e.target.checked)}
+            disabled={!support.deliveryAvailable}
+          />
+        </label>
+        <label className="flex items-center justify-between gap-3 text-sm text-gray-700">
+          <span className="font-semibold text-gray-800">Air conditioning</span>
+          <Checkbox
+            checked={Boolean(filters.airConditioning)}
+            onChange={(e) => updateCheckbox("airConditioning", e.target.checked)}
+            disabled={!support.airConditioning}
+          />
+        </label>
+      </div>
+      {!support.deliveryAvailable ? (
+        <p className="-mt-3 text-xs text-amber-700">Delivery filter wiring coming soon.</p>
+      ) : null}
+      {!support.airConditioning ? (
+        <p className="-mt-3 text-xs text-amber-700">Air conditioning flag coming soon.</p>
+      ) : null}
+      <div className="grid grid-cols-2 gap-3 rounded-lg border border-border bg-white p-3">
+        <div className="flex flex-col gap-2">
+          <label className="text-sm font-semibold text-gray-800">Min rating</label>
+          <Select
+            value={String(filters.minRating ?? "")}
+            onChange={(e) =>
+              onChange({
+                ...filters,
+                minRating: e.target.value ? Number(e.target.value) : undefined,
+              })
+            }
+            disabled={!support.rating}
+          >
+            <option value="">Any</option>
+            {[1, 2, 3, 4, 5].map((value) => (
+              <option key={value} value={value}>
+                {value}+
+              </option>
+            ))}
+          </Select>
+        </div>
+        <div className="flex flex-col gap-2">
+          <label className="text-sm font-semibold text-gray-800">Host type</label>
+          <Select
+            value={filters.hostType ?? ""}
+            onChange={(e) => onChange({ ...filters, hostType: e.target.value as Filters["hostType"] })}
+            disabled={!support.hostType}
+          >
+            <option value="">Any</option>
+            <option value="verified">Verified</option>
+            <option value="top_host">Top Host</option>
+          </Select>
+        </div>
+      </div>
+      {!support.rating ? <p className="-mt-3 text-xs text-amber-700">Rating filter coming soon.</p> : null}
+      {!support.hostType ? <p className="-mt-3 text-xs text-amber-700">Host level filter coming soon.</p> : null}
       <div className="flex flex-col gap-3">
         <label className="text-sm font-semibold text-gray-800">Features</label>
         <div className="grid grid-cols-2 gap-2 text-sm">
@@ -204,6 +402,16 @@ export function FiltersSidebar({ filters, onChange }: Props) {
             fuelType: "",
             minPrice: undefined,
             maxPrice: undefined,
+            instantBook: false,
+            deliveryAvailable: false,
+            transmission: "",
+            seatsCapacity: "",
+            minYear: undefined,
+            maxYear: undefined,
+            airConditioning: false,
+            minRating: undefined,
+            hostType: "",
+            sort: "",
             features: [],
           })
         }

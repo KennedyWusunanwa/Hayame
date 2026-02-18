@@ -39,6 +39,9 @@ export function Footer() {
             <Link href="/privacy" className="hover:text-brand">
               Privacy
             </Link>
+            <Link href="/protection" className="hover:text-brand">
+              Protection
+            </Link>
             <Link href="/contact" className="hover:text-brand">
               Support
             </Link>

@@ -77,7 +77,7 @@ export function CarCard({ car, isFavorite = false, onToggleFavorite }: Props) {
             {formatCurrency(car.daily_price)} <span className="text-sm text-gray-500">/ day</span>
           </div>
           <Button asChild size="sm" className="shadow-soft">
-            <span>Book now</span>
+            <span>Book Now</span>
           </Button>
         </div>
       </div>

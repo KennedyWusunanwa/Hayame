@@ -79,6 +79,7 @@ export const featureOptions = [
   "LED Headlights",
   "Parking Assist",
   "Parking Sensors",
+  "Reverse Camera",
   "Roof Rack",
   "Sidesteps",
   "Spotlight",
@@ -89,6 +90,7 @@ export const featureOptions = [
   // legacy options kept for backwards compatibility
   "Automatic",
   "Bluetooth",
+  "GPS",
   "USB Port",
   "4x4",
   "Child Seat",

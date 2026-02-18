@@ -1,88 +1,198 @@
-import { ArrowUpRight, CalendarClock, CarFront, Wallet } from "lucide-react";
-import { StatCard } from "@/components/dashboard/stat-card";
-import { EarningsChart } from "@/components/dashboard/earnings-chart";
+import Link from "next/link";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { StatCard } from "@/components/dashboard/stat-card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { EarningsCalculator } from "@/components/host/earnings-calculator";
+import { VerificationBadges } from "@/components/verification-badges";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { formatCurrency } from "@/lib/utils";
 
-const bookings = [
-  { car: "Toyota RAV4", guest: "Ama K.", dates: "Dec 24 - Dec 27", payout: 2400, status: "Pending" },
-  { car: "Mercedes C300", guest: "Kojo L.", dates: "Jan 3 - Jan 6", payout: 4050, status: "Confirmed" },
-  { car: "Honda Fit", guest: "Efua A.", dates: "Jan 10 - Jan 12", payout: 620, status: "Pending" },
-];
+const EARNING_STATUSES = new Set(["awaiting_host", "confirmed", "completed"]);
 
-const earningsSeries = [
-  { month: "Jul", earnings: 4200 },
-  { month: "Aug", earnings: 5800 },
-  { month: "Sep", earnings: 6400 },
-  { month: "Oct", earnings: 7000 },
-  { month: "Nov", earnings: 7600 },
-  { month: "Dec", earnings: 8400 },
-];
+export default async function DashboardHome() {
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-export default function DashboardHome() {
+  const hostId = user?.id ?? "";
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("full_name, city")
+    .eq("id", hostId)
+    .maybeSingle();
+  const hostName = (profile as any)?.full_name ?? "Host";
+  const hostCity = (profile as any)?.city ?? "Ghana";
+
+  const { data: cars } = await (supabase as any)
+    .from("cars")
+    .select("id,title")
+    .eq("owner_id", hostId);
+  const carIds = (cars ?? []).map((car: any) => car.id);
+
+  const { data: bookings } =
+    carIds.length > 0
+      ? await (supabase as any)
+          .from("bookings")
+          .select("id,car_id,start_date,end_date,status,payment_status,total_price,created_at,cars(title)")
+          .in("car_id", carIds)
+          .order("start_date", { ascending: false })
+      : { data: [] as any[] };
+
+  const { data: reviews } =
+    carIds.length > 0
+      ? await (supabase as any)
+          .from("reviews")
+          .select("id")
+          .in("car_id", carIds)
+      : { data: [] as any[] };
+
+  const bookingRows = (bookings ?? []) as any[];
+  const paidBookings = bookingRows.filter((booking) => EARNING_STATUSES.has(booking.status));
+  const now = new Date();
+  const currentMonth = now.getMonth();
+  const currentYear = now.getFullYear();
+
+  const totalEarnings = paidBookings.reduce(
+    (sum, booking) => sum + Number(booking.total_price ?? 0),
+    0,
+  );
+  const monthlyEarnings = paidBookings.reduce((sum, booking) => {
+    const start = booking.start_date ? new Date(booking.start_date) : null;
+    if (!start || Number.isNaN(start.getTime())) return sum;
+    if (start.getMonth() !== currentMonth || start.getFullYear() !== currentYear) return sum;
+    return sum + Number(booking.total_price ?? 0);
+  }, 0);
+
+  const bookingRate = carIds.length > 0 ? Math.round((paidBookings.length / carIds.length) * 100) : 0;
+  const totalReviews = (reviews ?? []).length;
+  const defaultFeeValue = Number(process.env.NEXT_PUBLIC_PLATFORM_FEE_PERCENT ?? process.env.PLATFORM_FEE_PERCENT);
+  const platformFeePercent = Number.isFinite(defaultFeeValue) ? defaultFeeValue : 10;
+  const isPlaceholderFee = !Number.isFinite(defaultFeeValue);
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-sm font-semibold text-primary">Dashboard</p>
           <h1 className="text-2xl font-semibold text-foreground">Welcome back</h1>
-          <p className="text-sm text-gray-600">Track bookings, cars, and payouts in one place.</p>
+          <p className="text-sm text-gray-600">Track bookings, performance, and projected payouts in one place.</p>
         </div>
-        <div className="flex items-center gap-2 text-sm text-emerald-700">
-          <ArrowUpRight className="h-4 w-4" /> Paystack integration coming soon
-        </div>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <StatCard title="Active cars" value="8" icon={<CarFront className="h-4 w-4 text-primary" />} />
-        <StatCard title="Upcoming trips" value="12" icon={<CalendarClock className="h-4 w-4 text-primary" />} />
-        <StatCard title="Pending earnings" value={formatCurrency(12400)} icon={<Wallet className="h-4 w-4 text-primary" />} />
-        <StatCard title="Avg. rating" value="4.8 / 5" icon={<ArrowUpRight className="h-4 w-4 text-primary" />} />
+        <Button asChild>
+          <Link href="/host/cars/new">Start Earning Today</Link>
+        </Button>
       </div>
 
       <Card>
-        <CardHeader>
-          <CardTitle>Earnings (GHS)</CardTitle>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex flex-wrap items-center gap-2">
+            Host profile
+            <Badge variant="outline">New Host</Badge>
+          </CardTitle>
         </CardHeader>
-        <CardContent>
-          <EarningsChart data={earningsSeries} />
+        <CardContent className="space-y-2">
+          <p className="text-sm text-gray-700">{hostName} - {hostCity}</p>
+          <VerificationBadges />
+          <p className="text-xs text-amber-700">
+            TODO: map host level and verification badges to real schema fields when available.
+          </p>
         </CardContent>
       </Card>
 
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <StatCard title="Total earnings" value={formatCurrency(totalEarnings)} />
+        <StatCard title="Monthly earnings" value={formatCurrency(monthlyEarnings)} />
+        <StatCard title="Booking rate" value={`${bookingRate}%`} />
+        <StatCard title="Reviews" value={String(totalReviews)} />
+      </div>
+
       <Card>
         <CardHeader>
-          <CardTitle>Upcoming bookings</CardTitle>
+          <CardTitle>Host performance</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <PerformanceItem label="Total earnings" value={formatCurrency(totalEarnings)} />
+          <PerformanceItem label="Monthly earnings" value={formatCurrency(monthlyEarnings)} />
+          <PerformanceItem label="Booking rate" value={`${bookingRate}%`} />
+          <PerformanceItem label="Reviews" value={String(totalReviews)} />
+          <PerformanceItem
+            label="Views"
+            value="Coming soon"
+            note="TODO: requires listing views schema."
+          />
+          <PerformanceItem
+            label="Conversion rate"
+            value="Coming soon"
+            note="TODO: requires view-to-booking attribution."
+          />
+        </CardContent>
+      </Card>
+
+      <EarningsCalculator
+        defaultPlatformFeePercent={platformFeePercent}
+        isPlaceholderFee={isPlaceholderFee}
+      />
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Trip history</CardTitle>
         </CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Car</TableHead>
-                <TableHead>Guest</TableHead>
                 <TableHead>Dates</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead className="text-right">Payout</TableHead>
+                <TableHead className="text-right">Amount</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {bookings.map((booking) => (
-                <TableRow key={booking.car + booking.guest}>
-                  <TableCell>{booking.car}</TableCell>
-                  <TableCell>{booking.guest}</TableCell>
-                  <TableCell>{booking.dates}</TableCell>
+              {bookingRows.slice(0, 8).map((booking) => (
+                <TableRow key={booking.id}>
+                  <TableCell>{booking.cars?.title ?? "Car"}</TableCell>
+                  <TableCell>{booking.start_date} - {booking.end_date}</TableCell>
                   <TableCell>
-                    <span className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700">
+                    <span className="rounded-full bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-700">
                       {booking.status}
                     </span>
                   </TableCell>
-                  <TableCell className="text-right font-semibold">{formatCurrency(booking.payout)}</TableCell>
+                  <TableCell className="text-right font-semibold">
+                    {formatCurrency(Number(booking.total_price ?? 0))}
+                  </TableCell>
                 </TableRow>
               ))}
+              {bookingRows.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={4} className="text-center text-sm text-gray-600">
+                    No trip history yet. Create your first listing to start earning.
+                  </TableCell>
+                </TableRow>
+              ) : null}
             </TableBody>
           </Table>
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+function PerformanceItem({
+  label,
+  value,
+  note,
+}: {
+  label: string;
+  value: string;
+  note?: string;
+}) {
+  return (
+    <div className="rounded-xl border border-border bg-gray-50 p-3">
+      <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">{label}</p>
+      <p className="text-lg font-semibold text-foreground">{value}</p>
+      {note ? <p className="text-xs text-amber-700">{note}</p> : null}
     </div>
   );
 }

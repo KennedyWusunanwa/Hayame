@@ -479,6 +479,41 @@ export default async function AdminPage({
                 </div>
               </CardContent>
             </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Platform controls (placeholders)</CardTitle>
+              </CardHeader>
+              <CardContent className="grid gap-3 sm:grid-cols-2">
+                {[
+                  {
+                    title: "Host approvals",
+                    note: "Implemented in Applications tab.",
+                  },
+                  {
+                    title: "Listing approvals",
+                    note: "TODO: requires listing moderation status field.",
+                  },
+                  {
+                    title: "Refund control",
+                    note: "TODO: requires admin refund queue with booking/payment metadata.",
+                  },
+                  {
+                    title: "Review moderation",
+                    note: "TODO: requires review moderation actions and flags.",
+                  },
+                  {
+                    title: "Disputes",
+                    note: "TODO: requires disputes table and workflow state.",
+                  },
+                ].map((item) => (
+                  <div key={item.title} className="rounded-lg border border-border bg-gray-50 p-3">
+                    <p className="text-sm font-semibold text-foreground">{item.title}</p>
+                    <p className="text-xs text-amber-700">{item.note}</p>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
           </div>
         }
         applications={

@@ -22,9 +22,28 @@ type Props = {
   carId?: string;
   defaultValues?: Partial<FormValues>;
   redirectTo?: string;
+  existingPhotoCount?: number;
 };
 
-export function CarForm({ carId, defaultValues, redirectTo }: Props) {
+const qualityChecklist = [
+  "Exterior photos",
+  "Interior photos",
+  "Dashboard photo",
+  "Tires photo",
+  "Plate visibility note",
+];
+
+const priorityFeatures = [
+  "Bluetooth",
+  "Reverse Camera",
+  "Leather Seats",
+  "Sunroof",
+  "GPS",
+  "Apple CarPlay",
+  "Android Auto",
+];
+
+export function CarForm({ carId, defaultValues, redirectTo, existingPhotoCount = 0 }: Props) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [files, setFiles] = useState<File[]>([]);
@@ -61,6 +80,13 @@ export function CarForm({ carId, defaultValues, redirectTo }: Props) {
 
   const onSubmit = async (values: FormValues) => {
     setError(null);
+    const totalPhotos = existingPhotoCount + files.length;
+    if (totalPhotos < 5) {
+      setError(
+        `At least 5 photos are required before submission. Current total: ${totalPhotos}.`,
+      );
+      return;
+    }
     try {
       const res = await fetch(carId ? `/api/cars/${carId}` : "/api/cars", {
         method: carId ? "PUT" : "POST",
@@ -88,6 +114,7 @@ export function CarForm({ carId, defaultValues, redirectTo }: Props) {
   };
 
   const selectedFeatures = watch("features") || [];
+  const totalPhotos = existingPhotoCount + files.length;
 
   return (
     <form className="space-y-4" onSubmit={handleSubmit(onSubmit)}>
@@ -206,6 +233,28 @@ export function CarForm({ carId, defaultValues, redirectTo }: Props) {
 
       <div className="space-y-3">
         <label className="text-sm font-semibold text-gray-700">Features</label>
+        <div className="grid grid-cols-1 gap-2 rounded-lg border border-border bg-gray-50 p-3 text-sm sm:grid-cols-2">
+          {priorityFeatures.map((feature) => {
+            const checked = selectedFeatures.includes(feature);
+            return (
+              <label key={feature} className="flex items-center gap-2 text-gray-700">
+                <Checkbox
+                  checked={checked}
+                  onChange={() => {
+                    const set = new Set(selectedFeatures);
+                    if (checked) {
+                      set.delete(feature);
+                    } else {
+                      set.add(feature);
+                    }
+                    setValue("features", Array.from(set));
+                  }}
+                />
+                {feature}
+              </label>
+            );
+          })}
+        </div>
         <div className="grid grid-cols-2 gap-2 text-sm">
           {featureOptions.map((feature) => {
             const checked = selectedFeatures.includes(feature);
@@ -239,7 +288,24 @@ export function CarForm({ carId, defaultValues, redirectTo }: Props) {
           onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
         />
         <p className="text-xs text-gray-600">
-          Add clear exterior/interior photos. You can upload more later in edit.
+          At least 5 photos are required. Add clear exterior/interior photos before saving.
+        </p>
+        <div className="rounded-lg border border-border bg-gray-50 p-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Listing quality checklist</p>
+          <div className="mt-2 space-y-1 text-xs text-gray-700">
+            {qualityChecklist.map((item, idx) => {
+              const done = idx === 4 ? true : totalPhotos > idx;
+              return (
+                <p key={item} className={done ? "text-emerald-700" : "text-gray-600"}>
+                  {done ? "Done" : "Pending"} - {item}
+                </p>
+              );
+            })}
+            <p className="text-amber-700">Plate blur automatically: Coming soon.</p>
+          </div>
+        </div>
+        <p className="text-xs font-semibold text-gray-700">
+          Photos total: {totalPhotos} / 5 minimum
         </p>
         {files.length > 0 ? (
           <p className="text-xs text-gray-700">{files.length} file(s) selected</p>
@@ -259,12 +325,12 @@ export function CarForm({ carId, defaultValues, redirectTo }: Props) {
 
       <div className="flex items-center justify-between rounded-lg border border-border bg-white p-4">
         <div>
-          <p className="text-sm font-semibold text-foreground">Instant book</p>
+          <p className="text-sm font-semibold text-foreground">Instant Book</p>
           <p className="text-xs text-gray-600">Enable to auto-confirm bookings after payment.</p>
         </div>
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" {...register("instant_book")} />
-          Instant
+          Instant Book
         </label>
       </div>
 
