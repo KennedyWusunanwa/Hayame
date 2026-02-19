@@ -52,8 +52,16 @@ export function Navbar() {
         setHostBookingAlertCount(0);
         return;
       }
-      const name = (user.user_metadata as any)?.full_name || user.email || "Account";
-      setUserName(name);
+      const { data: profile } = await (supabase as any)
+        .from("profiles")
+        .select("full_name")
+        .eq("id", user.id)
+        .maybeSingle();
+      const profileName = String((profile as { full_name?: string | null } | null)?.full_name ?? "").trim();
+      const metadataName = String((user.user_metadata as any)?.full_name ?? "").trim();
+      const username = String((user.user_metadata as any)?.username ?? "").trim();
+      const fallbackName = user.email || "Account";
+      setUserName(username || profileName || metadataName || fallbackName);
       const res = await fetch("/api/host-status", { cache: "no-store" });
       if (res.ok) {
         const payload = (await res.json()) as { is_host?: boolean; status?: string | null };

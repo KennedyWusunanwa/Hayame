@@ -206,6 +206,36 @@ async function deleteListingAction(formData: FormData) {
   redirect("/admin");
 }
 
+async function bulkDeleteListingsAction(formData: FormData) {
+  "use server";
+  await requireAdmin();
+
+  const carIds = Array.from(
+    new Set(
+      formData
+        .getAll("carIds")
+        .map((value) => (typeof value === "string" ? value.trim() : ""))
+        .filter((value) => value.length > 0),
+    ),
+  );
+  if (carIds.length === 0) {
+    redirect("/admin");
+  }
+
+  const admin = createSupabaseAdminClient() as any;
+  await admin.from("cars").delete().in("id", carIds);
+  await admin.from("admin_actions").insert({
+    action: "listing_bulk_deleted",
+    target_type: "car",
+    performed_by: process.env.ADMIN_USERNAME ?? "admin",
+    metadata: {
+      count: carIds.length,
+      car_ids: carIds,
+    },
+  });
+  redirect("/admin");
+}
+
 export default async function AdminPage({
   searchParams,
 }: {
@@ -510,112 +540,131 @@ export default async function AdminPage({
                 <CardTitle>Vehicles & availability</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-3">
-                  {(cars ?? []).map((car: any) => {
-                    const bookings = bookingsByCar.get(car.id) ?? [];
-                    const blocks = (blocksByCar.get(car.id) ?? []).filter((b: any) => b.available === false);
-                    const listingPhotos = photosByCar.get(car.id) ?? [];
-                    const previewImage = listingPhotos[0] ?? "/car-placeholder.jpg";
-                    return (
-                      <div key={car.id} className="rounded-lg border border-border p-3">
-                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                          <div className="flex min-w-0 items-start gap-3">
-                            <div className="relative h-16 w-24 shrink-0 overflow-hidden rounded-md border border-border">
-                              <Image
-                                src={previewImage}
-                                alt={car.title ?? "Listing photo"}
-                                fill
-                                className="object-cover"
-                                sizes="96px"
-                              />
-                            </div>
-                            <div className="min-w-0">
-                              <p className="truncate text-sm font-semibold text-foreground">{car.title}</p>
-                              <div className="mt-1 flex items-center gap-2 text-[11px] text-gray-500">
-                                <ProfileAvatar
-                                  src={car.owner?.avatar_url}
-                                  name={car.owner?.full_name ?? "Host"}
-                                  className="h-6 w-6"
+                <form action={bulkDeleteListingsAction} className="space-y-3">
+                  {(cars ?? []).length > 0 ? (
+                    <div className="flex flex-col gap-2 rounded-lg border border-border bg-gray-50 p-3 sm:flex-row sm:items-center sm:justify-between">
+                      <p className="text-xs text-gray-700">
+                        Select listings and delete them in one action.
+                      </p>
+                      <button
+                        type="submit"
+                        className="rounded-md border border-red-200 px-3 py-1 text-xs font-semibold text-red-700 hover:bg-red-50"
+                      >
+                        Delete selected
+                      </button>
+                    </div>
+                  ) : null}
+                  <div className="space-y-3">
+                    {(cars ?? []).map((car: any) => {
+                      const bookings = bookingsByCar.get(car.id) ?? [];
+                      const blocks = (blocksByCar.get(car.id) ?? []).filter((b: any) => b.available === false);
+                      const listingPhotos = photosByCar.get(car.id) ?? [];
+                      const previewImage = listingPhotos[0] ?? "/car-placeholder.jpg";
+                      return (
+                        <div key={car.id} className="rounded-lg border border-border p-3">
+                          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                            <div className="flex min-w-0 items-start gap-3">
+                              <label className="mt-1 flex items-center gap-2 text-xs font-semibold text-gray-700">
+                                <input type="checkbox" name="carIds" value={car.id} className="h-4 w-4 rounded border-border" />
+                                Select
+                              </label>
+                              <div className="relative h-16 w-24 shrink-0 overflow-hidden rounded-md border border-border">
+                                <Image
+                                  src={previewImage}
+                                  alt={car.title ?? "Listing photo"}
+                                  fill
+                                  className="object-cover"
+                                  sizes="96px"
                                 />
-                                <span className="truncate">
-                                  Host: {car.owner?.full_name ?? "Host"} {car.owner?.phone ? `| ${car.owner.phone}` : ""}
-                                </span>
+                              </div>
+                              <div className="min-w-0">
+                                <p className="truncate text-sm font-semibold text-foreground">{car.title}</p>
+                                <div className="mt-1 flex items-center gap-2 text-[11px] text-gray-500">
+                                  <ProfileAvatar
+                                    src={car.owner?.avatar_url}
+                                    name={car.owner?.full_name ?? "Host"}
+                                    className="h-6 w-6"
+                                  />
+                                  <span className="truncate">
+                                    Host: {car.owner?.full_name ?? "Host"} {car.owner?.phone ? `| ${car.owner.phone}` : ""}
+                                  </span>
+                                </div>
                               </div>
                             </div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs text-gray-500">{car.city ?? "-"}</span>
-                            <Link
-                              href={`/admin/cars/${car.id}/preview`}
-                              className="rounded-md border border-border px-2 py-1 text-[11px] font-semibold text-gray-700 hover:bg-gray-50"
-                            >
-                              Preview
-                            </Link>
-                            <Link
-                              href={`/admin/cars/${car.id}/edit`}
-                              className="rounded-md border border-border px-2 py-1 text-[11px] font-semibold text-gray-700 hover:bg-gray-50"
-                            >
-                              Edit
-                            </Link>
-                            <form action={deleteListingAction}>
-                              <input type="hidden" name="carId" value={car.id} />
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-gray-500">{car.city ?? "-"}</span>
+                              <Link
+                                href={`/admin/cars/${car.id}/preview`}
+                                className="rounded-md border border-border px-2 py-1 text-[11px] font-semibold text-gray-700 hover:bg-gray-50"
+                              >
+                                Preview
+                              </Link>
+                              <Link
+                                href={`/admin/cars/${car.id}/edit`}
+                                className="rounded-md border border-border px-2 py-1 text-[11px] font-semibold text-gray-700 hover:bg-gray-50"
+                              >
+                                Edit
+                              </Link>
                               <button
                                 type="submit"
+                                formAction={deleteListingAction}
+                                name="carId"
+                                value={car.id}
                                 className="rounded-md border border-red-200 px-2 py-1 text-[11px] font-semibold text-red-700 hover:bg-red-50"
                               >
                                 Delete
                               </button>
-                            </form>
+                            </div>
                           </div>
-                        </div>
-                        <div className="mt-2 text-xs text-gray-600">
-                          Bookings: {bookings.length} | Host blocks: {blocks.length}
-                        </div>
-                        <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
-                          {listingPhotos.length > 0 ? (
-                            listingPhotos.map((photoUrl: string, index: number) => (
-                              <div
-                                key={`${car.id}-photo-${index}`}
-                                className="relative h-12 w-16 shrink-0 overflow-hidden rounded border border-border"
-                              >
-                                <Image
-                                  src={photoUrl}
-                                  alt={`${car.title ?? "Listing"} photo ${index + 1}`}
-                                  fill
-                                  className="object-cover"
-                                  sizes="64px"
-                                />
-                              </div>
-                            ))
-                          ) : (
-                            <p className="text-[11px] text-gray-500">No photos uploaded yet.</p>
-                          )}
-                        </div>
-                        {bookings.length > 0 ? (
-                          <div className="mt-2 text-[11px] text-gray-600">
-                            Upcoming bookings:{" "}
-                            {bookings
-                              .slice(0, 2)
-                              .map((b: any) => `${b.start_date} -> ${b.end_date}`)
-                              .join(", ")}
+                          <div className="mt-2 text-xs text-gray-600">
+                            Bookings: {bookings.length} | Host blocks: {blocks.length}
                           </div>
-                        ) : null}
-                        {blocks.length > 0 ? (
-                          <div className="mt-1 text-[11px] text-gray-600">
-                            Host blocks:{" "}
-                            {blocks
-                              .slice(0, 2)
-                              .map((b: any) => `${b.start_date} -> ${b.end_date}`)
-                              .join(", ")}
+                          <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
+                            {listingPhotos.length > 0 ? (
+                              listingPhotos.map((photoUrl: string, index: number) => (
+                                <div
+                                  key={`${car.id}-photo-${index}`}
+                                  className="relative h-12 w-16 shrink-0 overflow-hidden rounded border border-border"
+                                >
+                                  <Image
+                                    src={photoUrl}
+                                    alt={`${car.title ?? "Listing"} photo ${index + 1}`}
+                                    fill
+                                    className="object-cover"
+                                    sizes="64px"
+                                  />
+                                </div>
+                              ))
+                            ) : (
+                              <p className="text-[11px] text-gray-500">No photos uploaded yet.</p>
+                            )}
                           </div>
-                        ) : null}
-                      </div>
-                    );
-                  })}
-                  {(cars ?? []).length === 0 ? (
-                    <p className="text-sm text-gray-600">No vehicles yet.</p>
-                  ) : null}
-                </div>
+                          {bookings.length > 0 ? (
+                            <div className="mt-2 text-[11px] text-gray-600">
+                              Upcoming bookings:{" "}
+                              {bookings
+                                .slice(0, 2)
+                                .map((b: any) => `${b.start_date} -> ${b.end_date}`)
+                                .join(", ")}
+                            </div>
+                          ) : null}
+                          {blocks.length > 0 ? (
+                            <div className="mt-1 text-[11px] text-gray-600">
+                              Host blocks:{" "}
+                              {blocks
+                                .slice(0, 2)
+                                .map((b: any) => `${b.start_date} -> ${b.end_date}`)
+                                .join(", ")}
+                            </div>
+                          ) : null}
+                        </div>
+                      );
+                    })}
+                    {(cars ?? []).length === 0 ? (
+                      <p className="text-sm text-gray-600">No vehicles yet.</p>
+                    ) : null}
+                  </div>
+                </form>
               </CardContent>
             </Card>
             <Card>
