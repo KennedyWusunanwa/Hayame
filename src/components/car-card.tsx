@@ -29,12 +29,12 @@ export function CarCard({ car, isFavorite = false, onToggleFavorite }: Props) {
       className="group flex flex-col overflow-hidden rounded-2xl border border-border bg-white shadow-card card-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-2"
       aria-label={`View ${car.title}`}
     >
-      <div className="relative h-48 w-full overflow-hidden">
+      <div className="relative h-56 w-full overflow-hidden bg-gray-100 sm:h-48">
         <Image
           src={car.image_url ?? "/car-placeholder.jpg"}
           alt={car.title}
           fill
-          className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105"
+          className="h-full w-full object-contain object-center transition-transform duration-200 sm:object-cover sm:object-[center_58%] sm:group-hover:scale-105"
           sizes="(max-width:768px) 100vw, 400px"
         />
         <div

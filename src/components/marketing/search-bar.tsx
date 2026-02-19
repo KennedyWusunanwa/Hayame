@@ -179,7 +179,7 @@ export function HeroSearchBar() {
               </div>
             </div>
             <Button
-              className="h-12 w-full rounded-full bg-brand px-6 font-semibold text-white hover:bg-brand/90 lg:col-span-1"
+              className="h-12 w-full rounded-full border border-brand bg-brand px-6 font-semibold text-white shadow-soft hover:bg-white hover:text-brand lg:col-span-1"
               onClick={onSearch}
             >
               Search
