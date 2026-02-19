@@ -30,7 +30,8 @@ export async function GET() {
         .lt("end_date", today);
     }
 
-    const bookingSelect = "*, cars(title, city, region, owner_id, cancellation_policy)";
+    const bookingSelect =
+      "id,car_id,renter_id,start_date,end_date,status,nights,daily_rate,subtotal,platform_fee,insurance_fee,delivery_fee,deposit_amount,total_price,payment_status,payment_reference,payment_provider,paid_at,approved_at,rejected_at,rejection_reason,created_at,cars(id,title,city,region,owner_id,cancellation_policy,car_photos(url),owner:profiles!cars_owner_id_fkey(id,full_name,avatar_url,phone)),renter:profiles!bookings_renter_id_fkey(id,full_name,avatar_url,phone)";
 
     const renterBookings = await supa
       .from("bookings")
@@ -53,11 +54,29 @@ export async function GET() {
 
     const combined = [...(renterBookings.data ?? []), ...(ownerBookings.data ?? [])] as any[];
     const unique = Array.from(new Map(combined.map((item) => [item.id, item])).values());
+    const carIds = Array.from(new Set(unique.map((item) => item.car_id).filter(Boolean)));
+    const { data: conversationRows } =
+      carIds.length > 0
+        ? await supa
+            .from("conversations")
+            .select("id,host_id,user_id,car_id")
+            .in("car_id", carIds)
+        : { data: [] as any[] };
+
+    const conversationByPair = new Map<string, string>();
+    for (const conversation of conversationRows ?? []) {
+      const key = `${conversation.host_id}|${conversation.user_id}|${conversation.car_id}`;
+      conversationByPair.set(key, conversation.id);
+    }
+
     const withRole = unique.map((item: any) => {
       const role = [];
       if (item.renter_id === user.id) role.push("renter");
       if (ownerCarIds.includes(item.car_id)) role.push("owner");
-      return { ...item, role: role.join("+") || "guest" };
+      const hostId = item?.cars?.owner_id ?? null;
+      const conversationKey = hostId ? `${hostId}|${item.renter_id}|${item.car_id}` : null;
+      const conversationId = conversationKey ? conversationByPair.get(conversationKey) ?? null : null;
+      return { ...item, role: role.join("+") || "guest", conversation_id: conversationId };
     });
     return NextResponse.json({ data: withRole });
   } catch (error: any) {

@@ -12,7 +12,7 @@ const links = [
   { href: "/host/profile", label: "Settings", icon: User },
 ];
 
-export function DashboardMobileNav() {
+export function DashboardMobileNav({ pendingBookingCount = 0 }: { pendingBookingCount?: number }) {
   const pathname = usePathname();
   return (
     <nav className="sticky top-0 z-20 -mx-4 bg-white/95 px-4 py-2 shadow-sm backdrop-blur lg:hidden">
@@ -24,6 +24,7 @@ export function DashboardMobileNav() {
         {links.map((link) => {
           const Icon = link.icon;
           const active = pathname?.startsWith(link.href);
+          const showBookingDot = link.href === "/host/bookings" && pendingBookingCount > 0;
           return (
             <Link
               key={link.href}
@@ -33,7 +34,15 @@ export function DashboardMobileNav() {
                 active && "border-primary bg-primary/10 text-primary",
               )}
             >
-              <Icon className="h-4 w-4" />
+              <span className="relative inline-flex">
+                <Icon className="h-4 w-4" />
+                {showBookingDot ? (
+                  <>
+                    <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-brand" />
+                    <span className="sr-only">New booking requests</span>
+                  </>
+                ) : null}
+              </span>
               {link.label}
             </Link>
           );

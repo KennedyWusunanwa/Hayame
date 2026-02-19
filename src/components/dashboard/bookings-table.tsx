@@ -1,13 +1,23 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
+import { differenceInCalendarDays, format, parseISO } from "date-fns";
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { TripStatusTracker } from "@/components/trip-status-tracker";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, getInitials } from "@/lib/utils";
+
+type BookingPerson = {
+  id?: string | null;
+  full_name?: string | null;
+  avatar_url?: string | null;
+  phone?: string | null;
+};
 
 type BookingRow = {
   id: string;
@@ -16,24 +26,41 @@ type BookingRow = {
   start_date: string;
   end_date: string;
   status: string;
+  nights?: number | null;
+  daily_rate?: number | null;
+  subtotal?: number | null;
+  platform_fee?: number | null;
+  insurance_fee?: number | null;
+  delivery_fee?: number | null;
+  deposit_amount?: number | null;
   payment_status?: string | null;
   payment_reference?: string | null;
+  rejection_reason?: string | null;
   total_price: number;
   role?: string;
+  conversation_id?: string | null;
+  created_at?: string | null;
   cars?: {
+    id?: string | null;
+    owner_id?: string | null;
     title?: string;
     city?: string;
     region?: string;
     cancellation_policy?: "flexible" | "moderate" | "strict" | string | null;
+    car_photos?: Array<{ url?: string | null }> | null;
+    owner?: BookingPerson | null;
   };
+  renter?: BookingPerson | null;
 };
 
 export function BookingsTable({ mode = "host" }: { mode?: "host" | "renter" }) {
+  const router = useRouter();
   const [rows, setRows] = useState<BookingRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [disputingId, setDisputingId] = useState<string | null>(null);
+  const [messagingId, setMessagingId] = useState<string | null>(null);
 
   const load = async () => {
     try {
@@ -100,6 +127,41 @@ export function BookingsTable({ mode = "host" }: { mode?: "host" | "renter" }) {
     }
   };
 
+  const startConversation = async (booking: BookingRow, isOwnerView: boolean) => {
+    try {
+      setMessagingId(booking.id);
+      let conversationId = booking.conversation_id ?? null;
+      if (!conversationId) {
+        const hostId = booking.cars?.owner?.id ?? booking.cars?.owner_id ?? null;
+        if (!hostId) throw new Error("Host details not available for chat.");
+        const participantId = isOwnerView ? booking.renter?.id ?? booking.renter_id : undefined;
+
+        const res = await fetch("/api/conversations", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            hostId,
+            participantId,
+            carId: booking.car_id,
+          }),
+        });
+        const payload = (await res.json().catch(() => ({}))) as { id?: string; message?: string };
+        if (!res.ok || !payload.id) {
+          throw new Error(payload.message ?? "Unable to open chat.");
+        }
+        conversationId = payload.id;
+        setRows((prev) =>
+          prev.map((row) => (row.id === booking.id ? { ...row, conversation_id: conversationId } : row)),
+        );
+      }
+      router.push(`/messages?conversation=${conversationId}`);
+    } catch (err: any) {
+      alert(err.message ?? "Unable to open chat.");
+    } finally {
+      setMessagingId(null);
+    }
+  };
+
   const rowsSorted = useMemo(
     () => [...rows].sort((a, b) => (a.start_date < b.start_date ? 1 : -1)),
     [rows],
@@ -122,7 +184,17 @@ export function BookingsTable({ mode = "host" }: { mode?: "host" | "renter" }) {
             {error ? <p className="text-sm text-red-600">{error}</p> : null}
           </CardHeader>
           <CardContent>
-            {renderTable(renterRows, false, updatingId, disputingId, handleAction, openDispute, loading)}
+            <BookingsList
+              rows={renterRows}
+              isOwnerView={false}
+              loading={loading}
+              updatingId={updatingId}
+              disputingId={disputingId}
+              messagingId={messagingId}
+              onAction={handleAction}
+              onDispute={openDispute}
+              onMessage={startConversation}
+            />
           </CardContent>
         </Card>
       </div>
@@ -137,67 +209,188 @@ export function BookingsTable({ mode = "host" }: { mode?: "host" | "renter" }) {
           {error ? <p className="text-sm text-red-600">{error}</p> : null}
         </CardHeader>
         <CardContent>
-          {renderTable(renterRows, false, updatingId, disputingId, handleAction, openDispute, loading)}
+          <BookingsList
+            rows={renterRows}
+            isOwnerView={false}
+            loading={loading}
+            updatingId={updatingId}
+            disputingId={disputingId}
+            messagingId={messagingId}
+            onAction={handleAction}
+            onDispute={openDispute}
+            onMessage={startConversation}
+          />
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
           <CardTitle>Bookings on your cars</CardTitle>
-          <p className="text-sm text-gray-600">Approve or reject guest requests after payment.</p>
+          <p className="text-sm text-gray-600">Compact cards on mobile. Tap each booking to expand all details.</p>
         </CardHeader>
         <CardContent>
-          {renderTable(ownerRows, true, updatingId, disputingId, handleAction, openDispute, loading)}
+          <BookingsList
+            rows={ownerRows}
+            isOwnerView={true}
+            loading={loading}
+            updatingId={updatingId}
+            disputingId={disputingId}
+            messagingId={messagingId}
+            onAction={handleAction}
+            onDispute={openDispute}
+            onMessage={startConversation}
+          />
         </CardContent>
       </Card>
     </div>
   );
 }
 
-function renderTable(
-  rows: BookingRow[],
-  isOwnerView: boolean,
-  updatingId: string | null,
-  disputingId: string | null,
-  handleAction: (id: string, action: "approve" | "reject") => void,
-  openDispute: (id: string) => void,
-  loading: boolean,
-) {
+function BookingsList({
+  rows,
+  isOwnerView,
+  loading,
+  updatingId,
+  disputingId,
+  messagingId,
+  onAction,
+  onDispute,
+  onMessage,
+}: {
+  rows: BookingRow[];
+  isOwnerView: boolean;
+  loading: boolean;
+  updatingId: string | null;
+  disputingId: string | null;
+  messagingId: string | null;
+  onAction: (id: string, action: "approve" | "reject") => void;
+  onDispute: (id: string) => void;
+  onMessage: (booking: BookingRow, isOwnerView: boolean) => void;
+}) {
+  if (rows.length === 0 && !loading) {
+    return (
+      <p className="text-center text-sm text-gray-600">
+        {isOwnerView ? "No bookings on your cars yet." : "No trips booked yet."}
+      </p>
+    );
+  }
+
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Car</TableHead>
-          <TableHead>Dates</TableHead>
-          <TableHead>Status</TableHead>
-          <TableHead>Payment</TableHead>
-          <TableHead className="text-right">Total</TableHead>
-          {isOwnerView ? <TableHead className="text-right">Actions</TableHead> : null}
-        </TableRow>
-      </TableHeader>
-      <TableBody>
+    <div className="space-y-4">
+      <div className="space-y-3 md:hidden">
         {rows.map((booking) => {
           const awaiting = booking.status === "awaiting_host";
           const canAct = isOwnerView && awaiting && booking.payment_status === "paid";
+          const personName = isOwnerView
+            ? booking.renter?.full_name ?? "Guest"
+            : booking.cars?.owner?.full_name ?? "Host";
+          const personLabel = isOwnerView ? "Booked by" : "Host";
+          const location = [booking.cars?.city, booking.cars?.region].filter(Boolean).join(", ");
+          const image = booking.cars?.car_photos?.[0]?.url ?? booking.cars?.owner?.avatar_url ?? null;
+          const durationNights = getDurationNights(booking);
+          const tripMode = Number(booking.delivery_fee ?? 0) > 0 ? "Delivery" : "Pickup";
+
           return (
-            <TableRow key={booking.id}>
-              <TableCell>
-                <div className="font-semibold">{booking.cars?.title ?? booking.car_id}</div>
-                <div className="text-xs text-gray-600">
-                  {[booking.cars?.city, booking.cars?.region].filter(Boolean).join(", ")}
+            <details key={booking.id} className="overflow-hidden rounded-xl border border-border bg-white">
+              <summary className="list-none cursor-pointer p-3">
+                <div className="flex items-start gap-3">
+                  <div className="relative h-16 w-20 shrink-0 overflow-hidden rounded-lg border border-border bg-gray-100">
+                    {image ? (
+                      <Image src={image} alt={booking.cars?.title ?? "Listing"} fill className="object-cover" sizes="80px" />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center text-xs font-semibold text-gray-500">
+                        {getInitials(booking.cars?.title ?? "Car")}
+                      </div>
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-foreground">{booking.cars?.title ?? booking.car_id}</p>
+                    <p className="mt-0.5 truncate text-xs text-gray-600">{location || "Location not set"}</p>
+                    <p className="mt-1 text-xs text-gray-700">
+                      {personLabel}: <span className="font-semibold">{personName}</span>
+                    </p>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <Badge variant={statusVariant(booking.status)}>{statusLabel(booking.status)}</Badge>
+                      <Badge variant={paymentVariant(booking.payment_status)}>{paymentLabel(booking.payment_status)}</Badge>
+                    </div>
+                    <p className="mt-2 text-xs text-gray-700">
+                      {formatDateLabel(booking.start_date)} to {formatDateLabel(booking.end_date)} | {durationNights} night(s)
+                    </p>
+                    <p className="text-sm font-semibold text-foreground">{formatCurrency(booking.total_price)}</p>
+                  </div>
                 </div>
-              </TableCell>
-              <TableCell>
-                {booking.start_date} - {booking.end_date}
-              </TableCell>
-              <TableCell>
-                <Badge variant={statusVariant(booking.status)}>{statusLabel(booking.status)}</Badge>
-                <TripStatusTracker
-                  status={booking.status}
-                  startDate={booking.start_date}
-                  endDate={booking.end_date}
-                />
-                <div className="mt-1 text-[11px] text-gray-600">
+              </summary>
+
+              <div className="border-t border-border px-3 pb-3 pt-2">
+                <div className="mb-3 flex flex-wrap gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 px-3 text-xs"
+                    onClick={() => onMessage(booking, isOwnerView)}
+                    disabled={messagingId === booking.id}
+                  >
+                    {messagingId === booking.id ? "Opening..." : "Message"}
+                  </Button>
+                  {!isOwnerView && booking.payment_status === "paid" ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-8 px-3 text-xs"
+                      disabled={disputingId === booking.id}
+                      onClick={() => onDispute(booking.id)}
+                    >
+                      {disputingId === booking.id ? "Opening..." : "Open dispute"}
+                    </Button>
+                  ) : null}
+                </div>
+
+                {canAct ? (
+                  <div className="mb-3 flex flex-wrap gap-2">
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      className="h-8 px-3 text-xs"
+                      onClick={() => onAction(booking.id, "reject")}
+                      disabled={updatingId === booking.id}
+                    >
+                      Reject & refund
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="h-8 px-3 text-xs"
+                      onClick={() => onAction(booking.id, "approve")}
+                      disabled={updatingId === booking.id}
+                    >
+                      Approve
+                    </Button>
+                  </div>
+                ) : null}
+
+                <TripStatusTracker status={booking.status} startDate={booking.start_date} endDate={booking.end_date} />
+
+                <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
+                  <Detail label="Trip mode" value={tripMode} />
+                  <Detail label="Duration" value={`${durationNights} night(s)`} />
+                  <Detail label="Start" value={formatDateLabel(booking.start_date)} />
+                  <Detail label="End" value={formatDateLabel(booking.end_date)} />
+                  <Detail label="Daily rate" value={formatCurrency(Number(booking.daily_rate ?? 0))} />
+                  <Detail label="Subtotal" value={formatCurrency(Number(booking.subtotal ?? 0))} />
+                  <Detail label="Platform fee" value={formatCurrency(Number(booking.platform_fee ?? 0))} />
+                  <Detail label="Insurance fee" value={formatCurrency(Number(booking.insurance_fee ?? 0))} />
+                  <Detail label="Delivery fee" value={formatCurrency(Number(booking.delivery_fee ?? 0))} />
+                  <Detail label="Deposit" value={formatCurrency(Number(booking.deposit_amount ?? 0))} />
+                  <Detail label="Total" value={formatCurrency(Number(booking.total_price ?? 0))} />
+                  <Detail label="Payment ref" value={booking.payment_reference ?? "N/A"} />
+                </div>
+
+                {booking.rejection_reason ? (
+                  <p className="mt-2 rounded-md bg-red-50 px-2 py-1 text-xs text-red-700">
+                    Rejection reason: {booking.rejection_reason}
+                  </p>
+                ) : null}
+
+                <div className="mt-3 text-[11px] text-gray-600">
                   {booking.cars?.cancellation_policy ? (
                     <span className="rounded-full bg-gray-100 px-2 py-1 font-semibold capitalize text-gray-700">
                       {booking.cars.cancellation_policy} cancellation
@@ -208,64 +401,160 @@ function renderTable(
                     </Link>
                   )}
                 </div>
-                {!isOwnerView && booking.payment_status === "paid" ? (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="mt-2 h-7 px-2 text-xs"
-                    disabled={disputingId === booking.id}
-                    onClick={() => openDispute(booking.id)}
-                  >
-                    {disputingId === booking.id ? "Opening..." : "Open dispute"}
-                  </Button>
-                ) : null}
-              </TableCell>
-              <TableCell>
-                <Badge variant={paymentVariant(booking.payment_status)}>
-                  {paymentLabel(booking.payment_status)}
-                </Badge>
-              </TableCell>
-              <TableCell className="text-right font-semibold">{formatCurrency(booking.total_price)}</TableCell>
-              {isOwnerView ? (
-                <TableCell className="text-right">
-                  {canAct ? (
+              </div>
+            </details>
+          );
+        })}
+      </div>
+
+      <div className="hidden md:block">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Listing</TableHead>
+              <TableHead>{isOwnerView ? "Booked by" : "Host"}</TableHead>
+              <TableHead>Dates</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead>Payment</TableHead>
+              <TableHead className="text-right">Total</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.map((booking) => {
+              const awaiting = booking.status === "awaiting_host";
+              const canAct = isOwnerView && awaiting && booking.payment_status === "paid";
+              const personName = isOwnerView
+                ? booking.renter?.full_name ?? "Guest"
+                : booking.cars?.owner?.full_name ?? "Host";
+              const image = booking.cars?.car_photos?.[0]?.url ?? booking.cars?.owner?.avatar_url ?? null;
+              const location = [booking.cars?.city, booking.cars?.region].filter(Boolean).join(", ");
+
+              return (
+                <TableRow key={booking.id}>
+                  <TableCell>
+                    <div className="flex items-center gap-3">
+                      <div className="relative h-12 w-16 overflow-hidden rounded-md border border-border bg-gray-100">
+                        {image ? (
+                          <Image src={image} alt={booking.cars?.title ?? "Listing"} fill className="object-cover" sizes="64px" />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center text-xs font-semibold text-gray-500">
+                            {getInitials(booking.cars?.title ?? "Car")}
+                          </div>
+                        )}
+                      </div>
+                      <div>
+                        <div className="font-semibold">{booking.cars?.title ?? booking.car_id}</div>
+                        <div className="text-xs text-gray-600">{location || "Location not set"}</div>
+                      </div>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="font-semibold">{personName}</div>
+                    <div className="text-xs text-gray-600">{booking.renter?.phone ?? booking.cars?.owner?.phone ?? "No phone"}</div>
+                  </TableCell>
+                  <TableCell>
+                    {formatDateLabel(booking.start_date)} - {formatDateLabel(booking.end_date)}
+                    <div className="text-xs text-gray-600">{getDurationNights(booking)} night(s)</div>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant={statusVariant(booking.status)}>{statusLabel(booking.status)}</Badge>
+                    <TripStatusTracker
+                      status={booking.status}
+                      startDate={booking.start_date}
+                      endDate={booking.end_date}
+                    />
+                    {booking.cars?.cancellation_policy ? (
+                      <div className="mt-1 text-[11px] text-gray-600">
+                        <span className="rounded-full bg-gray-100 px-2 py-1 font-semibold capitalize text-gray-700">
+                          {booking.cars.cancellation_policy} cancellation
+                        </span>
+                      </div>
+                    ) : null}
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant={paymentVariant(booking.payment_status)}>{paymentLabel(booking.payment_status)}</Badge>
+                  </TableCell>
+                  <TableCell className="text-right font-semibold">{formatCurrency(booking.total_price)}</TableCell>
+                  <TableCell className="text-right">
                     <div className="flex justify-end gap-2">
                       <Button
                         size="sm"
-                        variant="secondary"
-                        onClick={() => handleAction(booking.id, "reject")}
-                        disabled={updatingId === booking.id}
+                        variant="outline"
+                        onClick={() => onMessage(booking, isOwnerView)}
+                        disabled={messagingId === booking.id}
                       >
-                        Reject &amp; refund
+                        {messagingId === booking.id ? "Opening..." : "Message"}
                       </Button>
-                      <Button
-                        size="sm"
-                        onClick={() => handleAction(booking.id, "approve")}
-                        disabled={updatingId === booking.id}
-                      >
-                        Approve
-                      </Button>
+                      {canAct ? (
+                        <>
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => onAction(booking.id, "reject")}
+                            disabled={updatingId === booking.id}
+                          >
+                            Reject &amp; refund
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={() => onAction(booking.id, "approve")}
+                            disabled={updatingId === booking.id}
+                          >
+                            Approve
+                          </Button>
+                        </>
+                      ) : null}
                     </div>
-                  ) : (
-                    <span className="text-xs text-gray-600">
-                      {awaiting ? "Awaiting your decision" : "No action needed"}
-                    </span>
-                  )}
-                </TableCell>
-              ) : null}
-            </TableRow>
-          );
-        })}
-        {rows.length === 0 && !loading ? (
-          <TableRow>
-            <TableCell colSpan={isOwnerView ? 6 : 5} className="text-center text-sm text-gray-600">
-              {isOwnerView ? "No bookings on your cars yet." : "No trips booked yet."}
-            </TableCell>
-          </TableRow>
-        ) : null}
-      </TableBody>
-    </Table>
+                    {!isOwnerView && booking.payment_status === "paid" ? (
+                      <div className="mt-2 flex justify-end">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 px-2 text-xs"
+                          disabled={disputingId === booking.id}
+                          onClick={() => onDispute(booking.id)}
+                        >
+                          {disputingId === booking.id ? "Opening..." : "Open dispute"}
+                        </Button>
+                      </div>
+                    ) : null}
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </div>
+    </div>
   );
+}
+
+function Detail({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md border border-border bg-gray-50 px-2 py-1">
+      <p className="text-[10px] uppercase tracking-wide text-gray-500">{label}</p>
+      <p className="truncate font-semibold text-foreground">{value}</p>
+    </div>
+  );
+}
+
+function getDurationNights(booking: BookingRow) {
+  if (typeof booking.nights === "number" && booking.nights > 0) return booking.nights;
+  try {
+    return Math.max(differenceInCalendarDays(parseISO(booking.end_date), parseISO(booking.start_date)), 1);
+  } catch {
+    return 1;
+  }
+}
+
+function formatDateLabel(value?: string | null) {
+  if (!value) return "N/A";
+  try {
+    return format(parseISO(value), "MMM d, yyyy");
+  } catch {
+    return value;
+  }
 }
 
 function statusLabel(status?: string) {

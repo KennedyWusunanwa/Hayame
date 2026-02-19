@@ -21,7 +21,7 @@ const links = [
   { href: "/host/profile", label: "Host settings", icon: User },
 ];
 
-export function DashboardSidebar({ host }: { host: Host }) {
+export function DashboardSidebar({ host, pendingBookingCount = 0 }: { host: Host; pendingBookingCount?: number }) {
   const pathname = usePathname();
   const initials = getInitials(host.name);
   return (
@@ -49,6 +49,7 @@ export function DashboardSidebar({ host }: { host: Host }) {
         {links.map((link) => {
           const Icon = link.icon;
           const active = pathname?.startsWith(link.href);
+          const showBookingDot = link.href === "/host/bookings" && pendingBookingCount > 0;
           return (
             <Link
               key={link.href}
@@ -58,7 +59,15 @@ export function DashboardSidebar({ host }: { host: Host }) {
                 active && "bg-brand/10 text-brand",
               )}
             >
-              <Icon className="h-4 w-4" />
+              <span className="relative inline-flex">
+                <Icon className="h-4 w-4" />
+                {showBookingDot ? (
+                  <>
+                    <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-brand" />
+                    <span className="sr-only">New booking requests</span>
+                  </>
+                ) : null}
+              </span>
               {link.label}
             </Link>
           );
