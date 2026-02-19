@@ -209,7 +209,11 @@ export function AdminMessagesConsole({ initialUserId }: Props) {
                       <button
                         key={user.id}
                         type="button"
-                        onClick={() => void startConversation(user.id)}
+                        onClick={() => {
+                          void startConversation(user.id).catch((err: unknown) => {
+                            setError(err instanceof Error ? err.message : "Unable to start conversation");
+                          });
+                        }}
                         className="flex w-full items-center justify-between rounded-lg border border-border px-2 py-2 text-left hover:bg-gray-50"
                       >
                         <div className="flex min-w-0 items-center gap-2">
@@ -251,7 +255,11 @@ export function AdminMessagesConsole({ initialUserId }: Props) {
                       <button
                         key={conversation.id}
                         type="button"
-                        onClick={() => void openConversation(conversation.id)}
+                        onClick={() => {
+                          void openConversation(conversation.id).catch((err: unknown) => {
+                            setError(err instanceof Error ? err.message : "Unable to open conversation");
+                          });
+                        }}
                         className={cn(
                           "flex w-full items-center justify-between rounded-lg border border-border px-2 py-2 text-left hover:bg-gray-50",
                           activeConversationId === conversation.id ? "bg-gray-50" : "bg-white",

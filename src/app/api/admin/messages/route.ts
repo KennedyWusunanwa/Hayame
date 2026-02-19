@@ -22,7 +22,32 @@ async function requireAdminClient() {
 }
 
 async function ensureOfficeProfile(admin: any) {
-  await admin.from("profiles").upsert(
+  const officeEmail =
+    process.env.ADMIN_OFFICE_EMAIL?.trim() ||
+    `office-${ADMIN_OFFICE_PROFILE_ID.slice(0, 8)}@hayamegh.com`;
+
+  const { data: authUserResult, error: authUserError } = await admin.auth.admin
+    .getUserById(ADMIN_OFFICE_PROFILE_ID)
+    .catch(() => ({ data: null, error: null }));
+  if (authUserError) {
+    throw authUserError;
+  }
+
+  if (!authUserResult?.user) {
+    const password = `${crypto.randomUUID()}Aa!1`;
+    const { error: createAuthError } = await admin.auth.admin.createUser({
+      id: ADMIN_OFFICE_PROFILE_ID,
+      email: officeEmail,
+      email_confirm: true,
+      password,
+      user_metadata: { full_name: ADMIN_OFFICE_NAME },
+    });
+    if (createAuthError) {
+      throw createAuthError;
+    }
+  }
+
+  const { error: profileError } = await admin.from("profiles").upsert(
     {
       id: ADMIN_OFFICE_PROFILE_ID,
       full_name: ADMIN_OFFICE_NAME,
@@ -34,6 +59,9 @@ async function ensureOfficeProfile(admin: any) {
     },
     { onConflict: "id" },
   );
+  if (profileError) {
+    throw profileError;
+  }
 }
 
 type RequestBody =
