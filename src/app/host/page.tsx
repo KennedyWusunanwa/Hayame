@@ -179,7 +179,7 @@ export default async function DashboardHome() {
         </CardContent>
       </Card>
 
-      <Card className="md:hidden">
+      <Card className="lg:hidden">
         <CardHeader className="pb-2">
           <CardTitle className="text-base">Overview snapshot</CardTitle>
         </CardHeader>
@@ -193,7 +193,7 @@ export default async function DashboardHome() {
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-2 lg:grid-cols-4">
+      <div className="hidden grid-cols-2 gap-3 lg:grid lg:grid-cols-4">
         <StatCard title="Total earnings" value={formatCurrency(totalEarnings)} />
         <StatCard title="Monthly earnings" value={formatCurrency(monthlyEarnings)} />
         <StatCard title="Booking rate" value={`${bookingRate}%`} />
@@ -224,7 +224,7 @@ export default async function DashboardHome() {
           <CardTitle>Trip history</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div className="hidden overflow-x-auto md:block">
+          <div className="hidden overflow-x-auto lg:block">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -259,7 +259,7 @@ export default async function DashboardHome() {
               </TableBody>
             </Table>
           </div>
-          <div className="space-y-2 md:hidden">
+          <div className="space-y-2 lg:hidden">
             {bookingRows.slice(0, 8).map((booking) => (
               <div key={booking.id} className="rounded-lg border border-border bg-white p-3">
                 <div className="flex items-start justify-between gap-2">

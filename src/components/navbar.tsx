@@ -31,6 +31,7 @@ export function Navbar() {
   const [userName, setUserName] = useState<string | null>(null);
   const [isHost, setIsHost] = useState(false);
   const [hostStatus, setHostStatus] = useState<"pending" | "approved" | "rejected" | null>(null);
+  const [hostBookingAlertCount, setHostBookingAlertCount] = useState(0);
   const [mobileOpen, setMobileOpen] = useState(false);
   const { unreadCount } = useMessaging();
 
@@ -48,6 +49,7 @@ export function Navbar() {
         setUserName(null);
         setIsHost(false);
         setHostStatus(null);
+        setHostBookingAlertCount(0);
         return;
       }
       const name = (user.user_metadata as any)?.full_name || user.email || "Account";
@@ -58,14 +60,35 @@ export function Navbar() {
         const approvedHost = Boolean(payload.is_host);
         setIsHost(approvedHost);
         setHostStatus(approvedHost ? "approved" : (payload.status as any) ?? null);
+        if (approvedHost) {
+          const bookingsRes = await fetch("/api/bookings", { cache: "no-store" });
+          if (bookingsRes.ok) {
+            const bookingsPayload = (await bookingsRes.json()) as {
+              data?: Array<{ role?: string; status?: string | null }>;
+            };
+            const ownerAlerts = (bookingsPayload.data ?? []).filter((booking) => {
+              const role = String(booking.role ?? "");
+              const status = String(booking.status ?? "");
+              const isOwnerBooking = role.includes("owner");
+              return isOwnerBooking && (status === "awaiting_host" || status === "confirmed");
+            }).length;
+            setHostBookingAlertCount(ownerAlerts);
+          } else {
+            setHostBookingAlertCount(0);
+          }
+        } else {
+          setHostBookingAlertCount(0);
+        }
       } else {
         setIsHost(false);
         setHostStatus(null);
+        setHostBookingAlertCount(0);
       }
     } catch {
       setUserName(null);
       setIsHost(false);
       setHostStatus(null);
+      setHostBookingAlertCount(0);
     }
   }, []);
 
@@ -132,7 +155,14 @@ export function Navbar() {
               {isHost ? (
                 <>
                   <Button asChild variant="outline" className="border-brand text-brand">
-                    <Link href="/host">Host dashboard</Link>
+                    <Link href="/host" className="inline-flex items-center gap-2">
+                      <span>Host dashboard</span>
+                      {hostBookingAlertCount > 0 ? (
+                        <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-brand px-1 text-[11px] font-semibold text-white">
+                          {hostBookingAlertCount > 99 ? "99+" : hostBookingAlertCount}
+                        </span>
+                      ) : null}
+                    </Link>
                   </Button>
                   <Button
                     asChild
@@ -233,7 +263,14 @@ export function Navbar() {
                           variant="outline"
                           className="w-full border-brand text-brand hover:bg-brand hover:text-white"
                         >
-                          <Link href="/host">Host dashboard</Link>
+                          <Link href="/host" className="inline-flex items-center gap-2">
+                            <span>Host dashboard</span>
+                            {hostBookingAlertCount > 0 ? (
+                              <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-brand px-1 text-[11px] font-semibold text-white">
+                                {hostBookingAlertCount > 99 ? "99+" : hostBookingAlertCount}
+                              </span>
+                            ) : null}
+                          </Link>
                         </Button>
                       ) : (
                         <Button

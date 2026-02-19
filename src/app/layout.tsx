@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Suspense } from "react";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
@@ -21,6 +21,12 @@ export const metadata: Metadata = {
   title: "Hayame 2.0 · Ghana Car Sharing",
   description:
     "Turo-style peer-to-peer car rental marketplace for Ghana. Rent anytime, anywhere.",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
@@ -47,3 +53,4 @@ export default function RootLayout({
     </html>
   );
 }
+
