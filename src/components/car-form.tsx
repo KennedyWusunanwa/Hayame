@@ -18,12 +18,16 @@ import { useLocations } from "@/lib/use-locations";
 import { useCarCatalog } from "@/lib/use-car-catalog";
 
 type FormValues = z.infer<typeof carFormSchema>;
+type ExistingPhoto = {
+  id: string;
+  url: string;
+};
 
 type Props = {
   carId?: string;
   defaultValues?: Partial<FormValues>;
   redirectTo?: string;
-  existingPhotoCount?: number;
+  existingPhotos?: ExistingPhoto[];
 };
 
 const qualityChecklist = [
@@ -47,10 +51,12 @@ const priorityFeatures = [
 const MIN_PHOTOS = 5;
 const MAX_PHOTOS = 7;
 
-export function CarForm({ carId, defaultValues, redirectTo, existingPhotoCount = 0 }: Props) {
+export function CarForm({ carId, defaultValues, redirectTo, existingPhotos = [] }: Props) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [files, setFiles] = useState<File[]>([]);
+  const [existingPhotosState, setExistingPhotosState] = useState<ExistingPhoto[]>(existingPhotos);
+  const [removedExistingPhotos, setRemovedExistingPhotos] = useState<ExistingPhoto[]>([]);
   const [uploading, setUploading] = useState(false);
   const redirectPath = redirectTo ?? "/host/cars";
   const { regions, citiesByRegion } = useLocations();
@@ -97,14 +103,14 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotoCount =
       return;
     }
 
-    const totalPhotos = existingPhotoCount + files.length;
+    const totalPhotos = existingPhotosState.length + files.length;
     if (totalPhotos < MIN_PHOTOS) {
       setError(
         `At least ${MIN_PHOTOS} photos are required before submission. Current total: ${totalPhotos}.`,
       );
       return;
     }
-    if (files.length > 0 && totalPhotos > MAX_PHOTOS) {
+    if (totalPhotos > MAX_PHOTOS) {
       setError(`Maximum ${MAX_PHOTOS} photos allowed. Current total: ${totalPhotos}.`);
       return;
     }
@@ -124,9 +130,14 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotoCount =
       const payload = (await res.json().catch(() => ({}))) as { data?: { id?: string } };
       const newCarId = carId ?? payload?.data?.id;
 
+      if (newCarId && removedExistingPhotos.length > 0) {
+        setUploading(true);
+        await removeExistingPhotos(newCarId, removedExistingPhotos);
+      }
+
       if (newCarId && files.length > 0) {
         setUploading(true);
-        await uploadPhotos(newCarId, files, existingPhotoCount);
+        await uploadPhotos(newCarId, files, existingPhotosState.length);
       }
 
       router.push(redirectPath);
@@ -141,8 +152,8 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotoCount =
   const brandValue = watch("brand");
   const modelValue = watch("model");
   const yearValue = watch("car_year");
-  const totalPhotos = existingPhotoCount + files.length;
-  const remainingSlots = Math.max(MAX_PHOTOS - existingPhotoCount - files.length, 0);
+  const totalPhotos = existingPhotosState.length + files.length;
+  const remainingSlots = Math.max(MAX_PHOTOS - existingPhotosState.length - files.length, 0);
   const autoTitlePreview = buildListingTitlePreview(brandValue, modelValue, yearValue);
   const filePreviews = useMemo(
     () =>
@@ -162,7 +173,7 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotoCount =
 
   const handleFileSelection = (selected: File[]) => {
     if (selected.length === 0) return;
-    const room = Math.max(MAX_PHOTOS - existingPhotoCount - files.length, 0);
+    const room = Math.max(MAX_PHOTOS - existingPhotosState.length - files.length, 0);
     if (room <= 0) {
       setError(`You already have ${MAX_PHOTOS} photos. Remove one before adding another.`);
       return;
@@ -189,6 +200,17 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotoCount =
 
   const removeSelectedFile = (index: number) => {
     setFiles((prev) => prev.filter((_, fileIndex) => fileIndex !== index));
+  };
+
+  const removeExistingPhoto = (photoId: string) => {
+    const photo = existingPhotosState.find((item) => item.id === photoId);
+    if (!photo) return;
+
+    setExistingPhotosState((prev) => prev.filter((item) => item.id !== photoId));
+    setRemovedExistingPhotos((prev) =>
+      prev.some((item) => item.id === photo.id) ? prev : [...prev, photo],
+    );
+    setError(null);
   };
 
   return (
@@ -427,6 +449,29 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotoCount =
         ) : (
           <p className="text-xs text-amber-700">Photo limit reached.</p>
         )}
+        {existingPhotosState.length > 0 ? (
+          <div className="space-y-1">
+            <p className="text-xs text-gray-700">{existingPhotosState.length} current photo(s)</p>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {existingPhotosState.map((photo) => (
+                <div key={photo.id} className="overflow-hidden rounded border border-border bg-white">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={photo.url} alt="Current car photo" className="h-24 w-full object-cover" loading="lazy" />
+                  <div className="flex items-center justify-between gap-2 px-2 py-1 text-xs text-gray-700">
+                    <span className="truncate">Current photo</span>
+                    <button
+                      type="button"
+                      onClick={() => removeExistingPhoto(photo.id)}
+                      className="shrink-0 font-semibold text-red-600"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
         {filePreviews.length > 0 ? (
           <div className="space-y-1">
             <p className="text-xs text-gray-700">{filePreviews.length} new file(s) selected</p>
@@ -523,10 +568,7 @@ async function uploadPhotos(carId: string, files: File[], existingPhotoCount = 0
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) throw new Error("Please sign in to upload photos");
-  const bucket =
-    process.env.NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET ||
-    process.env.NEXT_PUBLIC_SUPABASE_AVATAR_BUCKET ||
-    "car-photos";
+  const bucket = getPhotoBucketName();
 
   for (const file of files) {
     const ext = file.name.split(".").pop();
@@ -543,5 +585,50 @@ async function uploadPhotos(carId: string, files: File[], existingPhotoCount = 0
 
     const { error: insertError } = await supabase.from("car_photos").insert({ car_id: carId, url: publicUrl });
     if (insertError) throw insertError;
+  }
+}
+
+async function removeExistingPhotos(carId: string, photosToRemove: ExistingPhoto[]) {
+  if (photosToRemove.length === 0) return;
+
+  const supabase = createSupabaseBrowserClient();
+  const photoIds = photosToRemove.map((photo) => photo.id);
+  const { error: rowDeleteError } = await supabase
+    .from("car_photos")
+    .delete()
+    .eq("car_id", carId)
+    .in("id", photoIds);
+
+  if (rowDeleteError) {
+    throw rowDeleteError;
+  }
+
+  const bucket = getPhotoBucketName();
+  const paths = photosToRemove
+    .map((photo) => getStoragePathFromPublicUrl(photo.url, bucket))
+    .filter((path): path is string => Boolean(path));
+
+  if (paths.length > 0) {
+    await supabase.storage.from(bucket).remove(paths);
+  }
+}
+
+function getPhotoBucketName() {
+  return (
+    process.env.NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET ||
+    process.env.NEXT_PUBLIC_SUPABASE_AVATAR_BUCKET ||
+    "car-photos"
+  );
+}
+
+function getStoragePathFromPublicUrl(publicUrl: string, bucket: string): string | null {
+  try {
+    const url = new URL(publicUrl);
+    const prefix = `/storage/v1/object/public/${bucket}/`;
+    const start = url.pathname.indexOf(prefix);
+    if (start === -1) return null;
+    return decodeURIComponent(url.pathname.slice(start + prefix.length));
+  } catch {
+    return null;
   }
 }

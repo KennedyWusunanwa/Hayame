@@ -38,10 +38,15 @@ export default async function AdminEditCarPage({ params }: PageProps) {
     .select("*")
     .eq("id", resolvedParams.id)
     .maybeSingle();
-  const { count: existingPhotoCount } = await admin
+  const { data: existingPhotoRows } = await admin
     .from("car_photos")
-    .select("id", { count: "exact", head: true })
+    .select("id,url")
     .eq("car_id", resolvedParams.id);
+
+  const existingPhotos =
+    ((existingPhotoRows ?? []) as { id: string; url: string }[]).filter(
+      (photo) => Boolean(photo.id && photo.url),
+    ) ?? [];
 
   if (!car) return notFound();
 
@@ -65,7 +70,7 @@ export default async function AdminEditCarPage({ params }: PageProps) {
           <CarForm
             carId={car.id}
             redirectTo="/admin"
-            existingPhotoCount={existingPhotoCount ?? 0}
+            existingPhotos={existingPhotos}
             defaultValues={{
               title: car.title ?? "",
               description: car.description ?? "",

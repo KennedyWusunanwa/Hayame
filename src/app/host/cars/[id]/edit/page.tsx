@@ -30,10 +30,16 @@ export default async function EditCarPage({ params }: PageProps) {
 
   const hydratedCar = car ?? (await fetchCarFallback(resolvedParams.id, user.id));
   if (!hydratedCar) return notFound();
-  const { count: existingPhotoCount } = await (supabase as any)
+
+  const { data: existingPhotoRows } = await (supabase as any)
     .from("car_photos")
-    .select("id", { count: "exact", head: true })
+    .select("id,url")
     .eq("car_id", hydratedCar.id);
+
+  const existingPhotos =
+    ((existingPhotoRows ?? []) as { id: string; url: string }[]).filter(
+      (photo) => Boolean(photo.id && photo.url),
+    ) ?? [];
 
   return (
     <div className="space-y-6">
@@ -49,7 +55,7 @@ export default async function EditCarPage({ params }: PageProps) {
         <CardContent>
           <CarForm
             carId={hydratedCar.id}
-            existingPhotoCount={existingPhotoCount ?? 0}
+            existingPhotos={existingPhotos}
             defaultValues={{
               title: hydratedCar.title ?? "",
               description: hydratedCar.description ?? "",
