@@ -19,8 +19,10 @@ import { ImageGallery } from "@/components/image-gallery";
 import { ListingViewTracker } from "@/components/listing-view-tracker";
 import { ReviewForm, type ReviewableBooking } from "@/components/review-form";
 import { HostMessageCard } from "@/components/messages/host-message-card";
+import { VerifiedHostIndicator } from "@/components/verified-host-indicator";
 import { VerificationBadges } from "@/components/verification-badges";
 import { detailIcons, getFeatureIcon } from "@/lib/feature-icons";
+import { deriveHostBadgeType } from "@/lib/host-badges";
 import type { Database } from "@/lib/database.types";
 import { mockCars, type MockCar } from "@/lib/mock-data";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -41,6 +43,7 @@ type Owner = {
   id_verified?: boolean | null;
   phone_verified?: boolean | null;
   email_verified?: boolean | null;
+  is_host?: boolean | null;
   host_level?: string | null;
 };
 
@@ -418,7 +421,7 @@ async function loadCar(id: string): Promise<{
       const { data: carData } = await supabase
         .from("cars")
         .select(
-          "*, car_photos(url), owner:profiles!cars_owner_id_fkey(id, full_name, avatar_url, city, id_verified, phone_verified, email_verified, host_level)",
+          "*, car_photos(url), owner:profiles!cars_owner_id_fkey(id, full_name, avatar_url, city, is_host, id_verified, phone_verified, email_verified, host_level)",
         )
         .eq("id", id)
         .maybeSingle();
@@ -432,7 +435,7 @@ async function loadCar(id: string): Promise<{
       const params = new URLSearchParams({
         id: `eq.${id}`,
         select:
-          "*, car_photos(url), owner:profiles!cars_owner_id_fkey(id,full_name,avatar_url,city,id_verified,phone_verified,email_verified,host_level)",
+          "*, car_photos(url), owner:profiles!cars_owner_id_fkey(id,full_name,avatar_url,city,is_host,id_verified,phone_verified,email_verified,host_level)",
       });
       const res = await fetch(
         `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/cars?${params.toString()}`,
@@ -547,7 +550,7 @@ async function getCarFromSupabaseRest(id: string): Promise<SupabaseCar | null> {
   const params = new URLSearchParams({
     id: `eq.${id}`,
     select:
-      "*, car_photos(url), owner:profiles!cars_owner_id_fkey(id,full_name,avatar_url,city,id_verified,phone_verified,email_verified,host_level)",
+      "*, car_photos(url), owner:profiles!cars_owner_id_fkey(id,full_name,avatar_url,city,is_host,id_verified,phone_verified,email_verified,host_level)",
   });
 
   try {
@@ -737,7 +740,19 @@ function HostCard({ owner, rating, reviews }: { owner?: Owner | null; rating?: n
   const avatar = owner?.avatar_url;
   const initials = getInitials(owner?.full_name ?? "Host");
   const score = typeof rating === "number" ? rating : null;
-  const hostLevel = formatHostLevel(owner?.host_level);
+  const hostBadgeType = deriveHostBadgeType({
+    hostLevel: owner?.host_level,
+    isHost: owner?.is_host,
+    idVerified: owner?.id_verified,
+    phoneVerified: owner?.phone_verified,
+    emailVerified: owner?.email_verified,
+  });
+  const hostLevel =
+    hostBadgeType === "top_host"
+      ? "Top Host"
+      : hostBadgeType === "verified"
+        ? "Verified Host"
+        : formatHostLevel(owner?.host_level);
   return (
     <Card>
       <CardHeader>
@@ -756,7 +771,10 @@ function HostCard({ owner, rating, reviews }: { owner?: Owner | null; rating?: n
               </div>
             )}
             <div>
-              <p className="text-sm font-semibold text-foreground">{owner?.full_name ?? "Host"}</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-sm font-semibold text-foreground">{owner?.full_name ?? "Host"}</p>
+                <VerifiedHostIndicator show={hostBadgeType !== "new"} />
+              </div>
               <p className="flex items-center gap-2 text-xs text-gray-600">
                 {score !== null ? (
                   <span className="flex items-center gap-1 text-amber-600">

@@ -1,5 +1,6 @@
 import { CarCard } from "@/components/car-card";
 import type { Database } from "@/lib/database.types";
+import { deriveHostBadgeType } from "@/lib/host-badges";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { mockCars } from "@/lib/mock-data";
 
@@ -9,6 +10,12 @@ type FeaturedRow = Database["public"]["Tables"]["cars"]["Row"] & {
   reviews_count?: number | null;
   host_name?: string | null;
   host_avatar?: string | null;
+  host_type?: string | null;
+  host_level?: string | null;
+  is_host?: boolean | null;
+  id_verified?: boolean | null;
+  phone_verified?: boolean | null;
+  email_verified?: boolean | null;
 };
 
 type FeaturedCar = {
@@ -24,6 +31,7 @@ type FeaturedCar = {
   image_url: string;
   host_name: string;
   host_avatar: string;
+  host_type?: string;
   isFavorite: boolean;
 };
 
@@ -41,6 +49,7 @@ export async function FeaturedCars() {
     image_url: car.image,
     host_name: car.host.name,
     host_avatar: car.host.avatar,
+    host_type: "",
     isFavorite: false,
   }));
 
@@ -75,6 +84,14 @@ export async function FeaturedCars() {
         image_url: car.image_url ?? "/car-placeholder.jpg",
         host_name: car.host_name ?? "Host",
         host_avatar: car.host_avatar ?? "/car-placeholder.jpg",
+        host_type: deriveHostBadgeType({
+          hostType: car.host_type,
+          hostLevel: car.host_level,
+          isHost: car.is_host,
+          idVerified: car.id_verified,
+          phoneVerified: car.phone_verified,
+          emailVerified: car.email_verified,
+        }),
         isFavorite: favoriteIds.has(car.id),
       }));
     }
@@ -107,6 +124,7 @@ export async function FeaturedCars() {
               image_url: car.image_url,
               host_name: car.host_name,
               host_avatar: car.host_avatar,
+              host_type: car.host_type,
             }}
             isFavorite={car.isFavorite}
           />

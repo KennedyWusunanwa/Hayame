@@ -71,7 +71,13 @@ export async function GET(req: Request) {
     if (model) query = query.eq("model", model);
     if (fuelType) query = query.eq("fuel_type", fuelType.toLowerCase());
     if (transmission) query = query.eq("transmission", transmission.toLowerCase());
-    if (hostType) query = query.eq("host_type", hostType);
+    if (hostType) {
+      if (hostType === "verified") {
+        query = query.or("host_type.eq.verified,host_level.eq.verified_host");
+      } else {
+        query = query.eq("host_type", hostType);
+      }
+    }
     if (typeof minPrice === "number") query = query.gte("daily_price", minPrice);
     if (typeof maxPrice === "number") query = query.lte("daily_price", maxPrice);
     if (typeof minYear === "number") query = query.gte("year", minYear);

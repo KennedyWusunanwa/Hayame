@@ -18,6 +18,7 @@ export type Car = {
   image_url?: string;
   host_name?: string;
   host_avatar?: string;
+  host_type?: string;
 };
 
 export type Booking = {

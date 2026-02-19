@@ -4,7 +4,9 @@ import { notFound } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { CarCard } from "@/components/car-card";
+import { VerifiedHostIndicator } from "@/components/verified-host-indicator";
 import { VerificationBadges } from "@/components/verification-badges";
+import { deriveHostBadgeType } from "@/lib/host-badges";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getInitials } from "@/lib/utils";
 import type { Car } from "@/lib/types";
@@ -22,7 +24,7 @@ export default async function HostProfilePage({ params }: PageProps) {
   const supa = supabase as any;
   const { data: profile } = await supa
     .from("profiles")
-    .select("id, full_name, avatar_url, city, id_verified, phone_verified, email_verified, host_level")
+    .select("id, full_name, avatar_url, city, is_host, id_verified, phone_verified, email_verified, host_level")
     .eq("id", resolved.id)
     .maybeSingle();
 
@@ -36,6 +38,14 @@ export default async function HostProfilePage({ params }: PageProps) {
     .eq("owner_id", resolved.id)
     .order("created_at", { ascending: false });
 
+  const hostBadgeType = deriveHostBadgeType({
+    hostLevel: profile.host_level,
+    isHost: profile.is_host,
+    idVerified: profile.id_verified,
+    phoneVerified: profile.phone_verified,
+    emailVerified: profile.email_verified,
+  });
+
   const mappedCars: Car[] = (cars ?? []).map((car: any) => ({
     id: car.id,
     title: car.title,
@@ -45,6 +55,7 @@ export default async function HostProfilePage({ params }: PageProps) {
     description: car.description ?? "",
     car_type: car.car_type ?? "",
     image_url: car.car_photos?.[0]?.url ?? "/car-placeholder.jpg",
+    host_type: hostBadgeType,
   }));
 
   const initials = getInitials(profile.full_name ?? "Host");
@@ -66,6 +77,7 @@ export default async function HostProfilePage({ params }: PageProps) {
             <p className="text-sm font-semibold text-brand">Host profile</p>
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-2xl font-semibold text-foreground">{profile.full_name ?? "Host"}</h1>
+              <VerifiedHostIndicator show={hostBadgeType !== "new"} className="text-sm" />
               <Badge variant="outline">{computeHostLevel(profile)}</Badge>
             </div>
             <p className="text-sm text-gray-600">{profile.city ?? "Location TBD"}</p>
@@ -103,11 +115,14 @@ export default async function HostProfilePage({ params }: PageProps) {
 }
 
 function computeHostLevel(profile: any) {
-  const explicitLevel = String(profile?.host_level ?? "").toLowerCase();
-  if (explicitLevel === "super_host") return "Super Host";
-  if (explicitLevel === "top_host") return "Top Host";
-  if (explicitLevel === "verified_host") return "Verified Host";
-  const verified = Boolean(profile?.id_verified && profile?.phone_verified && profile?.email_verified);
-  if (verified) return "Verified Host";
+  const hostBadgeType = deriveHostBadgeType({
+    hostLevel: profile?.host_level,
+    isHost: profile?.is_host,
+    idVerified: profile?.id_verified,
+    phoneVerified: profile?.phone_verified,
+    emailVerified: profile?.email_verified,
+  });
+  if (hostBadgeType === "top_host") return "Top Host";
+  if (hostBadgeType === "verified") return "Verified Host";
   return "New Host";
 }

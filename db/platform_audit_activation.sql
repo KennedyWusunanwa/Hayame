@@ -492,6 +492,8 @@ select
   p.host_level,
   case
     when lower(coalesce(p.host_level, '')) in ('top_host', 'super_host') then 'top_host'
+    when lower(coalesce(p.host_level, '')) = 'verified_host' then 'verified'
+    when coalesce(p.is_host, false) then 'verified'
     when coalesce(p.id_verified, false)
       and coalesce(p.phone_verified, false)
       and coalesce(p.email_verified, false) then 'verified'

@@ -14,6 +14,7 @@ import { MapPanel } from "@/components/map/map-panel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import { deriveHostBadgeType } from "@/lib/host-badges";
 import { mockCars, type MockCar } from "@/lib/mock-data";
 import { formatCurrency } from "@/lib/utils";
 
@@ -27,6 +28,11 @@ type ExploreCar = Omit<MockCar, "rating"> & {
   trips_count?: number;
   avg_rating?: number;
   host_type?: string;
+  host_level?: string;
+  is_host?: boolean;
+  id_verified?: boolean;
+  phone_verified?: boolean;
+  email_verified?: boolean;
   created_at?: string | null;
 };
 
@@ -191,7 +197,19 @@ function mapApiCars(rows: any[]): ExploreCar[] {
         typeof car.bookings_count === "number" ? Number(car.bookings_count) : undefined,
       trips_count: typeof car.trips_count === "number" ? Number(car.trips_count) : undefined,
       avg_rating: typeof car.avg_rating === "number" ? Number(car.avg_rating) : undefined,
-      host_type: car.host_type ?? car.host_level ?? "",
+      host_type: deriveHostBadgeType({
+        hostType: car.host_type,
+        hostLevel: car.host_level,
+        isHost: car.is_host,
+        idVerified: car.id_verified,
+        phoneVerified: car.phone_verified,
+        emailVerified: car.email_verified,
+      }),
+      host_level: car.host_level ?? null,
+      is_host: car.is_host ?? false,
+      id_verified: car.id_verified ?? false,
+      phone_verified: car.phone_verified ?? false,
+      email_verified: car.email_verified ?? false,
       created_at: car.created_at ?? null,
     };
   });
@@ -558,6 +576,7 @@ function ExploreContent() {
                     car_type: car.car_type,
                     description: car.description,
                     image_url: car.image,
+                    host_type: car.host_type,
                   }}
                   isFavorite={favoriteIds.includes(car.id)}
                   onToggleFavorite={toggleFavorite}

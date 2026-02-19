@@ -40,7 +40,7 @@ export async function GET(_: Request, context: Params) {
     const { data, error } = await supa
       .from("cars")
       .select(
-        "*, car_photos(url), owner:profiles!cars_owner_id_fkey(id,full_name,avatar_url,city,id_verified,phone_verified,email_verified,host_level)",
+        "*, car_photos(url), owner:profiles!cars_owner_id_fkey(id,full_name,avatar_url,city,is_host,id_verified,phone_verified,email_verified,host_level)",
       )
       .eq("id", id)
       .single();

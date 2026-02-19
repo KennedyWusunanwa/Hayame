@@ -5,7 +5,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { EarningsCalculator } from "@/components/host/earnings-calculator";
+import { VerifiedHostIndicator } from "@/components/verified-host-indicator";
 import { VerificationBadges } from "@/components/verification-badges";
+import { deriveHostBadgeType } from "@/lib/host-badges";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { formatCurrency } from "@/lib/utils";
 
@@ -110,6 +112,13 @@ export default async function DashboardHome() {
     trips: paidBookings.length,
     rating: averageRating,
   });
+  const hostBadgeType = deriveHostBadgeType({
+    hostLevel: explicitHostLevel,
+    isHost: true,
+    idVerified,
+    phoneVerified,
+    emailVerified,
+  });
 
   return (
     <div className="space-y-6">
@@ -132,7 +141,10 @@ export default async function DashboardHome() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
-          <p className="text-sm text-gray-700">{hostName} - {hostCity}</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-sm text-gray-700">{hostName} - {hostCity}</p>
+            <VerifiedHostIndicator show={hostBadgeType !== "new"} />
+          </div>
           <VerificationBadges idVerified={idVerified} phoneVerified={phoneVerified} emailVerified={emailVerified} />
         </CardContent>
       </Card>

@@ -2,10 +2,11 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { MapPin, Star } from "lucide-react";
+import { BadgeCheck, MapPin, Star } from "lucide-react";
 import { FavoriteButton } from "@/components/favorite-button";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { deriveHostBadgeType, hostBadgeLabel } from "@/lib/host-badges";
 import { formatCurrency } from "@/lib/utils";
 import type { Car } from "@/lib/types";
 
@@ -19,6 +20,8 @@ export function CarCard({ car, isFavorite = false, onToggleFavorite }: Props) {
   const handleFavorite = (next: boolean) => {
     onToggleFavorite?.(car.id, next);
   };
+  const hostType = deriveHostBadgeType({ hostType: car.host_type });
+  const hostLabel = hostBadgeLabel(hostType);
 
   return (
     <Link
@@ -63,6 +66,12 @@ export function CarCard({ car, isFavorite = false, onToggleFavorite }: Props) {
               <MapPin className="mr-1 h-4 w-4 text-brand" />
               {car.city}, {car.region}
             </p>
+            {hostLabel ? (
+              <Badge className="mt-2 inline-flex items-center gap-1 bg-brand text-white">
+                <BadgeCheck className="h-3 w-3" />
+                {hostLabel}
+              </Badge>
+            ) : null}
           </div>
           {car.rating ? (
             <div className="flex items-center gap-1 text-sm font-semibold text-gray-700">
