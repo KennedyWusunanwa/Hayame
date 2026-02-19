@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -6,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { buildHostApplicationDecisionEmail, sendEmailSafe } from "@/lib/email";
+import { getInitials } from "@/lib/utils";
 
 const COOKIE_NAME = "admin_auth";
 
@@ -287,7 +289,7 @@ export default async function AdminPage({
   const { data: hostApplications } = await admin
     .from("host_applications")
     .select(
-      "id,user_id,full_name,phone,city,created_at,profiles:profiles!host_applications_user_id_fkey(full_name,phone,city)",
+      "id,user_id,full_name,phone,city,created_at,profiles:profiles!host_applications_user_id_fkey(full_name,avatar_url,phone,city)",
     )
     .eq("status", "approved")
     .order("created_at", { ascending: false });
@@ -301,11 +303,28 @@ export default async function AdminPage({
 
   const { data: cars } = await admin
     .from("cars")
-    .select("id,title,owner_id,city,region,owner:profiles!cars_owner_id_fkey(full_name,phone)")
+    .select("id,title,owner_id,city,region,owner:profiles!cars_owner_id_fkey(full_name,avatar_url,phone)")
     .order("created_at", { ascending: false })
     .limit(50);
 
   const carIds = (cars ?? []).map((car: any) => car.id);
+  const { data: carPhotoRows } =
+    carIds.length > 0
+      ? await admin.from("car_photos").select("car_id,url").in("car_id", carIds)
+      : { data: [] };
+  const photosByCar = new Map<string, string[]>();
+  (carPhotoRows ?? []).forEach((row: any) => {
+    if (!row?.car_id || !row?.url) return;
+    if (!photosByCar.has(row.car_id)) photosByCar.set(row.car_id, []);
+    photosByCar.get(row.car_id)!.push(row.url);
+  });
+
+  const { data: users } = await admin
+    .from("profiles")
+    .select("id,full_name,avatar_url,phone,city,is_host,host_level")
+    .order("full_name", { ascending: true })
+    .limit(120);
+
   const carsByOwner = new Map<string, number>();
   (cars ?? []).forEach((car: any) => {
     if (!car.owner_id) return;
@@ -404,21 +423,59 @@ export default async function AdminPage({
               <CardContent>
                 <div className="space-y-2">
                   {(hosts ?? []).map((host: any) => (
-                    <div key={host.user_id ?? host.id} className="flex items-center justify-between text-sm">
-                      <div>
-                        <p className="font-semibold text-foreground">{host.profiles?.full_name ?? host.full_name ?? "Host"}</p>
-                        <p className="text-xs text-gray-600">{host.profiles?.phone ?? host.phone ?? "No phone"}</p>
-                        <p className="text-[11px] text-gray-500">
-                          Vehicles: {carsByOwner.get(host.user_id ?? host.id) ?? 0}
-                        </p>
+                    <div key={host.user_id ?? host.id} className="flex items-center justify-between gap-3 text-sm">
+                      <div className="flex items-center gap-3">
+                        <ProfileAvatar
+                          src={host.profiles?.avatar_url}
+                          name={host.profiles?.full_name ?? host.full_name ?? "Host"}
+                          className="h-10 w-10"
+                        />
+                        <div>
+                          <p className="font-semibold text-foreground">
+                            {host.profiles?.full_name ?? host.full_name ?? "Host"}
+                          </p>
+                          <p className="text-xs text-gray-600">{host.profiles?.phone ?? host.phone ?? "No phone"}</p>
+                          <p className="text-[11px] text-gray-500">
+                            Vehicles: {carsByOwner.get(host.user_id ?? host.id) ?? 0}
+                          </p>
+                        </div>
                       </div>
-                      <span className="text-xs text-gray-500">{host.profiles?.city ?? host.city ?? "—"}</span>
+                      <span className="text-xs text-gray-500">{host.profiles?.city ?? host.city ?? "-"}</span>
                     </div>
                   ))}
                   {(hosts ?? []).length === 0 ? (
                     <p className="text-sm text-gray-600">No approved hosts yet.</p>
                   ) : null}
                 </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Users</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <p className="text-xs text-gray-600">Showing profile photos for the latest {users?.length ?? 0} users.</p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {(users ?? []).map((user: any) => (
+                    <div key={user.id} className="flex items-center justify-between gap-3 rounded-lg border border-border p-3">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <ProfileAvatar src={user.avatar_url} name={user.full_name ?? "User"} className="h-10 w-10" />
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold text-foreground">{user.full_name ?? "User"}</p>
+                          <p className="truncate text-xs text-gray-600">{user.phone ?? "No phone"}</p>
+                          <p className="truncate text-[11px] text-gray-500">{user.city ?? "-"}</p>
+                        </div>
+                      </div>
+                      <span className="shrink-0 rounded-full bg-gray-100 px-2 py-1 text-[11px] font-semibold text-gray-700">
+                        {user.is_host ? "Host" : "Guest"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                {(users ?? []).length === 0 ? (
+                  <p className="text-sm text-gray-600">No users found.</p>
+                ) : null}
               </CardContent>
             </Card>
 
@@ -431,17 +488,43 @@ export default async function AdminPage({
                   {(cars ?? []).map((car: any) => {
                     const bookings = bookingsByCar.get(car.id) ?? [];
                     const blocks = (blocksByCar.get(car.id) ?? []).filter((b: any) => b.available === false);
+                    const listingPhotos = photosByCar.get(car.id) ?? [];
+                    const previewImage = listingPhotos[0] ?? "/car-placeholder.jpg";
                     return (
                       <div key={car.id} className="rounded-lg border border-border p-3">
-                        <div className="flex items-center justify-between gap-4">
-                          <div>
-                            <p className="text-sm font-semibold text-foreground">{car.title}</p>
-                            <p className="text-[11px] text-gray-500">
-                              Host: {car.owner?.full_name ?? "Host"} {car.owner?.phone ? `• ${car.owner.phone}` : ""}
-                            </p>
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="flex min-w-0 items-start gap-3">
+                            <div className="relative h-16 w-24 shrink-0 overflow-hidden rounded-md border border-border">
+                              <Image
+                                src={previewImage}
+                                alt={car.title ?? "Listing photo"}
+                                fill
+                                className="object-cover"
+                                sizes="96px"
+                              />
+                            </div>
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-semibold text-foreground">{car.title}</p>
+                              <div className="mt-1 flex items-center gap-2 text-[11px] text-gray-500">
+                                <ProfileAvatar
+                                  src={car.owner?.avatar_url}
+                                  name={car.owner?.full_name ?? "Host"}
+                                  className="h-6 w-6"
+                                />
+                                <span className="truncate">
+                                  Host: {car.owner?.full_name ?? "Host"} {car.owner?.phone ? `| ${car.owner.phone}` : ""}
+                                </span>
+                              </div>
+                            </div>
                           </div>
-                          <div className="flex items-center gap-3">
-                            <span className="text-xs text-gray-500">{car.city ?? "—"}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-gray-500">{car.city ?? "-"}</span>
+                            <Link
+                              href={`/admin/cars/${car.id}/preview`}
+                              className="rounded-md border border-border px-2 py-1 text-[11px] font-semibold text-gray-700 hover:bg-gray-50"
+                            >
+                              Preview
+                            </Link>
                             <Link
                               href={`/admin/cars/${car.id}/edit`}
                               className="rounded-md border border-border px-2 py-1 text-[11px] font-semibold text-gray-700 hover:bg-gray-50"
@@ -451,14 +534,34 @@ export default async function AdminPage({
                           </div>
                         </div>
                         <div className="mt-2 text-xs text-gray-600">
-                          Bookings: {bookings.length} • Host blocks: {blocks.length}
+                          Bookings: {bookings.length} | Host blocks: {blocks.length}
+                        </div>
+                        <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
+                          {listingPhotos.length > 0 ? (
+                            listingPhotos.map((photoUrl: string, index: number) => (
+                              <div
+                                key={`${car.id}-photo-${index}`}
+                                className="relative h-12 w-16 shrink-0 overflow-hidden rounded border border-border"
+                              >
+                                <Image
+                                  src={photoUrl}
+                                  alt={`${car.title ?? "Listing"} photo ${index + 1}`}
+                                  fill
+                                  className="object-cover"
+                                  sizes="64px"
+                                />
+                              </div>
+                            ))
+                          ) : (
+                            <p className="text-[11px] text-gray-500">No photos uploaded yet.</p>
+                          )}
                         </div>
                         {bookings.length > 0 ? (
                           <div className="mt-2 text-[11px] text-gray-600">
                             Upcoming bookings:{" "}
                             {bookings
                               .slice(0, 2)
-                              .map((b: any) => `${b.start_date} → ${b.end_date}`)
+                              .map((b: any) => `${b.start_date} -> ${b.end_date}`)
                               .join(", ")}
                           </div>
                         ) : null}
@@ -467,7 +570,7 @@ export default async function AdminPage({
                             Host blocks:{" "}
                             {blocks
                               .slice(0, 2)
-                              .map((b: any) => `${b.start_date} → ${b.end_date}`)
+                              .map((b: any) => `${b.start_date} -> ${b.end_date}`)
                               .join(", ")}
                           </div>
                         ) : null}
@@ -480,7 +583,6 @@ export default async function AdminPage({
                 </div>
               </CardContent>
             </Card>
-
             <Card>
               <CardHeader>
                 <CardTitle>Admin audit log</CardTitle>
@@ -582,9 +684,16 @@ export default async function AdminPage({
                 {applications?.map((app: any) => (
                   <div key={app.id} className="rounded-xl border border-border bg-white p-4">
                     <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-semibold text-foreground">{app.full_name}</p>
-                        <p className="text-xs text-gray-600">{app.profiles?.full_name ?? "User"}</p>
+                      <div className="flex min-w-0 items-start gap-3">
+                        <ProfileAvatar
+                          src={app.profiles?.avatar_url}
+                          name={app.profiles?.full_name ?? app.full_name ?? "User"}
+                          className="h-10 w-10"
+                        />
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold text-foreground">{app.full_name}</p>
+                          <p className="truncate text-xs text-gray-600">{app.profiles?.full_name ?? "User"}</p>
+                        </div>
                       </div>
                       <span className="rounded-full bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-700">
                         {app.status}
@@ -675,8 +784,17 @@ export default async function AdminPage({
                     {applications?.map((app: any) => (
                       <TableRow key={app.id}>
                         <TableCell>
-                          <div className="font-semibold">{app.full_name}</div>
-                          <div className="text-xs text-gray-600">{app.profiles?.full_name ?? "User"}</div>
+                          <div className="flex min-w-0 items-center gap-3">
+                            <ProfileAvatar
+                              src={app.profiles?.avatar_url}
+                              name={app.profiles?.full_name ?? app.full_name ?? "User"}
+                              className="h-10 w-10"
+                            />
+                            <div className="min-w-0">
+                              <div className="truncate font-semibold">{app.full_name}</div>
+                              <div className="truncate text-xs text-gray-600">{app.profiles?.full_name ?? "User"}</div>
+                            </div>
+                          </div>
                         </TableCell>
                         <TableCell>{app.region ?? "—"}</TableCell>
                         <TableCell>{app.city ?? app.profiles?.city ?? "—"}</TableCell>
@@ -760,3 +878,32 @@ export default async function AdminPage({
     </div>
   );
 }
+
+function ProfileAvatar({
+  src,
+  name,
+  className,
+}: {
+  src?: string | null;
+  name?: string | null;
+  className: string;
+}) {
+  const initials = getInitials(name ?? "User") || "U";
+
+  if (src) {
+    return (
+      <div className={`relative shrink-0 overflow-hidden rounded-full border border-border ${className}`}>
+        <Image src={src} alt={name ?? "User"} fill className="object-cover" sizes="40px" />
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={`flex shrink-0 items-center justify-center rounded-full border border-border bg-primary/10 text-xs font-semibold text-primary ${className}`}
+    >
+      {initials}
+    </div>
+  );
+}
+

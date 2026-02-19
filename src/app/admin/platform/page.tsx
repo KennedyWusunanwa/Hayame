@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -5,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { refundPaystack } from "@/lib/paystack";
+import { getInitials } from "@/lib/utils";
 
 const COOKIE_NAME = "admin_auth";
 
@@ -168,7 +170,7 @@ export default async function AdminPlatformPage() {
     admin
       .from("cars")
       .select(
-        "id,title,city,daily_price,approval_status,rejection_reason,owner:profiles!cars_owner_id_fkey(full_name,phone)",
+        "id,title,city,daily_price,approval_status,rejection_reason,owner:profiles!cars_owner_id_fkey(full_name,avatar_url,phone)",
       )
       .eq("approval_status", "pending")
       .order("created_at", { ascending: false })
@@ -192,6 +194,18 @@ export default async function AdminPlatformPage() {
       .order("created_at", { ascending: false })
       .limit(50),
   ]);
+
+  const pendingCarIds = (pendingListings.data ?? []).map((car: any) => car.id);
+  const { data: pendingPhotoRows } =
+    pendingCarIds.length > 0
+      ? await admin.from("car_photos").select("car_id,url").in("car_id", pendingCarIds)
+      : { data: [] };
+  const listingPhotosByCar = new Map<string, string[]>();
+  (pendingPhotoRows ?? []).forEach((row: any) => {
+    if (!row?.car_id || !row?.url) return;
+    if (!listingPhotosByCar.has(row.car_id)) listingPhotosByCar.set(row.car_id, []);
+    listingPhotosByCar.get(row.car_id)!.push(row.url);
+  });
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 px-4 py-6 sm:px-6 sm:py-8">
@@ -217,46 +231,104 @@ export default async function AdminPlatformPage() {
                 <TableHead>Listing</TableHead>
                 <TableHead>Owner</TableHead>
                 <TableHead>Price</TableHead>
+                <TableHead>Preview</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {(pendingListings.data ?? []).map((car: any) => (
-                <TableRow key={car.id}>
-                  <TableCell>
-                    <p className="font-semibold">{car.title}</p>
-                    <p className="text-xs text-gray-600">{car.city ?? "Ghana"}</p>
-                  </TableCell>
-                  <TableCell>{car.owner?.full_name ?? "Host"}</TableCell>
-                  <TableCell>GHS {Number(car.daily_price ?? 0).toFixed(0)}</TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-2">
-                      <form action={listingReviewAction}>
-                        <input type="hidden" name="carId" value={car.id} />
-                        <input type="hidden" name="action" value="approve" />
-                        <button className="rounded-md bg-emerald-600 px-3 py-1 text-xs font-semibold text-white">
-                          Approve
-                        </button>
-                      </form>
-                      <form action={listingReviewAction} className="flex items-center gap-2">
-                        <input type="hidden" name="carId" value={car.id} />
-                        <input type="hidden" name="action" value="reject" />
-                        <input
-                          name="reason"
-                          placeholder="Reason"
-                          className="hidden rounded-md border border-border px-2 py-1 text-xs sm:block"
+              {(pendingListings.data ?? []).map((car: any) => {
+                const listingPhotos = listingPhotosByCar.get(car.id) ?? [];
+                const previewImage = listingPhotos[0] ?? "/car-placeholder.jpg";
+
+                return (
+                  <TableRow key={car.id}>
+                    <TableCell>
+                      <div className="flex min-w-0 items-start gap-3">
+                        <div className="relative h-14 w-20 shrink-0 overflow-hidden rounded-md border border-border">
+                          <Image
+                            src={previewImage}
+                            alt={car.title ?? "Listing"}
+                            fill
+                            className="object-cover"
+                            sizes="80px"
+                          />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="truncate font-semibold">{car.title}</p>
+                          <p className="text-xs text-gray-600">{car.city ?? "Ghana"}</p>
+                          <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
+                            {listingPhotos.length > 0 ? (
+                              listingPhotos.map((url: string, idx: number) => (
+                                <div
+                                  key={`${car.id}-thumb-${idx}`}
+                                  className="relative h-10 w-12 shrink-0 overflow-hidden rounded border border-border"
+                                >
+                                  <Image
+                                    src={url}
+                                    alt={`${car.title ?? "Listing"} image ${idx + 1}`}
+                                    fill
+                                    className="object-cover"
+                                    sizes="48px"
+                                  />
+                                </div>
+                              ))
+                            ) : (
+                              <span className="text-[11px] text-gray-500">No photos uploaded.</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <ProfileAvatar
+                          src={car.owner?.avatar_url}
+                          name={car.owner?.full_name ?? "Host"}
+                          className="h-8 w-8"
                         />
-                        <button className="rounded-md bg-red-600 px-3 py-1 text-xs font-semibold text-white">
-                          Reject
-                        </button>
-                      </form>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
+                        <div className="text-sm">{car.owner?.full_name ?? "Host"}</div>
+                      </div>
+                    </TableCell>
+                    <TableCell>GHS {Number(car.daily_price ?? 0).toFixed(0)}</TableCell>
+                    <TableCell>
+                      <Link
+                        href={`/admin/cars/${car.id}/preview`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex rounded-md border border-border px-3 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+                      >
+                        Demo preview
+                      </Link>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-2">
+                        <form action={listingReviewAction}>
+                          <input type="hidden" name="carId" value={car.id} />
+                          <input type="hidden" name="action" value="approve" />
+                          <button className="rounded-md bg-emerald-600 px-3 py-1 text-xs font-semibold text-white">
+                            Approve
+                          </button>
+                        </form>
+                        <form action={listingReviewAction} className="flex items-center gap-2">
+                          <input type="hidden" name="carId" value={car.id} />
+                          <input type="hidden" name="action" value="reject" />
+                          <input
+                            name="reason"
+                            placeholder="Reason"
+                            className="hidden rounded-md border border-border px-2 py-1 text-xs sm:block"
+                          />
+                          <button className="rounded-md bg-red-600 px-3 py-1 text-xs font-semibold text-white">
+                            Reject
+                          </button>
+                        </form>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
               {(pendingListings.data ?? []).length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center text-sm text-gray-600">
+                  <TableCell colSpan={5} className="text-center text-sm text-gray-600">
                     No pending listings.
                   </TableCell>
                 </TableRow>
@@ -441,6 +513,34 @@ export default async function AdminPlatformPage() {
           </div>
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+function ProfileAvatar({
+  src,
+  name,
+  className,
+}: {
+  src?: string | null;
+  name?: string | null;
+  className: string;
+}) {
+  const initials = getInitials(name ?? "User") || "U";
+
+  if (src) {
+    return (
+      <div className={`relative shrink-0 overflow-hidden rounded-full border border-border ${className}`}>
+        <Image src={src} alt={name ?? "User"} fill className="object-cover" sizes="40px" />
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={`flex shrink-0 items-center justify-center rounded-full border border-border bg-primary/10 text-xs font-semibold text-primary ${className}`}
+    >
+      {initials}
     </div>
   );
 }
