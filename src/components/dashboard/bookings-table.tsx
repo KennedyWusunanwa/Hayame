@@ -416,13 +416,13 @@ function BookingsList({
           <Table className="w-full table-fixed">
             <TableHeader className="bg-gray-50/80">
               <TableRow>
-                <TableHead className="w-[24%]">Listing</TableHead>
-                <TableHead className="w-[13%]">{isOwnerView ? "Booked by" : "Host"}</TableHead>
-                <TableHead className="w-[14%]">Dates</TableHead>
-                <TableHead className="w-[18%]">Status</TableHead>
-                <TableHead className="w-[9%]">Payment</TableHead>
-                <TableHead className="w-[8%] text-right">Total</TableHead>
-                <TableHead className="w-[14%] text-right">Actions</TableHead>
+                <TableHead className="w-[23%]">Listing</TableHead>
+                <TableHead className="w-[12%]">{isOwnerView ? "Booked by" : "Host"}</TableHead>
+                <TableHead className="w-[13%]">Dates</TableHead>
+                <TableHead className="w-[17%]">Status</TableHead>
+                <TableHead className="w-[10%]">Payment</TableHead>
+                <TableHead className="w-[12%] min-w-[116px] text-right">Total</TableHead>
+                <TableHead className="w-[13%] min-w-[124px] text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -485,15 +485,15 @@ function BookingsList({
                     <TableCell className="align-top">
                       <Badge variant={paymentVariant(booking.payment_status)}>{paymentLabel(booking.payment_status)}</Badge>
                     </TableCell>
-                    <TableCell className="align-top text-right text-xl font-semibold">
+                    <TableCell className="align-top pr-2 text-right text-base font-semibold tabular-nums whitespace-nowrap">
                       {formatCurrency(booking.total_price)}
                     </TableCell>
                     <TableCell className="relative z-10 align-top">
-                      <div className="ml-auto flex w-[170px] flex-col gap-2">
+                      <div className="ml-auto flex w-full max-w-[136px] flex-col gap-2">
                         <Button
                           size="sm"
                           variant="outline"
-                          className="h-10 w-full justify-center rounded-lg border-2 font-semibold"
+                          className="h-9 w-full justify-center rounded-lg border-2 px-2 text-xs font-semibold"
                           onClick={() => onMessage(booking, isOwnerView)}
                           disabled={messagingId === booking.id}
                         >
@@ -504,7 +504,7 @@ function BookingsList({
                             <Button
                               size="sm"
                               variant="secondary"
-                              className="h-10 w-full rounded-lg px-2 text-xs font-semibold"
+                              className="h-9 w-full rounded-lg px-1 text-xs font-semibold"
                               onClick={() => onAction(booking.id, "reject")}
                               disabled={updatingId === booking.id}
                             >
@@ -512,7 +512,7 @@ function BookingsList({
                             </Button>
                             <Button
                               size="sm"
-                              className="h-10 w-full rounded-lg px-2 text-xs font-semibold"
+                              className="h-9 w-full rounded-lg px-1 text-xs font-semibold"
                               onClick={() => onAction(booking.id, "approve")}
                               disabled={updatingId === booking.id}
                             >
@@ -524,7 +524,7 @@ function BookingsList({
                           <Button
                             size="sm"
                             variant="outline"
-                            className="h-9 w-full rounded-lg text-xs font-semibold"
+                            className="h-8 w-full rounded-lg px-2 text-xs font-semibold"
                             disabled={disputingId === booking.id}
                             onClick={() => onDispute(booking.id)}
                           >
