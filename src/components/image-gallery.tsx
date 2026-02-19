@@ -207,7 +207,7 @@ export function ImageGallery({ images }: Props) {
     <div className="space-y-3">
       <button
         type="button"
-        className="relative h-72 w-full overflow-hidden rounded-xl border border-border"
+        className="relative h-[22rem] w-full overflow-hidden rounded-xl border border-border bg-black/5 sm:h-[28rem] lg:h-[34rem]"
         onClick={() => openAt(active)}
         aria-label="Open full screen image viewer"
       >
@@ -215,8 +215,8 @@ export function ImageGallery({ images }: Props) {
           src={main}
           alt="Car photo"
           fill
-          className="h-full w-full object-cover"
-          sizes="(max-width:768px) 100vw, 640px"
+          className="h-full w-full object-contain"
+          sizes="(max-width:768px) 100vw, (max-width:1200px) 70vw, 900px"
         />
       </button>
       <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-5">

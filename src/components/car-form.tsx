@@ -87,7 +87,7 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotos = [] 
       instant_book: false,
       delivery_available: false,
       air_conditioning: false,
-      delivery_fee: 0,
+      delivery_fee: undefined,
       insurance_fee: 0,
       deposit_amount: 0,
       cancellation_policy: "moderate",
@@ -102,6 +102,11 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotos = [] 
       setError("Brand, model and year are required to generate the listing title.");
       return;
     }
+    const payloadValues = {
+      ...values,
+      // Only send delivery_fee when delivery is enabled.
+      delivery_fee: values.delivery_available ? values.delivery_fee : undefined,
+    };
 
     const totalPhotos = existingPhotosState.length + files.length;
     if (totalPhotos < MIN_PHOTOS) {
@@ -119,7 +124,7 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotos = [] 
         method: carId ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ...values,
+          ...payloadValues,
           title: computedTitle,
         }),
       });
@@ -152,6 +157,7 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotos = [] 
   const brandValue = watch("brand");
   const modelValue = watch("model");
   const yearValue = watch("car_year");
+  const deliveryAvailable = watch("delivery_available") ?? false;
   const totalPhotos = existingPhotosState.length + files.length;
   const remainingSlots = Math.max(MAX_PHOTOS - existingPhotosState.length - files.length, 0);
   const autoTitlePreview = buildListingTitlePreview(brandValue, modelValue, yearValue);
@@ -170,6 +176,12 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotos = [] 
       filePreviews.forEach((preview) => URL.revokeObjectURL(preview.url));
     };
   }, [filePreviews]);
+
+  useEffect(() => {
+    if (!deliveryAvailable) {
+      setValue("delivery_fee", undefined, { shouldDirty: true });
+    }
+  }, [deliveryAvailable, setValue]);
 
   const handleFileSelection = (selected: File[]) => {
     if (selected.length === 0) return;
@@ -346,8 +358,25 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotos = [] 
           </Select>
         </div>
         <div className="space-y-2">
+          <label className="text-sm font-semibold text-gray-700">Delivery available</label>
+          <div className="flex items-center justify-between rounded-md border border-border bg-white px-3 py-2">
+            <p className="text-xs text-gray-600">Enable this first to set a delivery charge.</p>
+            <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+              <input type="checkbox" {...register("delivery_available")} />
+              Delivery
+            </label>
+          </div>
+        </div>
+        <div className="space-y-2">
           <label className="text-sm font-semibold text-gray-700">Delivery fee (GHS)</label>
-          <Input type="number" min={0} {...register("delivery_fee", { valueAsNumber: true })} />
+          <Input
+            type="number"
+            min={0}
+            placeholder={deliveryAvailable ? "Enter delivery fee" : "Enable delivery to set fee"}
+            disabled={!deliveryAvailable}
+            {...register("delivery_fee", { valueAsNumber: true })}
+          />
+          {!deliveryAvailable ? <p className="text-xs text-gray-500">Leave blank when delivery is off.</p> : null}
         </div>
         <div className="space-y-2">
           <label className="text-sm font-semibold text-gray-700">Insurance fee (GHS)</label>
@@ -521,17 +550,6 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotos = [] 
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" {...register("instant_book")} />
           Instant Book
-        </label>
-      </div>
-
-      <div className="flex items-center justify-between rounded-lg border border-border bg-white p-4">
-        <div>
-          <p className="text-sm font-semibold text-foreground">Delivery available</p>
-          <p className="text-xs text-gray-600">Allow guests to request delivery for this car.</p>
-        </div>
-        <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" {...register("delivery_available")} />
-          Delivery
         </label>
       </div>
 

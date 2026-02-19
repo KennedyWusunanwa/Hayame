@@ -217,6 +217,7 @@ export async function POST(req: Request) {
       reviewed_by: null,
       rejection_reason: null,
       air_conditioning: hasAirConditioning,
+      delivery_fee: parsed.delivery_available ? (parsed.delivery_fee ?? 0) : null,
     };
 
     const { data, error } = await supa.from("cars").insert(payload).select().single();
