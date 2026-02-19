@@ -11,6 +11,7 @@ import {
 } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import type { ConversationSummary, Message } from "@/lib/messages/types";
+import { ADMIN_OFFICE_AVATAR, ADMIN_OFFICE_NAME, ADMIN_OFFICE_PROFILE_ID } from "@/lib/admin-office";
 
 type MessagingContextValue = {
   loading: boolean;
@@ -63,6 +64,14 @@ export function MessagingProvider({ children }: ProviderProps) {
         const other = isHost ? row.user : row.host;
         const host = row.host;
         const renter = row.user;
+        const fallbackOtherName =
+          (isHost ? row.user_id : row.host_id) === ADMIN_OFFICE_PROFILE_ID ? ADMIN_OFFICE_NAME : "User";
+        const fallbackOtherAvatar =
+          (isHost ? row.user_id : row.host_id) === ADMIN_OFFICE_PROFILE_ID ? ADMIN_OFFICE_AVATAR : null;
+        const fallbackHostName = row.host_id === ADMIN_OFFICE_PROFILE_ID ? ADMIN_OFFICE_NAME : "Host";
+        const fallbackHostAvatar = row.host_id === ADMIN_OFFICE_PROFILE_ID ? ADMIN_OFFICE_AVATAR : null;
+        const fallbackUserName = row.user_id === ADMIN_OFFICE_PROFILE_ID ? ADMIN_OFFICE_NAME : "User";
+        const fallbackUserAvatar = row.user_id === ADMIN_OFFICE_PROFILE_ID ? ADMIN_OFFICE_AVATAR : null;
         const carLocation = [row.car?.city, row.car?.region].filter(Boolean).join(", ") || null;
         return {
           id: row.id,
@@ -74,28 +83,30 @@ export function MessagingProvider({ children }: ProviderProps) {
           last_message_preview: row.last_message_preview ?? null,
           created_at: row.created_at,
           otherUser: {
-            id: other?.id ?? "",
-            name: other?.full_name ?? "User",
-            avatar: other?.avatar_url ?? null,
+            id: other?.id ?? (isHost ? row.user_id : row.host_id),
+            name: other?.full_name ?? fallbackOtherName,
+            avatar: other?.avatar_url ?? fallbackOtherAvatar,
           },
-          hostProfile: host
-            ? {
-                id: host.id ?? "",
-                name: host.full_name ?? "Host",
-                avatar: host.avatar_url ?? null,
-                phone: host.phone ?? null,
-                city: host.city ?? null,
-              }
-            : undefined,
-          userProfile: renter
-            ? {
-                id: renter.id ?? "",
-                name: renter.full_name ?? "User",
-                avatar: renter.avatar_url ?? null,
-                phone: renter.phone ?? null,
-                city: renter.city ?? null,
-              }
-            : undefined,
+          hostProfile:
+            host || row.host_id === ADMIN_OFFICE_PROFILE_ID
+              ? {
+                  id: host?.id ?? row.host_id,
+                  name: host?.full_name ?? fallbackHostName,
+                  avatar: host?.avatar_url ?? fallbackHostAvatar,
+                  phone: host?.phone ?? null,
+                  city: host?.city ?? null,
+                }
+              : undefined,
+          userProfile:
+            renter || row.user_id === ADMIN_OFFICE_PROFILE_ID
+              ? {
+                  id: renter?.id ?? row.user_id,
+                  name: renter?.full_name ?? fallbackUserName,
+                  avatar: renter?.avatar_url ?? fallbackUserAvatar,
+                  phone: renter?.phone ?? null,
+                  city: renter?.city ?? null,
+                }
+              : undefined,
           carTitle: row.car?.title ?? null,
           carLocation,
           unreadCount: 0,

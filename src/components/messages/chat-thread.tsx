@@ -2,11 +2,13 @@
 
 import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { CheckCircle2 } from "lucide-react";
 import { MessageComposer } from "@/components/messages/message-composer";
 import { MessageBubble } from "@/components/messages/message-bubble";
 import { useMessaging } from "@/components/messages/messaging-provider";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { getInitials } from "@/lib/utils";
+import { ADMIN_OFFICE_PROFILE_ID } from "@/lib/admin-office";
 
 export function ChatThread() {
   const {
@@ -83,6 +85,7 @@ export function ChatThread() {
   }
 
   const initials = getInitials(activeConversation.otherUser.name);
+  const isOfficeConversation = activeConversation.otherUser.id === ADMIN_OFFICE_PROFILE_ID;
   const canRevealHost =
     userId === activeConversation.user_id && Boolean(bookingStatus) && Boolean(activeConversation.hostProfile);
   const hostProfile = activeConversation.hostProfile;
@@ -109,7 +112,15 @@ export function ChatThread() {
             )}
           </div>
           <div>
-            <p className="text-sm font-semibold text-foreground">{activeConversation.otherUser.name}</p>
+            <p className="text-sm font-semibold text-foreground">
+              {activeConversation.otherUser.name}
+              {isOfficeConversation ? (
+                <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                  <CheckCircle2 className="h-3 w-3" />
+                  Verified
+                </span>
+              ) : null}
+            </p>
             <p className="text-xs text-gray-600">
               {activeConversation.carTitle ? `Listing: ${activeConversation.carTitle}` : "Direct conversation"}
             </p>

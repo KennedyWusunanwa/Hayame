@@ -416,6 +416,12 @@ export default async function AdminPage({
         </div>
         <div className="flex items-center gap-2">
           <Link
+            href="/admin/messages"
+            className="rounded-md border border-border px-3 py-2 text-sm font-semibold text-gray-700"
+          >
+            Messages
+          </Link>
+          <Link
             href="/admin/filters"
             className="rounded-md border border-border px-3 py-2 text-sm font-semibold text-gray-700"
           >
@@ -507,9 +513,8 @@ export default async function AdminPage({
                 <p className="text-xs text-gray-600">Showing profile photos for the latest {users?.length ?? 0} users.</p>
                 <div className="grid gap-3 sm:grid-cols-2">
                   {(users ?? []).map((user: any) => (
-                    <Link
+                    <div
                       key={user.id}
-                      href={`/admin/users/${user.id}`}
                       className="flex items-center justify-between gap-3 rounded-lg border border-border p-3 transition-colors hover:bg-gray-50"
                     >
                       <div className="flex min-w-0 items-center gap-3">
@@ -520,13 +525,18 @@ export default async function AdminPage({
                           <p className="truncate text-[11px] text-gray-500">{user.city ?? "-"}</p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-3">
                         <span className="shrink-0 rounded-full bg-gray-100 px-2 py-1 text-[11px] font-semibold text-gray-700">
                           {user.is_host ? "Host" : "Guest"}
                         </span>
-                        <span className="text-[11px] font-semibold text-brand">View</span>
+                        <Link href={`/admin/messages?user=${user.id}`} className="text-[11px] font-semibold text-brand">
+                          Message
+                        </Link>
+                        <Link href={`/admin/users/${user.id}`} className="text-[11px] font-semibold text-brand">
+                          View
+                        </Link>
                       </div>
-                    </Link>
+                    </div>
                   ))}
                 </div>
                 {(users ?? []).length === 0 ? (

@@ -1,8 +1,10 @@
 "use client";
 
 import Image from "next/image";
+import { CheckCircle2 } from "lucide-react";
 import { cn, getInitials } from "@/lib/utils";
 import type { ConversationSummary } from "@/lib/messages/types";
+import { ADMIN_OFFICE_PROFILE_ID } from "@/lib/admin-office";
 
 type Props = {
   conversation: ConversationSummary;
@@ -14,6 +16,7 @@ export function ConversationListItem({ conversation, active, onClick }: Props) {
   const initials = getInitials(conversation.otherUser.name);
   const date = conversation.last_message_at ?? conversation.created_at;
   const timeLabel = date ? new Date(date).toLocaleDateString() : "";
+  const isOffice = conversation.otherUser.id === ADMIN_OFFICE_PROFILE_ID;
   return (
     <button
       type="button"
@@ -40,7 +43,15 @@ export function ConversationListItem({ conversation, active, onClick }: Props) {
       </div>
       <div className="min-w-0 flex-1">
         <div className="flex items-center justify-between gap-3">
-          <p className="truncate text-sm font-semibold text-foreground">{conversation.otherUser.name}</p>
+          <p className="truncate text-sm font-semibold text-foreground">
+            {conversation.otherUser.name}
+            {isOffice ? (
+              <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                <CheckCircle2 className="h-3 w-3" />
+                Verified
+              </span>
+            ) : null}
+          </p>
           <span className="text-xs text-gray-500">{timeLabel}</span>
         </div>
         <p className="truncate text-xs text-gray-600">
