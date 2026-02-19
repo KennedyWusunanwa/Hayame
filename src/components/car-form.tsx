@@ -13,6 +13,7 @@ import { Select } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { featureOptions, carTypes, fuelTypes } from "@/lib/utils";
+import { buildListingTitle, buildListingTitlePreview } from "@/lib/listing-title";
 import { useLocations } from "@/lib/use-locations";
 import { useCarCatalog } from "@/lib/use-car-catalog";
 
@@ -59,7 +60,7 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotoCount =
     handleSubmit,
     setValue,
     watch,
-    formState: { isSubmitting },
+    formState: { isSubmitting, errors },
   } = useForm<FormValues>({
     resolver: zodResolver(carFormSchema),
     defaultValues: {
@@ -90,6 +91,12 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotoCount =
 
   const onSubmit = async (values: FormValues) => {
     setError(null);
+    const computedTitle = buildListingTitle(values.brand, values.model, values.car_year);
+    if (!computedTitle) {
+      setError("Brand, model and year are required to generate the listing title.");
+      return;
+    }
+
     const totalPhotos = existingPhotoCount + files.length;
     if (totalPhotos < MIN_PHOTOS) {
       setError(
@@ -105,7 +112,10 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotoCount =
       const res = await fetch(carId ? `/api/cars/${carId}` : "/api/cars", {
         method: carId ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(values),
+        body: JSON.stringify({
+          ...values,
+          title: computedTitle,
+        }),
       });
       if (!res.ok) {
         const { message } = await res.json().catch(() => ({ message: "Unknown error" }));
@@ -128,8 +138,12 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotoCount =
   };
 
   const selectedFeatures = watch("features") || [];
+  const brandValue = watch("brand");
+  const modelValue = watch("model");
+  const yearValue = watch("car_year");
   const totalPhotos = existingPhotoCount + files.length;
   const remainingSlots = Math.max(MAX_PHOTOS - existingPhotoCount - files.length, 0);
+  const autoTitlePreview = buildListingTitlePreview(brandValue, modelValue, yearValue);
   const filePreviews = useMemo(
     () =>
       files.map((file, index) => ({
@@ -181,8 +195,11 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotoCount =
     <form className="space-y-4" onSubmit={handleSubmit(onSubmit)}>
       <div className="grid gap-4 md:grid-cols-2">
         <div className="space-y-2">
-          <label className="text-sm font-semibold text-gray-700">Title</label>
-          <Input placeholder="Toyota RAV4 2022" {...register("title")} />
+          <label className="text-sm font-semibold text-gray-700">Listing title (auto)</label>
+          <div className="rounded-md border border-border bg-gray-50 px-3 py-2 text-sm font-semibold text-foreground">
+            {autoTitlePreview}
+          </div>
+          <p className="text-xs text-gray-600">Generated automatically from brand, model and year.</p>
         </div>
         <div className="space-y-2">
           <label className="text-sm font-semibold text-gray-700">Daily price (GHS)</label>
@@ -232,12 +249,12 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotoCount =
           </Select>
         </div>
         <div className="space-y-2">
-          <label className="text-sm font-semibold text-gray-700">Brand</label>
+          <label className="text-sm font-semibold text-gray-700">Brand *</label>
           <Select
             value={watch("brand") ?? ""}
             onChange={(e) => {
-              setValue("brand", e.target.value);
-              setValue("model", "");
+              setValue("brand", e.target.value, { shouldValidate: true });
+              setValue("model", "", { shouldValidate: true });
             }}
           >
             <option value="">Select brand</option>
@@ -247,12 +264,13 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotoCount =
               </option>
             ))}
           </Select>
+          {errors.brand?.message ? <p className="text-xs text-red-600">{errors.brand.message}</p> : null}
         </div>
         <div className="space-y-2">
-          <label className="text-sm font-semibold text-gray-700">Model</label>
+          <label className="text-sm font-semibold text-gray-700">Model *</label>
           <Select
             value={watch("model") ?? ""}
-            onChange={(e) => setValue("model", e.target.value)}
+            onChange={(e) => setValue("model", e.target.value, { shouldValidate: true })}
             disabled={!watch("brand")}
           >
             <option value="">Select model</option>
@@ -262,19 +280,22 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotoCount =
               </option>
             ))}
           </Select>
+          {errors.model?.message ? <p className="text-xs text-red-600">{errors.model.message}</p> : null}
         </div>
         <div className="space-y-2">
           <label className="text-sm font-semibold text-gray-700">Seats</label>
           <Input type="number" min={2} max={8} {...register("seats", { valueAsNumber: true })} />
         </div>
         <div className="space-y-2">
-          <label className="text-sm font-semibold text-gray-700">Car year</label>
+          <label className="text-sm font-semibold text-gray-700">Car year *</label>
           <Input
             type="number"
             min={2000}
             max={new Date().getFullYear() + 1}
+            required
             {...register("car_year", { valueAsNumber: true })}
           />
+          {errors.car_year?.message ? <p className="text-xs text-red-600">{errors.car_year.message}</p> : null}
         </div>
         <div className="space-y-2">
           <label className="text-sm font-semibold text-gray-700">Transmission</label>

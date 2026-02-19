@@ -73,6 +73,56 @@ set
   cancellation_policy = coalesce(cancellation_policy, 'moderate'),
   approval_status = coalesce(approval_status, 'approved');
 
+-- Keep listing titles aligned with brand/model/year.
+create or replace function public.sync_car_listing_title()
+returns trigger
+language plpgsql
+as $$
+begin
+  if nullif(trim(new.brand), '') is not null
+    and nullif(trim(new.model), '') is not null
+    and new.car_year is not null then
+    new.title := trim(
+      regexp_replace(
+        concat_ws(' ', trim(new.brand), trim(new.model), new.car_year::text),
+        '\s+',
+        ' ',
+        'g'
+      )
+    );
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_sync_car_listing_title on public.cars;
+create trigger trg_sync_car_listing_title
+before insert or update of brand, model, car_year on public.cars
+for each row
+execute function public.sync_car_listing_title();
+
+-- Backfill existing rows where brand/model/year already exist.
+update public.cars
+set title = trim(
+  regexp_replace(
+    concat_ws(' ', nullif(trim(brand), ''), nullif(trim(model), ''), car_year::text),
+    '\s+',
+    ' ',
+    'g'
+  )
+)
+where nullif(trim(brand), '') is not null
+  and nullif(trim(model), '') is not null
+  and car_year is not null
+  and title is distinct from trim(
+    regexp_replace(
+      concat_ws(' ', nullif(trim(brand), ''), nullif(trim(model), ''), car_year::text),
+      '\s+',
+      ' ',
+      'g'
+    )
+  );
+
 -- Handle both enum-backed and text-backed fuel_type columns safely.
 do $$
 declare

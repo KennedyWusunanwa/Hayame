@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { carFormSchema } from "@/lib/validators";
 import { getHostStatus } from "@/lib/host-status";
+import { buildListingTitle } from "@/lib/listing-title";
 
 function parseNumber(value: string | null) {
   if (!value) return undefined;
@@ -168,6 +169,13 @@ export async function POST(req: Request) {
   try {
     const body = await req.json();
     const parsed = carFormSchema.parse(body);
+    const listingTitle = buildListingTitle(parsed.brand, parsed.model, parsed.car_year);
+    if (!listingTitle) {
+      return NextResponse.json(
+        { message: "Brand, model and year are required to generate the listing title." },
+        { status: 400 },
+      );
+    }
     const supabase = await createSupabaseServerClient();
     const supa = supabase as any;
     const {
@@ -196,6 +204,7 @@ export async function POST(req: Request) {
 
     const payload = {
       ...parsed,
+      title: listingTitle,
       owner_id: user.id,
       approval_status: "pending",
       reviewed_at: null,

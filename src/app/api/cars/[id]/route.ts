@@ -4,6 +4,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { carFormSchema } from "@/lib/validators";
 import { getHostStatus } from "@/lib/host-status";
+import { buildListingTitle } from "@/lib/listing-title";
 
 const COOKIE_NAME = "admin_auth";
 
@@ -59,6 +60,13 @@ export async function PUT(req: Request, context: Params) {
   try {
     const body = await req.json();
     const parsed = carFormSchema.parse(body);
+    const listingTitle = buildListingTitle(parsed.brand, parsed.model, parsed.car_year);
+    if (!listingTitle) {
+      return NextResponse.json(
+        { message: "Brand, model and year are required to generate the listing title." },
+        { status: 400 },
+      );
+    }
     const admin = await isAdmin();
     const hasAirConditioning =
       Boolean(parsed.air_conditioning) ||
@@ -70,6 +78,7 @@ export async function PUT(req: Request, context: Params) {
         .from("cars")
         .update({
           ...parsed,
+          title: listingTitle,
           air_conditioning: hasAirConditioning,
           approval_status: "approved",
           reviewed_at: new Date().toISOString(),
@@ -115,6 +124,7 @@ export async function PUT(req: Request, context: Params) {
       .from("cars")
       .update({
         ...parsed,
+        title: listingTitle,
         air_conditioning: hasAirConditioning,
         approval_status: "pending",
         reviewed_at: null,
