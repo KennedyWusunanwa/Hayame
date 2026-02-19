@@ -47,6 +47,17 @@ function getResend() {
   return new Resend(apiKey);
 }
 
+function formatCurrency(value: number) {
+  return `GHS ${Number(value ?? 0).toFixed(2)}`;
+}
+
+function formatDateTime(value?: string | Date | null) {
+  if (!value) return "N/A";
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toUTCString();
+}
+
 export async function sendEmailSafe(input: SendEmailInput) {
   const resend = getResend();
   const from = process.env.RESEND_FROM;
@@ -59,13 +70,17 @@ export async function sendEmailSafe(input: SendEmailInput) {
   }
 
   try {
-    return await resend.emails.send({
+    const payload: Record<string, unknown> = {
       from,
       to: input.to,
       subject: input.subject,
       html: input.html,
       text: input.text,
-    });
+    };
+    if (input.idempotencyKey) {
+      payload.headers = { "Idempotency-Key": input.idempotencyKey };
+    }
+    return await resend.emails.send(payload as any);
   } catch (error) {
     console.error("[email] send failed", error);
     return { error };
@@ -146,6 +161,10 @@ export function buildBookingPaidEmail(params: {
   startDate: string;
   endDate: string;
   totalPrice: number;
+  bookingId?: string | null;
+  paymentReference?: string | null;
+  bookedAt?: string | null;
+  conversationUrl?: string | null;
 }) {
   const carTitle = params.carTitle ? escapeHtml(params.carTitle) : "your booking";
   const subject = params.instantBook
@@ -157,15 +176,24 @@ export function buildBookingPaidEmail(params: {
     <div style="font-family: Arial, sans-serif; line-height: 1.5;">
       <h2>Payment received</h2>
       <p>Your booking for <strong>${carTitle}</strong> is ${statusLine}.</p>
+      <p><strong>Booked at:</strong> ${escapeHtml(formatDateTime(params.bookedAt))}</p>
+      <p><strong>Booking ID:</strong> ${escapeHtml(params.bookingId ?? "N/A")}</p>
+      <p><strong>Payment reference:</strong> ${escapeHtml(params.paymentReference ?? "N/A")}</p>
       <p><strong>Dates:</strong> ${escapeHtml(params.startDate)} to ${escapeHtml(params.endDate)}</p>
-      <p><strong>Total:</strong> ${params.totalPrice}</p>
-      <p><a href="${siteUrl}/dashboard" style="color:#2563eb;">View booking</a></p>
+      <p><strong>Total:</strong> ${formatCurrency(params.totalPrice)}</p>
+      <p><a href="${params.conversationUrl ?? `${siteUrl}/messages`}" style="color:#2563eb;">Open messages</a></p>
       <p style="color:#6b7280; font-size: 12px;">${appName}</p>
     </div>
   `;
   const text = `Payment received\nYour booking for ${
     params.carTitle ?? "your booking"
-  } is ${statusLine}.\nDates: ${params.startDate} to ${params.endDate}\nTotal: ${params.totalPrice}\nView booking: ${siteUrl}/dashboard\n\n${appName}`;
+  } is ${statusLine}.\nBooked at: ${formatDateTime(params.bookedAt)}\nBooking ID: ${
+    params.bookingId ?? "N/A"
+  }\nPayment reference: ${params.paymentReference ?? "N/A"}\nDates: ${params.startDate} to ${
+    params.endDate
+  }\nTotal: ${formatCurrency(params.totalPrice)}\nOpen messages: ${
+    params.conversationUrl ?? `${siteUrl}/messages`
+  }\n\n${appName}`;
 
   return { subject, ...withOfficialFooter(html, text) };
 }
@@ -173,9 +201,15 @@ export function buildBookingPaidEmail(params: {
 export function buildHostBookingNoticeEmail(params: {
   instantBook: boolean;
   renterName?: string | null;
+  renterPhone?: string | null;
   carTitle?: string | null;
   startDate: string;
   endDate: string;
+  totalPrice: number;
+  bookingId?: string | null;
+  paymentReference?: string | null;
+  bookedAt?: string | null;
+  conversationUrl?: string | null;
 }) {
   const renterName = escapeHtml(params.renterName || "Guest");
   const carTitle = params.carTitle ? escapeHtml(params.carTitle) : "your listing";
@@ -190,15 +224,130 @@ export function buildHostBookingNoticeEmail(params: {
     <div style="font-family: Arial, sans-serif; line-height: 1.5;">
       <h2>${statusLine}</h2>
       <p><strong>${renterName}</strong> booked <strong>${carTitle}</strong>.</p>
+      <p><strong>Booked at:</strong> ${escapeHtml(formatDateTime(params.bookedAt))}</p>
+      <p><strong>Booking ID:</strong> ${escapeHtml(params.bookingId ?? "N/A")}</p>
+      <p><strong>Payment reference:</strong> ${escapeHtml(params.paymentReference ?? "N/A")}</p>
+      <p><strong>Renter phone:</strong> ${escapeHtml(params.renterPhone ?? "Not provided")}</p>
       <p><strong>Dates:</strong> ${escapeHtml(params.startDate)} to ${escapeHtml(params.endDate)}</p>
+      <p><strong>Total paid:</strong> ${formatCurrency(params.totalPrice)}</p>
+      <p><a href="${params.conversationUrl ?? `${siteUrl}/messages`}" style="color:#2563eb;">Open messages</a></p>
       <p><a href="${siteUrl}/host/bookings" style="color:#2563eb;">Manage bookings</a></p>
       <p style="color:#6b7280; font-size: 12px;">${appName}</p>
     </div>
   `;
   const text = `${statusLine}\n${renterName} booked ${params.carTitle ?? "your listing"}.\nDates: ${
     params.startDate
-  } to ${params.endDate}\nManage bookings: ${siteUrl}/host/bookings\n\n${appName}`;
+  } to ${params.endDate}\nBooked at: ${formatDateTime(params.bookedAt)}\nBooking ID: ${
+    params.bookingId ?? "N/A"
+  }\nPayment reference: ${params.paymentReference ?? "N/A"}\nRenter phone: ${
+    params.renterPhone ?? "Not provided"
+  }\nTotal paid: ${formatCurrency(params.totalPrice)}\nOpen messages: ${
+    params.conversationUrl ?? `${siteUrl}/messages`
+  }\nManage bookings: ${siteUrl}/host/bookings\n\n${appName}`;
 
+  return { subject, ...withOfficialFooter(html, text) };
+}
+
+export function buildBookingInvoiceEmail(params: {
+  recipientRole: "renter" | "host";
+  recipientName?: string | null;
+  counterpartName?: string | null;
+  carTitle?: string | null;
+  bookingId: string;
+  paymentReference?: string | null;
+  bookedAt?: string | null;
+  startDate: string;
+  endDate: string;
+  nights: number;
+  dailyRate: number;
+  subtotal: number;
+  platformFee: number;
+  insuranceFee: number;
+  deliveryFee: number;
+  depositAmount: number;
+  totalPrice: number;
+  status: string;
+  conversationUrl?: string | null;
+}) {
+  const recipient = escapeHtml(params.recipientName || (params.recipientRole === "host" ? "Host" : "Guest"));
+  const counterpart = escapeHtml(params.counterpartName || (params.recipientRole === "host" ? "Guest" : "Host"));
+  const carTitle = escapeHtml(params.carTitle || "Listing");
+  const invoiceRef = `INV-${params.bookingId.slice(0, 8).toUpperCase()}`;
+  const subject = `${appName}: Booking invoice ${invoiceRef}`;
+  const roleNote =
+    params.recipientRole === "host"
+      ? `Your listing was booked by ${counterpart}.`
+      : `Your trip booking with ${counterpart} is recorded.`;
+
+  const html = `
+    <div style="font-family: Arial, sans-serif; line-height: 1.5;">
+      <h2>Booking invoice</h2>
+      <p>Hello ${recipient},</p>
+      <p>${roleNote}</p>
+      <p><strong>Invoice:</strong> ${invoiceRef}</p>
+      <p><strong>Booking ID:</strong> ${escapeHtml(params.bookingId)}</p>
+      <p><strong>Payment reference:</strong> ${escapeHtml(params.paymentReference ?? "N/A")}</p>
+      <p><strong>Booked at:</strong> ${escapeHtml(formatDateTime(params.bookedAt))}</p>
+      <p><strong>Listing:</strong> ${carTitle}</p>
+      <p><strong>Trip dates:</strong> ${escapeHtml(params.startDate)} to ${escapeHtml(params.endDate)} (${params.nights} night(s))</p>
+      <p><strong>Status:</strong> ${escapeHtml(params.status)}</p>
+      <hr style="margin: 16px 0; border: 0; border-top: 1px solid #e5e7eb;" />
+      <p><strong>Daily rate:</strong> ${formatCurrency(params.dailyRate)}</p>
+      <p><strong>Subtotal:</strong> ${formatCurrency(params.subtotal)}</p>
+      <p><strong>Platform fee:</strong> ${formatCurrency(params.platformFee)}</p>
+      <p><strong>Insurance fee:</strong> ${formatCurrency(params.insuranceFee)}</p>
+      <p><strong>Delivery fee:</strong> ${formatCurrency(params.deliveryFee)}</p>
+      <p><strong>Deposit:</strong> ${formatCurrency(params.depositAmount)}</p>
+      <p><strong>Total paid:</strong> ${formatCurrency(params.totalPrice)}</p>
+      <p><a href="${params.conversationUrl ?? `${siteUrl}/messages`}" style="color:#2563eb;">Open messages</a></p>
+      <p style="color:#6b7280; font-size: 12px;">${appName}</p>
+    </div>
+  `;
+
+  const text = `Booking invoice
+Invoice: ${invoiceRef}
+Booking ID: ${params.bookingId}
+Payment reference: ${params.paymentReference ?? "N/A"}
+Booked at: ${formatDateTime(params.bookedAt)}
+Listing: ${params.carTitle ?? "Listing"}
+Trip dates: ${params.startDate} to ${params.endDate} (${params.nights} night(s))
+Status: ${params.status}
+
+Daily rate: ${formatCurrency(params.dailyRate)}
+Subtotal: ${formatCurrency(params.subtotal)}
+Platform fee: ${formatCurrency(params.platformFee)}
+Insurance fee: ${formatCurrency(params.insuranceFee)}
+Delivery fee: ${formatCurrency(params.deliveryFee)}
+Deposit: ${formatCurrency(params.depositAmount)}
+Total paid: ${formatCurrency(params.totalPrice)}
+
+Open messages: ${params.conversationUrl ?? `${siteUrl}/messages`}
+
+${appName}`;
+
+  return { subject, ...withOfficialFooter(html, text) };
+}
+
+export function buildConversationStartedEmail(params: {
+  starterName: string;
+  conversationUrl: string;
+  carTitle?: string | null;
+}) {
+  const starterName = escapeHtml(params.starterName || "Someone");
+  const carTitle = params.carTitle ? escapeHtml(params.carTitle) : null;
+  const subject = `${appName}: New chat started`;
+  const html = `
+    <div style="font-family: Arial, sans-serif; line-height: 1.5;">
+      <h2>New conversation</h2>
+      <p><strong>${starterName}</strong> started a conversation with you.</p>
+      ${carTitle ? `<p><strong>Listing:</strong> ${carTitle}</p>` : ""}
+      <p><a href="${params.conversationUrl}" style="color:#2563eb;">Open conversation</a></p>
+      <p style="color:#6b7280; font-size: 12px;">${appName}</p>
+    </div>
+  `;
+  const text = `${starterName} started a conversation with you.${
+    carTitle ? `\nListing: ${params.carTitle}` : ""
+  }\nOpen conversation: ${params.conversationUrl}\n\n${appName}`;
   return { subject, ...withOfficialFooter(html, text) };
 }
 

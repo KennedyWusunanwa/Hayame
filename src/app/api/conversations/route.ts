@@ -1,5 +1,16 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { buildConversationStartedEmail, sendEmailSafe } from "@/lib/email";
+
+const SITE_URL =
+  process.env.NEXT_PUBLIC_SITE_URL ??
+  process.env.EMAIL_BASE_URL ??
+  (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
+
+function extractAuthEmail(result: any): string | null {
+  return result?.data?.user?.email ?? result?.user?.email ?? result?.email ?? null;
+}
 
 export async function POST(req: Request) {
   try {
@@ -45,6 +56,46 @@ export async function POST(req: Request) {
       .select("id")
       .single();
     if (error) throw error;
+
+    // Notify the recipient that a new conversation started (best effort)
+    const admin = (() => {
+      try {
+        return createSupabaseAdminClient() as any;
+      } catch {
+        return null;
+      }
+    })();
+
+    if (admin) {
+      const recipientId = hostId;
+      const [recipientAuthResult, senderProfileResult, carResult] = await Promise.all([
+        admin.auth.admin.getUserById(recipientId).catch(() => null),
+        admin.from("profiles").select("full_name").eq("id", user.id).maybeSingle().catch(() => null),
+        carId ? supa.from("cars").select("title").eq("id", carId).maybeSingle().catch(() => null) : Promise.resolve(null),
+      ]);
+
+      const recipientEmail = extractAuthEmail(recipientAuthResult);
+      const senderName =
+        (senderProfileResult as any)?.data?.full_name ??
+        (user.user_metadata as any)?.full_name ??
+        user.email ??
+        "User";
+      const carTitle = (carResult as any)?.data?.title ?? null;
+
+      if (recipientEmail) {
+        const conversationUrl = `${SITE_URL}/messages?conversation=${data.id}`;
+        const email = buildConversationStartedEmail({
+          starterName: senderName,
+          conversationUrl,
+          carTitle,
+        });
+        await sendEmailSafe({
+          to: recipientEmail,
+          ...email,
+          idempotencyKey: `conversation:${data.id}:started`,
+        });
+      }
+    }
 
     return NextResponse.json({ id: data.id });
   } catch (error: any) {

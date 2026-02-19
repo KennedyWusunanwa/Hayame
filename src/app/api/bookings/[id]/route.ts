@@ -4,6 +4,10 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { refundPaystack } from "@/lib/paystack";
 import { buildHostDecisionEmail, sendEmailSafe } from "@/lib/email";
 
+function extractAuthEmail(result: any): string | null {
+  return result?.data?.user?.email ?? result?.user?.email ?? result?.email ?? null;
+}
+
 type Params = {
   params: { id: string } | Promise<{ id: string }>;
 };
@@ -60,15 +64,15 @@ export async function PATCH(req: Request, { params }: Params) {
 
       if (admin) {
         const renterId = booking.renter_id;
-        const [renterAuth, hostProfile] = await Promise.all([
-          admin.auth.admin.getUserById(renterId),
+        const [renterAuthResult, hostProfileResult] = await Promise.all([
+          admin.auth.admin.getUserById(renterId).catch(() => null),
           admin.from("profiles").select("full_name").eq("id", ownerId).maybeSingle(),
         ]);
-        const renterEmail = renterAuth?.user?.email ?? null;
+        const renterEmail = extractAuthEmail(renterAuthResult);
         if (renterEmail) {
           const email = buildHostDecisionEmail({
             approved: true,
-            hostName: (hostProfile as any)?.full_name ?? null,
+            hostName: ((hostProfileResult as any)?.data as { full_name?: string | null } | null)?.full_name ?? null,
             carTitle: booking?.car_id ? booking?.cars?.title ?? null : null,
             startDate: booking.start_date,
             endDate: booking.end_date,
@@ -104,15 +108,15 @@ export async function PATCH(req: Request, { params }: Params) {
 
     if (admin) {
       const renterId = booking.renter_id;
-      const [renterAuth, hostProfile] = await Promise.all([
-        admin.auth.admin.getUserById(renterId),
+      const [renterAuthResult, hostProfileResult] = await Promise.all([
+        admin.auth.admin.getUserById(renterId).catch(() => null),
         admin.from("profiles").select("full_name").eq("id", ownerId).maybeSingle(),
       ]);
-      const renterEmail = renterAuth?.user?.email ?? null;
+      const renterEmail = extractAuthEmail(renterAuthResult);
       if (renterEmail) {
         const email = buildHostDecisionEmail({
           approved: false,
-          hostName: (hostProfile as any)?.full_name ?? null,
+          hostName: ((hostProfileResult as any)?.data as { full_name?: string | null } | null)?.full_name ?? null,
           carTitle: booking?.car_id ? booking?.cars?.title ?? null : null,
           startDate: booking.start_date,
           endDate: booking.end_date,

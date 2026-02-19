@@ -3,7 +3,12 @@ import { differenceInCalendarDays } from "date-fns";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { verifyPaystackTransaction } from "@/lib/paystack";
-import { buildBookingPaidEmail, buildHostBookingNoticeEmail, sendEmailSafe } from "@/lib/email";
+import {
+  buildBookingInvoiceEmail,
+  buildBookingPaidEmail,
+  buildHostBookingNoticeEmail,
+  sendEmailSafe,
+} from "@/lib/email";
 
 type Body = {
   carId?: string;
@@ -15,6 +20,66 @@ type Body = {
 };
 
 const BLOCKING_STATUSES = ["pending", "awaiting_host", "confirmed"];
+const SITE_URL =
+  process.env.NEXT_PUBLIC_SITE_URL ??
+  process.env.EMAIL_BASE_URL ??
+  (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
+
+function extractAuthEmail(result: any): string | null {
+  return result?.data?.user?.email ?? result?.user?.email ?? result?.email ?? null;
+}
+
+async function ensureBookingConversation(params: {
+  primaryClient: any;
+  fallbackClient?: any;
+  hostId: string;
+  userId: string;
+  carId: string;
+  bookingId: string;
+}) {
+  const upsertOn = async (client: any) => {
+    const { data: existing } = await client
+      .from("conversations")
+      .select("id,booking_id")
+      .eq("host_id", params.hostId)
+      .eq("user_id", params.userId)
+      .eq("car_id", params.carId)
+      .maybeSingle();
+
+    if (existing?.id) {
+      if ((existing as any).booking_id !== params.bookingId) {
+        await client.from("conversations").update({ booking_id: params.bookingId }).eq("id", existing.id);
+      }
+      return existing.id as string;
+    }
+
+    const { data, error } = await client
+      .from("conversations")
+      .insert({
+        host_id: params.hostId,
+        user_id: params.userId,
+        car_id: params.carId,
+        booking_id: params.bookingId,
+      })
+      .select("id")
+      .single();
+    if (error) throw error;
+    return data?.id as string;
+  };
+
+  try {
+    return await upsertOn(params.primaryClient);
+  } catch {
+    if (params.fallbackClient) {
+      try {
+        return await upsertOn(params.fallbackClient);
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }
+}
 
 export async function POST(req: Request) {
   try {
@@ -212,21 +277,25 @@ export async function POST(req: Request) {
       }
     })();
 
-    const sendBookingEmails = async (booking: any) => {
+    const sendBookingEmails = async (booking: any, conversationId: string | null) => {
       if (!maybeAdmin) return;
       const renterId = booking.renter_id;
       const hostId = car.owner_id;
-      const [renterAuth, hostAuth, renterProfile, hostProfile] = await Promise.all([
-        maybeAdmin.auth.admin.getUserById(renterId),
-        maybeAdmin.auth.admin.getUserById(hostId),
-        maybeAdmin.from("profiles").select("full_name").eq("id", renterId).maybeSingle(),
-        maybeAdmin.from("profiles").select("full_name").eq("id", hostId).maybeSingle(),
+      const [renterAuthResult, hostAuthResult, renterProfileResult, hostProfileResult] = await Promise.all([
+        maybeAdmin.auth.admin.getUserById(renterId).catch(() => null),
+        maybeAdmin.auth.admin.getUserById(hostId).catch(() => null),
+        maybeAdmin.from("profiles").select("full_name,phone").eq("id", renterId).maybeSingle().catch(() => null),
+        maybeAdmin.from("profiles").select("full_name,phone").eq("id", hostId).maybeSingle().catch(() => null),
       ]);
 
-      const renterEmail = renterAuth?.user?.email ?? null;
-      const hostEmail = hostAuth?.user?.email ?? null;
-      const renterName = (renterProfile as any)?.full_name ?? "Guest";
-      const hostName = (hostProfile as any)?.full_name ?? "Host";
+      const renterEmail = extractAuthEmail(renterAuthResult);
+      const hostEmail = extractAuthEmail(hostAuthResult);
+      const renterProfile = (renterProfileResult as any)?.data ?? null;
+      const hostProfile = (hostProfileResult as any)?.data ?? null;
+      const renterName = renterProfile?.full_name ?? "Guest";
+      const hostName = hostProfile?.full_name ?? "Host";
+      const renterPhone = renterProfile?.phone ?? null;
+      const conversationUrl = conversationId ? `${SITE_URL}/messages?conversation=${conversationId}` : `${SITE_URL}/messages`;
 
       if (renterEmail) {
         const email = buildBookingPaidEmail({
@@ -235,6 +304,10 @@ export async function POST(req: Request) {
           startDate,
           endDate,
           totalPrice: total,
+          bookingId: booking.id,
+          paymentReference: reference,
+          bookedAt: booking.paid_at ?? new Date().toISOString(),
+          conversationUrl,
         });
         await sendEmailSafe({
           to: renterEmail,
@@ -247,14 +320,78 @@ export async function POST(req: Request) {
         const email = buildHostBookingNoticeEmail({
           instantBook: car.instant_book,
           renterName,
+          renterPhone,
           carTitle: car.title ?? null,
           startDate,
           endDate,
+          totalPrice: total,
+          bookingId: booking.id,
+          paymentReference: reference,
+          bookedAt: booking.paid_at ?? new Date().toISOString(),
+          conversationUrl,
         });
         await sendEmailSafe({
           to: hostEmail,
           ...email,
           idempotencyKey: `booking:${booking.id}:host-notice`,
+        });
+      }
+
+      if (renterEmail) {
+        const invoice = buildBookingInvoiceEmail({
+          recipientRole: "renter",
+          recipientName: renterName,
+          counterpartName: hostName,
+          carTitle: car.title ?? null,
+          bookingId: booking.id,
+          paymentReference: reference,
+          bookedAt: booking.paid_at ?? new Date().toISOString(),
+          startDate,
+          endDate,
+          nights,
+          dailyRate: Number(car.daily_price ?? 0),
+          subtotal,
+          platformFee,
+          insuranceFee,
+          deliveryFee,
+          depositAmount,
+          totalPrice: total,
+          status: finalStatus,
+          conversationUrl,
+        });
+        await sendEmailSafe({
+          to: renterEmail,
+          ...invoice,
+          idempotencyKey: `booking:${booking.id}:invoice:renter`,
+        });
+      }
+
+      if (hostEmail) {
+        const invoice = buildBookingInvoiceEmail({
+          recipientRole: "host",
+          recipientName: hostName,
+          counterpartName: renterName,
+          carTitle: car.title ?? null,
+          bookingId: booking.id,
+          paymentReference: reference,
+          bookedAt: booking.paid_at ?? new Date().toISOString(),
+          startDate,
+          endDate,
+          nights,
+          dailyRate: Number(car.daily_price ?? 0),
+          subtotal,
+          platformFee,
+          insuranceFee,
+          deliveryFee,
+          depositAmount,
+          totalPrice: total,
+          status: finalStatus,
+          conversationUrl,
+        });
+        await sendEmailSafe({
+          to: hostEmail,
+          ...invoice,
+          idempotencyKey: `booking:${booking.id}:invoice:host`,
         });
       }
     };
@@ -278,13 +415,21 @@ export async function POST(req: Request) {
           paid_at: new Date().toISOString(),
           approved_at: approvedAt,
           hold_expires_at: null,
-        })
+      })
         .eq("id", bookingId)
         .select()
         .single();
       if (error) throw error;
-      await sendBookingEmails(data);
-      return NextResponse.json({ data });
+      const conversationId = await ensureBookingConversation({
+        primaryClient: supa,
+        fallbackClient: maybeAdmin,
+        hostId: car.owner_id,
+        userId: data.renter_id,
+        carId,
+        bookingId: data.id,
+      });
+      await sendBookingEmails(data, conversationId);
+      return NextResponse.json({ data, conversationId });
     }
 
     // Avoid duplicate inserts on refresh (legacy flow)
@@ -294,7 +439,15 @@ export async function POST(req: Request) {
       .eq("payment_reference", reference)
       .maybeSingle();
     if (existing?.id) {
-      return NextResponse.json({ data: existing });
+      const conversationId = await ensureBookingConversation({
+        primaryClient: supa,
+        fallbackClient: maybeAdmin,
+        hostId: car.owner_id,
+        userId: user.id,
+        carId,
+        bookingId: existing.id,
+      });
+      return NextResponse.json({ data: existing, conversationId });
     }
 
     const { data, error } = await supa
@@ -323,8 +476,16 @@ export async function POST(req: Request) {
       .single();
 
     if (error) throw error;
-    await sendBookingEmails(data);
-    return NextResponse.json({ data });
+    const conversationId = await ensureBookingConversation({
+      primaryClient: supa,
+      fallbackClient: maybeAdmin,
+      hostId: car.owner_id,
+      userId: data.renter_id,
+      carId,
+      bookingId: data.id,
+    });
+    await sendBookingEmails(data, conversationId);
+    return NextResponse.json({ data, conversationId });
   } catch (error: any) {
     return NextResponse.json({ message: error.message ?? "Failed to create booking" }, { status: 400 });
   }

@@ -3,6 +3,15 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { buildMessageEmail, sendEmailSafe } from "@/lib/email";
 
+const SITE_URL =
+  process.env.NEXT_PUBLIC_SITE_URL ??
+  process.env.EMAIL_BASE_URL ??
+  (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
+
+function extractAuthEmail(result: any): string | null {
+  return result?.data?.user?.email ?? result?.user?.email ?? result?.email ?? null;
+}
+
 type Body = {
   conversationId?: string;
   body?: string;
@@ -54,18 +63,18 @@ export async function POST(req: Request) {
     })();
 
     if (admin) {
-      const [{ data: recipientAuth }, { data: senderProfile }] = await Promise.all([
-        admin.auth.admin.getUserById(recipientId),
-        admin.from("profiles").select("full_name").eq("id", user.id).maybeSingle(),
+      const [recipientAuthResult, senderProfileResult] = await Promise.all([
+        admin.auth.admin.getUserById(recipientId).catch(() => null),
+        admin.from("profiles").select("full_name").eq("id", user.id).maybeSingle().catch(() => null),
       ]);
 
-      const recipientEmail = recipientAuth?.user?.email ?? null;
+      const recipientEmail = extractAuthEmail(recipientAuthResult);
       const senderName =
-        (senderProfile as { full_name?: string | null } | null)?.full_name ??
+        ((senderProfileResult as any)?.data as { full_name?: string | null } | null)?.full_name ??
         (user.user_metadata as any)?.full_name ??
         user.email ??
         "User";
-      const conversationUrl = `${process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"}/messages?conversation=${conversationId}`;
+      const conversationUrl = `${SITE_URL}/messages?conversation=${conversationId}`;
       const carTitle = (conversation as any)?.car?.title ?? null;
 
       if (recipientEmail) {

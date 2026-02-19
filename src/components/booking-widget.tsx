@@ -171,12 +171,20 @@ export function BookingWidget({
               amount: amountInMinorUnit,
             }),
           });
+          const payload = (await res.json().catch(() => ({}))) as {
+            data?: { id?: string };
+            conversationId?: string | null;
+            message?: string;
+          };
           if (!res.ok) {
-            const error = await res.json().catch(() => ({}));
-            throw new Error(error.message ?? "Payment verified but booking failed");
+            throw new Error(payload.message ?? "Payment verified but booking failed");
           }
           setHold(null);
-          router.push("/dashboard/bookings");
+          if (payload.conversationId) {
+            router.push(`/messages?conversation=${payload.conversationId}`);
+          } else {
+            router.push("/messages");
+          }
         } catch (err: any) {
           alert(err.message ?? "Booking failed after payment. Please contact support.");
         } finally {
