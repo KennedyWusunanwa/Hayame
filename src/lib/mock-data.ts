@@ -39,7 +39,7 @@ export const mockCars: MockCar[] = [
     fuel: "Petrol",
     fuel_type: "petrol",
     image:
-      "https://images.unsplash.com/photo-1503736334956-4c8f8e92946d?auto=format&fit=crop&w=1200&q=80",
+      "/car-placeholder.jpg",
     features: ["Air Conditioning", "Automatic", "Bluetooth", "USB Port", "4x4"],
     description:
       "Clean and efficient SUV perfect for weekend getaways or business trips around Accra.",
@@ -64,7 +64,7 @@ export const mockCars: MockCar[] = [
     fuel: "Petrol",
     fuel_type: "petrol",
     image:
-      "https://images.unsplash.com/photo-1503736334956-4c8f8e92946d?auto=format&fit=crop&w=1200&q=80",
+      "/car-placeholder.jpg",
     features: ["Leather Seats", "Bluetooth", "Automatic", "Sunroof"],
     description: "Luxury comfort with premium interior and seamless ride quality.",
     host: {
@@ -89,7 +89,7 @@ export const mockCars: MockCar[] = [
     fuel: "Petrol",
     fuel_type: "petrol",
     image:
-      "https://images.unsplash.com/photo-1503736334956-4c8f8e92946d?auto=format&fit=crop&w=1200&q=80",
+      "/car-placeholder.jpg",
     features: ["Bluetooth", "Automatic", "USB Port", "Air Conditioning"],
     description: "Reliable sedan with great fuel economy for trips across Kumasi.",
     host: {
@@ -114,7 +114,7 @@ export const mockCars: MockCar[] = [
     fuel: "Diesel",
     fuel_type: "diesel",
     image:
-      "https://images.unsplash.com/photo-1503736334956-4c8f8e92946d?auto=format&fit=crop&w=1200&q=80",
+      "/car-placeholder.jpg",
     features: ["4x4", "Automatic", "Bluetooth", "Air Conditioning"],
     description: "Comfortable SUV with ample boot space for coastal drives.",
     host: {
@@ -139,9 +139,9 @@ export const mockCars: MockCar[] = [
     fuel: "Diesel",
     fuel_type: "diesel",
     image:
-      "https://images.unsplash.com/photo-1503736334956-4c8f8e92946d?auto=format&fit=crop&w=1200&q=80",
+      "/car-placeholder.jpg",
     features: ["4x4", "Leather Seats", "Automatic", "Air Conditioning"],
-    description: "Built for the north—roomy, rugged, and comfortable for long trips.",
+    description: "Built for the north - roomy, rugged, and comfortable for long trips.",
     host: {
       name: "Hawa Sule",
       avatar:
@@ -164,9 +164,9 @@ export const mockCars: MockCar[] = [
     fuel: "Petrol",
     fuel_type: "petrol",
     image:
-      "https://images.unsplash.com/photo-1503736334956-4c8f8e92946d?auto=format&fit=crop&w=1200&q=80",
+      "/car-placeholder.jpg",
     features: ["Automatic", "Bluetooth", "USB Port"],
-    description: "Compact and easy to park—perfect for quick city errands.",
+    description: "Compact and easy to park - perfect for quick city errands.",
     host: {
       name: "Efua Armah",
       avatar:
@@ -189,7 +189,7 @@ export const mockCars: MockCar[] = [
     fuel: "Diesel",
     fuel_type: "diesel",
     image:
-      "https://images.unsplash.com/photo-1503736334956-4c8f8e92946d?auto=format&fit=crop&w=1200&q=80",
+      "/car-placeholder.jpg",
     features: ["4x4", "Bluetooth", "Automatic", "USB Port"],
     description: "Powerful pickup ready for work trips and off-road adventures.",
     host: {
@@ -214,7 +214,7 @@ export const mockCars: MockCar[] = [
     fuel: "Diesel",
     fuel_type: "diesel",
     image:
-      "https://images.unsplash.com/photo-1503736334956-4c8f8e92946d?auto=format&fit=crop&w=1200&q=80",
+      "/car-placeholder.jpg",
     features: ["Automatic", "Bluetooth", "USB Port", "Leather Seats"],
     description: "Family-sized comfort with sliding doors and plenty of space.",
     host: {

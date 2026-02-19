@@ -57,6 +57,26 @@ async function listingReviewAction(formData: FormData) {
   redirect("/admin/platform");
 }
 
+async function deleteListingAction(formData: FormData) {
+  "use server";
+  await requireAdmin();
+  const admin = createSupabaseAdminClient() as any;
+  const carId = String(formData.get("carId") ?? "");
+  if (!carId) {
+    redirect("/admin/platform");
+  }
+
+  await admin.from("cars").delete().eq("id", carId);
+  await admin.from("admin_actions").insert({
+    action: "listing_deleted",
+    target_id: carId,
+    target_type: "car",
+    performed_by: process.env.ADMIN_USERNAME ?? "admin",
+  });
+
+  redirect("/admin/platform");
+}
+
 async function refundAction(formData: FormData) {
   "use server";
   await requireAdmin();
@@ -319,6 +339,12 @@ export default async function AdminPlatformPage() {
                           />
                           <button className="rounded-md bg-red-600 px-3 py-1 text-xs font-semibold text-white">
                             Reject
+                          </button>
+                        </form>
+                        <form action={deleteListingAction}>
+                          <input type="hidden" name="carId" value={car.id} />
+                          <button className="rounded-md border border-red-200 px-3 py-1 text-xs font-semibold text-red-700 hover:bg-red-50">
+                            Delete
                           </button>
                         </form>
                       </div>

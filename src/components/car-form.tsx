@@ -6,7 +6,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { carFormSchema } from "@/lib/validators";
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select } from "@/components/ui/select";
@@ -56,7 +55,7 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotos = [] 
   const [error, setError] = useState<string | null>(null);
   const [files, setFiles] = useState<File[]>([]);
   const [existingPhotosState, setExistingPhotosState] = useState<ExistingPhoto[]>(existingPhotos);
-  const [removedExistingPhotos, setRemovedExistingPhotos] = useState<ExistingPhoto[]>([]);
+  const [photoMutatingId, setPhotoMutatingId] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const redirectPath = redirectTo ?? "/host/cars";
   const { regions, citiesByRegion } = useLocations();
@@ -135,11 +134,6 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotos = [] 
       const payload = (await res.json().catch(() => ({}))) as { data?: { id?: string } };
       const newCarId = carId ?? payload?.data?.id;
 
-      if (newCarId && removedExistingPhotos.length > 0) {
-        setUploading(true);
-        await removeExistingPhotos(newCarId, removedExistingPhotos);
-      }
-
       if (newCarId && files.length > 0) {
         setUploading(true);
         await uploadPhotos(newCarId, files, existingPhotosState.length);
@@ -214,15 +208,68 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotos = [] 
     setFiles((prev) => prev.filter((_, fileIndex) => fileIndex !== index));
   };
 
-  const removeExistingPhoto = (photoId: string) => {
+  const removeExistingPhoto = async (photoId: string) => {
     const photo = existingPhotosState.find((item) => item.id === photoId);
     if (!photo) return;
 
-    setExistingPhotosState((prev) => prev.filter((item) => item.id !== photoId));
-    setRemovedExistingPhotos((prev) =>
-      prev.some((item) => item.id === photo.id) ? prev : [...prev, photo],
-    );
+    if (!carId) {
+      setExistingPhotosState((prev) => prev.filter((item) => item.id !== photoId));
+      setError(null);
+      return;
+    }
+
+    setPhotoMutatingId(photoId);
     setError(null);
+    try {
+      const res = await fetch(`/api/cars/${carId}/photos`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ photoId }),
+      });
+      if (!res.ok) {
+        const payload = (await res.json().catch(() => ({}))) as { message?: string };
+        throw new Error(payload.message ?? "Unable to delete photo");
+      }
+      setExistingPhotosState((prev) => prev.filter((item) => item.id !== photoId));
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Unable to delete photo");
+    } finally {
+      setPhotoMutatingId((current) => (current === photoId ? null : current));
+    }
+  };
+
+  const replaceExistingPhoto = async (photoId: string, file: File) => {
+    if (!carId) return;
+    setPhotoMutatingId(photoId);
+    setError(null);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("replacePhotoId", photoId);
+
+      const res = await fetch(`/api/cars/${carId}/photos`, {
+        method: "POST",
+        body: formData,
+      });
+      const payload = (await res.json().catch(() => ({}))) as {
+        message?: string;
+        data?: ExistingPhoto;
+      };
+      if (!res.ok) {
+        throw new Error(payload.message ?? "Unable to replace photo");
+      }
+      if (!payload.data?.url) {
+        throw new Error("Photo replacement failed");
+      }
+
+      setExistingPhotosState((prev) =>
+        prev.map((photo) => (photo.id === photoId ? { id: photo.id, url: payload.data!.url } : photo)),
+      );
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Unable to replace photo");
+    } finally {
+      setPhotoMutatingId((current) => (current === photoId ? null : current));
+    }
   };
 
   return (
@@ -488,13 +535,32 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotos = [] 
                   <img src={photo.url} alt="Current car photo" className="h-24 w-full object-cover" loading="lazy" />
                   <div className="flex items-center justify-between gap-2 px-2 py-1 text-xs text-gray-700">
                     <span className="truncate">Current photo</span>
-                    <button
-                      type="button"
-                      onClick={() => removeExistingPhoto(photo.id)}
-                      className="shrink-0 font-semibold text-red-600"
-                    >
-                      Remove
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <label className="cursor-pointer font-semibold text-brand">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          disabled={photoMutatingId === photo.id}
+                          onChange={(event) => {
+                            const file = event.target.files?.[0];
+                            if (file) {
+                              void replaceExistingPhoto(photo.id, file);
+                            }
+                            event.currentTarget.value = "";
+                          }}
+                        />
+                        {photoMutatingId === photo.id ? "Updating..." : "Replace"}
+                      </label>
+                      <button
+                        type="button"
+                        disabled={photoMutatingId === photo.id}
+                        onClick={() => void removeExistingPhoto(photo.id)}
+                        className="shrink-0 font-semibold text-red-600 disabled:opacity-60"
+                      >
+                        {photoMutatingId === photo.id ? "Working..." : "Remove"}
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -570,72 +636,16 @@ async function uploadPhotos(carId: string, files: File[], existingPhotoCount = 0
   if (existingPhotoCount + files.length > MAX_PHOTOS) {
     throw new Error(`Maximum ${MAX_PHOTOS} photos allowed per listing.`);
   }
-  const supabase = createSupabaseBrowserClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("Please sign in to upload photos");
-  const bucket = getPhotoBucketName();
-
   for (const file of files) {
-    const ext = file.name.split(".").pop();
-    const path = `${user.id}/${carId}/${Date.now()}-${Math.random().toString(16).slice(2)}.${ext}`;
-    const { error: uploadError } = await supabase.storage.from(bucket).upload(path, file, {
-      cacheControl: "3600",
-      upsert: false,
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await fetch(`/api/cars/${carId}/photos`, {
+      method: "POST",
+      body: formData,
     });
-    if (uploadError) throw uploadError;
-
-    const {
-      data: { publicUrl },
-    } = supabase.storage.from(bucket).getPublicUrl(path);
-
-    const { error: insertError } = await supabase.from("car_photos").insert({ car_id: carId, url: publicUrl });
-    if (insertError) throw insertError;
-  }
-}
-
-async function removeExistingPhotos(carId: string, photosToRemove: ExistingPhoto[]) {
-  if (photosToRemove.length === 0) return;
-
-  const supabase = createSupabaseBrowserClient();
-  const photoIds = photosToRemove.map((photo) => photo.id);
-  const { error: rowDeleteError } = await supabase
-    .from("car_photos")
-    .delete()
-    .eq("car_id", carId)
-    .in("id", photoIds);
-
-  if (rowDeleteError) {
-    throw rowDeleteError;
-  }
-
-  const bucket = getPhotoBucketName();
-  const paths = photosToRemove
-    .map((photo) => getStoragePathFromPublicUrl(photo.url, bucket))
-    .filter((path): path is string => Boolean(path));
-
-  if (paths.length > 0) {
-    await supabase.storage.from(bucket).remove(paths);
-  }
-}
-
-function getPhotoBucketName() {
-  return (
-    process.env.NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET ||
-    process.env.NEXT_PUBLIC_SUPABASE_AVATAR_BUCKET ||
-    "car-photos"
-  );
-}
-
-function getStoragePathFromPublicUrl(publicUrl: string, bucket: string): string | null {
-  try {
-    const url = new URL(publicUrl);
-    const prefix = `/storage/v1/object/public/${bucket}/`;
-    const start = url.pathname.indexOf(prefix);
-    if (start === -1) return null;
-    return decodeURIComponent(url.pathname.slice(start + prefix.length));
-  } catch {
-    return null;
+    if (!res.ok) {
+      const payload = (await res.json().catch(() => ({}))) as { message?: string };
+      throw new Error(payload.message ?? "Unable to upload photo");
+    }
   }
 }
