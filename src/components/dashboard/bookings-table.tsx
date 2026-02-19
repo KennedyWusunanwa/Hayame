@@ -205,13 +205,14 @@ export function BookingsTable({ mode = "host" }: { mode?: "host" | "renter" }) {
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>Your bookings</CardTitle>
+          <CardTitle>Bookings on your cars</CardTitle>
+          <p className="text-sm text-gray-600">Approve or reject requests quickly, then message guests if needed.</p>
           {error ? <p className="text-sm text-red-600">{error}</p> : null}
         </CardHeader>
         <CardContent>
           <BookingsList
-            rows={renterRows}
-            isOwnerView={false}
+            rows={ownerRows}
+            isOwnerView={true}
             loading={loading}
             updatingId={updatingId}
             disputingId={disputingId}
@@ -225,13 +226,12 @@ export function BookingsTable({ mode = "host" }: { mode?: "host" | "renter" }) {
 
       <Card>
         <CardHeader>
-          <CardTitle>Bookings on your cars</CardTitle>
-          <p className="text-sm text-gray-600">Compact cards on mobile. Tap each booking to expand all details.</p>
+          <CardTitle>Your bookings</CardTitle>
         </CardHeader>
         <CardContent>
           <BookingsList
-            rows={ownerRows}
-            isOwnerView={true}
+            rows={renterRows}
+            isOwnerView={false}
             loading={loading}
             updatingId={updatingId}
             disputingId={disputingId}
@@ -408,123 +408,138 @@ function BookingsList({
       </div>
 
       <div className="hidden md:block">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Listing</TableHead>
-              <TableHead>{isOwnerView ? "Booked by" : "Host"}</TableHead>
-              <TableHead>Dates</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Payment</TableHead>
-              <TableHead className="text-right">Total</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {rows.map((booking) => {
-              const awaiting = booking.status === "awaiting_host";
-              const canAct = isOwnerView && awaiting && booking.payment_status === "paid";
-              const personName = isOwnerView
-                ? booking.renter?.full_name ?? "Guest"
-                : booking.cars?.owner?.full_name ?? "Host";
-              const image = booking.cars?.car_photos?.[0]?.url ?? booking.cars?.owner?.avatar_url ?? null;
-              const location = [booking.cars?.city, booking.cars?.region].filter(Boolean).join(", ");
+        <div className="overflow-x-auto rounded-xl border border-border bg-white">
+          <Table className="min-w-[1140px] table-fixed">
+            <TableHeader className="bg-gray-50/80">
+              <TableRow>
+                <TableHead className="w-[27%]">Listing</TableHead>
+                <TableHead className="w-[14%]">{isOwnerView ? "Booked by" : "Host"}</TableHead>
+                <TableHead className="w-[15%]">Dates</TableHead>
+                <TableHead className="w-[20%]">Status</TableHead>
+                <TableHead className="w-[9%]">Payment</TableHead>
+                <TableHead className="w-[7%] text-right">Total</TableHead>
+                <TableHead className="w-[18%] text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.map((booking) => {
+                const awaiting = booking.status === "awaiting_host";
+                const canAct = isOwnerView && awaiting && booking.payment_status === "paid";
+                const personName = isOwnerView
+                  ? booking.renter?.full_name ?? "Guest"
+                  : booking.cars?.owner?.full_name ?? "Host";
+                const image = booking.cars?.car_photos?.[0]?.url ?? booking.cars?.owner?.avatar_url ?? null;
+                const location = [booking.cars?.city, booking.cars?.region].filter(Boolean).join(", ");
+                const durationNights = getDurationNights(booking);
 
-              return (
-                <TableRow key={booking.id}>
-                  <TableCell>
-                    <div className="flex items-center gap-3">
-                      <div className="relative h-12 w-16 overflow-hidden rounded-md border border-border bg-gray-100">
-                        {image ? (
-                          <Image src={image} alt={booking.cars?.title ?? "Listing"} fill className="object-cover" sizes="64px" />
-                        ) : (
-                          <div className="flex h-full w-full items-center justify-center text-xs font-semibold text-gray-500">
-                            {getInitials(booking.cars?.title ?? "Car")}
+                return (
+                  <TableRow key={booking.id}>
+                    <TableCell className="align-top">
+                      <div className="flex min-w-0 items-start gap-3">
+                        <div className="relative h-14 w-20 shrink-0 overflow-hidden rounded-md border border-border bg-gray-100">
+                          {image ? (
+                            <Image src={image} alt={booking.cars?.title ?? "Listing"} fill className="object-cover" sizes="80px" />
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center text-xs font-semibold text-gray-500">
+                              {getInitials(booking.cars?.title ?? "Car")}
+                            </div>
+                          )}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="break-words text-base font-semibold leading-tight">
+                            {booking.cars?.title ?? booking.car_id}
                           </div>
-                        )}
+                          <div className="mt-1 break-words text-sm text-gray-600">{location || "Location not set"}</div>
+                        </div>
                       </div>
-                      <div>
-                        <div className="font-semibold">{booking.cars?.title ?? booking.car_id}</div>
-                        <div className="text-xs text-gray-600">{location || "Location not set"}</div>
+                    </TableCell>
+                    <TableCell className="align-top">
+                      <div className="break-words text-base font-semibold leading-tight">{personName}</div>
+                      <div className="mt-1 break-words text-sm text-gray-600">
+                        {booking.renter?.phone ?? booking.cars?.owner?.phone ?? "No phone"}
                       </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="font-semibold">{personName}</div>
-                    <div className="text-xs text-gray-600">{booking.renter?.phone ?? booking.cars?.owner?.phone ?? "No phone"}</div>
-                  </TableCell>
-                  <TableCell>
-                    {formatDateLabel(booking.start_date)} - {formatDateLabel(booking.end_date)}
-                    <div className="text-xs text-gray-600">{getDurationNights(booking)} night(s)</div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={statusVariant(booking.status)}>{statusLabel(booking.status)}</Badge>
-                    <TripStatusTracker
-                      status={booking.status}
-                      startDate={booking.start_date}
-                      endDate={booking.end_date}
-                    />
-                    {booking.cars?.cancellation_policy ? (
-                      <div className="mt-1 text-[11px] text-gray-600">
-                        <span className="rounded-full bg-gray-100 px-2 py-1 font-semibold capitalize text-gray-700">
-                          {booking.cars.cancellation_policy} cancellation
-                        </span>
+                    </TableCell>
+                    <TableCell className="align-top">
+                      <div className="text-base leading-tight">
+                        {formatDateLabel(booking.start_date)} - {formatDateLabel(booking.end_date)}
                       </div>
-                    ) : null}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={paymentVariant(booking.payment_status)}>{paymentLabel(booking.payment_status)}</Badge>
-                  </TableCell>
-                  <TableCell className="text-right font-semibold">{formatCurrency(booking.total_price)}</TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => onMessage(booking, isOwnerView)}
-                        disabled={messagingId === booking.id}
-                      >
-                        {messagingId === booking.id ? "Opening..." : "Message"}
-                      </Button>
-                      {canAct ? (
-                        <>
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            onClick={() => onAction(booking.id, "reject")}
-                            disabled={updatingId === booking.id}
-                          >
-                            Reject &amp; refund
-                          </Button>
-                          <Button
-                            size="sm"
-                            onClick={() => onAction(booking.id, "approve")}
-                            disabled={updatingId === booking.id}
-                          >
-                            Approve
-                          </Button>
-                        </>
-                      ) : null}
-                    </div>
-                    {!isOwnerView && booking.payment_status === "paid" ? (
-                      <div className="mt-2 flex justify-end">
+                      <div className="mt-1 text-sm text-gray-600">{durationNights} night(s)</div>
+                    </TableCell>
+                    <TableCell className="align-top">
+                      <div className="max-w-[230px] space-y-2 overflow-hidden">
+                        <Badge variant={statusVariant(booking.status)}>{statusLabel(booking.status)}</Badge>
+                        <TripStatusTracker
+                          status={booking.status}
+                          startDate={booking.start_date}
+                          endDate={booking.end_date}
+                          compact
+                        />
+                        {booking.cars?.cancellation_policy ? (
+                          <div className="text-xs text-gray-600">
+                            <span className="inline-flex rounded-full bg-gray-100 px-2 py-1 font-semibold capitalize text-gray-700">
+                              {booking.cars.cancellation_policy} cancellation
+                            </span>
+                          </div>
+                        ) : null}
+                      </div>
+                    </TableCell>
+                    <TableCell className="align-top">
+                      <Badge variant={paymentVariant(booking.payment_status)}>{paymentLabel(booking.payment_status)}</Badge>
+                    </TableCell>
+                    <TableCell className="align-top text-right text-xl font-semibold">
+                      {formatCurrency(booking.total_price)}
+                    </TableCell>
+                    <TableCell className="relative z-10 align-top">
+                      <div className="ml-auto flex w-[180px] flex-col gap-2">
                         <Button
                           size="sm"
                           variant="outline"
-                          className="h-7 px-2 text-xs"
-                          disabled={disputingId === booking.id}
-                          onClick={() => onDispute(booking.id)}
+                          className="h-9 w-full justify-center rounded-md border-2"
+                          onClick={() => onMessage(booking, isOwnerView)}
+                          disabled={messagingId === booking.id}
                         >
-                          {disputingId === booking.id ? "Opening..." : "Open dispute"}
+                          {messagingId === booking.id ? "Opening..." : "Message"}
                         </Button>
+                        {canAct ? (
+                          <div className="grid grid-cols-2 gap-2">
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              className="h-9 w-full rounded-md px-2 text-xs"
+                              onClick={() => onAction(booking.id, "reject")}
+                              disabled={updatingId === booking.id}
+                            >
+                              Reject
+                            </Button>
+                            <Button
+                              size="sm"
+                              className="h-9 w-full rounded-md px-2 text-xs"
+                              onClick={() => onAction(booking.id, "approve")}
+                              disabled={updatingId === booking.id}
+                            >
+                              Approve
+                            </Button>
+                          </div>
+                        ) : null}
+                        {!isOwnerView && booking.payment_status === "paid" ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-8 w-full rounded-md text-xs"
+                            disabled={disputingId === booking.id}
+                            onClick={() => onDispute(booking.id)}
+                          >
+                            {disputingId === booking.id ? "Opening..." : "Open dispute"}
+                          </Button>
+                        ) : null}
                       </div>
-                    ) : null}
-                  </TableCell>
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </div>
       </div>
     </div>
   );

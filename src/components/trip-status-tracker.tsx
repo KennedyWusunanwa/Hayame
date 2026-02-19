@@ -4,16 +4,19 @@ type Props = {
   status?: string;
   startDate?: string;
   endDate?: string;
+  compact?: boolean;
 };
 
 const steps = ["Pending", "Confirmed", "Ongoing", "Completed"];
+const compactSteps = ["Pending", "Confirm", "Ongoing", "Done"];
 
-export function TripStatusTracker({ status, startDate, endDate }: Props) {
+export function TripStatusTracker({ status, startDate, endDate, compact = false }: Props) {
   const normalized = (status ?? "").toLowerCase();
+  const labels = compact ? compactSteps : steps;
 
   if (["cancelled", "rejected", "refunded"].includes(normalized)) {
     return (
-      <div className="mt-1 flex items-center gap-2 text-[10px]">
+      <div className="mt-1 flex items-center gap-2 text-[10px] pointer-events-none select-none">
         <span className="rounded-full bg-red-50 px-2 py-1 font-semibold text-red-700">Cancelled</span>
       </div>
     );
@@ -22,12 +25,12 @@ export function TripStatusTracker({ status, startDate, endDate }: Props) {
   const activeIndex = getActiveIndex(normalized, startDate, endDate);
 
   return (
-    <div className="mt-1 grid grid-cols-4 gap-1 text-[10px]">
-      {steps.map((step, index) => (
+    <div className="mt-1 grid grid-cols-4 gap-1 overflow-hidden text-[10px] pointer-events-none select-none">
+      {labels.map((step, index) => (
         <span
           key={step}
           className={cn(
-            "rounded-full px-2 py-1 text-center font-semibold",
+            "truncate rounded-full px-2 py-1 text-center font-semibold",
             index < activeIndex && "bg-emerald-50 text-emerald-700",
             index === activeIndex && "bg-brand/10 text-brand",
             index > activeIndex && "bg-gray-100 text-gray-500",
