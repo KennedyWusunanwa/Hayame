@@ -38,6 +38,7 @@ type Props = {
 };
 
 export function AdminMessagesConsole({ initialUserId }: Props) {
+  const [officeProfileId, setOfficeProfileId] = useState(ADMIN_OFFICE_PROFILE_ID);
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [usersLoading, setUsersLoading] = useState(true);
   const [usersQuery, setUsersQuery] = useState("");
@@ -62,30 +63,41 @@ export function AdminMessagesConsole({ initialUserId }: Props) {
 
   const filteredUsers = useMemo(() => {
     const q = usersQuery.trim().toLowerCase();
-    if (!q) return users;
-    return users.filter((user) =>
-      [user.full_name ?? "", user.phone ?? "", user.city ?? ""].join(" ").toLowerCase().includes(q),
-    );
-  }, [users, usersQuery]);
+    return users.filter((user) => {
+      if (user.id === officeProfileId) return false;
+      if (!q) return true;
+      return [user.full_name ?? "", user.phone ?? "", user.city ?? ""].join(" ").toLowerCase().includes(q);
+    });
+  }, [users, usersQuery, officeProfileId]);
 
   const loadUsers = async (query = "") => {
     setUsersLoading(true);
     const url = query ? `/api/admin/messages?scope=users&q=${encodeURIComponent(query)}` : "/api/admin/messages?scope=users";
     const res = await fetch(url, { cache: "no-store" });
-    const payload = (await res.json()) as { data?: AdminUser[]; message?: string };
+    const payload = (await res.json()) as { data?: AdminUser[]; office_profile_id?: string; message?: string };
     if (!res.ok) {
       throw new Error(payload.message ?? "Failed to load users");
     }
-    setUsers((payload.data ?? []).filter((user) => user.id !== ADMIN_OFFICE_PROFILE_ID));
+    if (payload.office_profile_id) {
+      setOfficeProfileId(payload.office_profile_id);
+    }
+    setUsers(payload.data ?? []);
     setUsersLoading(false);
   };
 
   const loadConversations = async () => {
     setConversationsLoading(true);
     const res = await fetch("/api/admin/messages", { cache: "no-store" });
-    const payload = (await res.json()) as { data?: AdminConversation[]; message?: string };
+    const payload = (await res.json()) as {
+      data?: AdminConversation[];
+      office_profile_id?: string;
+      message?: string;
+    };
     if (!res.ok) {
       throw new Error(payload.message ?? "Failed to load conversations");
+    }
+    if (payload.office_profile_id) {
+      setOfficeProfileId(payload.office_profile_id);
     }
     setConversations(payload.data ?? []);
     setConversationsLoading(false);
@@ -95,9 +107,16 @@ export function AdminMessagesConsole({ initialUserId }: Props) {
     setActiveConversationId(conversationId);
     setMessagesLoading(true);
     const res = await fetch(`/api/admin/messages?conversationId=${conversationId}`, { cache: "no-store" });
-    const payload = (await res.json()) as { data?: { messages?: AdminMessage[] }; message?: string };
+    const payload = (await res.json()) as {
+      data?: { messages?: AdminMessage[] };
+      office_profile_id?: string;
+      message?: string;
+    };
     if (!res.ok) {
       throw new Error(payload.message ?? "Failed to load messages");
+    }
+    if (payload.office_profile_id) {
+      setOfficeProfileId(payload.office_profile_id);
     }
     setMessages(payload.data?.messages ?? []);
     setMessagesLoading(false);
@@ -342,7 +361,7 @@ export function AdminMessagesConsole({ initialUserId }: Props) {
               ) : null}
               {!messagesLoading
                 ? messages.map((message) => {
-                    const isOffice = message.sender_id === ADMIN_OFFICE_PROFILE_ID;
+                    const isOffice = message.sender_id === officeProfileId;
                     const initials = getInitials(activeConversation.participant.full_name ?? "User");
                     return (
                       <div

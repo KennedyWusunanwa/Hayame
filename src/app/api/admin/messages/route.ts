@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { ADMIN_OFFICE_AVATAR, ADMIN_OFFICE_NAME, ADMIN_OFFICE_PROFILE_ID } from "@/lib/admin-office";
+import {
+  ADMIN_OFFICE_AVATAR,
+  ADMIN_OFFICE_EMAIL,
+  ADMIN_OFFICE_NAME,
+  ADMIN_OFFICE_PROFILE_ID,
+} from "@/lib/admin-office";
 
 const COOKIE_NAME = "admin_auth";
 
@@ -21,35 +26,94 @@ async function requireAdminClient() {
   return createSupabaseAdminClient() as any;
 }
 
-async function ensureOfficeProfile(admin: any) {
-  const officeEmail =
-    process.env.ADMIN_OFFICE_EMAIL?.trim() ||
-    `office-${ADMIN_OFFICE_PROFILE_ID.slice(0, 8)}@hayamegh.com`;
+type OfficeIdentity = {
+  id: string;
+  email: string;
+};
 
-  const { data: authUserResult, error: authUserError } = await admin.auth.admin
-    .getUserById(ADMIN_OFFICE_PROFILE_ID)
-    .catch(() => ({ data: null, error: null }));
-  if (authUserError) {
-    throw authUserError;
+function isNotFoundError(error: any) {
+  const message = String(error?.message ?? "").toLowerCase();
+  const status = Number(error?.status ?? error?.statusCode ?? 0);
+  return status === 404 || message.includes("not found");
+}
+
+async function findAuthUserByEmail(admin: any, email: string) {
+  const normalizedEmail = email.trim().toLowerCase();
+  if (!normalizedEmail) return null;
+
+  let page = 1;
+  while (page <= 10) {
+    const { data, error } = await admin.auth.admin.listUsers({ page, perPage: 200 });
+    if (error) throw error;
+
+    const users: any[] = data?.users ?? [];
+    const match = users.find((user) => String(user?.email ?? "").toLowerCase() === normalizedEmail);
+    if (match) return match;
+    if (users.length < 200) break;
+    page += 1;
   }
 
-  if (!authUserResult?.user) {
+  return null;
+}
+
+async function getAuthUserById(admin: any, userId: string) {
+  const { data, error } = await admin.auth.admin.getUserById(userId);
+  if (error) {
+    if (isNotFoundError(error)) return null;
+    throw error;
+  }
+  return data?.user ?? null;
+}
+
+async function ensureOfficeProfile(admin: any): Promise<OfficeIdentity> {
+  const officeEmail = (
+    process.env.ADMIN_OFFICE_EMAIL?.trim() ||
+    ADMIN_OFFICE_EMAIL ||
+    `office-${ADMIN_OFFICE_PROFILE_ID.slice(0, 8)}@hayamegh.com`
+  ).toLowerCase();
+
+  let officeUser = await getAuthUserById(admin, ADMIN_OFFICE_PROFILE_ID);
+  if (!officeUser) {
+    officeUser = await findAuthUserByEmail(admin, officeEmail);
+  }
+
+  if (!officeUser) {
     const password = `${crypto.randomUUID()}Aa!1`;
-    const { error: createAuthError } = await admin.auth.admin.createUser({
+    const createWithPreferredId = await admin.auth.admin.createUser({
       id: ADMIN_OFFICE_PROFILE_ID,
       email: officeEmail,
       email_confirm: true,
       password,
       user_metadata: { full_name: ADMIN_OFFICE_NAME },
     });
-    if (createAuthError) {
-      throw createAuthError;
+
+    if (createWithPreferredId.error) {
+      const existingByEmail = await findAuthUserByEmail(admin, officeEmail);
+      if (existingByEmail) {
+        officeUser = existingByEmail;
+      } else {
+        const createWithoutId = await admin.auth.admin.createUser({
+          email: officeEmail,
+          email_confirm: true,
+          password,
+          user_metadata: { full_name: ADMIN_OFFICE_NAME },
+        });
+        if (createWithoutId.error) throw createWithoutId.error;
+        officeUser = createWithoutId.data?.user ?? null;
+      }
+    } else {
+      officeUser = createWithPreferredId.data?.user ?? null;
     }
+  }
+
+  const officeProfileId = String(officeUser?.id ?? "").trim();
+  if (!officeProfileId) {
+    throw new Error("Unable to provision admin office auth user");
   }
 
   const { error: profileError } = await admin.from("profiles").upsert(
     {
-      id: ADMIN_OFFICE_PROFILE_ID,
+      id: officeProfileId,
       full_name: ADMIN_OFFICE_NAME,
       avatar_url: ADMIN_OFFICE_AVATAR,
       id_verified: true,
@@ -59,9 +123,9 @@ async function ensureOfficeProfile(admin: any) {
     },
     { onConflict: "id" },
   );
-  if (profileError) {
-    throw profileError;
-  }
+  if (profileError) throw profileError;
+
+  return { id: officeProfileId, email: officeEmail };
 }
 
 type RequestBody =
@@ -90,7 +154,8 @@ export async function GET(req: Request) {
     if (!admin) {
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
     }
-    await ensureOfficeProfile(admin);
+    const office = await ensureOfficeProfile(admin);
+    const officeId = office.id;
 
     const { searchParams } = new URL(req.url);
     const scope = searchParams.get("scope");
@@ -101,7 +166,7 @@ export async function GET(req: Request) {
       let query = admin
         .from("profiles")
         .select("id,full_name,avatar_url,phone,city,created_at")
-        .neq("id", ADMIN_OFFICE_PROFILE_ID)
+        .neq("id", officeId)
         .order("created_at", { ascending: false })
         .limit(200);
 
@@ -111,7 +176,7 @@ export async function GET(req: Request) {
 
       const { data, error } = await query;
       if (error) throw error;
-      return NextResponse.json({ data: data ?? [] });
+      return NextResponse.json({ data: data ?? [], office_profile_id: officeId });
     }
 
     if (conversationId) {
@@ -121,7 +186,7 @@ export async function GET(req: Request) {
           "id,host_id,user_id,last_message_at,last_message_preview,created_at,user:profiles!conversations_user_id_fkey(id,full_name,avatar_url,phone,city),host:profiles!conversations_host_id_fkey(id,full_name,avatar_url,phone,city)",
         )
         .eq("id", conversationId)
-        .or(`host_id.eq.${ADMIN_OFFICE_PROFILE_ID},user_id.eq.${ADMIN_OFFICE_PROFILE_ID}`)
+        .or(`host_id.eq.${officeId},user_id.eq.${officeId}`)
         .maybeSingle();
       if (conversationError) throw conversationError;
       if (!conversation) {
@@ -133,7 +198,7 @@ export async function GET(req: Request) {
         .update({ read_at: new Date().toISOString() })
         .eq("conversation_id", conversationId)
         .is("read_at", null)
-        .neq("sender_id", ADMIN_OFFICE_PROFILE_ID);
+        .neq("sender_id", officeId);
 
       const { data: messages, error: messagesError } = await admin
         .from("messages")
@@ -144,9 +209,10 @@ export async function GET(req: Request) {
       if (messagesError) throw messagesError;
 
       const participant =
-        conversation.host_id === ADMIN_OFFICE_PROFILE_ID ? conversation.user : conversation.host;
+        conversation.host_id === officeId ? conversation.user : conversation.host;
 
       return NextResponse.json({
+        office_profile_id: officeId,
         data: {
           conversation: {
             id: conversation.id,
@@ -171,11 +237,11 @@ export async function GET(req: Request) {
       .select(
         "id,host_id,user_id,last_message_at,last_message_preview,created_at,user:profiles!conversations_user_id_fkey(id,full_name,avatar_url,phone,city),host:profiles!conversations_host_id_fkey(id,full_name,avatar_url,phone,city)",
       )
-      .or(`host_id.eq.${ADMIN_OFFICE_PROFILE_ID},user_id.eq.${ADMIN_OFFICE_PROFILE_ID}`);
+      .or(`host_id.eq.${officeId},user_id.eq.${officeId}`);
     if (conversationsError) throw conversationsError;
 
     const mapped: ConversationSummary[] = (conversations ?? []).map((row: any) => {
-      const participant = row.host_id === ADMIN_OFFICE_PROFILE_ID ? row.user : row.host;
+      const participant = row.host_id === officeId ? row.user : row.host;
       return {
         id: row.id,
         created_at: row.created_at,
@@ -199,7 +265,7 @@ export async function GET(req: Request) {
         .select("conversation_id")
         .in("conversation_id", conversationIds)
         .is("read_at", null)
-        .neq("sender_id", ADMIN_OFFICE_PROFILE_ID);
+        .neq("sender_id", officeId);
       unreadByConversation = (unreadRows ?? []).reduce((acc: Record<string, number>, row: any) => {
         const key = String(row.conversation_id ?? "");
         if (!key) return acc;
@@ -215,6 +281,7 @@ export async function GET(req: Request) {
     });
 
     return NextResponse.json({
+      office_profile_id: officeId,
       data: mapped.map((item) => ({
         ...item,
         unread_count: unreadByConversation[item.id] ?? 0,
@@ -231,7 +298,8 @@ export async function POST(req: Request) {
     if (!admin) {
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
     }
-    await ensureOfficeProfile(admin);
+    const office = await ensureOfficeProfile(admin);
+    const officeId = office.id;
 
     const payload = (await req.json().catch(() => ({}))) as RequestBody;
     const action = payload.action;
@@ -241,7 +309,7 @@ export async function POST(req: Request) {
       if (!userId) {
         return NextResponse.json({ message: "Missing user id" }, { status: 400 });
       }
-      if (userId === ADMIN_OFFICE_PROFILE_ID) {
+      if (userId === officeId) {
         return NextResponse.json({ message: "Invalid user id" }, { status: 400 });
       }
 
@@ -253,18 +321,18 @@ export async function POST(req: Request) {
       const { data: existing } = await admin
         .from("conversations")
         .select("id")
-        .eq("host_id", ADMIN_OFFICE_PROFILE_ID)
+        .eq("host_id", officeId)
         .eq("user_id", userId)
         .is("car_id", null)
         .maybeSingle();
       if (existing?.id) {
-        return NextResponse.json({ data: { id: existing.id } });
+        return NextResponse.json({ data: { id: existing.id }, office_profile_id: officeId });
       }
 
       const { data, error } = await admin
         .from("conversations")
         .insert({
-          host_id: ADMIN_OFFICE_PROFILE_ID,
+          host_id: officeId,
           user_id: userId,
           car_id: null,
           booking_id: null,
@@ -272,7 +340,7 @@ export async function POST(req: Request) {
         .select("id")
         .single();
       if (error) throw error;
-      return NextResponse.json({ data });
+      return NextResponse.json({ data, office_profile_id: officeId });
     }
 
     if (action === "send") {
@@ -286,7 +354,7 @@ export async function POST(req: Request) {
         .from("conversations")
         .select("id")
         .eq("id", conversationId)
-        .or(`host_id.eq.${ADMIN_OFFICE_PROFILE_ID},user_id.eq.${ADMIN_OFFICE_PROFILE_ID}`)
+        .or(`host_id.eq.${officeId},user_id.eq.${officeId}`)
         .maybeSingle();
       if (!conversation) {
         return NextResponse.json({ message: "Conversation not found" }, { status: 404 });
@@ -296,7 +364,7 @@ export async function POST(req: Request) {
         .from("messages")
         .insert({
           conversation_id: conversationId,
-          sender_id: ADMIN_OFFICE_PROFILE_ID,
+          sender_id: officeId,
           body,
         })
         .select("id,conversation_id,sender_id,body,created_at,read_at")
@@ -311,7 +379,7 @@ export async function POST(req: Request) {
         })
         .eq("id", conversationId);
 
-      return NextResponse.json({ data: message });
+      return NextResponse.json({ data: message, office_profile_id: officeId });
     }
 
     return NextResponse.json({ message: "Invalid action" }, { status: 400 });
