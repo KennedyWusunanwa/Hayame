@@ -196,10 +196,37 @@ export function MessagingProvider({ children }: ProviderProps) {
         },
       );
 
+      const rebindForConversationChanges = async () => {
+        const nextConversationIds = await hydrateConversations(currentUserId);
+        ensureSubscription(nextConversationIds, currentUserId);
+      };
+
+      channel.on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "conversations",
+          filter: `host_id=eq.${currentUserId}`,
+        },
+        rebindForConversationChanges,
+      );
+
+      channel.on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "conversations",
+          filter: `user_id=eq.${currentUserId}`,
+        },
+        rebindForConversationChanges,
+      );
+
       channel.subscribe();
       channelRef.current = channel;
     },
-    [supabase],
+    [hydrateConversations, supabase],
   );
 
   useEffect(() => {
@@ -346,6 +373,30 @@ export function MessagingProvider({ children }: ProviderProps) {
     const conversationIds = await hydrateConversations(userId);
     ensureSubscription(conversationIds, userId);
   }, [ensureSubscription, hydrateConversations, userId]);
+
+  useEffect(() => {
+    if (!userId) return;
+
+    const refreshOnVisible = () => {
+      if (document.visibilityState === "visible") {
+        refreshConversations();
+      }
+    };
+
+    const refreshOnFocus = () => {
+      refreshConversations();
+    };
+
+    document.addEventListener("visibilitychange", refreshOnVisible);
+    window.addEventListener("focus", refreshOnFocus);
+    window.addEventListener("pageshow", refreshOnFocus);
+
+    return () => {
+      document.removeEventListener("visibilitychange", refreshOnVisible);
+      window.removeEventListener("focus", refreshOnFocus);
+      window.removeEventListener("pageshow", refreshOnFocus);
+    };
+  }, [refreshConversations, userId]);
 
   const value = useMemo(
     () => ({

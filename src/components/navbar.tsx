@@ -217,7 +217,21 @@ export function Navbar() {
             </>
           )}
         </div>
-        <div className="md:hidden">
+        <div className="flex items-center gap-2 md:hidden">
+          {userName ? (
+            <Link
+              href="/messages"
+              className="relative flex h-10 w-10 items-center justify-center rounded-full border border-border text-gray-700 hover:text-brand"
+              aria-label="Messages"
+            >
+              <MessageCircle className="h-5 w-5" />
+              {unreadCount > 0 ? (
+                <span className="absolute -right-1 -top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-brand px-1 text-[11px] font-semibold text-white">
+                  {unreadCount > 99 ? "99+" : unreadCount}
+                </span>
+              ) : null}
+            </Link>
+          ) : null}
           <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
             <SheetTrigger asChild>
               <Button variant="ghost" size="icon" className="text-gray-900">

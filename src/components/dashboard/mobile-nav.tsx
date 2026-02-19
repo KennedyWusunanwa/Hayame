@@ -2,18 +2,22 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Car, Home, User, WalletCards } from "lucide-react";
+import { Car, Home, MessageCircle, User, WalletCards } from "lucide-react";
+import { useMessaging } from "@/components/messages/messaging-provider";
 import { cn } from "@/lib/utils";
 
 const links = [
   { href: "/host", label: "Overview", icon: Home },
   { href: "/host/cars", label: "Vehicles", icon: Car },
   { href: "/host/bookings", label: "Bookings", icon: WalletCards },
+  { href: "/messages", label: "Chats", icon: MessageCircle },
   { href: "/host/profile", label: "Settings", icon: User },
 ];
 
 export function DashboardMobileNav({ pendingBookingCount = 0 }: { pendingBookingCount?: number }) {
   const pathname = usePathname();
+  const { unreadCount } = useMessaging();
+  const unreadLabel = unreadCount > 99 ? "99+" : String(unreadCount);
   const bookingCountLabel = pendingBookingCount > 99 ? "99+" : String(pendingBookingCount);
   return (
     <nav className="sticky top-0 z-20 -mx-4 bg-white/95 px-4 py-2 shadow-sm backdrop-blur lg:hidden">
@@ -26,6 +30,7 @@ export function DashboardMobileNav({ pendingBookingCount = 0 }: { pendingBooking
           const Icon = link.icon;
           const active = pathname?.startsWith(link.href);
           const showBookingDot = link.href === "/host/bookings" && pendingBookingCount > 0;
+          const showChatDot = link.href === "/messages" && unreadCount > 0;
           return (
             <Link
               key={link.href}
@@ -43,11 +48,22 @@ export function DashboardMobileNav({ pendingBookingCount = 0 }: { pendingBooking
                     <span className="sr-only">New booking requests</span>
                   </>
                 ) : null}
+                {showChatDot ? (
+                  <>
+                    <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-brand ring-2 ring-white" />
+                    <span className="sr-only">Unread messages</span>
+                  </>
+                ) : null}
               </span>
               {link.label}
               {showBookingDot ? (
                 <span className="ml-1 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-brand px-1 text-[11px] font-semibold text-white">
                   {bookingCountLabel}
+                </span>
+              ) : null}
+              {showChatDot ? (
+                <span className="ml-1 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-brand px-1 text-[11px] font-semibold text-white">
+                  {unreadLabel}
                 </span>
               ) : null}
             </Link>

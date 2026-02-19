@@ -2,18 +2,22 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Heart, Home, User, WalletCards } from "lucide-react";
+import { Heart, Home, MessageCircle, User, WalletCards } from "lucide-react";
+import { useMessaging } from "@/components/messages/messaging-provider";
 import { cn } from "@/lib/utils";
 
 const links = [
   { href: "/dashboard", label: "Overview", icon: Home },
   { href: "/dashboard/bookings", label: "Bookings", icon: WalletCards },
+  { href: "/messages", label: "Chats", icon: MessageCircle },
   { href: "/dashboard/favorites", label: "Favorites", icon: Heart },
   { href: "/dashboard/profile", label: "Profile", icon: User },
 ];
 
 export function UserDashboardMobileNav() {
   const pathname = usePathname();
+  const { unreadCount } = useMessaging();
+  const unreadLabel = unreadCount > 99 ? "99+" : String(unreadCount);
   return (
     <nav className="sticky top-0 z-20 -mx-4 bg-white/95 px-4 py-2 shadow-sm backdrop-blur lg:hidden">
       <div className="flex items-center justify-between">
@@ -24,6 +28,7 @@ export function UserDashboardMobileNav() {
         {links.map((link) => {
           const Icon = link.icon;
           const active = pathname?.startsWith(link.href);
+          const showChatDot = link.href === "/messages" && unreadCount > 0;
           return (
             <Link
               key={link.href}
@@ -33,8 +38,21 @@ export function UserDashboardMobileNav() {
                 active && "border-primary bg-primary/10 text-primary",
               )}
             >
-              <Icon className="h-4 w-4" />
+              <span className="relative inline-flex">
+                <Icon className="h-4 w-4" />
+                {showChatDot ? (
+                  <>
+                    <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-brand ring-2 ring-white" />
+                    <span className="sr-only">Unread messages</span>
+                  </>
+                ) : null}
+              </span>
               {link.label}
+              {showChatDot ? (
+                <span className="ml-1 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-brand px-1 text-[11px] font-semibold text-white">
+                  {unreadLabel}
+                </span>
+              ) : null}
             </Link>
           );
         })}

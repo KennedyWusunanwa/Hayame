@@ -458,7 +458,11 @@ export default async function AdminPage({
                 <p className="text-xs text-gray-600">Showing profile photos for the latest {users?.length ?? 0} users.</p>
                 <div className="grid gap-3 sm:grid-cols-2">
                   {(users ?? []).map((user: any) => (
-                    <div key={user.id} className="flex items-center justify-between gap-3 rounded-lg border border-border p-3">
+                    <Link
+                      key={user.id}
+                      href={`/admin/users/${user.id}`}
+                      className="flex items-center justify-between gap-3 rounded-lg border border-border p-3 transition-colors hover:bg-gray-50"
+                    >
                       <div className="flex min-w-0 items-center gap-3">
                         <ProfileAvatar src={user.avatar_url} name={user.full_name ?? "User"} className="h-10 w-10" />
                         <div className="min-w-0">
@@ -467,10 +471,13 @@ export default async function AdminPage({
                           <p className="truncate text-[11px] text-gray-500">{user.city ?? "-"}</p>
                         </div>
                       </div>
-                      <span className="shrink-0 rounded-full bg-gray-100 px-2 py-1 text-[11px] font-semibold text-gray-700">
-                        {user.is_host ? "Host" : "Guest"}
-                      </span>
-                    </div>
+                      <div className="flex items-center gap-2">
+                        <span className="shrink-0 rounded-full bg-gray-100 px-2 py-1 text-[11px] font-semibold text-gray-700">
+                          {user.is_host ? "Host" : "Guest"}
+                        </span>
+                        <span className="text-[11px] font-semibold text-brand">View</span>
+                      </div>
+                    </Link>
                   ))}
                 </div>
                 {(users ?? []).length === 0 ? (
