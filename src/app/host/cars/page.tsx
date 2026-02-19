@@ -1,7 +1,6 @@
 export const dynamic = "force-dynamic";
 
 import Link from "next/link";
-import Image from "next/image";
 import { PlusCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -52,111 +51,111 @@ export default async function DashboardCarsPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {cars.map((car) => (
-                  <TableRow key={car.id}>
-                    <TableCell className="font-semibold">
-                      <div className="flex items-center gap-3">
-                        <div className="relative h-12 w-16 overflow-hidden rounded-md border border-border bg-gray-100">
-                          <Image
-                            src={car.image_url ?? "/car-placeholder.jpg"}
-                            alt={car.title}
-                            fill
-                            className="object-cover"
-                            sizes="64px"
-                          />
+                {cars.map((car) => {
+                  const imageSrc = car.image_url?.trim() ? car.image_url : "/car-placeholder.jpg";
+
+                  return (
+                    <TableRow key={car.id}>
+                      <TableCell className="font-semibold">
+                        <div className="flex items-center gap-3">
+                          <div className="relative h-12 w-16 overflow-hidden rounded-md border border-border bg-gray-100">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={imageSrc} alt={car.title} className="h-full w-full object-cover" />
+                          </div>
+                          <span className="line-clamp-2">{car.title}</span>
                         </div>
-                        <span className="line-clamp-2">{car.title}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      {car.city}, {car.region}
-                    </TableCell>
-                    <TableCell className="font-semibold">{favoriteCounts[car.id] ?? 0}</TableCell>
-                    <TableCell>{car.car_type}</TableCell>
-                    <TableCell>{formatCurrency(car.daily_price)}</TableCell>
-                    <TableCell>
-                      <span
-                        className={
-                          car.approval_status === "approved"
-                            ? "rounded-full bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700"
-                            : car.approval_status === "rejected"
-                              ? "rounded-full bg-red-50 px-2 py-1 text-xs font-semibold text-red-700"
-                              : "rounded-full bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700"
-                        }
-                      >
-                        {car.approval_status ?? "pending"}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      {car.is_available ? (
-                        <span className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700">
-                          Available
+                      </TableCell>
+                      <TableCell>
+                        {car.city}, {car.region}
+                      </TableCell>
+                      <TableCell className="font-semibold">{favoriteCounts[car.id] ?? 0}</TableCell>
+                      <TableCell>{car.car_type}</TableCell>
+                      <TableCell>{formatCurrency(car.daily_price)}</TableCell>
+                      <TableCell>
+                        <span
+                          className={
+                            car.approval_status === "approved"
+                              ? "rounded-full bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700"
+                              : car.approval_status === "rejected"
+                                ? "rounded-full bg-red-50 px-2 py-1 text-xs font-semibold text-red-700"
+                                : "rounded-full bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700"
+                          }
+                        >
+                          {car.approval_status ?? "pending"}
                         </span>
-                      ) : (
-                        <span className="rounded-full bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700">
-                          Unavailable
-                        </span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <CarActions carId={car.id} />
-                    </TableCell>
-                  </TableRow>
-                ))}
+                      </TableCell>
+                      <TableCell>
+                        {car.is_available ? (
+                          <span className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700">
+                            Available
+                          </span>
+                        ) : (
+                          <span className="rounded-full bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700">
+                            Unavailable
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <CarActions carId={car.id} />
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </div>
 
           <div className="space-y-3 sm:hidden">
-            {cars.map((car) => (
-              <div key={car.id} className="rounded-lg border border-border bg-white p-3 shadow-sm">
-                <div className="flex items-start gap-3">
-                  <div className="relative h-20 w-28 shrink-0 overflow-hidden rounded-md border border-border bg-gray-100">
-                    <Image
-                      src={car.image_url ?? "/car-placeholder.jpg"}
-                      alt={car.title}
-                      fill
-                      className="object-cover"
-                      sizes="112px"
-                    />
+            {cars.map((car) => {
+              const imageSrc = car.image_url?.trim() ? car.image_url : "/car-placeholder.jpg";
+
+              return (
+                <div key={car.id} className="rounded-lg border border-border bg-white p-3 shadow-sm">
+                  <div className="flex items-start gap-3">
+                    <div className="relative h-20 w-28 shrink-0 overflow-hidden rounded-md border border-border bg-gray-100">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={imageSrc} alt={car.title} className="h-full w-full object-cover" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-base font-semibold text-foreground line-clamp-2">{car.title}</p>
+                      <p className="text-sm text-gray-600">
+                        {car.city}, {car.region}
+                      </p>
+                      <p className="text-sm text-gray-700">{formatCurrency(car.daily_price)} / day</p>
+                    </div>
+                    <div className="shrink-0">
+                      <CarActions carId={car.id} />
+                    </div>
                   </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-base font-semibold text-foreground line-clamp-2">{car.title}</p>
-                    <p className="text-sm text-gray-600">
-                      {car.city}, {car.region}
-                    </p>
-                    <p className="text-sm text-gray-700">{formatCurrency(car.daily_price)} / day</p>
-                  </div>
-                  <div className="shrink-0">
-                    <CarActions carId={car.id} />
-                  </div>
-                </div>
-                <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-gray-600">
-                  <span className="rounded-full bg-gray-100 px-2 py-1">Favorites {favoriteCounts[car.id] ?? 0}</span>
-                  {car.car_type ? <span className="rounded-full bg-gray-100 px-2 py-1">{car.car_type}</span> : null}
-                  <span
-                    className={
-                      car.is_available
-                        ? "rounded-full bg-emerald-50 px-2 py-1 font-semibold text-emerald-700"
-                        : "rounded-full bg-amber-50 px-2 py-1 font-semibold text-amber-700"
-                    }
-                  >
-                    {car.is_available ? "Available" : "Unavailable"}
-                  </span>
-                  <span
-                    className={
-                      car.approval_status === "approved"
-                        ? "rounded-full bg-emerald-50 px-2 py-1 font-semibold text-emerald-700"
-                        : car.approval_status === "rejected"
-                          ? "rounded-full bg-red-50 px-2 py-1 font-semibold text-red-700"
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-gray-600">
+                    <span className="rounded-full bg-gray-100 px-2 py-1">
+                      Favorites {favoriteCounts[car.id] ?? 0}
+                    </span>
+                    {car.car_type ? <span className="rounded-full bg-gray-100 px-2 py-1">{car.car_type}</span> : null}
+                    <span
+                      className={
+                        car.is_available
+                          ? "rounded-full bg-emerald-50 px-2 py-1 font-semibold text-emerald-700"
                           : "rounded-full bg-amber-50 px-2 py-1 font-semibold text-amber-700"
-                    }
-                  >
-                    {car.approval_status ?? "pending"}
-                  </span>
+                      }
+                    >
+                      {car.is_available ? "Available" : "Unavailable"}
+                    </span>
+                    <span
+                      className={
+                        car.approval_status === "approved"
+                          ? "rounded-full bg-emerald-50 px-2 py-1 font-semibold text-emerald-700"
+                          : car.approval_status === "rejected"
+                            ? "rounded-full bg-red-50 px-2 py-1 font-semibold text-red-700"
+                            : "rounded-full bg-amber-50 px-2 py-1 font-semibold text-amber-700"
+                      }
+                    >
+                      {car.approval_status ?? "pending"}
+                    </span>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </CardContent>
       </Card>

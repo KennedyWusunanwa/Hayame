@@ -14,6 +14,7 @@ export type OwnerCar = {
 };
 
 type OwnerCarRow = Database["public"]["Tables"]["cars"]["Row"];
+type CarPhotoRow = Database["public"]["Tables"]["car_photos"]["Row"];
 
 export async function loadOwnerCarsWithFavorites(): Promise<{
   cars: OwnerCar[];
@@ -30,11 +31,30 @@ export async function loadOwnerCarsWithFavorites(): Promise<{
 
     const { data: carData } = await supabase
       .from("cars")
-      .select("id,title,city,region,car_type,daily_price,is_available,approval_status,car_photos(url)")
-      .eq("owner_id", user.id);
+      .select("id,title,city,region,car_type,daily_price,is_available,approval_status,created_at")
+      .eq("owner_id", user.id)
+      .order("created_at", { ascending: false });
+
+    const carRows = (carData as OwnerCarRow[] | null) ?? [];
+    const carIds = carRows.map((car) => car.id);
+    const firstPhotoByCarId: Record<string, string> = {};
+
+    if (carIds.length > 0) {
+      const { data: photoData } = await supabase
+        .from("car_photos")
+        .select("car_id,url,created_at")
+        .in("car_id", carIds)
+        .order("created_at", { ascending: true });
+
+      (photoData as CarPhotoRow[] | null)?.forEach((photo) => {
+        if (photo.car_id && !firstPhotoByCarId[photo.car_id]) {
+          firstPhotoByCarId[photo.car_id] = photo.url;
+        }
+      });
+    }
 
     const cars: OwnerCar[] =
-      (carData as OwnerCarRow[] | null)?.map((car) => ({
+      carRows.map((car) => ({
         id: car.id,
         title: car.title,
         city: car.city,
@@ -42,9 +62,9 @@ export async function loadOwnerCarsWithFavorites(): Promise<{
         car_type: car.car_type,
         daily_price: Number(car.daily_price ?? 0),
         is_available: car.is_available,
-        approval_status: (car as any).approval_status ?? null,
-        image_url: (car as any).car_photos?.[0]?.url ?? null,
-      })) ?? [];
+        approval_status: car.approval_status,
+        image_url: firstPhotoByCarId[car.id] ?? null,
+      }));
 
     const favoriteCounts: Record<string, number> = {};
     if (cars.length > 0) {

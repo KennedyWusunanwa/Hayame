@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
@@ -120,8 +120,8 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotoCount =
       }
 
       router.push(redirectPath);
-    } catch (err: any) {
-      setError(err.message ?? "Unable to save car");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Unable to save car");
     } finally {
       setUploading(false);
     }
@@ -130,6 +130,21 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotoCount =
   const selectedFeatures = watch("features") || [];
   const totalPhotos = existingPhotoCount + files.length;
   const remainingSlots = Math.max(MAX_PHOTOS - existingPhotoCount - files.length, 0);
+  const filePreviews = useMemo(
+    () =>
+      files.map((file, index) => ({
+        key: `${file.name}-${file.lastModified}-${file.size}-${index}`,
+        name: file.name,
+        url: URL.createObjectURL(file),
+      })),
+    [files],
+  );
+
+  useEffect(() => {
+    return () => {
+      filePreviews.forEach((preview) => URL.revokeObjectURL(preview.url));
+    };
+  }, [filePreviews]);
 
   const handleFileSelection = (selected: File[]) => {
     if (selected.length === 0) return;
@@ -391,23 +406,29 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotoCount =
         ) : (
           <p className="text-xs text-amber-700">Photo limit reached.</p>
         )}
-        {files.length > 0 ? (
+        {filePreviews.length > 0 ? (
           <div className="space-y-1">
-            <p className="text-xs text-gray-700">{files.length} new file(s) selected</p>
-            <div className="space-y-1">
-              {files.map((file, index) => (
-                <div
-                  key={`${file.name}-${file.lastModified}-${index}`}
-                  className="flex items-center justify-between rounded border border-border bg-white px-2 py-1 text-xs text-gray-700"
-                >
-                  <span className="truncate pr-2">{file.name}</span>
-                  <button
-                    type="button"
-                    onClick={() => removeSelectedFile(index)}
-                    className="shrink-0 font-semibold text-red-600"
-                  >
-                    Remove
-                  </button>
+            <p className="text-xs text-gray-700">{filePreviews.length} new file(s) selected</p>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {filePreviews.map((preview, index) => (
+                <div key={preview.key} className="overflow-hidden rounded border border-border bg-white">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={preview.url}
+                    alt={preview.name}
+                    className="h-24 w-full object-cover"
+                    loading="lazy"
+                  />
+                  <div className="flex items-center justify-between gap-2 px-2 py-1 text-xs text-gray-700">
+                    <span className="truncate">{preview.name}</span>
+                    <button
+                      type="button"
+                      onClick={() => removeSelectedFile(index)}
+                      className="shrink-0 font-semibold text-red-600"
+                    >
+                      Remove
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -477,7 +498,6 @@ async function uploadPhotos(carId: string, files: File[], existingPhotoCount = 0
     throw new Error(`Maximum ${MAX_PHOTOS} photos allowed per listing.`);
   }
   const supabase = createSupabaseBrowserClient();
-  const supa = supabase as any;
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -500,7 +520,7 @@ async function uploadPhotos(carId: string, files: File[], existingPhotoCount = 0
       data: { publicUrl },
     } = supabase.storage.from(bucket).getPublicUrl(path);
 
-    const { error: insertError } = await supa.from("car_photos").insert({ car_id: carId, url: publicUrl });
+    const { error: insertError } = await supabase.from("car_photos").insert({ car_id: carId, url: publicUrl });
     if (insertError) throw insertError;
   }
 }
