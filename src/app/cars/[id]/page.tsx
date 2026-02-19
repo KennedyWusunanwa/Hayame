@@ -91,6 +91,14 @@ type ReviewRow = {
   profiles?: { full_name?: string | null; avatar_url?: string | null } | null;
 };
 
+type ExistingBooking = {
+  id: string;
+  start_date: string;
+  end_date: string;
+  status: string;
+  created_at?: string | null;
+};
+
 type SupabaseCar = Database["public"]["Tables"]["cars"]["Row"] & {
   car_photos?: { url: string }[];
   owner?: Owner | null;
@@ -99,9 +107,8 @@ type SupabaseCar = Database["public"]["Tables"]["cars"]["Row"] & {
 export default async function CarDetailPage({ params }: PageProps) {
   const resolvedParams = await params;
   console.log("[car-detail] start", resolvedParams);
-  const { car, availability, isFavorite, reviews, userId, reviewableBookings, platformFeePercent } = await loadCar(
-    resolvedParams.id,
-  );
+  const { car, availability, isFavorite, reviews, userId, reviewableBookings, platformFeePercent, existingBooking } =
+    await loadCar(resolvedParams.id);
 
   if (!car) {
     return <NotFoundState />;
@@ -199,6 +206,7 @@ export default async function CarDetailPage({ params }: PageProps) {
       </div>
 
       <div className="mt-8 grid gap-x-8 gap-y-6 lg:grid-cols-[1fr,360px]">
+        {existingBooking ? <BookedNotice booking={existingBooking} /> : null}
         <div className="contents lg:block lg:space-y-6">
           <div className="order-1 lg:order-none">
             <ImageGallery images={galleryImages} />
@@ -321,7 +329,6 @@ export default async function CarDetailPage({ params }: PageProps) {
           </div>
         </div>
       </div>
-      <MobileBookNow />
     </div>
   );
 }
@@ -371,6 +378,7 @@ async function loadCar(id: string): Promise<{
   userId: string | null;
   reviewableBookings: ReviewableBooking[];
   platformFeePercent: number;
+  existingBooking: ExistingBooking | null;
 }> {
   const mock = mockCars.find((c) => c.id === id);
   if (mock) {
@@ -383,6 +391,7 @@ async function loadCar(id: string): Promise<{
       userId: null,
       reviewableBookings: [],
       platformFeePercent: 10,
+      existingBooking: null,
     };
   }
 
@@ -409,6 +418,7 @@ async function loadCar(id: string): Promise<{
   let userId: string | null = null;
   let reviewableBookings: ReviewableBooking[] = [];
   let platformFeePercent = 10;
+  let existingBooking: ExistingBooking | null = null;
 
   try {
     const supabase = await createSupabaseServerClient();
@@ -494,6 +504,17 @@ async function loadCar(id: string): Promise<{
         .maybeSingle();
       isFavorite = Boolean(favoriteRow);
 
+      const { data: existingBookingRow } = await (supabase as any)
+        .from("bookings")
+        .select("id,start_date,end_date,status,created_at")
+        .eq("car_id", id)
+        .eq("renter_id", user.id)
+        .in("status", ["awaiting_host", "confirmed", "completed"])
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      existingBooking = (existingBookingRow as ExistingBooking | null) ?? null;
+
       const { data: completedBookings } = await (supabase as any)
         .from("bookings")
         .select("id,start_date,end_date")
@@ -539,7 +560,7 @@ async function loadCar(id: string): Promise<{
     notFound();
   }
 
-  return { car, availability, isFavorite, reviews, userId, reviewableBookings, platformFeePercent };
+  return { car, availability, isFavorite, reviews, userId, reviewableBookings, platformFeePercent, existingBooking };
 }
 
 async function getCarFromSupabaseRest(id: string): Promise<SupabaseCar | null> {
@@ -854,15 +875,36 @@ function formatHostLevel(level?: string | null) {
   return "New Host";
 }
 
-function MobileBookNow() {
+function BookedNotice({ booking }: { booking: ExistingBooking }) {
+  const start = booking.start_date ? new Date(booking.start_date) : null;
+  const end = booking.end_date ? new Date(booking.end_date) : null;
+  const hasValidDates = start && end && !Number.isNaN(start.getTime()) && !Number.isNaN(end.getTime());
+  const dateLabel = hasValidDates
+    ? `${format(start, "MMM d, yyyy")} - ${format(end, "MMM d, yyyy")}`
+    : `${booking.start_date} - ${booking.end_date}`;
+
+  const statusLabel =
+    booking.status === "awaiting_host"
+      ? "Awaiting host approval"
+      : booking.status === "confirmed"
+        ? "Confirmed"
+        : booking.status === "completed"
+          ? "Completed"
+          : "Booked";
+
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-3 z-30 px-4 lg:hidden">
-      <a
-        href="#booking-widget"
-        className="pointer-events-auto flex h-12 items-center justify-center rounded-full bg-brand text-sm font-semibold text-white shadow-lg"
-      >
-        Book Now
-      </a>
+    <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 lg:col-span-2">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-emerald-800">You already booked this car</p>
+          <p className="text-sm text-emerald-700">
+            {dateLabel} • {statusLabel}
+          </p>
+        </div>
+        <Button asChild size="sm" variant="outline" className="border-emerald-600 text-emerald-700">
+          <Link href="/dashboard/bookings">Take me to my dashboard bookings</Link>
+        </Button>
+      </div>
     </div>
   );
 }

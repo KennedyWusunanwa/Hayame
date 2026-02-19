@@ -65,7 +65,7 @@ export async function POST(req: Request) {
     if (admin) {
       const [recipientAuthResult, senderProfileResult] = await Promise.all([
         admin.auth.admin.getUserById(recipientId).catch(() => null),
-        admin.from("profiles").select("full_name").eq("id", user.id).maybeSingle().catch(() => null),
+        admin.from("profiles").select("full_name").eq("id", user.id).maybeSingle(),
       ]);
 
       const recipientEmail = extractAuthEmail(recipientAuthResult);

@@ -279,120 +279,124 @@ export async function POST(req: Request) {
 
     const sendBookingEmails = async (booking: any, conversationId: string | null) => {
       if (!maybeAdmin) return;
-      const renterId = booking.renter_id;
-      const hostId = car.owner_id;
-      const [renterAuthResult, hostAuthResult, renterProfileResult, hostProfileResult] = await Promise.all([
-        maybeAdmin.auth.admin.getUserById(renterId).catch(() => null),
-        maybeAdmin.auth.admin.getUserById(hostId).catch(() => null),
-        maybeAdmin.from("profiles").select("full_name,phone").eq("id", renterId).maybeSingle().catch(() => null),
-        maybeAdmin.from("profiles").select("full_name,phone").eq("id", hostId).maybeSingle().catch(() => null),
-      ]);
+      try {
+        const renterId = booking.renter_id;
+        const hostId = car.owner_id;
+        const [renterAuthResult, hostAuthResult, renterProfileResult, hostProfileResult] = await Promise.all([
+          maybeAdmin.auth.admin.getUserById(renterId).catch(() => null),
+          maybeAdmin.auth.admin.getUserById(hostId).catch(() => null),
+          maybeAdmin.from("profiles").select("full_name,phone").eq("id", renterId).maybeSingle(),
+          maybeAdmin.from("profiles").select("full_name,phone").eq("id", hostId).maybeSingle(),
+        ]);
 
-      const renterEmail = extractAuthEmail(renterAuthResult);
-      const hostEmail = extractAuthEmail(hostAuthResult);
-      const renterProfile = (renterProfileResult as any)?.data ?? null;
-      const hostProfile = (hostProfileResult as any)?.data ?? null;
-      const renterName = renterProfile?.full_name ?? "Guest";
-      const hostName = hostProfile?.full_name ?? "Host";
-      const renterPhone = renterProfile?.phone ?? null;
-      const conversationUrl = conversationId ? `${SITE_URL}/messages?conversation=${conversationId}` : `${SITE_URL}/messages`;
+        const renterEmail = extractAuthEmail(renterAuthResult);
+        const hostEmail = extractAuthEmail(hostAuthResult);
+        const renterProfile = (renterProfileResult as any)?.data ?? null;
+        const hostProfile = (hostProfileResult as any)?.data ?? null;
+        const renterName = renterProfile?.full_name ?? "Guest";
+        const hostName = hostProfile?.full_name ?? "Host";
+        const renterPhone = renterProfile?.phone ?? null;
+        const conversationUrl = conversationId ? `${SITE_URL}/messages?conversation=${conversationId}` : `${SITE_URL}/messages`;
 
-      if (renterEmail) {
-        const email = buildBookingPaidEmail({
-          instantBook: car.instant_book,
-          carTitle: car.title ?? null,
-          startDate,
-          endDate,
-          totalPrice: total,
-          bookingId: booking.id,
-          paymentReference: reference,
-          bookedAt: booking.paid_at ?? new Date().toISOString(),
-          conversationUrl,
-        });
-        await sendEmailSafe({
-          to: renterEmail,
-          ...email,
-          idempotencyKey: `booking:${booking.id}:renter-paid`,
-        });
-      }
+        if (renterEmail) {
+          const email = buildBookingPaidEmail({
+            instantBook: car.instant_book,
+            carTitle: car.title ?? null,
+            startDate,
+            endDate,
+            totalPrice: total,
+            bookingId: booking.id,
+            paymentReference: reference,
+            bookedAt: booking.paid_at ?? new Date().toISOString(),
+            conversationUrl,
+          });
+          await sendEmailSafe({
+            to: renterEmail,
+            ...email,
+            idempotencyKey: `booking:${booking.id}:renter-paid`,
+          });
+        }
 
-      if (hostEmail) {
-        const email = buildHostBookingNoticeEmail({
-          instantBook: car.instant_book,
-          renterName,
-          renterPhone,
-          carTitle: car.title ?? null,
-          startDate,
-          endDate,
-          totalPrice: total,
-          bookingId: booking.id,
-          paymentReference: reference,
-          bookedAt: booking.paid_at ?? new Date().toISOString(),
-          conversationUrl,
-        });
-        await sendEmailSafe({
-          to: hostEmail,
-          ...email,
-          idempotencyKey: `booking:${booking.id}:host-notice`,
-        });
-      }
+        if (hostEmail) {
+          const email = buildHostBookingNoticeEmail({
+            instantBook: car.instant_book,
+            renterName,
+            renterPhone,
+            carTitle: car.title ?? null,
+            startDate,
+            endDate,
+            totalPrice: total,
+            bookingId: booking.id,
+            paymentReference: reference,
+            bookedAt: booking.paid_at ?? new Date().toISOString(),
+            conversationUrl,
+          });
+          await sendEmailSafe({
+            to: hostEmail,
+            ...email,
+            idempotencyKey: `booking:${booking.id}:host-notice`,
+          });
+        }
 
-      if (renterEmail) {
-        const invoice = buildBookingInvoiceEmail({
-          recipientRole: "renter",
-          recipientName: renterName,
-          counterpartName: hostName,
-          carTitle: car.title ?? null,
-          bookingId: booking.id,
-          paymentReference: reference,
-          bookedAt: booking.paid_at ?? new Date().toISOString(),
-          startDate,
-          endDate,
-          nights,
-          dailyRate: Number(car.daily_price ?? 0),
-          subtotal,
-          platformFee,
-          insuranceFee,
-          deliveryFee,
-          depositAmount,
-          totalPrice: total,
-          status: finalStatus,
-          conversationUrl,
-        });
-        await sendEmailSafe({
-          to: renterEmail,
-          ...invoice,
-          idempotencyKey: `booking:${booking.id}:invoice:renter`,
-        });
-      }
+        if (renterEmail) {
+          const invoice = buildBookingInvoiceEmail({
+            recipientRole: "renter",
+            recipientName: renterName,
+            counterpartName: hostName,
+            carTitle: car.title ?? null,
+            bookingId: booking.id,
+            paymentReference: reference,
+            bookedAt: booking.paid_at ?? new Date().toISOString(),
+            startDate,
+            endDate,
+            nights,
+            dailyRate: Number(car.daily_price ?? 0),
+            subtotal,
+            platformFee,
+            insuranceFee,
+            deliveryFee,
+            depositAmount,
+            totalPrice: total,
+            status: finalStatus,
+            conversationUrl,
+          });
+          await sendEmailSafe({
+            to: renterEmail,
+            ...invoice,
+            idempotencyKey: `booking:${booking.id}:invoice:renter`,
+          });
+        }
 
-      if (hostEmail) {
-        const invoice = buildBookingInvoiceEmail({
-          recipientRole: "host",
-          recipientName: hostName,
-          counterpartName: renterName,
-          carTitle: car.title ?? null,
-          bookingId: booking.id,
-          paymentReference: reference,
-          bookedAt: booking.paid_at ?? new Date().toISOString(),
-          startDate,
-          endDate,
-          nights,
-          dailyRate: Number(car.daily_price ?? 0),
-          subtotal,
-          platformFee,
-          insuranceFee,
-          deliveryFee,
-          depositAmount,
-          totalPrice: total,
-          status: finalStatus,
-          conversationUrl,
-        });
-        await sendEmailSafe({
-          to: hostEmail,
-          ...invoice,
-          idempotencyKey: `booking:${booking.id}:invoice:host`,
-        });
+        if (hostEmail) {
+          const invoice = buildBookingInvoiceEmail({
+            recipientRole: "host",
+            recipientName: hostName,
+            counterpartName: renterName,
+            carTitle: car.title ?? null,
+            bookingId: booking.id,
+            paymentReference: reference,
+            bookedAt: booking.paid_at ?? new Date().toISOString(),
+            startDate,
+            endDate,
+            nights,
+            dailyRate: Number(car.daily_price ?? 0),
+            subtotal,
+            platformFee,
+            insuranceFee,
+            deliveryFee,
+            depositAmount,
+            totalPrice: total,
+            status: finalStatus,
+            conversationUrl,
+          });
+          await sendEmailSafe({
+            to: hostEmail,
+            ...invoice,
+            idempotencyKey: `booking:${booking.id}:invoice:host`,
+          });
+        }
+      } catch (emailError) {
+        console.error("[bookings/paystack] email notifications failed", emailError);
       }
     };
 

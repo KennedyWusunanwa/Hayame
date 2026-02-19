@@ -113,8 +113,8 @@ export async function POST(req: Request) {
       const recipientId = user.id === resolvedHostId ? resolvedUserId : resolvedHostId;
       const [recipientAuthResult, senderProfileResult, carResult] = await Promise.all([
         admin.auth.admin.getUserById(recipientId).catch(() => null),
-        admin.from("profiles").select("full_name").eq("id", user.id).maybeSingle().catch(() => null),
-        carId ? supa.from("cars").select("title").eq("id", carId).maybeSingle().catch(() => null) : Promise.resolve(null),
+        admin.from("profiles").select("full_name").eq("id", user.id).maybeSingle(),
+        carId ? supa.from("cars").select("title").eq("id", carId).maybeSingle() : Promise.resolve({ data: null }),
       ]);
 
       const recipientEmail = extractAuthEmail(recipientAuthResult);
