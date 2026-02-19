@@ -64,13 +64,14 @@ export function Navbar() {
           const bookingsRes = await fetch("/api/bookings", { cache: "no-store" });
           if (bookingsRes.ok) {
             const bookingsPayload = (await bookingsRes.json()) as {
-              data?: Array<{ role?: string; status?: string | null }>;
+              data?: Array<{ role?: string; status?: string | null; payment_status?: string | null }>;
             };
             const ownerAlerts = (bookingsPayload.data ?? []).filter((booking) => {
               const role = String(booking.role ?? "");
               const status = String(booking.status ?? "");
+              const paymentStatus = String(booking.payment_status ?? "");
               const isOwnerBooking = role.includes("owner");
-              return isOwnerBooking && (status === "awaiting_host" || status === "confirmed");
+              return isOwnerBooking && status === "awaiting_host" && paymentStatus === "paid";
             }).length;
             setHostBookingAlertCount(ownerAlerts);
           } else {
@@ -107,6 +108,16 @@ export function Navbar() {
   useEffect(() => {
     loadUser();
   }, [loadUser, pathname]);
+
+  useEffect(() => {
+    const onBookingsUpdated = () => {
+      loadUser();
+    };
+    window.addEventListener("bookings:updated", onBookingsUpdated);
+    return () => {
+      window.removeEventListener("bookings:updated", onBookingsUpdated);
+    };
+  }, [loadUser]);
 
   return (
     <header className="sticky top-0 z-30 border-b border-border bg-white/90 backdrop-blur-md shadow-sm">

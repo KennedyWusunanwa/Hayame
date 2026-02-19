@@ -98,6 +98,10 @@ export function BookingsTable({ mode = "host" }: { mode?: "host" | "renter" }) {
       }
       const payload = (await res.json()) as { data: BookingRow };
       setRows((prev) => prev.map((row) => (row.id === bookingId ? { ...row, ...payload.data } : row)));
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event("bookings:updated"));
+      }
+      router.refresh();
     } catch (err: any) {
       alert(err.message ?? "Unable to update booking");
     } finally {
@@ -409,16 +413,16 @@ function BookingsList({
 
       <div className="hidden md:block">
         <div className="overflow-x-auto rounded-xl border border-border bg-white">
-          <Table className="min-w-[1140px] table-fixed">
+          <Table className="w-full table-fixed">
             <TableHeader className="bg-gray-50/80">
               <TableRow>
-                <TableHead className="w-[27%]">Listing</TableHead>
-                <TableHead className="w-[14%]">{isOwnerView ? "Booked by" : "Host"}</TableHead>
-                <TableHead className="w-[15%]">Dates</TableHead>
-                <TableHead className="w-[20%]">Status</TableHead>
+                <TableHead className="w-[24%]">Listing</TableHead>
+                <TableHead className="w-[13%]">{isOwnerView ? "Booked by" : "Host"}</TableHead>
+                <TableHead className="w-[14%]">Dates</TableHead>
+                <TableHead className="w-[18%]">Status</TableHead>
                 <TableHead className="w-[9%]">Payment</TableHead>
-                <TableHead className="w-[7%] text-right">Total</TableHead>
-                <TableHead className="w-[18%] text-right">Actions</TableHead>
+                <TableHead className="w-[8%] text-right">Total</TableHead>
+                <TableHead className="w-[14%] text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -468,12 +472,7 @@ function BookingsList({
                     <TableCell className="align-top">
                       <div className="max-w-[230px] space-y-2 overflow-hidden">
                         <Badge variant={statusVariant(booking.status)}>{statusLabel(booking.status)}</Badge>
-                        <TripStatusTracker
-                          status={booking.status}
-                          startDate={booking.start_date}
-                          endDate={booking.end_date}
-                          compact
-                        />
+                        <p className="text-xs text-gray-600">{statusSummaryLabel(booking.status)}</p>
                         {booking.cars?.cancellation_policy ? (
                           <div className="text-xs text-gray-600">
                             <span className="inline-flex rounded-full bg-gray-100 px-2 py-1 font-semibold capitalize text-gray-700">
@@ -490,11 +489,11 @@ function BookingsList({
                       {formatCurrency(booking.total_price)}
                     </TableCell>
                     <TableCell className="relative z-10 align-top">
-                      <div className="ml-auto flex w-[180px] flex-col gap-2">
+                      <div className="ml-auto flex w-[170px] flex-col gap-2">
                         <Button
                           size="sm"
                           variant="outline"
-                          className="h-9 w-full justify-center rounded-md border-2"
+                          className="h-10 w-full justify-center rounded-lg border-2 font-semibold"
                           onClick={() => onMessage(booking, isOwnerView)}
                           disabled={messagingId === booking.id}
                         >
@@ -505,7 +504,7 @@ function BookingsList({
                             <Button
                               size="sm"
                               variant="secondary"
-                              className="h-9 w-full rounded-md px-2 text-xs"
+                              className="h-10 w-full rounded-lg px-2 text-xs font-semibold"
                               onClick={() => onAction(booking.id, "reject")}
                               disabled={updatingId === booking.id}
                             >
@@ -513,7 +512,7 @@ function BookingsList({
                             </Button>
                             <Button
                               size="sm"
-                              className="h-9 w-full rounded-md px-2 text-xs"
+                              className="h-10 w-full rounded-lg px-2 text-xs font-semibold"
                               onClick={() => onAction(booking.id, "approve")}
                               disabled={updatingId === booking.id}
                             >
@@ -525,7 +524,7 @@ function BookingsList({
                           <Button
                             size="sm"
                             variant="outline"
-                            className="h-8 w-full rounded-md text-xs"
+                            className="h-9 w-full rounded-lg text-xs font-semibold"
                             disabled={disputingId === booking.id}
                             onClick={() => onDispute(booking.id)}
                           >
@@ -636,5 +635,26 @@ function paymentVariant(status?: string | null): "default" | "secondary" | "outl
       return "outline";
     default:
       return "muted";
+  }
+}
+
+function statusSummaryLabel(status?: string) {
+  switch (status) {
+    case "awaiting_host":
+      return "Host response required";
+    case "confirmed":
+      return "Confirmed and ready for trip";
+    case "completed":
+      return "Trip completed";
+    case "rejected":
+      return "Rejected by host";
+    case "cancelled":
+      return "Booking cancelled";
+    case "refunded":
+      return "Payment refunded";
+    case "pending":
+      return "Pending payment hold";
+    default:
+      return "Status update pending";
   }
 }

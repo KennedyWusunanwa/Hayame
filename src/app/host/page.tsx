@@ -65,7 +65,9 @@ export default async function DashboardHome() {
       : { data: [] as any[] };
 
   const bookingRows = (bookings ?? []) as any[];
-  const urgentBookings = bookingRows.filter((booking) => booking.status === "awaiting_host");
+  const urgentBookings = bookingRows.filter(
+    (booking) => booking.status === "awaiting_host" && booking.payment_status === "paid",
+  );
   const urgentBookingCount = urgentBookings.length;
   const activeBookingsCount = bookingRows.filter(
     (booking) => booking.status === "awaiting_host" || booking.status === "confirmed",
