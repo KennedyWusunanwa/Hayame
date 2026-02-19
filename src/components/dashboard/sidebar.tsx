@@ -24,6 +24,7 @@ const links = [
 export function DashboardSidebar({ host, pendingBookingCount = 0 }: { host: Host; pendingBookingCount?: number }) {
   const pathname = usePathname();
   const initials = getInitials(host.name);
+  const bookingCountLabel = pendingBookingCount > 99 ? "99+" : String(pendingBookingCount);
   return (
     <aside className="hidden min-h-screen w-60 border-r border-border bg-white px-4 py-6 lg:block">
       <div className="text-lg font-semibold text-foreground">Host Dashboard</div>
@@ -63,12 +64,17 @@ export function DashboardSidebar({ host, pendingBookingCount = 0 }: { host: Host
                 <Icon className="h-4 w-4" />
                 {showBookingDot ? (
                   <>
-                    <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-brand" />
+                    <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-brand ring-2 ring-white" />
                     <span className="sr-only">New booking requests</span>
                   </>
                 ) : null}
               </span>
               {link.label}
+              {showBookingDot ? (
+                <span className="ml-auto inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-brand px-1 text-[11px] font-semibold text-white">
+                  {bookingCountLabel}
+                </span>
+              ) : null}
             </Link>
           );
         })}

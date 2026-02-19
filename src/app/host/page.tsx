@@ -65,6 +65,15 @@ export default async function DashboardHome() {
       : { data: [] as any[] };
 
   const bookingRows = (bookings ?? []) as any[];
+  const urgentBookings = bookingRows.filter((booking) => booking.status === "awaiting_host");
+  const urgentBookingCount = urgentBookings.length;
+  const activeBookingsCount = bookingRows.filter(
+    (booking) => booking.status === "awaiting_host" || booking.status === "confirmed",
+  ).length;
+  const unattendedBookingValue = urgentBookings.reduce(
+    (sum, booking) => sum + Number(booking.total_price ?? 0),
+    0,
+  );
   const paidBookings = bookingRows.filter((booking) => EARNING_STATUSES.has(booking.status));
   const now = new Date();
   const currentMonth = now.getMonth();
@@ -133,6 +142,27 @@ export default async function DashboardHome() {
         </Button>
       </div>
 
+      {urgentBookingCount > 0 ? (
+        <Card className="border-red-200 bg-red-50">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base text-red-800">Urgent: booking not attended to.</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 pt-0">
+            <p className="text-sm text-red-700">
+              You have {urgentBookingCount} booking request{urgentBookingCount > 1 ? "s" : ""} waiting for approval.
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-full bg-white px-2 py-1 text-xs font-semibold text-red-700">
+                Pending value: {formatCurrency(unattendedBookingValue)}
+              </span>
+              <Button asChild size="sm" className="bg-red-600 text-white hover:bg-red-700">
+                <Link href="/host/bookings">Review now</Link>
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
+
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="flex flex-wrap items-center gap-2">
@@ -149,7 +179,21 @@ export default async function DashboardHome() {
         </CardContent>
       </Card>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <Card className="md:hidden">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">Overview snapshot</CardTitle>
+        </CardHeader>
+        <CardContent className="grid grid-cols-2 gap-2 pt-0">
+          <MobileMetric label="Active bookings" value={String(activeBookingsCount)} />
+          <MobileMetric label="Needs approval" value={String(urgentBookingCount)} />
+          <MobileMetric label="Total earnings" value={formatCurrency(totalEarnings)} />
+          <MobileMetric label="This month" value={formatCurrency(monthlyEarnings)} />
+          <MobileMetric label="Reviews" value={`${totalReviews} (${averageRating || 0}/5)`} />
+          <MobileMetric label="Conversion" value={`${conversionRate}%`} />
+        </CardContent>
+      </Card>
+
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-2 lg:grid-cols-4">
         <StatCard title="Total earnings" value={formatCurrency(totalEarnings)} />
         <StatCard title="Monthly earnings" value={formatCurrency(monthlyEarnings)} />
         <StatCard title="Booking rate" value={`${bookingRate}%`} />
@@ -218,7 +262,14 @@ export default async function DashboardHome() {
           <div className="space-y-2 md:hidden">
             {bookingRows.slice(0, 8).map((booking) => (
               <div key={booking.id} className="rounded-lg border border-border bg-white p-3">
-                <p className="text-sm font-semibold text-foreground">{booking.cars?.title ?? "Car"}</p>
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-sm font-semibold text-foreground">{booking.cars?.title ?? "Car"}</p>
+                  {booking.status === "awaiting_host" ? (
+                    <span className="rounded-full bg-red-100 px-2 py-1 text-[10px] font-semibold text-red-700">
+                      Needs approval
+                    </span>
+                  ) : null}
+                </div>
                 <p className="text-xs text-gray-600">
                   {booking.start_date} - {booking.end_date}
                 </p>
@@ -230,6 +281,13 @@ export default async function DashboardHome() {
                     {formatCurrency(Number(booking.total_price ?? 0))}
                   </span>
                 </div>
+                {booking.status === "awaiting_host" ? (
+                  <div className="mt-2">
+                    <Button asChild size="sm" className="h-8 text-xs">
+                      <Link href="/host/bookings">Open booking request</Link>
+                    </Button>
+                  </div>
+                ) : null}
               </div>
             ))}
             {bookingRows.length === 0 ? (
@@ -258,6 +316,15 @@ function PerformanceItem({
       <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">{label}</p>
       <p className="text-lg font-semibold text-foreground">{value}</p>
       {note ? <p className="text-xs text-amber-700">{note}</p> : null}
+    </div>
+  );
+}
+
+function MobileMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-border bg-gray-50 px-3 py-2">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">{label}</p>
+      <p className="text-sm font-semibold text-foreground">{value}</p>
     </div>
   );
 }

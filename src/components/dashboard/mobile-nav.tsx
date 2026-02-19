@@ -14,6 +14,7 @@ const links = [
 
 export function DashboardMobileNav({ pendingBookingCount = 0 }: { pendingBookingCount?: number }) {
   const pathname = usePathname();
+  const bookingCountLabel = pendingBookingCount > 99 ? "99+" : String(pendingBookingCount);
   return (
     <nav className="sticky top-0 z-20 -mx-4 bg-white/95 px-4 py-2 shadow-sm backdrop-blur lg:hidden">
       <div className="flex items-center justify-between">
@@ -38,12 +39,17 @@ export function DashboardMobileNav({ pendingBookingCount = 0 }: { pendingBooking
                 <Icon className="h-4 w-4" />
                 {showBookingDot ? (
                   <>
-                    <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-brand" />
+                    <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-brand ring-2 ring-white" />
                     <span className="sr-only">New booking requests</span>
                   </>
                 ) : null}
               </span>
               {link.label}
+              {showBookingDot ? (
+                <span className="ml-1 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-brand px-1 text-[11px] font-semibold text-white">
+                  {bookingCountLabel}
+                </span>
+              ) : null}
             </Link>
           );
         })}

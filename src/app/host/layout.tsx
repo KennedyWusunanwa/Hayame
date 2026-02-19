@@ -35,7 +35,7 @@ export default async function HostLayout({ children }: { children: ReactNode }) 
       .from("bookings")
       .select("id", { count: "exact", head: true })
       .in("car_id", ownerCarIds)
-      .eq("status", "awaiting_host");
+      .in("status", ["awaiting_host", "confirmed"]);
     pendingBookingCount = count ?? 0;
   }
 
