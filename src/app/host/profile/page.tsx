@@ -15,10 +15,12 @@ export default async function ProfilePage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("full_name, first_name, last_name, avatar_url, city")
+    .select("full_name, first_name, last_name, avatar_url, city, phone")
     .eq("id", user.id)
     .maybeSingle<Database["public"]["Tables"]["profiles"]["Row"]>();
 
+  const username =
+    String((user.user_metadata as any)?.username ?? "").trim() || (user.email?.split("@")[0] ?? "");
   const firstName =
     profile?.first_name ?? (user.user_metadata as any)?.first_name ?? (profile?.full_name ?? "").split(" ")[0] ?? "";
   const lastName =
@@ -44,8 +46,10 @@ export default async function ProfilePage() {
             userId={user.id}
             email={user.email ?? ""}
             initialName={name}
+            initialUsername={username}
             initialFirstName={firstName}
             initialLastName={lastName}
+            initialPhone={profile?.phone ?? (user as any)?.phone ?? (user.user_metadata as any)?.phone ?? ""}
             initialAvatar={profile?.avatar_url ?? ""}
             initialCity={profile?.city ?? ""}
           />

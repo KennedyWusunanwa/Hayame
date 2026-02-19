@@ -553,17 +553,6 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotos = [] 
         </label>
       </div>
 
-      <div className="flex items-center justify-between rounded-lg border border-border bg-white p-4">
-        <div>
-          <p className="text-sm font-semibold text-foreground">Air conditioning</p>
-          <p className="text-xs text-gray-600">Flag this listing as air-conditioned.</p>
-        </div>
-        <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" {...register("air_conditioning")} />
-          AC
-        </label>
-      </div>
-
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
       <div className="flex items-center gap-3">
         <Button type="submit" disabled={isSubmitting || uploading}>

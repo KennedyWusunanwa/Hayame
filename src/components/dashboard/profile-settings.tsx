@@ -13,8 +13,10 @@ type Props = {
   userId: string;
   email: string;
   initialName: string;
+  initialUsername?: string;
   initialFirstName?: string;
   initialLastName?: string;
+  initialPhone?: string;
   initialAvatar?: string;
   initialCity?: string;
 };
@@ -23,13 +25,17 @@ export function ProfileSettings({
   userId,
   email,
   initialName,
+  initialUsername,
   initialFirstName,
   initialLastName,
+  initialPhone,
   initialAvatar,
   initialCity,
 }: Props) {
+  const [username, setUsername] = useState(initialUsername ?? "");
   const [firstName, setFirstName] = useState(initialFirstName ?? initialName.split(" ")[0] ?? "");
   const [lastName, setLastName] = useState(initialLastName ?? initialName.split(" ").slice(1).join(" "));
+  const [phone, setPhone] = useState(initialPhone ?? "");
   const [city, setCity] = useState(initialCity ?? "");
   const [region, setRegion] = useState("");
   const [avatarUrl, setAvatarUrl] = useState(initialAvatar ?? "");
@@ -77,6 +83,7 @@ export function ProfileSettings({
             first_name: firstName || null,
             last_name: lastName || null,
             full_name: `${firstName} ${lastName}`.trim() || initialName,
+            phone: phone || null,
             city: city || null,
           },
           { onConflict: "id" },
@@ -113,11 +120,27 @@ export function ProfileSettings({
             last_name: lastName || null,
             full_name: `${firstName} ${lastName}`.trim() || initialName,
             avatar_url: avatarUrl || null,
+            phone: phone || null,
             city: city || null,
           },
           { onConflict: "id" },
         );
       if (error) throw error;
+
+      const fullName = `${firstName} ${lastName}`.trim() || initialName;
+      const { error: authUpdateError } = await supabase.auth.updateUser({
+        data: {
+          ...(auth.user.user_metadata ?? {}),
+          username: username || null,
+          first_name: firstName || null,
+          last_name: lastName || null,
+          full_name: fullName,
+          city: city || null,
+          phone: phone || null,
+        },
+      });
+      if (authUpdateError) throw authUpdateError;
+
       setStatus("Profile saved");
     } catch (error: any) {
       setStatus(error.message ?? "Could not save profile");
@@ -165,6 +188,10 @@ export function ProfileSettings({
 
       <div className="grid gap-4 md:grid-cols-2">
         <div className="space-y-2">
+          <label className="text-sm font-semibold text-gray-700">Username</label>
+          <Input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="yourname" />
+        </div>
+        <div className="space-y-2">
           <label className="text-sm font-semibold text-gray-700">First name</label>
           <Input value={firstName} onChange={(e) => setFirstName(e.target.value)} placeholder="Ama" />
         </div>
@@ -175,6 +202,10 @@ export function ProfileSettings({
         <div className="space-y-2">
           <label className="text-sm font-semibold text-gray-700">Email</label>
           <Input value={email} disabled />
+        </div>
+        <div className="space-y-2">
+          <label className="text-sm font-semibold text-gray-700">Phone number</label>
+          <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+233..." />
         </div>
         <div className="space-y-2">
           <label className="text-sm font-semibold text-gray-700">Region</label>
