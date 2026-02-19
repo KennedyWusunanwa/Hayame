@@ -34,7 +34,7 @@ export function CarCard({ car, isFavorite = false, onToggleFavorite }: Props) {
           src={car.image_url ?? "/car-placeholder.jpg"}
           alt={car.title}
           fill
-          className="h-full w-full object-contain object-center transition-transform duration-200 sm:object-cover sm:object-[center_58%] sm:group-hover:scale-105"
+          className="h-full w-full object-cover object-[center_58%] transition-transform duration-200 group-hover:scale-105"
           sizes="(max-width:768px) 100vw, 400px"
         />
         <div
