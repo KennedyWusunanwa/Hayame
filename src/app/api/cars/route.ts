@@ -141,13 +141,15 @@ export async function GET(req: Request) {
     }
 
     const platformFeePercent = await getPlatformFeePercent(supa).catch(() => 10);
+    const rows = Array.isArray(data) ? data : [];
+    const hasInstantBookListings = rows.some((row: any) => row?.instant_book === true);
 
     return NextResponse.json({
       data,
       meta: {
         platform_fee_percent: platformFeePercent,
         capabilities: {
-          instantBook: true,
+          instantBook: hasInstantBookListings,
           deliveryAvailable: true,
           transmission: true,
           fuelType: true,

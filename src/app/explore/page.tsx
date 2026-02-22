@@ -279,7 +279,7 @@ function ExploreContent() {
   const capabilities = useMemo<FilterCapabilities>(() => {
     const hasAirConditioningFlag = cars.some((car) => typeof car.air_conditioning === "boolean");
     const inferred: FilterCapabilities = {
-      instantBook: cars.some((car) => typeof car.instant_book === "boolean"),
+      instantBook: filters.instantBook === true || cars.some((car) => car.instant_book === true),
       deliveryAvailable: cars.some((car) => typeof car.delivery_available === "boolean"),
       transmission: cars.some((car) => Boolean(car.transmission)),
       fuelType: cars.some((car) => Boolean(car.fuel_type)),
@@ -293,8 +293,12 @@ function ExploreContent() {
       rating: cars.some((car) => typeof getComparableRating(car) === "number"),
       hostType: cars.some((car) => Boolean(car.host_type)),
     };
-    return { ...inferred, ...(meta.capabilities ?? {}) };
-  }, [cars, meta.capabilities]);
+    const merged = { ...inferred, ...(meta.capabilities ?? {}) };
+    return {
+      ...merged,
+      instantBook: inferred.instantBook || Boolean(meta.capabilities?.instantBook),
+    };
+  }, [cars, filters.instantBook, meta.capabilities]);
 
   const sortCapabilities = useMemo<SortCapabilities>(
     () => ({

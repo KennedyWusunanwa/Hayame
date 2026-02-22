@@ -167,7 +167,7 @@ export function BookingsTable({ mode = "host" }: { mode?: "host" | "renter" }) {
   };
 
   const rowsSorted = useMemo(
-    () => [...rows].sort((a, b) => (a.start_date < b.start_date ? 1 : -1)),
+    () => [...rows].sort((a, b) => bookingSortTimestamp(b) - bookingSortTimestamp(a)),
     [rows],
   );
   const renterRows = useMemo(
@@ -320,6 +320,7 @@ function BookingsList({
                     <p className="mt-2 text-xs text-gray-700">
                       {formatDateLabel(booking.start_date)} to {formatDateLabel(booking.end_date)} | {durationNights} night(s)
                     </p>
+                    <p className="text-xs text-gray-600">Booked: {formatDateLabel(booking.created_at)}</p>
                     <p className="text-sm font-semibold text-foreground">{formatCurrency(booking.total_price)}</p>
                   </div>
                 </div>
@@ -468,6 +469,7 @@ function BookingsList({
                         {formatDateLabel(booking.start_date)} - {formatDateLabel(booking.end_date)}
                       </div>
                       <div className="mt-1 text-sm text-gray-600">{durationNights} night(s)</div>
+                      <div className="mt-1 text-sm text-gray-600">Booked: {formatDateLabel(booking.created_at)}</div>
                     </TableCell>
                     <TableCell className="align-top">
                       <div className="max-w-[230px] space-y-2 overflow-hidden">
@@ -560,6 +562,14 @@ function getDurationNights(booking: BookingRow) {
   } catch {
     return 1;
   }
+}
+
+function bookingSortTimestamp(booking: BookingRow) {
+  const primary = Date.parse(booking.created_at ?? "");
+  if (!Number.isNaN(primary)) return primary;
+  const fallback = Date.parse(booking.start_date ?? "");
+  if (!Number.isNaN(fallback)) return fallback;
+  return 0;
 }
 
 function formatDateLabel(value?: string | null) {

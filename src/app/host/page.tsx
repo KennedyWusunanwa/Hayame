@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { format, parseISO } from "date-fns";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -44,6 +45,7 @@ export default async function DashboardHome() {
           .from("bookings")
           .select("id,car_id,start_date,end_date,status,payment_status,total_price,created_at,cars(title)")
           .in("car_id", carIds)
+          .order("created_at", { ascending: false })
           .order("start_date", { ascending: false })
       : { data: [] as any[] };
 
@@ -232,6 +234,7 @@ export default async function DashboardHome() {
                 <TableRow>
                   <TableHead>Car</TableHead>
                   <TableHead>Dates</TableHead>
+                  <TableHead>Booked</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Amount</TableHead>
                 </TableRow>
@@ -240,7 +243,10 @@ export default async function DashboardHome() {
                 {bookingRows.slice(0, 8).map((booking) => (
                   <TableRow key={booking.id}>
                     <TableCell>{booking.cars?.title ?? "Car"}</TableCell>
-                    <TableCell>{booking.start_date} - {booking.end_date}</TableCell>
+                    <TableCell>
+                      {formatDateLabel(booking.start_date)} - {formatDateLabel(booking.end_date)}
+                    </TableCell>
+                    <TableCell>{formatDateLabel(booking.created_at)}</TableCell>
                     <TableCell>
                       <span className="rounded-full bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-700">
                         {booking.status}
@@ -253,7 +259,7 @@ export default async function DashboardHome() {
                 ))}
                 {bookingRows.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={4} className="text-center text-sm text-gray-600">
+                    <TableCell colSpan={5} className="text-center text-sm text-gray-600">
                       No trip history yet. Create your first listing to start earning.
                     </TableCell>
                   </TableRow>
@@ -273,8 +279,9 @@ export default async function DashboardHome() {
                   ) : null}
                 </div>
                 <p className="text-xs text-gray-600">
-                  {booking.start_date} - {booking.end_date}
+                  {formatDateLabel(booking.start_date)} - {formatDateLabel(booking.end_date)}
                 </p>
+                <p className="text-xs text-gray-600">Booked: {formatDateLabel(booking.created_at)}</p>
                 <div className="mt-2 flex items-center justify-between">
                   <span className="rounded-full bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-700">
                     {booking.status}
@@ -302,6 +309,15 @@ export default async function DashboardHome() {
       </Card>
     </div>
   );
+}
+
+function formatDateLabel(value?: string | null) {
+  if (!value) return "N/A";
+  try {
+    return format(parseISO(value), "MMM d, yyyy");
+  } catch {
+    return value;
+  }
 }
 
 function PerformanceItem({

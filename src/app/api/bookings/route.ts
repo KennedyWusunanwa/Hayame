@@ -37,6 +37,7 @@ export async function GET() {
       .from("bookings")
       .select(bookingSelect)
       .eq("renter_id", user.id)
+      .order("created_at", { ascending: false })
       .order("start_date", { ascending: false });
 
     const ownerBookings =
@@ -45,6 +46,7 @@ export async function GET() {
             .from("bookings")
             .select(bookingSelect)
             .in("car_id", ownerCarIds)
+            .order("created_at", { ascending: false })
             .order("start_date", { ascending: false })
         : { data: [], error: null };
 
@@ -78,7 +80,21 @@ export async function GET() {
       const conversationId = conversationKey ? conversationByPair.get(conversationKey) ?? null : null;
       return { ...item, role: role.join("+") || "guest", conversation_id: conversationId };
     });
-    return NextResponse.json({ data: withRole });
+    const sorted = [...withRole].sort((a: any, b: any) => {
+      const createdA = Date.parse(a?.created_at ?? "");
+      const createdB = Date.parse(b?.created_at ?? "");
+      if (!Number.isNaN(createdA) || !Number.isNaN(createdB)) {
+        const safeA = Number.isNaN(createdA) ? 0 : createdA;
+        const safeB = Number.isNaN(createdB) ? 0 : createdB;
+        if (safeB !== safeA) return safeB - safeA;
+      }
+      const startA = Date.parse(a?.start_date ?? "");
+      const startB = Date.parse(b?.start_date ?? "");
+      const safeStartA = Number.isNaN(startA) ? 0 : startA;
+      const safeStartB = Number.isNaN(startB) ? 0 : startB;
+      return safeStartB - safeStartA;
+    });
+    return NextResponse.json({ data: sorted });
   } catch (error: any) {
     return NextResponse.json({ message: error.message ?? "Failed to load bookings" }, { status: 400 });
   }

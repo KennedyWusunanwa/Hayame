@@ -23,6 +23,8 @@ const schema = z.object({
 });
 
 type FormValues = z.infer<typeof schema>;
+const EMAIL_CONFIRMATION_REDIRECT_URL =
+  process.env.NEXT_PUBLIC_AUTH_CONFIRMATION_REDIRECT_URL ?? "https://www.hayamegh.com";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -52,6 +54,7 @@ export default function SignupPage() {
         email: values.email,
         password: values.password,
         options: {
+          emailRedirectTo: EMAIL_CONFIRMATION_REDIRECT_URL,
           data: {
             full_name: fullName,
             first_name: values.firstName,

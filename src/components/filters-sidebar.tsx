@@ -297,14 +297,16 @@ export function FiltersSidebar({ filters, onChange, capabilities = {} }: Props) 
       </div>
       {!support.year ? <p className="-mt-3 text-xs text-amber-700">Car year filter coming soon.</p> : null}
       <div className="grid gap-2 rounded-lg border border-border bg-white p-3">
-        <label className="flex items-center justify-between gap-3 text-sm text-gray-700">
-          <span className="font-semibold text-gray-800">Instant Book</span>
-          <Checkbox
-            checked={Boolean(filters.instantBook)}
-            onChange={(e) => updateCheckbox("instantBook", e.target.checked)}
-            disabled={!support.instantBook}
-          />
-        </label>
+        {support.instantBook || Boolean(filters.instantBook) ? (
+          <label className="flex items-center justify-between gap-3 text-sm text-gray-700">
+            <span className="font-semibold text-gray-800">Instant Book</span>
+            <Checkbox
+              checked={Boolean(filters.instantBook)}
+              onChange={(e) => updateCheckbox("instantBook", e.target.checked)}
+              disabled={!support.instantBook}
+            />
+          </label>
+        ) : null}
         <label className="flex items-center justify-between gap-3 text-sm text-gray-700">
           <span className="font-semibold text-gray-800">Delivery available</span>
           <Checkbox

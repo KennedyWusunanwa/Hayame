@@ -111,13 +111,23 @@ export function BookingWidget({
       setMessage("End date must be after start date.");
       return;
     }
-    if (!publicKey) {
-      alert("Paystack is not configured yet.");
-      return;
-    }
     try {
       setLoading(true);
       setMessage(null);
+      const supabase = createSupabaseBrowserClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) {
+        alert("You need to sign in before you can book.");
+        router.push("/auth/login");
+        return;
+      }
+      if (!publicKey) {
+        alert("Paystack is not configured yet.");
+        return;
+      }
+
       const now = new Date();
       let bookingId = hold?.id ?? null;
       let holdExpiresAt = hold?.expiresAt ?? null;
@@ -141,14 +151,6 @@ export function BookingWidget({
       }
 
       await loadPaystackScript();
-      const supabase = createSupabaseBrowserClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) {
-        router.push("/auth/login");
-        return;
-      }
 
       const amountInMinorUnit = Math.round(total * 100);
       const reference = `car-${carId}-${Date.now()}`;
