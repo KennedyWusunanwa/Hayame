@@ -160,6 +160,7 @@ export function buildBookingPaidEmail(params: {
   carTitle?: string | null;
   startDate: string;
   endDate: string;
+  tripUseLocation?: string | null;
   totalPrice: number;
   bookingId?: string | null;
   paymentReference?: string | null;
@@ -180,6 +181,7 @@ export function buildBookingPaidEmail(params: {
       <p><strong>Booking ID:</strong> ${escapeHtml(params.bookingId ?? "N/A")}</p>
       <p><strong>Payment reference:</strong> ${escapeHtml(params.paymentReference ?? "N/A")}</p>
       <p><strong>Dates:</strong> ${escapeHtml(params.startDate)} to ${escapeHtml(params.endDate)}</p>
+      ${params.tripUseLocation ? `<p><strong>Trip use location:</strong> ${escapeHtml(params.tripUseLocation)}</p>` : ""}
       <p><strong>Total:</strong> ${formatCurrency(params.totalPrice)}</p>
       <p><a href="${params.conversationUrl ?? `${siteUrl}/messages`}" style="color:#2563eb;">Open messages</a></p>
       <p style="color:#6b7280; font-size: 12px;">${appName}</p>
@@ -191,7 +193,9 @@ export function buildBookingPaidEmail(params: {
     params.bookingId ?? "N/A"
   }\nPayment reference: ${params.paymentReference ?? "N/A"}\nDates: ${params.startDate} to ${
     params.endDate
-  }\nTotal: ${formatCurrency(params.totalPrice)}\nOpen messages: ${
+  }${params.tripUseLocation ? `\nTrip use location: ${params.tripUseLocation}` : ""}\nTotal: ${formatCurrency(
+    params.totalPrice,
+  )}\nOpen messages: ${
     params.conversationUrl ?? `${siteUrl}/messages`
   }\n\n${appName}`;
 
@@ -205,6 +209,7 @@ export function buildHostBookingNoticeEmail(params: {
   carTitle?: string | null;
   startDate: string;
   endDate: string;
+  tripUseLocation?: string | null;
   totalPrice: number;
   bookingId?: string | null;
   paymentReference?: string | null;
@@ -229,6 +234,7 @@ export function buildHostBookingNoticeEmail(params: {
       <p><strong>Payment reference:</strong> ${escapeHtml(params.paymentReference ?? "N/A")}</p>
       <p><strong>Renter phone:</strong> ${escapeHtml(params.renterPhone ?? "Not provided")}</p>
       <p><strong>Dates:</strong> ${escapeHtml(params.startDate)} to ${escapeHtml(params.endDate)}</p>
+      ${params.tripUseLocation ? `<p><strong>Trip use location:</strong> ${escapeHtml(params.tripUseLocation)}</p>` : ""}
       <p><strong>Total paid:</strong> ${formatCurrency(params.totalPrice)}</p>
       <p><a href="${params.conversationUrl ?? `${siteUrl}/messages`}" style="color:#2563eb;">Open messages</a></p>
       <p><a href="${siteUrl}/host/bookings" style="color:#2563eb;">Manage bookings</a></p>
@@ -241,7 +247,9 @@ export function buildHostBookingNoticeEmail(params: {
     params.bookingId ?? "N/A"
   }\nPayment reference: ${params.paymentReference ?? "N/A"}\nRenter phone: ${
     params.renterPhone ?? "Not provided"
-  }\nTotal paid: ${formatCurrency(params.totalPrice)}\nOpen messages: ${
+  }${params.tripUseLocation ? `\nTrip use location: ${params.tripUseLocation}` : ""}\nTotal paid: ${formatCurrency(
+    params.totalPrice,
+  )}\nOpen messages: ${
     params.conversationUrl ?? `${siteUrl}/messages`
   }\nManage bookings: ${siteUrl}/host/bookings\n\n${appName}`;
 
@@ -264,10 +272,12 @@ export function buildBookingInvoiceEmail(params: {
   platformFee: number;
   insuranceFee: number;
   deliveryFee: number;
+  outsideAccraSurcharge: number;
   depositAmount: number;
   totalPrice: number;
   status: string;
   conversationUrl?: string | null;
+  tripUseLocation?: string | null;
 }) {
   const recipient = escapeHtml(params.recipientName || (params.recipientRole === "host" ? "Host" : "Guest"));
   const counterpart = escapeHtml(params.counterpartName || (params.recipientRole === "host" ? "Guest" : "Host"));
@@ -290,6 +300,7 @@ export function buildBookingInvoiceEmail(params: {
       <p><strong>Booked at:</strong> ${escapeHtml(formatDateTime(params.bookedAt))}</p>
       <p><strong>Listing:</strong> ${carTitle}</p>
       <p><strong>Trip dates:</strong> ${escapeHtml(params.startDate)} to ${escapeHtml(params.endDate)} (${params.nights} night(s))</p>
+      ${params.tripUseLocation ? `<p><strong>Trip use location:</strong> ${escapeHtml(params.tripUseLocation)}</p>` : ""}
       <p><strong>Status:</strong> ${escapeHtml(params.status)}</p>
       <hr style="margin: 16px 0; border: 0; border-top: 1px solid #e5e7eb;" />
       <p><strong>Daily rate:</strong> ${formatCurrency(params.dailyRate)}</p>
@@ -297,6 +308,7 @@ export function buildBookingInvoiceEmail(params: {
       <p><strong>Platform fee:</strong> ${formatCurrency(params.platformFee)}</p>
       <p><strong>Insurance fee:</strong> ${formatCurrency(params.insuranceFee)}</p>
       <p><strong>Delivery fee:</strong> ${formatCurrency(params.deliveryFee)}</p>
+      <p><strong>Outside Accra surcharge:</strong> ${formatCurrency(params.outsideAccraSurcharge)}</p>
       <p><strong>Deposit:</strong> ${formatCurrency(params.depositAmount)}</p>
       <p><strong>Total paid:</strong> ${formatCurrency(params.totalPrice)}</p>
       <p><a href="${params.conversationUrl ?? `${siteUrl}/messages`}" style="color:#2563eb;">Open messages</a></p>
@@ -311,13 +323,14 @@ Payment reference: ${params.paymentReference ?? "N/A"}
 Booked at: ${formatDateTime(params.bookedAt)}
 Listing: ${params.carTitle ?? "Listing"}
 Trip dates: ${params.startDate} to ${params.endDate} (${params.nights} night(s))
-Status: ${params.status}
+${params.tripUseLocation ? `Trip use location: ${params.tripUseLocation}\n` : ""}Status: ${params.status}
 
 Daily rate: ${formatCurrency(params.dailyRate)}
 Subtotal: ${formatCurrency(params.subtotal)}
 Platform fee: ${formatCurrency(params.platformFee)}
 Insurance fee: ${formatCurrency(params.insuranceFee)}
 Delivery fee: ${formatCurrency(params.deliveryFee)}
+Outside Accra surcharge: ${formatCurrency(params.outsideAccraSurcharge)}
 Deposit: ${formatCurrency(params.depositAmount)}
 Total paid: ${formatCurrency(params.totalPrice)}
 

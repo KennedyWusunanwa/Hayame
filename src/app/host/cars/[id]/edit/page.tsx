@@ -77,6 +77,7 @@ export default async function EditCarPage({ params }: PageProps) {
               delivery_fee: Number((hydratedCar as any).delivery_fee ?? 0),
               insurance_fee: Number((hydratedCar as any).insurance_fee ?? 0),
               deposit_amount: Number((hydratedCar as any).deposit_amount ?? 0),
+              outside_accra_fee: Number((hydratedCar as any).outside_accra_fee ?? 0),
               cancellation_policy: (hydratedCar as any).cancellation_policy ?? "moderate",
             }}
           />

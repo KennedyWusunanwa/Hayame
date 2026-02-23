@@ -89,6 +89,7 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotos = [] 
       delivery_fee: undefined,
       insurance_fee: 0,
       deposit_amount: 0,
+      outside_accra_fee: 0,
       cancellation_policy: "moderate",
       ...defaultValues,
     },
@@ -432,6 +433,13 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotos = [] 
         <div className="space-y-2">
           <label className="text-sm font-semibold text-gray-700">Deposit amount (GHS)</label>
           <Input type="number" min={0} {...register("deposit_amount", { valueAsNumber: true })} />
+        </div>
+        <div className="space-y-2">
+          <label className="text-sm font-semibold text-gray-700">Outside Accra surcharge (GHS)</label>
+          <Input type="number" min={0} {...register("outside_accra_fee", { valueAsNumber: true })} />
+          <p className="text-xs text-gray-500">
+            Added automatically when the renter selects a trip use location outside Greater Accra.
+          </p>
         </div>
       </div>
 

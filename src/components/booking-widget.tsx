@@ -6,10 +6,18 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { VerificationBadges } from "@/components/verification-badges";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
-import { formatCurrency, calculateNights } from "@/lib/utils";
+import { useLocations } from "@/lib/use-locations";
+import {
+  calculateNights,
+  formatCurrency,
+  isLocationOutsideAccra,
+  isOutsideListingRegion,
+} from "@/lib/utils";
 
 type Props = {
   carId: string;
@@ -19,6 +27,9 @@ type Props = {
   deliveryFee?: number | null;
   insuranceFee?: number | null;
   depositAmount?: number | null;
+  outsideAccraFee?: number | null;
+  listingCity?: string | null;
+  listingRegion?: string | null;
   cancellationPolicy?: string | null;
   hostVerification?: {
     idVerified?: boolean | null;
@@ -35,6 +46,9 @@ export function BookingWidget({
   deliveryFee,
   insuranceFee,
   depositAmount,
+  outsideAccraFee,
+  listingCity,
+  listingRegion,
   cancellationPolicy,
   hostVerification,
 }: Props) {
@@ -45,7 +59,11 @@ export function BookingWidget({
   const [message, setMessage] = useState<string | null>(null);
   const [hold, setHold] = useState<{ id: string; expiresAt: string } | null>(null);
   const [holdRemaining, setHoldRemaining] = useState<string | null>(null);
+  const [tripUseRegion, setTripUseRegion] = useState<string>(listingRegion ?? "");
+  const [tripUseCity, setTripUseCity] = useState<string>(listingCity ?? "");
+  const [tripUseAddress, setTripUseAddress] = useState<string>("");
   const router = useRouter();
+  const { regions, citiesByRegion } = useLocations();
   const publicKey = useMemo(() => process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY, []);
 
   const nights = calculateNights(startDate, endDate);
@@ -55,7 +73,20 @@ export function BookingWidget({
   const insuranceFeeAmount = Math.max(Number(insuranceFee ?? 0), 0);
   const deliveryFeeAmount = Math.max(Number(deliveryFee ?? 0), 0);
   const depositAmountValue = Math.max(Number(depositAmount ?? 0), 0);
-  const total = baseTotal + platformFeeAmount + insuranceFeeAmount + deliveryFeeAmount + depositAmountValue;
+  const outsideAccraFeeValue = Math.max(Number(outsideAccraFee ?? 0), 0);
+  const tripOutsideAccra = isLocationOutsideAccra({ region: tripUseRegion, city: tripUseCity });
+  const tripOutsideListingRegion = isOutsideListingRegion({
+    tripRegion: tripUseRegion,
+    listingRegion,
+  });
+  const outsideAccraSurchargeAmount = tripOutsideAccra ? outsideAccraFeeValue : 0;
+  const total =
+    baseTotal +
+    platformFeeAmount +
+    insuranceFeeAmount +
+    deliveryFeeAmount +
+    outsideAccraSurchargeAmount +
+    depositAmountValue;
 
   useEffect(() => {
     const loadAvailability = async () => {
@@ -81,7 +112,13 @@ export function BookingWidget({
   useEffect(() => {
     setHold(null);
     setHoldRemaining(null);
-  }, [carId, startDate, endDate]);
+  }, [carId, startDate, endDate, tripUseRegion, tripUseCity, tripUseAddress]);
+
+  useEffect(() => {
+    setTripUseRegion(listingRegion ?? "");
+    setTripUseCity(listingCity ?? "");
+    setTripUseAddress("");
+  }, [carId, listingCity, listingRegion]);
 
   useEffect(() => {
     if (!hold) {
@@ -111,6 +148,10 @@ export function BookingWidget({
       setMessage("End date must be after start date.");
       return;
     }
+    if (!tripUseRegion || !tripUseCity || tripUseAddress.trim().length < 3) {
+      setMessage("Please enter the exact trip-use location (region, city and area).");
+      return;
+    }
     try {
       setLoading(true);
       setMessage(null);
@@ -135,7 +176,15 @@ export function BookingWidget({
         const holdRes = await fetch("/api/bookings/hold", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ carId, startDate, endDate }),
+          body: JSON.stringify({
+            carId,
+            startDate,
+            endDate,
+            tripUseRegion,
+            tripUseCity,
+            tripUseAddress: tripUseAddress.trim(),
+            tripOutsideAccra,
+          }),
         });
         if (!holdRes.ok) {
           const error = await holdRes.json().catch(() => ({}));
@@ -169,6 +218,10 @@ export function BookingWidget({
               carId,
               startDate,
               endDate,
+              tripUseRegion,
+              tripUseCity,
+              tripUseAddress: tripUseAddress.trim(),
+              tripOutsideAccra,
               reference: tran?.reference ?? reference,
               amount: amountInMinorUnit,
             }),
@@ -271,6 +324,73 @@ export function BookingWidget({
         }}
         onInvalidRange={(msg) => setMessage(msg)}
       />
+      <div className="space-y-3 rounded-xl border border-border bg-gray-50 p-3">
+        <div className="flex items-center justify-between">
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Trip use location</p>
+          {listingRegion ? (
+            <span className="text-[11px] font-medium text-gray-600">Listing region: {listingRegion}</span>
+          ) : null}
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-gray-700">Region</label>
+            <Select
+              value={tripUseRegion}
+              onChange={(e) => {
+                setMessage(null);
+                setTripUseRegion(e.target.value);
+                setTripUseCity("");
+              }}
+            >
+              <option value="">Select region</option>
+              {regions.map((region) => (
+                <option key={region} value={region}>
+                  {region}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-gray-700">City / district</label>
+            <Select
+              value={tripUseCity}
+              onChange={(e) => {
+                setMessage(null);
+                setTripUseCity(e.target.value);
+              }}
+              disabled={!tripUseRegion}
+            >
+              <option value="">Select city / district</option>
+              {(citiesByRegion[tripUseRegion] ?? []).map((city) => (
+                <option key={city} value={city}>
+                  {city}
+                </option>
+              ))}
+            </Select>
+          </div>
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs font-semibold text-gray-700">Exact area / destination</label>
+          <Input
+            value={tripUseAddress}
+            onChange={(e) => {
+              setMessage(null);
+              setTripUseAddress(e.target.value);
+            }}
+            placeholder="e.g. East Legon, Airport Residential, Adum, Cape Coast central"
+          />
+        </div>
+        <div className="space-y-1 text-xs">
+          <p className={tripOutsideAccra ? "text-amber-700" : "text-emerald-700"}>
+            {tripOutsideAccra
+              ? `Outside Accra trip${outsideAccraFeeValue > 0 ? ` (+${formatCurrency(outsideAccraFeeValue)})` : ""}`
+              : "Within Accra (no outside-Accra surcharge)"}
+          </p>
+          {tripOutsideListingRegion && listingRegion ? (
+            <p className="text-gray-600">Trip use region differs from the listing region ({listingRegion}).</p>
+          ) : null}
+        </div>
+      </div>
       {holdRemaining ? (
         <p className="text-xs text-emerald-700">Reserved for {holdRemaining}. Complete payment to confirm.</p>
       ) : null}
@@ -286,6 +406,13 @@ export function BookingWidget({
           label="Delivery fee"
           value={formatCurrency(deliveryFeeAmount)}
         />
+        {outsideAccraFeeValue > 0 || tripOutsideAccra ? (
+          <PriceRow
+            label={tripOutsideAccra ? "Outside Accra surcharge" : "Outside Accra surcharge (not applied)"}
+            value={formatCurrency(outsideAccraSurchargeAmount)}
+            muted={!tripOutsideAccra}
+          />
+        ) : null}
         <PriceRow
           label="Deposit"
           value={formatCurrency(depositAmountValue)}

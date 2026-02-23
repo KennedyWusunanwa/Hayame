@@ -67,6 +67,7 @@ type CarDetail = {
   delivery_fee?: number | null;
   insurance_fee?: number | null;
   deposit_amount?: number | null;
+  outside_accra_fee?: number | null;
   cancellation_policy?: string | null;
   approval_status?: string | null;
   photos: { url: string }[];
@@ -312,6 +313,9 @@ export default async function CarDetailPage({ params }: PageProps) {
                 deliveryFee={car.delivery_fee}
                 insuranceFee={car.insurance_fee}
                 depositAmount={car.deposit_amount}
+                outsideAccraFee={car.outside_accra_fee}
+                listingCity={car.city}
+                listingRegion={car.region}
                 cancellationPolicy={car.cancellation_policy}
                 hostVerification={{
                   idVerified: car.owner?.id_verified,
@@ -618,6 +622,8 @@ function mapCar(data: SupabaseCar): CarDetail {
     delivery_fee: typeof (data as any).delivery_fee === "number" ? Number((data as any).delivery_fee) : null,
     insurance_fee: typeof (data as any).insurance_fee === "number" ? Number((data as any).insurance_fee) : null,
     deposit_amount: typeof (data as any).deposit_amount === "number" ? Number((data as any).deposit_amount) : null,
+    outside_accra_fee:
+      typeof (data as any).outside_accra_fee === "number" ? Number((data as any).outside_accra_fee) : null,
     cancellation_policy: (data as any).cancellation_policy ?? null,
     approval_status: (data as any).approval_status ?? "approved",
     photos: data.car_photos ?? [],
@@ -649,6 +655,7 @@ function mapMockCar(mock: MockCar): CarDetail {
     delivery_fee: null,
     insurance_fee: null,
     deposit_amount: null,
+    outside_accra_fee: null,
     cancellation_policy: null,
     approval_status: "approved",
     photos: [{ url: mock.image }],

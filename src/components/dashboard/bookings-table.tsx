@@ -26,6 +26,12 @@ type BookingRow = {
   start_date: string;
   end_date: string;
   status: string;
+  trip_use_region?: string | null;
+  trip_use_city?: string | null;
+  trip_use_address?: string | null;
+  trip_outside_accra?: boolean | null;
+  trip_outside_listing_region?: boolean | null;
+  outside_accra_surcharge?: number | null;
   nights?: number | null;
   daily_rate?: number | null;
   subtotal?: number | null;
@@ -293,6 +299,7 @@ function BookingsList({
           const image = booking.cars?.car_photos?.[0]?.url ?? booking.cars?.owner?.avatar_url ?? null;
           const durationNights = getDurationNights(booking);
           const tripMode = Number(booking.delivery_fee ?? 0) > 0 ? "Delivery" : "Pickup";
+          const tripUseLocation = formatTripUseLocation(booking);
 
           return (
             <details key={booking.id} className="overflow-hidden rounded-xl border border-border bg-white">
@@ -319,6 +326,10 @@ function BookingsList({
                     </div>
                     <p className="mt-2 text-xs text-gray-700">
                       {formatDateLabel(booking.start_date)} to {formatDateLabel(booking.end_date)} | {durationNights} night(s)
+                    </p>
+                    <p className="text-xs text-gray-600">
+                      Use: {tripUseLocation}
+                      {booking.trip_outside_accra ? " (Outside Accra)" : ""}
                     </p>
                     <p className="text-xs text-gray-600">Booked: {formatDateLabel(booking.created_at)}</p>
                     <p className="text-sm font-semibold text-foreground">{formatCurrency(booking.total_price)}</p>
@@ -379,11 +390,16 @@ function BookingsList({
                   <Detail label="Duration" value={`${durationNights} night(s)`} />
                   <Detail label="Start" value={formatDateLabel(booking.start_date)} />
                   <Detail label="End" value={formatDateLabel(booking.end_date)} />
+                  <Detail label="Use location" value={tripUseLocation} />
                   <Detail label="Daily rate" value={formatCurrency(Number(booking.daily_rate ?? 0))} />
                   <Detail label="Subtotal" value={formatCurrency(Number(booking.subtotal ?? 0))} />
                   <Detail label="Platform fee" value={formatCurrency(Number(booking.platform_fee ?? 0))} />
                   <Detail label="Insurance fee" value={formatCurrency(Number(booking.insurance_fee ?? 0))} />
                   <Detail label="Delivery fee" value={formatCurrency(Number(booking.delivery_fee ?? 0))} />
+                  <Detail
+                    label="Outside Accra fee"
+                    value={formatCurrency(Number(booking.outside_accra_surcharge ?? 0))}
+                  />
                   <Detail label="Deposit" value={formatCurrency(Number(booking.deposit_amount ?? 0))} />
                   <Detail label="Total" value={formatCurrency(Number(booking.total_price ?? 0))} />
                   <Detail label="Payment ref" value={booking.payment_reference ?? "N/A"} />
@@ -436,6 +452,7 @@ function BookingsList({
                 const image = booking.cars?.car_photos?.[0]?.url ?? booking.cars?.owner?.avatar_url ?? null;
                 const location = [booking.cars?.city, booking.cars?.region].filter(Boolean).join(", ");
                 const durationNights = getDurationNights(booking);
+                const tripUseLocation = formatTripUseLocation(booking);
 
                 return (
                   <TableRow key={booking.id}>
@@ -469,6 +486,10 @@ function BookingsList({
                         {formatDateLabel(booking.start_date)} - {formatDateLabel(booking.end_date)}
                       </div>
                       <div className="mt-1 text-sm text-gray-600">{durationNights} night(s)</div>
+                      <div className="mt-1 text-xs text-gray-600">
+                        Use: {tripUseLocation}
+                        {booking.trip_outside_accra ? " (Outside Accra)" : ""}
+                      </div>
                       <div className="mt-1 text-sm text-gray-600">Booked: {formatDateLabel(booking.created_at)}</div>
                     </TableCell>
                     <TableCell className="align-top">
@@ -646,6 +667,12 @@ function paymentVariant(status?: string | null): "default" | "secondary" | "outl
     default:
       return "muted";
   }
+}
+
+function formatTripUseLocation(
+  booking: Pick<BookingRow, "trip_use_address" | "trip_use_city" | "trip_use_region">,
+) {
+  return [booking.trip_use_address, booking.trip_use_city, booking.trip_use_region].filter(Boolean).join(", ") || "N/A";
 }
 
 function statusSummaryLabel(status?: string) {

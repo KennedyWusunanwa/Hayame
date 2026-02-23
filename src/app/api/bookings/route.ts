@@ -31,7 +31,7 @@ export async function GET() {
     }
 
     const bookingSelect =
-      "id,car_id,renter_id,start_date,end_date,status,nights,daily_rate,subtotal,platform_fee,insurance_fee,delivery_fee,deposit_amount,total_price,payment_status,payment_reference,payment_provider,paid_at,approved_at,rejected_at,rejection_reason,created_at,cars(id,title,city,region,owner_id,cancellation_policy,car_photos(url),owner:profiles!cars_owner_id_fkey(id,full_name,avatar_url,phone)),renter:profiles!bookings_renter_id_fkey(id,full_name,avatar_url,phone)";
+      "id,car_id,renter_id,start_date,end_date,status,trip_use_region,trip_use_city,trip_use_address,trip_outside_accra,trip_outside_listing_region,outside_accra_surcharge,nights,daily_rate,subtotal,platform_fee,insurance_fee,delivery_fee,deposit_amount,total_price,payment_status,payment_reference,payment_provider,paid_at,approved_at,rejected_at,rejection_reason,created_at,cars(id,title,city,region,owner_id,cancellation_policy,car_photos(url),owner:profiles!cars_owner_id_fkey(id,full_name,avatar_url,phone)),renter:profiles!bookings_renter_id_fkey(id,full_name,avatar_url,phone)";
 
     const renterBookings = await supa
       .from("bookings")

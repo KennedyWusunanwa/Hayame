@@ -198,6 +198,7 @@ export type Database = {
           city: string | null;
           region: string | null;
           location_id: number | null;
+          outside_accra_fee: number | null;
           car_type: string | null;
           brand: string | null;
           model: string | null;
@@ -231,6 +232,7 @@ export type Database = {
           city?: string | null;
           region?: string | null;
           location_id?: number | null;
+          outside_accra_fee?: number | null;
           car_type?: string | null;
           brand?: string | null;
           model?: string | null;
@@ -264,6 +266,7 @@ export type Database = {
           city?: string | null;
           region?: string | null;
           location_id?: number | null;
+          outside_accra_fee?: number | null;
           car_type?: string | null;
           brand?: string | null;
           model?: string | null;
@@ -334,6 +337,12 @@ export type Database = {
           start_date: string;
           end_date: string;
           status: Database["public"]["Enums"]["booking_status"];
+          trip_use_region: string | null;
+          trip_use_city: string | null;
+          trip_use_address: string | null;
+          trip_outside_accra: boolean | null;
+          trip_outside_listing_region: boolean | null;
+          outside_accra_surcharge: number | null;
           nights: number | null;
           daily_rate: number | null;
           subtotal: number | null;
@@ -361,6 +370,12 @@ export type Database = {
           start_date: string;
           end_date: string;
           status?: Database["public"]["Enums"]["booking_status"];
+          trip_use_region?: string | null;
+          trip_use_city?: string | null;
+          trip_use_address?: string | null;
+          trip_outside_accra?: boolean | null;
+          trip_outside_listing_region?: boolean | null;
+          outside_accra_surcharge?: number | null;
           nights?: number | null;
           daily_rate?: number | null;
           subtotal?: number | null;
@@ -388,6 +403,12 @@ export type Database = {
           start_date?: string;
           end_date?: string;
           status?: Database["public"]["Enums"]["booking_status"];
+          trip_use_region?: string | null;
+          trip_use_city?: string | null;
+          trip_use_address?: string | null;
+          trip_outside_accra?: boolean | null;
+          trip_outside_listing_region?: boolean | null;
+          outside_accra_surcharge?: number | null;
           nights?: number | null;
           daily_rate?: number | null;
           subtotal?: number | null;
@@ -592,6 +613,7 @@ export type Database = {
           delivery_fee: number | null;
           insurance_fee: number | null;
           deposit_amount: number | null;
+          outside_accra_fee: number | null;
           cancellation_policy: string | null;
           approval_status: string | null;
           created_at: string | null;

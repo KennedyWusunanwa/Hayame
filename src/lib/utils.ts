@@ -27,6 +27,40 @@ export function calculateNights(start?: string | null, end?: string | null) {
   return Math.max(differenceInCalendarDays(new Date(end), new Date(start)), 0);
 }
 
+function normalizeLocationToken(value?: string | null) {
+  return (value ?? "")
+    .toString()
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+}
+
+export function isGreaterAccraRegion(value?: string | null) {
+  const normalized = normalizeLocationToken(value);
+  if (!normalized) return false;
+  return normalized === "greater accra" || normalized === "greater accra region";
+}
+
+export function isLocationOutsideAccra(params: { region?: string | null; city?: string | null }) {
+  const region = normalizeLocationToken(params.region);
+  if (region) {
+    return !isGreaterAccraRegion(region);
+  }
+  const city = normalizeLocationToken(params.city);
+  if (!city) return false;
+  return city !== "accra" && city !== "tema";
+}
+
+export function isOutsideListingRegion(params: {
+  tripRegion?: string | null;
+  listingRegion?: string | null;
+}) {
+  const tripRegion = normalizeLocationToken(params.tripRegion);
+  const listingRegion = normalizeLocationToken(params.listingRegion);
+  if (!tripRegion || !listingRegion) return false;
+  return tripRegion !== listingRegion;
+}
+
 export function getInitials(name?: string | null) {
   if (!name) return "";
   return name

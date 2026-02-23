@@ -3,6 +3,7 @@ import { addMinutes, isAfter, parseISO } from "date-fns";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { bookingSchema } from "@/lib/validators";
+import { isLocationOutsideAccra, isOutsideListingRegion } from "@/lib/utils";
 
 const BLOCKING_STATUSES = ["pending", "awaiting_host", "confirmed"];
 const HOLD_MINUTES = 15;
@@ -24,9 +25,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ message: "End date must be after start date" }, { status: 400 });
     }
 
+    const tripUseRegion = parsed.tripUseRegion.trim();
+    const tripUseCity = parsed.tripUseCity.trim();
+    const tripUseAddress = parsed.tripUseAddress.trim();
+
     const { data: car, error: carError } = await supa
       .from("cars")
-      .select("id,is_available")
+      .select("id,is_available,city,region,outside_accra_fee")
       .eq("id", parsed.carId)
       .maybeSingle();
     if (carError || !car) {
@@ -35,6 +40,13 @@ export async function POST(req: Request) {
     if (car.is_available === false) {
       return NextResponse.json({ message: "Car is unavailable" }, { status: 409 });
     }
+
+    const tripOutsideAccra = isLocationOutsideAccra({ region: tripUseRegion, city: tripUseCity });
+    const tripOutsideListingRegion = isOutsideListingRegion({
+      tripRegion: tripUseRegion,
+      listingRegion: (car as any).region ?? null,
+    });
+    const outsideAccraSurcharge = tripOutsideAccra ? Math.max(Number((car as any).outside_accra_fee ?? 0), 0) : 0;
 
     const admin = (() => {
       try {
@@ -58,7 +70,9 @@ export async function POST(req: Request) {
 
     const { data: existingHold } = await supa
       .from("bookings")
-      .select("id,hold_expires_at")
+      .select(
+        "id,hold_expires_at,trip_use_region,trip_use_city,trip_use_address,trip_outside_accra,trip_outside_listing_region,outside_accra_surcharge",
+      )
       .eq("car_id", parsed.carId)
       .eq("renter_id", user.id)
       .eq("status", "pending")
@@ -67,6 +81,27 @@ export async function POST(req: Request) {
       .gt("hold_expires_at", nowIso)
       .maybeSingle();
     if (existingHold?.id && existingHold.hold_expires_at) {
+      const needsUpdate =
+        existingHold.trip_use_region !== tripUseRegion ||
+        existingHold.trip_use_city !== tripUseCity ||
+        existingHold.trip_use_address !== tripUseAddress ||
+        Boolean(existingHold.trip_outside_accra) !== tripOutsideAccra ||
+        Boolean(existingHold.trip_outside_listing_region) !== tripOutsideListingRegion ||
+        Number(existingHold.outside_accra_surcharge ?? 0) !== outsideAccraSurcharge;
+
+      if (needsUpdate) {
+        await supa
+          .from("bookings")
+          .update({
+            trip_use_region: tripUseRegion,
+            trip_use_city: tripUseCity,
+            trip_use_address: tripUseAddress,
+            trip_outside_accra: tripOutsideAccra,
+            trip_outside_listing_region: tripOutsideListingRegion,
+            outside_accra_surcharge: outsideAccraSurcharge,
+          })
+          .eq("id", existingHold.id);
+      }
       return NextResponse.json({ bookingId: existingHold.id, hold_expires_at: existingHold.hold_expires_at });
     }
 
@@ -107,6 +142,12 @@ export async function POST(req: Request) {
         status: "pending",
         payment_status: "pending",
         hold_expires_at: holdExpiresAt,
+        trip_use_region: tripUseRegion,
+        trip_use_city: tripUseCity,
+        trip_use_address: tripUseAddress,
+        trip_outside_accra: tripOutsideAccra,
+        trip_outside_listing_region: tripOutsideListingRegion,
+        outside_accra_surcharge: outsideAccraSurcharge,
       })
       .select("id,hold_expires_at")
       .single();

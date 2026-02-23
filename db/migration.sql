@@ -111,6 +111,7 @@ create table if not exists cars (
   city text,
   region text,
   location_id integer references locations(id),
+  outside_accra_fee numeric default 0,
   car_type text,
   seats integer,
   transmission text,
@@ -121,6 +122,7 @@ create table if not exists cars (
 );
 alter table cars add column if not exists is_available boolean default true;
 alter table cars add column if not exists instant_book boolean default false;
+alter table cars add column if not exists outside_accra_fee numeric default 0;
 
 -- Car photos
 create table if not exists car_photos (
@@ -146,6 +148,12 @@ create table if not exists bookings (
   start_date date not null,
   end_date date not null,
   status booking_status default 'pending'::booking_status,
+  trip_use_region text,
+  trip_use_city text,
+  trip_use_address text,
+  trip_outside_accra boolean default false,
+  trip_outside_listing_region boolean default false,
+  outside_accra_surcharge numeric default 0,
   total_price numeric,
   payment_status text default 'pending',
   payment_reference text,
@@ -158,6 +166,12 @@ create table if not exists bookings (
   created_at timestamptz default now()
 );
 alter table bookings add column if not exists hold_expires_at timestamptz;
+alter table bookings add column if not exists trip_use_region text;
+alter table bookings add column if not exists trip_use_city text;
+alter table bookings add column if not exists trip_use_address text;
+alter table bookings add column if not exists trip_outside_accra boolean default false;
+alter table bookings add column if not exists trip_outside_listing_region boolean default false;
+alter table bookings add column if not exists outside_accra_surcharge numeric default 0;
 create index if not exists idx_bookings_car on bookings(car_id);
 create index if not exists idx_bookings_renter on bookings(renter_id);
 

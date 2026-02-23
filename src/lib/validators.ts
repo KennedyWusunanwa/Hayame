@@ -22,6 +22,7 @@ export const carFormSchema = z.object({
   delivery_fee: z.coerce.number().min(0).optional(),
   insurance_fee: z.coerce.number().min(0).optional(),
   deposit_amount: z.coerce.number().min(0).optional(),
+  outside_accra_fee: z.coerce.number().min(0).optional(),
   cancellation_policy: z.enum(["flexible", "moderate", "strict"]).optional(),
 });
 
@@ -29,6 +30,10 @@ export const bookingSchema = z.object({
   carId: z.string().uuid().or(z.string()),
   startDate: z.string(),
   endDate: z.string(),
+  tripUseRegion: z.string().trim().min(2, "Trip use region is required"),
+  tripUseCity: z.string().trim().min(2, "Trip use city is required"),
+  tripUseAddress: z.string().trim().min(3, "Trip use location is required"),
+  tripOutsideAccra: z.boolean().optional(),
 });
 
 export const favoriteSchema = z.object({

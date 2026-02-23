@@ -3,6 +3,7 @@ import { differenceInCalendarDays } from "date-fns";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { verifyPaystackTransaction } from "@/lib/paystack";
+import { isLocationOutsideAccra, isOutsideListingRegion } from "@/lib/utils";
 import {
   buildBookingInvoiceEmail,
   buildBookingPaidEmail,
@@ -14,6 +15,10 @@ type Body = {
   carId?: string;
   startDate?: string;
   endDate?: string;
+  tripUseRegion?: string;
+  tripUseCity?: string;
+  tripUseAddress?: string;
+  tripOutsideAccra?: boolean;
   reference?: string;
   amount?: number;
   bookingId?: string;
@@ -106,6 +111,8 @@ export async function POST(req: Request) {
     const body = (await req.json()) as Body;
     const { reference, amount, bookingId } = body;
     let { carId, startDate, endDate } = body;
+    let { tripUseRegion, tripUseCity, tripUseAddress } = body;
+    let heldBooking: any = null;
     if (!reference || !amount) {
       return NextResponse.json({ message: "Missing booking or payment details" }, { status: 400 });
     }
@@ -113,7 +120,9 @@ export async function POST(req: Request) {
     if (bookingId) {
       const { data: booking, error: bookingError } = await supa
         .from("bookings")
-        .select("id,car_id,renter_id,start_date,end_date,status,hold_expires_at")
+        .select(
+          "id,car_id,renter_id,start_date,end_date,status,hold_expires_at,trip_use_region,trip_use_city,trip_use_address,trip_outside_accra,trip_outside_listing_region,outside_accra_surcharge",
+        )
         .eq("id", bookingId)
         .single();
       if (bookingError || !booking) {
@@ -132,9 +141,15 @@ export async function POST(req: Request) {
           .eq("id", bookingId);
         return NextResponse.json({ message: "Booking hold expired" }, { status: 409 });
       }
+      heldBooking = booking;
       carId = booking.car_id;
       startDate = booking.start_date;
       endDate = booking.end_date;
+      tripUseRegion = booking.trip_use_region ?? tripUseRegion;
+      tripUseCity = booking.trip_use_city ?? tripUseCity;
+      tripUseAddress = booking.trip_use_address ?? tripUseAddress;
+      body.tripOutsideAccra =
+        typeof booking.trip_outside_accra === "boolean" ? booking.trip_outside_accra : body.tripOutsideAccra;
     }
 
     if (!carId || !startDate || !endDate) {
@@ -144,7 +159,7 @@ export async function POST(req: Request) {
     const { data: carData, error: carError } = await supa
       .from("cars")
       .select(
-        "id,title,daily_price,owner_id,instant_book,is_available,delivery_fee,insurance_fee,deposit_amount",
+        "id,title,daily_price,owner_id,instant_book,is_available,city,region,delivery_fee,insurance_fee,deposit_amount,outside_accra_fee",
       )
       .eq("id", carId)
       .single();
@@ -163,6 +178,28 @@ export async function POST(req: Request) {
     if (new Date(endDate) <= new Date(startDate)) {
       return NextResponse.json({ message: "End date must be after start date" }, { status: 400 });
     }
+
+    tripUseRegion = (tripUseRegion ?? "").trim();
+    tripUseCity = (tripUseCity ?? "").trim();
+    tripUseAddress = (tripUseAddress ?? "").trim();
+    if (!tripUseRegion || !tripUseCity || tripUseAddress.length < 3) {
+      if (bookingId) {
+        await supa
+          .from("bookings")
+          .update({ status: "cancelled", payment_status: "failed", hold_expires_at: null })
+          .eq("id", bookingId);
+      }
+      return NextResponse.json(
+        { message: "Trip use location is required (region, city and exact area)." },
+        { status: 400 },
+      );
+    }
+
+    const tripOutsideAccra = isLocationOutsideAccra({ region: tripUseRegion, city: tripUseCity });
+    const tripOutsideListingRegion = isOutsideListingRegion({
+      tripRegion: tripUseRegion,
+      listingRegion: car.region ?? null,
+    });
 
     const admin = (() => {
       try {
@@ -241,7 +278,13 @@ export async function POST(req: Request) {
     const insuranceFee = Math.max(Number(car.insurance_fee ?? 0), 0);
     const deliveryFee = Math.max(Number(car.delivery_fee ?? 0), 0);
     const depositAmount = Math.max(Number(car.deposit_amount ?? 0), 0);
-    const total = subtotal + platformFee + insuranceFee + deliveryFee + depositAmount;
+    const heldOutsideAccraSurcharge = Number(heldBooking?.outside_accra_surcharge);
+    const outsideAccraSurcharge = Number.isFinite(heldOutsideAccraSurcharge)
+      ? Math.max(heldOutsideAccraSurcharge, 0)
+      : tripOutsideAccra
+        ? Math.max(Number(car.outside_accra_fee ?? 0), 0)
+        : 0;
+    const total = subtotal + platformFee + insuranceFee + deliveryFee + outsideAccraSurcharge + depositAmount;
     const expectedAmount = Math.round(total * 100);
 
     const tx = await verifyPaystackTransaction(reference);
@@ -269,6 +312,7 @@ export async function POST(req: Request) {
 
     const finalStatus = car.instant_book ? "confirmed" : "awaiting_host";
     const approvedAt = car.instant_book ? new Date().toISOString() : null;
+    const tripUseLocationLine = [tripUseAddress, tripUseCity, tripUseRegion].filter(Boolean).join(", ");
     const maybeAdmin = (() => {
       try {
         return createSupabaseAdminClient() as any;
@@ -309,6 +353,7 @@ export async function POST(req: Request) {
             paymentReference: reference,
             bookedAt: booking.paid_at ?? new Date().toISOString(),
             conversationUrl,
+            tripUseLocation: tripUseLocationLine,
           });
           await sendEmailSafe({
             to: renterEmail,
@@ -330,6 +375,7 @@ export async function POST(req: Request) {
             paymentReference: reference,
             bookedAt: booking.paid_at ?? new Date().toISOString(),
             conversationUrl,
+            tripUseLocation: tripUseLocationLine,
           });
           await sendEmailSafe({
             to: hostEmail,
@@ -355,10 +401,12 @@ export async function POST(req: Request) {
             platformFee,
             insuranceFee,
             deliveryFee,
+            outsideAccraSurcharge,
             depositAmount,
             totalPrice: total,
             status: finalStatus,
             conversationUrl,
+            tripUseLocation: tripUseLocationLine,
           });
           await sendEmailSafe({
             to: renterEmail,
@@ -384,10 +432,12 @@ export async function POST(req: Request) {
             platformFee,
             insuranceFee,
             deliveryFee,
+            outsideAccraSurcharge,
             depositAmount,
             totalPrice: total,
             status: finalStatus,
             conversationUrl,
+            tripUseLocation: tripUseLocationLine,
           });
           await sendEmailSafe({
             to: hostEmail,
@@ -412,7 +462,13 @@ export async function POST(req: Request) {
           platform_fee: platformFee,
           insurance_fee: insuranceFee,
           delivery_fee: deliveryFee,
+          outside_accra_surcharge: outsideAccraSurcharge,
           deposit_amount: depositAmount,
+          trip_use_region: tripUseRegion,
+          trip_use_city: tripUseCity,
+          trip_use_address: tripUseAddress,
+          trip_outside_accra: tripOutsideAccra,
+          trip_outside_listing_region: tripOutsideListingRegion,
           payment_status: "paid",
           payment_reference: reference,
           payment_provider: "paystack",
@@ -469,7 +525,13 @@ export async function POST(req: Request) {
         platform_fee: platformFee,
         insurance_fee: insuranceFee,
         delivery_fee: deliveryFee,
+        outside_accra_surcharge: outsideAccraSurcharge,
         deposit_amount: depositAmount,
+        trip_use_region: tripUseRegion,
+        trip_use_city: tripUseCity,
+        trip_use_address: tripUseAddress,
+        trip_outside_accra: tripOutsideAccra,
+        trip_outside_listing_region: tripOutsideListingRegion,
         payment_status: "paid",
         payment_reference: reference,
         payment_provider: "paystack",

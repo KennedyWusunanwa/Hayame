@@ -92,6 +92,7 @@ export default async function AdminEditCarPage({ params }: PageProps) {
               delivery_fee: Number((car as any).delivery_fee ?? 0),
               insurance_fee: Number((car as any).insurance_fee ?? 0),
               deposit_amount: Number((car as any).deposit_amount ?? 0),
+              outside_accra_fee: Number((car as any).outside_accra_fee ?? 0),
               cancellation_policy: (car as any).cancellation_policy ?? "moderate",
             }}
           />
