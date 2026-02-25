@@ -58,8 +58,12 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotos = [] 
   const [photoMutatingId, setPhotoMutatingId] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const redirectPath = redirectTo ?? "/host/cars";
+  const createMode = !carId;
   const { regions, citiesByRegion } = useLocations();
   const { makes } = useCarCatalog();
+  const optionalNumberField = {
+    setValueAs: parseOptionalNumberInput,
+  } as const;
   const {
     register,
     handleSubmit,
@@ -86,12 +90,12 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotos = [] 
       instant_book: false,
       delivery_available: false,
       air_conditioning: false,
-      delivery_fee: undefined,
-      insurance_fee: 0,
-      deposit_amount: 0,
-      outside_accra_fee: 0,
       cancellation_policy: "moderate",
       ...defaultValues,
+      delivery_fee: normalizeOptionalFeeDefault(defaultValues?.delivery_fee),
+      insurance_fee: normalizeOptionalFeeDefault(defaultValues?.insurance_fee),
+      deposit_amount: normalizeOptionalFeeDefault(defaultValues?.deposit_amount),
+      outside_accra_fee: normalizeOptionalFeeDefault(defaultValues?.outside_accra_fee),
     },
   });
 
@@ -140,7 +144,7 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotos = [] 
         await uploadPhotos(newCarId, files, existingPhotosState.length);
       }
 
-      router.push(redirectPath);
+      router.push(buildPostSubmitRedirectPath(redirectPath, createMode ? "submitted" : "updated"));
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Unable to save car");
     } finally {
@@ -156,6 +160,24 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotos = [] 
   const totalPhotos = existingPhotosState.length + files.length;
   const remainingSlots = Math.max(MAX_PHOTOS - existingPhotosState.length - files.length, 0);
   const autoTitlePreview = buildListingTitlePreview(brandValue, modelValue, yearValue);
+  const submitButtonLabel = uploading
+    ? "Uploading photos..."
+    : isSubmitting
+      ? createMode
+        ? "Submitting listing..."
+        : "Saving..."
+      : createMode
+        ? "Submit car"
+        : "Save car";
+  const submitProgressMessage = uploading
+    ? createMode
+      ? "Uploading photos and finalizing your listing. You will be redirected to My cars when it is submitted."
+      : "Uploading photos and finalizing your changes."
+    : isSubmitting
+      ? createMode
+        ? "Submitting your car ad..."
+        : "Saving your changes..."
+      : null;
   const filePreviews = useMemo(
     () =>
       files.map((file, index) => ({
@@ -422,21 +444,21 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotos = [] 
             min={0}
             placeholder={deliveryAvailable ? "Enter delivery fee" : "Enable delivery to set fee"}
             disabled={!deliveryAvailable}
-            {...register("delivery_fee", { valueAsNumber: true })}
+            {...register("delivery_fee", optionalNumberField)}
           />
           {!deliveryAvailable ? <p className="text-xs text-gray-500">Leave blank when delivery is off.</p> : null}
         </div>
         <div className="space-y-2">
           <label className="text-sm font-semibold text-gray-700">Insurance fee (GHS)</label>
-          <Input type="number" min={0} {...register("insurance_fee", { valueAsNumber: true })} />
+          <Input type="number" min={0} placeholder="0" {...register("insurance_fee", optionalNumberField)} />
         </div>
         <div className="space-y-2">
           <label className="text-sm font-semibold text-gray-700">Deposit amount (GHS)</label>
-          <Input type="number" min={0} {...register("deposit_amount", { valueAsNumber: true })} />
+          <Input type="number" min={0} placeholder="0" {...register("deposit_amount", optionalNumberField)} />
         </div>
         <div className="space-y-2">
           <label className="text-sm font-semibold text-gray-700">Outside Accra surcharge (GHS)</label>
-          <Input type="number" min={0} {...register("outside_accra_fee", { valueAsNumber: true })} />
+          <Input type="number" min={0} placeholder="0" {...register("outside_accra_fee", optionalNumberField)} />
           <p className="text-xs text-gray-500">
             Added automatically when the renter selects a trip use location outside Greater Accra.
           </p>
@@ -628,9 +650,10 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotos = [] 
       </div>
 
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
+      {submitProgressMessage ? <p className="text-sm text-gray-600">{submitProgressMessage}</p> : null}
       <div className="flex items-center gap-3">
         <Button type="submit" disabled={isSubmitting || uploading}>
-          {isSubmitting || uploading ? "Saving..." : "Save car"}
+          {submitButtonLabel}
         </Button>
         <Button type="button" variant="secondary" onClick={() => router.push(redirectPath)}>
           Cancel
@@ -656,4 +679,28 @@ async function uploadPhotos(carId: string, files: File[], existingPhotoCount = 0
       throw new Error(payload.message ?? "Unable to upload photo");
     }
   }
+}
+
+function parseOptionalNumberInput(value: unknown) {
+  if (value === null || value === undefined || value === "") return undefined;
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function normalizeOptionalFeeDefault(value: unknown) {
+  const parsed = parseOptionalNumberInput(value);
+  if (parsed === undefined) return undefined;
+  return parsed === 0 ? undefined : parsed;
+}
+
+function buildPostSubmitRedirectPath(basePath: string, notice: "submitted" | "updated") {
+  if (!basePath.startsWith("/host/cars")) return basePath;
+
+  const [pathWithQuery, hash = ""] = basePath.split("#");
+  const [pathname, query = ""] = pathWithQuery.split("?");
+  const search = new URLSearchParams(query);
+  search.set("notice", notice);
+  const nextQuery = search.toString();
+
+  return `${pathname}${nextQuery ? `?${nextQuery}` : ""}${hash ? `#${hash}` : ""}`;
 }

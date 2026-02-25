@@ -9,7 +9,16 @@ import { CarActions } from "@/components/dashboard/car-actions";
 import { loadOwnerCarsWithFavorites } from "@/lib/owner-cars";
 import { formatCurrency } from "@/lib/utils";
 
-export default async function DashboardCarsPage() {
+type PageProps = {
+  searchParams?: { notice?: string } | Promise<{ notice?: string }>;
+};
+
+export default async function DashboardCarsPage({ searchParams }: PageProps) {
+  const resolvedSearch = (await searchParams) ?? {};
+  const notice =
+    resolvedSearch.notice === "submitted" || resolvedSearch.notice === "updated"
+      ? resolvedSearch.notice
+      : undefined;
   const { cars, favoriteCounts } = await loadOwnerCarsWithFavorites();
 
   return (
@@ -26,6 +35,13 @@ export default async function DashboardCarsPage() {
           </Link>
         </Button>
       </div>
+      {notice ? (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          {notice === "submitted"
+            ? "Your car ad has been uploaded successfully and is now under review. It will appear publicly after approval."
+            : "Your car changes were saved and the listing is now under review until approval."}
+        </div>
+      ) : null}
       <Card className="overflow-hidden">
         <CardHeader>
           <CardTitle className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
