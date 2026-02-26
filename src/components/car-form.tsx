@@ -82,7 +82,7 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotos = [] 
       brand: "",
       model: "",
       car_year: new Date().getFullYear(),
-      seats: 4,
+      seats: 5,
       transmission: "automatic",
       fuel_type: "petrol",
       features: [],
@@ -144,7 +144,15 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotos = [] 
         await uploadPhotos(newCarId, files, existingPhotosState.length);
       }
 
-      router.push(buildPostSubmitRedirectPath(redirectPath, createMode ? "submitted" : "updated"));
+      const postSubmitRedirectPath = buildPostSubmitRedirectPath(
+        redirectPath,
+        createMode ? "submitted" : "updated",
+      );
+      if (createMode) {
+        window.location.assign(postSubmitRedirectPath);
+      } else {
+        router.push(postSubmitRedirectPath);
+      }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Unable to save car");
     } finally {
