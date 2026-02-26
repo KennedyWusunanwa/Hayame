@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm } from "react-hook-form";
+import { type FieldErrors, useForm } from "react-hook-form";
 import { z } from "zod";
 import { carFormSchema } from "@/lib/validators";
 import { Input } from "@/components/ui/input";
@@ -63,7 +63,7 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotos = [] 
   const redirectPath = redirectTo ?? "/host/cars";
   const createMode = !carId;
   const { regions, citiesByRegion } = useLocations();
-  const { makes } = useCarCatalog();
+  const { makes, error: carCatalogError } = useCarCatalog();
   const optionalNumberField = {
     setValueAs: parseOptionalNumberInput,
   } as const;
@@ -101,6 +101,15 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotos = [] 
       outside_accra_fee: normalizeOptionalFeeDefault(defaultValues?.outside_accra_fee),
     },
   });
+
+  // Custom-controlled fields still need registration so validation/submission is consistent.
+  useEffect(() => {
+    register("region");
+    register("city");
+    register("brand");
+    register("model");
+    register("features");
+  }, [register]);
 
   const onSubmit = async (values: FormValues) => {
     setError(null);
@@ -256,6 +265,10 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotos = [] 
     setFiles((prev) => prev.filter((_, fileIndex) => fileIndex !== index));
   };
 
+  const onInvalidSubmit = (formErrors: FieldErrors<FormValues>) => {
+    setError(getFirstFormValidationMessage(formErrors));
+  };
+
   const removeExistingPhoto = async (photoId: string) => {
     const photo = existingPhotosState.find((item) => item.id === photoId);
     if (!photo) return;
@@ -324,7 +337,7 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotos = [] 
   };
 
   return (
-    <form className="space-y-4" onSubmit={handleSubmit(onSubmit)}>
+    <form className="space-y-4" noValidate onSubmit={handleSubmit(onSubmit, onInvalidSubmit)}>
       <div className="grid gap-4 md:grid-cols-2">
         <div className="space-y-2">
           <label className="text-sm font-semibold text-gray-700">Listing title (auto)</label>
@@ -336,14 +349,17 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotos = [] 
         <div className="space-y-2">
           <label className="text-sm font-semibold text-gray-700">Daily price (GHS)</label>
           <Input type="number" min={50} {...register("daily_price", { valueAsNumber: true })} />
+          {errors.daily_price?.message ? (
+            <p className="text-xs text-red-600">{errors.daily_price.message}</p>
+          ) : null}
         </div>
         <div className="space-y-2">
           <label className="text-sm font-semibold text-gray-700">Region</label>
           <Select
             value={watch("region") ?? ""}
             onChange={(e) => {
-              setValue("region", e.target.value);
-              setValue("city", "");
+              setValue("region", e.target.value, { shouldDirty: true, shouldValidate: true });
+              setValue("city", "", { shouldDirty: true, shouldValidate: true });
             }}
           >
             <option value="">Select region</option>
@@ -353,12 +369,13 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotos = [] 
               </option>
             ))}
           </Select>
+          {errors.region?.message ? <p className="text-xs text-red-600">{errors.region.message}</p> : null}
         </div>
         <div className="space-y-2">
           <label className="text-sm font-semibold text-gray-700">City</label>
           <Select
             value={watch("city") ?? ""}
-            onChange={(e) => setValue("city", e.target.value)}
+            onChange={(e) => setValue("city", e.target.value, { shouldDirty: true, shouldValidate: true })}
             disabled={!watch("region")}
           >
             <option value="">Select city</option>
@@ -368,6 +385,7 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotos = [] 
               </option>
             ))}
           </Select>
+          {errors.city?.message ? <p className="text-xs text-red-600">{errors.city.message}</p> : null}
         </div>
         <div className="space-y-2">
           <label className="text-sm font-semibold text-gray-700">Car type</label>
@@ -385,8 +403,8 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotos = [] 
           <Select
             value={watch("brand") ?? ""}
             onChange={(e) => {
-              setValue("brand", e.target.value, { shouldValidate: true });
-              setValue("model", "", { shouldValidate: true });
+              setValue("brand", e.target.value, { shouldDirty: true, shouldValidate: true });
+              setValue("model", "", { shouldDirty: true, shouldValidate: true });
             }}
           >
             <option value="">Select brand</option>
@@ -397,12 +415,15 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotos = [] 
             ))}
           </Select>
           {errors.brand?.message ? <p className="text-xs text-red-600">{errors.brand.message}</p> : null}
+          {carCatalogError ? (
+            <p className="text-xs text-red-600">Car catalog failed to load. Refresh and try again.</p>
+          ) : null}
         </div>
         <div className="space-y-2">
           <label className="text-sm font-semibold text-gray-700">Model *</label>
           <Select
             value={watch("model") ?? ""}
-            onChange={(e) => setValue("model", e.target.value, { shouldValidate: true })}
+            onChange={(e) => setValue("model", e.target.value, { shouldDirty: true, shouldValidate: true })}
             disabled={!watch("brand")}
           >
             <option value="">Select model</option>
@@ -496,6 +517,7 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotos = [] 
       <div className="space-y-2">
         <label className="text-sm font-semibold text-gray-700">Description</label>
         <Textarea rows={4} placeholder="Describe your car, pickup and rules" {...register("description")} />
+        {errors.description?.message ? <p className="text-xs text-red-600">{errors.description.message}</p> : null}
       </div>
 
       <div className="space-y-3">
@@ -514,7 +536,7 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotos = [] 
                     } else {
                       set.add(feature);
                     }
-                    setValue("features", Array.from(set));
+                    setValue("features", Array.from(set), { shouldDirty: true });
                   }}
                 />
                 {feature}
@@ -536,7 +558,7 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotos = [] 
                     } else {
                       set.add(feature);
                     }
-                    setValue("features", Array.from(set));
+                    setValue("features", Array.from(set), { shouldDirty: true });
                   }}
                 />
                 {feature}
@@ -741,6 +763,29 @@ function mapUploadErrorMessage(status: number, fallback: string) {
   if (status === 401) return "Your session expired. Please refresh the page and try again.";
   if (status === 403) return "You do not have permission to upload photos for this car.";
   return fallback;
+}
+
+function getFirstFormValidationMessage(errors: FieldErrors<FormValues>) {
+  const orderedFields: Array<{ key: keyof FormValues; label: string }> = [
+    { key: "region", label: "Region" },
+    { key: "city", label: "City" },
+    { key: "brand", label: "Brand" },
+    { key: "model", label: "Model" },
+    { key: "car_year", label: "Car year" },
+    { key: "daily_price", label: "Daily price" },
+    { key: "description", label: "Description" },
+    { key: "seats", label: "Seats" },
+  ];
+
+  for (const field of orderedFields) {
+    const entry = errors[field.key];
+    const message = entry && typeof entry === "object" && "message" in entry ? entry.message : undefined;
+    if (typeof message === "string" && message.trim()) {
+      return `${field.label}: ${message}`;
+    }
+  }
+
+  return "Please complete the required fields and fix any errors, then try again.";
 }
 
 function parseOptionalNumberInput(value: unknown) {
