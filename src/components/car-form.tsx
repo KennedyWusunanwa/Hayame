@@ -49,12 +49,15 @@ const priorityFeatures = [
 
 const MIN_PHOTOS = 5;
 const MAX_PHOTOS = 7;
+// Vercel/Serverless request limits commonly fail on larger mobile photos before our API can respond.
+const MAX_PHOTO_FILE_BYTES = 4 * 1024 * 1024;
 
 export function CarForm({ carId, defaultValues, redirectTo, existingPhotos = [] }: Props) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [files, setFiles] = useState<File[]>([]);
   const [existingPhotosState, setExistingPhotosState] = useState<ExistingPhoto[]>(existingPhotos);
+  const [draftCarId, setDraftCarId] = useState<string | null>(carId ?? null);
   const [photoMutatingId, setPhotoMutatingId] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const redirectPath = redirectTo ?? "/host/cars";
@@ -124,8 +127,9 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotos = [] 
       return;
     }
     try {
-      const res = await fetch(carId ? `/api/cars/${carId}` : "/api/cars", {
-        method: carId ? "PUT" : "POST",
+      const targetCarId = carId ?? draftCarId;
+      const res = await fetch(targetCarId ? `/api/cars/${targetCarId}` : "/api/cars", {
+        method: targetCarId ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...payloadValues,
@@ -137,11 +141,17 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotos = [] 
         throw new Error(message);
       }
       const payload = (await res.json().catch(() => ({}))) as { data?: { id?: string } };
-      const newCarId = carId ?? payload?.data?.id;
+      const newCarId = targetCarId ?? payload?.data?.id;
+      if (!carId && newCarId) {
+        setDraftCarId(newCarId);
+      }
 
       if (newCarId && files.length > 0) {
         setUploading(true);
-        await uploadPhotos(newCarId, files, existingPhotosState.length);
+        await uploadPhotos(newCarId, files, existingPhotosState.length, ({ uploadedPhoto, file }) => {
+          setExistingPhotosState((prev) => [...prev, uploadedPhoto]);
+          setFiles((prev) => prev.filter((candidate) => candidate !== file));
+        });
       }
 
       const postSubmitRedirectPath = buildPostSubmitRedirectPath(
@@ -216,7 +226,9 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotos = [] 
       return;
     }
 
-    const deduped = selected.filter(
+    const oversized = selected.filter((file) => file.size > MAX_PHOTO_FILE_BYTES);
+    const allowedBySize = selected.filter((file) => file.size <= MAX_PHOTO_FILE_BYTES);
+    const deduped = allowedBySize.filter(
       (file) =>
         !files.some(
           (current) =>
@@ -228,7 +240,12 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotos = [] 
 
     const nextFiles = [...files, ...deduped.slice(0, room)];
     setFiles(nextFiles);
-    if (deduped.length > room) {
+    if (oversized.length > 0) {
+      const largestMb = Math.max(...oversized.map((file) => file.size)) / (1024 * 1024);
+      setError(
+        `Some photos are too large to upload. Please use images under 4MB each (largest selected: ${largestMb.toFixed(1)}MB).`,
+      );
+    } else if (deduped.length > room) {
       setError(`Only ${MAX_PHOTOS} photos are allowed. Extra files were ignored.`);
     } else {
       setError(null);
@@ -242,8 +259,9 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotos = [] 
   const removeExistingPhoto = async (photoId: string) => {
     const photo = existingPhotosState.find((item) => item.id === photoId);
     if (!photo) return;
+    const managedCarId = carId ?? draftCarId;
 
-    if (!carId) {
+    if (!managedCarId) {
       setExistingPhotosState((prev) => prev.filter((item) => item.id !== photoId));
       setError(null);
       return;
@@ -252,7 +270,7 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotos = [] 
     setPhotoMutatingId(photoId);
     setError(null);
     try {
-      const res = await fetch(`/api/cars/${carId}/photos`, {
+      const res = await fetch(`/api/cars/${managedCarId}/photos`, {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ photoId }),
@@ -270,7 +288,12 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotos = [] 
   };
 
   const replaceExistingPhoto = async (photoId: string, file: File) => {
-    if (!carId) return;
+    const managedCarId = carId ?? draftCarId;
+    if (!managedCarId) return;
+    if (file.size > MAX_PHOTO_FILE_BYTES) {
+      setError("Photo is too large to upload. Please use an image under 4MB.");
+      return;
+    }
     setPhotoMutatingId(photoId);
     setError(null);
     try {
@@ -278,16 +301,13 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotos = [] 
       formData.append("file", file);
       formData.append("replacePhotoId", photoId);
 
-      const res = await fetch(`/api/cars/${carId}/photos`, {
+      const res = await fetch(`/api/cars/${managedCarId}/photos`, {
         method: "POST",
         body: formData,
       });
-      const payload = (await res.json().catch(() => ({}))) as {
-        message?: string;
-        data?: ExistingPhoto;
-      };
+      const payload = (await parseApiResponsePayload(res)) as { message?: string; data?: ExistingPhoto };
       if (!res.ok) {
-        throw new Error(payload.message ?? "Unable to replace photo");
+        throw new Error(payload.message ?? mapUploadErrorMessage(res.status, "Unable to replace photo"));
       }
       if (!payload.data?.url) {
         throw new Error("Photo replacement failed");
@@ -541,6 +561,9 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotos = [] 
           Upload between {MIN_PHOTOS} and {MAX_PHOTOS} photos. Add clear exterior/interior photos
           before saving.
         </p>
+        <p className="text-xs text-gray-600">
+          If upload fails on mobile, use photos under 4MB each (phone images are sometimes too large).
+        </p>
         <div className="rounded-lg border border-border bg-gray-50 p-3">
           <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Listing quality checklist</p>
           <div className="mt-2 space-y-1 text-xs text-gray-700">
@@ -671,22 +694,53 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotos = [] 
   );
 }
 
-async function uploadPhotos(carId: string, files: File[], existingPhotoCount = 0) {
+async function uploadPhotos(
+  carId: string,
+  files: File[],
+  existingPhotoCount = 0,
+  onUploaded?: (params: { uploadedPhoto: ExistingPhoto; file: File }) => void,
+) {
   if (existingPhotoCount + files.length > MAX_PHOTOS) {
     throw new Error(`Maximum ${MAX_PHOTOS} photos allowed per listing.`);
   }
   for (const file of files) {
+    if (file.size > MAX_PHOTO_FILE_BYTES) {
+      throw new Error(`"${file.name}" is too large to upload. Please use a photo under 4MB.`);
+    }
     const formData = new FormData();
     formData.append("file", file);
     const res = await fetch(`/api/cars/${carId}/photos`, {
       method: "POST",
       body: formData,
     });
+    const payload = (await parseApiResponsePayload(res)) as { message?: string; data?: ExistingPhoto };
     if (!res.ok) {
-      const payload = (await res.json().catch(() => ({}))) as { message?: string };
-      throw new Error(payload.message ?? "Unable to upload photo");
+      throw new Error(payload.message ?? mapUploadErrorMessage(res.status, `Unable to upload "${file.name}"`));
     }
+    if (!payload.data?.id || !payload.data?.url) {
+      throw new Error(`Upload completed but no photo record was returned for "${file.name}".`);
+    }
+    onUploaded?.({ uploadedPhoto: payload.data, file });
   }
+}
+
+async function parseApiResponsePayload(res: Response) {
+  const contentType = res.headers.get("content-type") ?? "";
+  if (contentType.includes("application/json")) {
+    return res.json().catch(() => ({}));
+  }
+
+  const text = await res.text().catch(() => "");
+  return text ? { message: text.slice(0, 200) } : {};
+}
+
+function mapUploadErrorMessage(status: number, fallback: string) {
+  if (status === 413) {
+    return "Photo upload failed because the image file is too large. Please use a photo under 4MB.";
+  }
+  if (status === 401) return "Your session expired. Please refresh the page and try again.";
+  if (status === 403) return "You do not have permission to upload photos for this car.";
+  return fallback;
 }
 
 function parseOptionalNumberInput(value: unknown) {
