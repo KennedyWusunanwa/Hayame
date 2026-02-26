@@ -111,6 +111,7 @@ export async function PUT(req: Request, context: Params) {
       {
         id: user.id,
         full_name: (user.user_metadata as any)?.full_name ?? user.email,
+        is_host: true,
       },
       { onConflict: "id" },
     );

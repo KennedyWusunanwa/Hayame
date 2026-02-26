@@ -5,6 +5,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 const COOKIE_NAME = "admin_auth";
 const MAX_PHOTOS = 7;
+const MAX_PHOTO_FILE_BYTES = 4 * 1024 * 1024;
 
 function adminToken() {
   const username = process.env.ADMIN_USERNAME ?? "";
@@ -22,11 +23,22 @@ async function isAdmin() {
 }
 
 function getPhotoBucketName() {
-  return (
+  const configured =
+    process.env.NEXT_PUBLIC_SUPABASE_CAR_PHOTOS_BUCKET ||
+    process.env.SUPABASE_CAR_PHOTOS_BUCKET ||
     process.env.NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET ||
-    process.env.NEXT_PUBLIC_SUPABASE_AVATAR_BUCKET ||
-    "car-photos"
+    "";
+  const reservedBuckets = new Set(
+    [
+      process.env.NEXT_PUBLIC_SUPABASE_AVATAR_BUCKET,
+      process.env.NEXT_PUBLIC_SUPABASE_HOST_ID_BUCKET,
+      process.env.SUPABASE_HOST_ID_BUCKET,
+    ].filter(Boolean),
   );
+  if (!configured || reservedBuckets.has(configured)) {
+    return "car-photos";
+  }
+  return configured;
 }
 
 function getStoragePathFromPublicUrl(publicUrl: string, bucket: string): string | null {
@@ -43,27 +55,39 @@ function getStoragePathFromPublicUrl(publicUrl: string, bucket: string): string 
 
 async function canManageCar(carId: string) {
   const adminAllowed = await isAdmin();
-  const adminClient = createSupabaseAdminClient() as any;
-  const { data: car, error } = await adminClient.from("cars").select("id,owner_id").eq("id", carId).single();
-  if (error || !car) {
-    return { ok: false as const, status: 404, message: "Car not found", adminClient, car: null };
-  }
-
   if (adminAllowed) {
-    return { ok: true as const, adminClient, car };
+    try {
+      const adminClient = createSupabaseAdminClient() as any;
+      const { data: car, error } = await adminClient.from("cars").select("id,owner_id").eq("id", carId).single();
+      if (error || !car) {
+        return { ok: false as const, status: 404, message: "Car not found" };
+      }
+      return { ok: true as const, client: adminClient, car, isAdmin: true as const };
+    } catch {
+      return {
+        ok: false as const,
+        status: 500,
+        message: "Server storage configuration error. Missing service role key.",
+      };
+    }
   }
 
   const supabase = await createSupabaseServerClient();
+  const client = supabase as any;
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) {
-    return { ok: false as const, status: 401, message: "Unauthorized", adminClient, car };
+    return { ok: false as const, status: 401, message: "Unauthorized" };
+  }
+  const { data: car, error } = await client.from("cars").select("id,owner_id").eq("id", carId).single();
+  if (error || !car) {
+    return { ok: false as const, status: 404, message: "Car not found" };
   }
   if (car.owner_id !== user.id) {
-    return { ok: false as const, status: 403, message: "Forbidden", adminClient, car };
+    return { ok: false as const, status: 403, message: "Forbidden" };
   }
-  return { ok: true as const, adminClient, car };
+  return { ok: true as const, client, car, isAdmin: false as const };
 }
 
 type Params = {
@@ -83,10 +107,19 @@ export async function POST(req: Request, context: Params) {
     if (!(file instanceof File)) {
       return NextResponse.json({ message: "Missing file" }, { status: 400 });
     }
+    if (!file.type?.startsWith("image/")) {
+      return NextResponse.json({ message: "Only image files are allowed" }, { status: 400 });
+    }
+    if (file.size > MAX_PHOTO_FILE_BYTES) {
+      return NextResponse.json(
+        { message: "Photo upload failed because the image file is too large. Please use a photo under 4MB." },
+        { status: 413 },
+      );
+    }
 
     const replacePhotoId = String(formData.get("replacePhotoId") ?? "").trim() || null;
-    const adminClient = access.adminClient;
-    const existingPhotoCount = await adminClient
+    const client = access.client;
+    const existingPhotoCount = await client
       .from("car_photos")
       .select("id", { count: "exact", head: true })
       .eq("car_id", carId);
@@ -95,7 +128,7 @@ export async function POST(req: Request, context: Params) {
     }
 
     const oldPhoto = replacePhotoId
-      ? await adminClient
+      ? await client
           .from("car_photos")
           .select("id,url")
           .eq("id", replacePhotoId)
@@ -110,7 +143,7 @@ export async function POST(req: Request, context: Params) {
     const ext = (file.name.split(".").pop() ?? "jpg").toLowerCase();
     const path = `${access.car.owner_id}/${carId}/${Date.now()}-${crypto.randomUUID()}.${ext}`;
     const bytes = Buffer.from(await file.arrayBuffer());
-    const { error: uploadError } = await adminClient.storage.from(bucket).upload(path, bytes, {
+    const { error: uploadError } = await client.storage.from(bucket).upload(path, bytes, {
       cacheControl: "3600",
       contentType: file.type || "image/jpeg",
       upsert: false,
@@ -119,10 +152,10 @@ export async function POST(req: Request, context: Params) {
 
     const {
       data: { publicUrl },
-    } = adminClient.storage.from(bucket).getPublicUrl(path);
+    } = client.storage.from(bucket).getPublicUrl(path);
 
     if (replacePhotoId) {
-      const { data: updatedPhoto, error: updateError } = await adminClient
+      const { data: updatedPhoto, error: updateError } = await client
         .from("car_photos")
         .update({ url: publicUrl })
         .eq("id", replacePhotoId)
@@ -130,31 +163,33 @@ export async function POST(req: Request, context: Params) {
         .select("id,url")
         .single();
       if (updateError) {
-        await adminClient.storage.from(bucket).remove([path]);
+        await client.storage.from(bucket).remove([path]);
         throw updateError;
       }
 
       const oldPath = getStoragePathFromPublicUrl(oldPhoto.data.url, bucket);
       if (oldPath) {
-        await adminClient.storage.from(bucket).remove([oldPath]);
+        await client.storage.from(bucket).remove([oldPath]);
       }
 
       return NextResponse.json({ data: updatedPhoto });
     }
 
-    const { data: insertedPhoto, error: insertError } = await adminClient
+    const { data: insertedPhoto, error: insertError } = await client
       .from("car_photos")
       .insert({ car_id: carId, url: publicUrl })
       .select("id,url")
       .single();
     if (insertError) {
-      await adminClient.storage.from(bucket).remove([path]);
+      await client.storage.from(bucket).remove([path]);
       throw insertError;
     }
 
     return NextResponse.json({ data: insertedPhoto });
   } catch (error: any) {
-    return NextResponse.json({ message: error.message ?? "Failed to upload photo" }, { status: 400 });
+    const message = error?.message ?? "Failed to upload photo";
+    const status = /too large/i.test(message) ? 413 : 400;
+    return NextResponse.json({ message }, { status });
   }
 }
 
@@ -172,8 +207,8 @@ export async function DELETE(req: Request, context: Params) {
       return NextResponse.json({ message: "Missing photoId" }, { status: 400 });
     }
 
-    const adminClient = access.adminClient;
-    const { data: photo } = await adminClient
+    const client = access.client;
+    const { data: photo } = await client
       .from("car_photos")
       .select("id,url")
       .eq("id", photoId)
@@ -183,7 +218,7 @@ export async function DELETE(req: Request, context: Params) {
       return NextResponse.json({ message: "Photo not found" }, { status: 404 });
     }
 
-    const { error: deleteError } = await adminClient
+    const { error: deleteError } = await client
       .from("car_photos")
       .delete()
       .eq("id", photoId)
@@ -193,7 +228,7 @@ export async function DELETE(req: Request, context: Params) {
     const bucket = getPhotoBucketName();
     const path = getStoragePathFromPublicUrl(photo.url, bucket);
     if (path) {
-      await adminClient.storage.from(bucket).remove([path]);
+      await client.storage.from(bucket).remove([path]);
     }
 
     return NextResponse.json({ ok: true });

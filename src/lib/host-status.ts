@@ -16,9 +16,18 @@ export async function getHostStatus(
     .maybeSingle();
 
   if (error) {
-    return { isHost: false, status: null };
+    // Backward-compatible fallback for older records that may only set profiles.is_host.
+    const { data: profile } = await supabase.from("profiles").select("is_host").eq("id", userId).maybeSingle();
+    const isHost = Boolean((profile as { is_host?: boolean } | null)?.is_host);
+    return { isHost, status: isHost ? "approved" : null };
   }
 
   const status = (data as { status?: HostApplicationStatus } | null)?.status ?? null;
-  return { isHost: status === "approved", status };
+  if (status) {
+    return { isHost: status === "approved", status };
+  }
+
+  const { data: profile } = await supabase.from("profiles").select("is_host").eq("id", userId).maybeSingle();
+  const isHost = Boolean((profile as { is_host?: boolean } | null)?.is_host);
+  return { isHost, status: isHost ? "approved" : null };
 }

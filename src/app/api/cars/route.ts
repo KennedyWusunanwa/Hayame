@@ -202,6 +202,7 @@ export async function POST(req: Request) {
       {
         id: user.id,
         full_name: (user.user_metadata as any)?.full_name ?? user.email,
+        is_host: true,
       },
       { onConflict: "id" },
     );
