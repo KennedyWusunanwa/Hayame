@@ -81,7 +81,7 @@ export function HeroSearchBar() {
       <div className="mx-auto max-w-5xl overflow-visible rounded-3xl border border-white/10 bg-[#0a2137] px-3 py-3 text-white shadow-xl sm:px-4 sm:py-4">
         <div className="lg:hidden">
           <form
-            className="flex items-center gap-2"
+            className="flex w-full items-center gap-2"
             onSubmit={(event) => {
               event.preventDefault();
               onSearch();
@@ -102,17 +102,21 @@ export function HeroSearchBar() {
                 <Button
                   type="button"
                   variant="outline"
-                  className="h-12 w-12 rounded-full border-white/20 bg-[#12263a] px-0 text-white hover:bg-[#163049] hover:text-white"
+                  className="h-12 w-12 shrink-0 rounded-full border-white/20 bg-[#12263a] px-0 text-white hover:bg-[#163049] hover:text-white"
                 >
                   <SlidersHorizontal className="h-5 w-5" />
                 </Button>
               </SheetTrigger>
-              <SheetContent side="right" className="w-[92vw] max-w-sm p-4">
+              <SheetContent
+                side="right"
+                className="w-[92vw] max-w-sm overflow-hidden p-4 pb-0"
+                onOpenAutoFocus={(event) => event.preventDefault()}
+              >
                 <SheetHeader>
                   <SheetTitle>Search filters</SheetTitle>
                 </SheetHeader>
 
-                <div className="mt-4 flex max-h-[calc(100vh-12rem)] flex-col gap-3 overflow-y-auto pr-1">
+                <div className="mt-4 flex flex-1 flex-col gap-3 overflow-y-auto pb-4 pr-1">
                   <div className="space-y-1.5">
                     <label className="text-sm font-semibold text-gray-800">Region</label>
                     <Select
@@ -192,27 +196,29 @@ export function HeroSearchBar() {
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1.5">
+                    <div className="min-w-0 space-y-1.5">
                       <label className="text-sm font-semibold text-gray-800">Start date</label>
                       <Input
                         type="date"
                         value={startDate}
+                        className="min-w-0"
                         onChange={(event) => setStartDate(event.target.value)}
                       />
                     </div>
-                    <div className="space-y-1.5">
+                    <div className="min-w-0 space-y-1.5">
                       <label className="text-sm font-semibold text-gray-800">End date</label>
                       <Input
                         type="date"
                         value={endDate}
                         min={startDate || undefined}
+                        className="min-w-0"
                         onChange={(event) => setEndDate(event.target.value)}
                       />
                     </div>
                   </div>
                 </div>
 
-                <div className="mt-4 grid grid-cols-2 gap-2">
+                <div className="sticky bottom-0 left-0 right-0 mt-2 grid grid-cols-2 gap-2 border-t border-border bg-white py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
                   <SheetClose asChild>
                     <Button type="button" variant="outline">
                       Close
@@ -233,7 +239,7 @@ export function HeroSearchBar() {
 
             <Button
               type="submit"
-              className="h-12 rounded-full border border-brand bg-brand px-4 text-sm font-semibold text-white shadow-soft hover:bg-white hover:text-brand"
+              className="h-12 shrink-0 rounded-full border border-brand bg-brand px-4 text-sm font-semibold text-white shadow-soft hover:bg-white hover:text-brand"
             >
               Search
             </Button>
