@@ -2,9 +2,8 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { BadgeCheck, MapPin, Star } from "lucide-react";
+import { BadgeCheck } from "lucide-react";
 import { FavoriteButton } from "@/components/favorite-button";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { deriveHostBadgeType, hostBadgeLabel } from "@/lib/host-badges";
 import { formatCurrency } from "@/lib/utils";
@@ -20,21 +19,27 @@ export function CarCard({ car, isFavorite = false, onToggleFavorite }: Props) {
   const handleFavorite = (next: boolean) => {
     onToggleFavorite?.(car.id, next);
   };
+
   const hostType = deriveHostBadgeType({ hostType: car.host_type });
   const hostLabel = hostBadgeLabel(hostType);
+  const yearMatch = car.title.match(/\b(?:19|20)\d{2}\b/);
+  const year = yearMatch?.[0];
+  const displayTitle = year ? car.title.replace(year, "").replace(/\s+/g, " ").trim() : car.title;
+  const location = [car.city, car.region].filter(Boolean).join(", ");
+  const priceText = formatCurrency(car.daily_price);
 
   return (
     <Link
       href={`/cars/${car.id}`}
-      className="group flex flex-col overflow-hidden rounded-2xl border border-border bg-white shadow-card card-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-2"
+      className="group block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-2"
       aria-label={`View ${car.title}`}
     >
-      <div className="relative h-56 w-full overflow-hidden bg-gray-100 sm:h-48">
+      <div className="relative aspect-[4/3] w-full overflow-hidden rounded-xl bg-gray-100">
         <Image
           src={car.image_url ?? "/car-placeholder.jpg"}
           alt={car.title}
           fill
-          className="h-full w-full object-cover object-[center_58%] transition-transform duration-200 group-hover:scale-105"
+          className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
           sizes="(max-width:768px) 100vw, 400px"
         />
         <div
@@ -48,46 +53,36 @@ export function CarCard({ car, isFavorite = false, onToggleFavorite }: Props) {
             carId={car.id}
             initialIsFavorited={isFavorite}
             onToggle={handleFavorite}
-            size="sm"
-            className="bg-white/95"
+            size="md"
+            className="h-10 w-10 border border-slate-200 bg-white/90 text-slate-700 shadow-md backdrop-blur hover:text-slate-900"
           />
         </div>
-        {car.car_type ? (
-          <Badge variant="muted" className="absolute left-3 top-3">
-            {car.car_type}
-          </Badge>
-        ) : null}
       </div>
-      <div className="flex flex-1 flex-col gap-2 p-4">
-        <div className="flex items-start justify-between gap-2">
-          <div>
-            <h3 className="text-lg font-semibold text-foreground">{car.title}</h3>
-            <p className="flex items-center text-sm text-gray-600">
-              <MapPin className="mr-1 h-4 w-4 text-brand" />
-              {car.city}, {car.region}
-            </p>
-            {hostLabel ? (
-              <Badge className="mt-2 inline-flex items-center gap-1 bg-brand text-white">
-                <BadgeCheck className="h-3 w-3" />
-                {hostLabel}
-              </Badge>
-            ) : null}
-          </div>
-          {car.rating ? (
-            <div className="flex items-center gap-1 text-sm font-semibold text-gray-700">
-              <Star className="h-4 w-4 text-amber-500" />
-              {car.rating}
-            </div>
+
+      <div className="pt-3.5 space-y-1.5">
+        <h3 className="line-clamp-1 text-lg font-semibold leading-tight text-foreground">
+          {displayTitle}
+        </h3>
+
+        <p className="line-clamp-1 text-sm font-normal leading-tight text-gray-600">
+          {year ? `${year} - ` : ""}
+          {location}
+        </p>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {hostLabel ? (
+            <Badge className="inline-flex items-center gap-1.5 rounded-lg bg-slate-100 px-2.5 py-1 text-slate-900">
+              <BadgeCheck className="h-3.5 w-3.5" />
+              {hostLabel}
+            </Badge>
           ) : null}
         </div>
-        <p className="text-sm text-gray-600 line-clamp-2">{car.description}</p>
-        <div className="mt-auto flex items-center justify-between">
-          <div className="text-base font-semibold text-foreground">
-            {formatCurrency(car.daily_price)} <span className="text-sm text-gray-500">/ day</span>
+
+        <div className="flex items-end justify-between gap-3 pt-1">
+          <p className="min-w-0 flex-1 text-sm text-gray-600 line-clamp-2">{car.description}</p>
+          <div className="shrink-0 text-right text-base font-semibold text-foreground">
+            {priceText} <span className="text-sm text-[#0e86d4]">/ day</span>
           </div>
-          <Button asChild size="sm" className="shadow-soft">
-            <span>Book Now</span>
-          </Button>
         </div>
       </div>
     </Link>
