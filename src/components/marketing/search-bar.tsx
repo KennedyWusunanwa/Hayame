@@ -195,12 +195,18 @@ export function HeroSearchBar() {
                     </Select>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 gap-3 min-[480px]:grid-cols-2">
                     <div className="min-w-0 space-y-1.5">
                       <label className="text-sm font-semibold text-gray-800">Start date</label>
                       <Input
-                        type="date"
+                        type="text"
                         value={startDate}
+                        placeholder="dd/mm/yy"
+                        inputMode="numeric"
+                        onFocus={(event) => (event.currentTarget.type = "date")}
+                        onBlur={(event) => {
+                          if (!event.currentTarget.value) event.currentTarget.type = "text";
+                        }}
                         className="min-w-0"
                         onChange={(event) => setStartDate(event.target.value)}
                       />
@@ -208,8 +214,14 @@ export function HeroSearchBar() {
                     <div className="min-w-0 space-y-1.5">
                       <label className="text-sm font-semibold text-gray-800">End date</label>
                       <Input
-                        type="date"
+                        type="text"
                         value={endDate}
+                        placeholder="dd/mm/yy"
+                        inputMode="numeric"
+                        onFocus={(event) => (event.currentTarget.type = "date")}
+                        onBlur={(event) => {
+                          if (!event.currentTarget.value) event.currentTarget.type = "text";
+                        }}
                         min={startDate || undefined}
                         className="min-w-0"
                         onChange={(event) => setEndDate(event.target.value)}
