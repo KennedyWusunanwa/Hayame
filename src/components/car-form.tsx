@@ -51,17 +51,20 @@ const MIN_PHOTOS = 5;
 const MAX_PHOTOS = 7;
 // Vercel/Serverless request limits commonly fail on larger mobile photos before our API can respond.
 const MAX_PHOTO_FILE_BYTES = 4 * 1024 * 1024;
+const PHOTO_UPLOAD_TIMEOUT_MS = 30_000;
 
 export function CarForm({ carId, defaultValues, redirectTo, existingPhotos = [] }: Props) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
+  const [photoWarning, setPhotoWarning] = useState<string | null>(null);
   const [files, setFiles] = useState<File[]>([]);
   const [existingPhotosState, setExistingPhotosState] = useState<ExistingPhoto[]>(existingPhotos);
   const [draftCarId, setDraftCarId] = useState<string | null>(carId ?? null);
   const [photoMutatingId, setPhotoMutatingId] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
-  const redirectPath = redirectTo ?? "/host/cars";
   const createMode = !carId;
+  const redirectPath = redirectTo ?? "/host/cars";
+  const postSubmitBasePath = redirectTo ?? "/host";
   const { regions, citiesByRegion } = useLocations();
   const { makes, error: carCatalogError } = useCarCatalog();
   const optionalNumberField = {
@@ -113,6 +116,7 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotos = [] 
 
   const onSubmit = async (values: FormValues) => {
     setError(null);
+    setPhotoWarning(null);
     const computedTitle = buildListingTitle(values.brand, values.model, values.car_year);
     if (!computedTitle) {
       setError("Brand, model and year are required to generate the listing title.");
@@ -125,15 +129,16 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotos = [] 
     };
 
     const totalPhotos = existingPhotosState.length + files.length;
+    const nonBlockingWarnings: string[] = [];
     if (totalPhotos < MIN_PHOTOS) {
-      setError(
-        `At least ${MIN_PHOTOS} photos are required before submission. Current total: ${totalPhotos}.`,
+      nonBlockingWarnings.push(
+        `Submitted with ${totalPhotos} photo(s). Listings usually pass approval faster with at least ${MIN_PHOTOS} clear photos.`,
       );
-      return;
     }
     if (totalPhotos > MAX_PHOTOS) {
-      setError(`Maximum ${MAX_PHOTOS} photos allowed. Current total: ${totalPhotos}.`);
-      return;
+      nonBlockingWarnings.push(
+        `Only ${MAX_PHOTOS} photos can be kept per listing. Extra files will be skipped during upload.`,
+      );
     }
     try {
       const targetCarId = carId ?? draftCarId;
@@ -157,21 +162,24 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotos = [] 
 
       if (newCarId && files.length > 0) {
         setUploading(true);
-        await uploadPhotos(newCarId, files, existingPhotosState.length, ({ uploadedPhoto, file }) => {
+        const uploadResult = await uploadPhotos(newCarId, files, existingPhotosState.length, ({ uploadedPhoto, file }) => {
           setExistingPhotosState((prev) => [...prev, uploadedPhoto]);
           setFiles((prev) => prev.filter((candidate) => candidate !== file));
         });
+        if (uploadResult.warning) {
+          nonBlockingWarnings.push(uploadResult.warning);
+        }
+      }
+
+      if (nonBlockingWarnings.length > 0) {
+        setPhotoWarning(nonBlockingWarnings.join(" "));
       }
 
       const postSubmitRedirectPath = buildPostSubmitRedirectPath(
-        redirectPath,
+        postSubmitBasePath,
         createMode ? "submitted" : "updated",
       );
-      if (createMode) {
-        window.location.assign(postSubmitRedirectPath);
-      } else {
-        router.push(postSubmitRedirectPath);
-      }
+      navigateAfterSubmit(router, postSubmitRedirectPath);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Unable to save car");
     } finally {
@@ -198,7 +206,7 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotos = [] 
         : "Save car";
   const submitProgressMessage = uploading
     ? createMode
-      ? "Uploading photos and finalizing your listing. You will be redirected to My cars when it is submitted."
+      ? "Uploading photos and finalizing your listing. You will be redirected to your dashboard when it is submitted."
       : "Uploading photos and finalizing your changes."
     : isSubmitting
       ? createMode
@@ -231,7 +239,7 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotos = [] 
     if (selected.length === 0) return;
     const room = Math.max(MAX_PHOTOS - existingPhotosState.length - files.length, 0);
     if (room <= 0) {
-      setError(`You already have ${MAX_PHOTOS} photos. Remove one before adding another.`);
+      setPhotoWarning(`You already have ${MAX_PHOTOS} photos. Remove one before adding another.`);
       return;
     }
 
@@ -251,13 +259,13 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotos = [] 
     setFiles(nextFiles);
     if (oversized.length > 0) {
       const largestMb = Math.max(...oversized.map((file) => file.size)) / (1024 * 1024);
-      setError(
+      setPhotoWarning(
         `Some photos are too large to upload. Please use images under 4MB each (largest selected: ${largestMb.toFixed(1)}MB).`,
       );
     } else if (deduped.length > room) {
-      setError(`Only ${MAX_PHOTOS} photos are allowed. Extra files were ignored.`);
+      setPhotoWarning(`Only ${MAX_PHOTOS} photos are allowed. Extra files were ignored.`);
     } else {
-      setError(null);
+      setPhotoWarning(null);
     }
   };
 
@@ -304,7 +312,7 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotos = [] 
     const managedCarId = carId ?? draftCarId;
     if (!managedCarId) return;
     if (file.size > MAX_PHOTO_FILE_BYTES) {
-      setError("Photo is too large to upload. Please use an image under 4MB.");
+      setPhotoWarning("Photo is too large to upload. Please use an image under 4MB.");
       return;
     }
     setPhotoMutatingId(photoId);
@@ -580,8 +588,12 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotos = [] 
           }}
         />
         <p className="text-xs text-gray-600">
-          Upload between {MIN_PHOTOS} and {MAX_PHOTOS} photos. Add clear exterior/interior photos
-          before saving.
+          Recommended: upload {MIN_PHOTOS} to {MAX_PHOTOS} photos with clear exterior/interior coverage
+          for faster approval.
+        </p>
+        <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          Photos are not auto-rejected during upload. Listings with low-quality photos (for example blurry shots,
+          poor lighting, wrong framing/centering, or too few angles) may fail approval.
         </p>
         <p className="text-xs text-gray-600">
           If upload fails on mobile, use photos under 4MB each (phone images are sometimes too large).
@@ -601,7 +613,7 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotos = [] 
           </div>
         </div>
         <p className="text-xs font-semibold text-gray-700">
-          Photos total: {totalPhotos} / {MIN_PHOTOS} minimum / {MAX_PHOTOS} max
+          Photos total: {totalPhotos} / {MIN_PHOTOS} recommended minimum / {MAX_PHOTOS} max
         </p>
         {remainingSlots > 0 ? (
           <p className="text-xs text-gray-600">You can add {remainingSlots} more photo(s).</p>
@@ -703,6 +715,7 @@ export function CarForm({ carId, defaultValues, redirectTo, existingPhotos = [] 
       </div>
 
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
+      {photoWarning ? <p className="text-sm text-amber-700">{photoWarning}</p> : null}
       {submitProgressMessage ? <p className="text-sm text-gray-600">{submitProgressMessage}</p> : null}
       <div className="flex items-center gap-3">
         <Button type="submit" disabled={isSubmitting || uploading}>
@@ -722,28 +735,67 @@ async function uploadPhotos(
   existingPhotoCount = 0,
   onUploaded?: (params: { uploadedPhoto: ExistingPhoto; file: File }) => void,
 ) {
-  if (existingPhotoCount + files.length > MAX_PHOTOS) {
-    throw new Error(`Maximum ${MAX_PHOTOS} photos allowed per listing.`);
-  }
+  const sizeSkipped: string[] = [];
+  const failedUploads: string[] = [];
+  let skippedForLimit = 0;
+  let currentPhotoCount = existingPhotoCount;
+
   for (const file of files) {
-    if (file.size > MAX_PHOTO_FILE_BYTES) {
-      throw new Error(`"${file.name}" is too large to upload. Please use a photo under 4MB.`);
+    if (currentPhotoCount >= MAX_PHOTOS) {
+      skippedForLimit += 1;
+      continue;
     }
+    if (file.size > MAX_PHOTO_FILE_BYTES) {
+      sizeSkipped.push(file.name);
+      continue;
+    }
+
     const formData = new FormData();
     formData.append("file", file);
-    const res = await fetch(`/api/cars/${carId}/photos`, {
-      method: "POST",
-      body: formData,
-    });
-    const payload = (await parseApiResponsePayload(res)) as { message?: string; data?: ExistingPhoto };
-    if (!res.ok) {
-      throw new Error(payload.message ?? mapUploadErrorMessage(res.status, `Unable to upload "${file.name}"`));
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), PHOTO_UPLOAD_TIMEOUT_MS);
+    try {
+      const res = await fetch(`/api/cars/${carId}/photos`, {
+        method: "POST",
+        body: formData,
+        signal: controller.signal,
+      });
+      const payload = (await parseApiResponsePayload(res)) as { message?: string; data?: ExistingPhoto };
+      if (!res.ok) {
+        throw new Error(payload.message ?? mapUploadErrorMessage(res.status, `Unable to upload "${file.name}"`));
+      }
+      if (!payload.data?.id || !payload.data?.url) {
+        throw new Error(`Upload completed but no photo record was returned for "${file.name}".`);
+      }
+      currentPhotoCount += 1;
+      onUploaded?.({ uploadedPhoto: payload.data, file });
+    } catch {
+      failedUploads.push(file.name);
+    } finally {
+      clearTimeout(timeoutId);
     }
-    if (!payload.data?.id || !payload.data?.url) {
-      throw new Error(`Upload completed but no photo record was returned for "${file.name}".`);
-    }
-    onUploaded?.({ uploadedPhoto: payload.data, file });
   }
+
+  const warningParts: string[] = [];
+  if (sizeSkipped.length > 0) {
+    warningParts.push(
+      `${sizeSkipped.length} photo(s) were skipped because they exceed 4MB.`,
+    );
+  }
+  if (skippedForLimit > 0) {
+    warningParts.push(
+      `${skippedForLimit} photo(s) were skipped because the listing already reached ${MAX_PHOTOS} photos.`,
+    );
+  }
+  if (failedUploads.length > 0) {
+    warningParts.push(
+      `${failedUploads.length} photo(s) could not be uploaded. You can update the listing later to retry.`,
+    );
+  }
+
+  return {
+    warning: warningParts.join(" "),
+  };
 }
 
 async function parseApiResponsePayload(res: Response) {
@@ -810,4 +862,21 @@ function buildPostSubmitRedirectPath(basePath: string, notice: "submitted" | "up
   const nextQuery = search.toString();
 
   return `${pathname}${nextQuery ? `?${nextQuery}` : ""}${hash ? `#${hash}` : ""}`;
+}
+
+function navigateAfterSubmit(router: ReturnType<typeof useRouter>, targetPath: string) {
+  router.replace(targetPath);
+  router.refresh();
+
+  if (typeof window === "undefined") return;
+  const targetUrl = new URL(targetPath, window.location.origin);
+  window.setTimeout(() => {
+    if (
+      window.location.pathname !== targetUrl.pathname ||
+      window.location.search !== targetUrl.search ||
+      window.location.hash !== targetUrl.hash
+    ) {
+      window.location.assign(targetUrl.toString());
+    }
+  }, 900);
 }

@@ -8,8 +8,8 @@ export default function NewCarPage() {
         <p className="text-sm font-semibold text-primary">New car</p>
         <h1 className="text-2xl font-semibold text-foreground">Create listing</h1>
         <p className="text-sm text-gray-600">
-          Add at least 5 photos and complete key details before saving. New listings go to admin
-          approval before they appear publicly.
+          Add up to 7 photos (5+ recommended for faster approval) and complete key details before
+          saving. New listings go to admin approval before they appear publicly.
         </p>
       </div>
       <Card>
