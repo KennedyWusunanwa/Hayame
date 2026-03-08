@@ -508,9 +508,9 @@ function ExploreContent() {
           </div>
         </div>
       </div>
-      <div className="grid gap-6 lg:grid-cols-[320px,1fr]">
+      <div className="grid items-start gap-6 lg:grid-cols-[320px,1fr]">
         <FiltersSidebar filters={filters} onChange={updateFilters} capabilities={capabilities} />
-        <div className="grid gap-5">
+        <div className="grid content-start gap-5">
           <form
             className="hidden h-14 items-center gap-3 rounded-2xl border border-border bg-white px-4 shadow-soft md:flex"
             onSubmit={(e) => {
