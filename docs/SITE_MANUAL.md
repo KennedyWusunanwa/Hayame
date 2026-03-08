@@ -1,388 +1,815 @@
-# Hayame Site Manual (Full, Plain-English Documentation)
+ï»¿# Hayame 2.0 User Manual
 
-## 1. What the Product Is
-Hayame is a peer-to-peer car rental marketplace for Ghana. Guests can browse cars, select dates, pay online, and message hosts. Hosts can list cars, manage availability, and accept or reject booking requests. Admins can review host applications, manage catalog filters, and oversee listings.
+Last updated: March 4, 2026
 
-## 2. Who Uses It (Roles)
-Guest (not signed in)
-- Browse marketing pages and explore listings.
-- View car detail pages.
-- Cannot book, favorite, or message without signing in.
+## 1. Purpose Of This Manual
+This is a full non-technical manual for Hayame 2.0.
 
-Renter (signed-in user)
-- Search and filter cars.
+It explains:
+- Every user-facing feature.
+- Every page and button.
+- What each control does.
+- What conditions change behavior (for example: signed in vs signed out, host approved vs not approved).
+
+This manual does not explain source code.
+
+## 2. User Roles And Access
+
+### Guest (not signed in)
+Can:
+- Open public pages.
+- Search and browse listings.
+- Open car details.
+
+Cannot:
 - Save favorites.
-- Book cars and pay online.
+- Start bookings.
 - Message hosts.
-- Leave reviews for completed trips.
-- Manage bookings and profile in the dashboard.
+- Leave reviews.
 
-Host (approved host application)
-- All renter capabilities.
-- Create and edit car listings.
-- Set availability and weekly blocks.
-- Review booking requests and approve or reject.
-- Access host dashboard with inventory, bookings, reviews, and earnings (some items are sample data).
+### Renter (signed-in user)
+Can:
+- Do everything a guest can do.
+- Save and remove favorites.
+- Book and pay.
+- Message hosts.
+- Open disputes for paid trips.
+- Leave reviews for completed trips only.
+- Manage profile, bookings, favorites.
 
-Admin
-- Sign in with admin credentials.
-- Review and approve or reject host applications.
-- View platform overview (counts for users, cars, bookings, pending host applications).
-- Manage car makes and models (filters catalog).
-- Edit car listings and availability.
-- View audit log entries for admin actions.
+### Host (approved host)
+Can:
+- Do everything a renter can do.
+- Access host dashboard pages.
+- Create, edit, and delete own listings.
+- Upload/replace/remove listing photos.
+- Set listing availability blocks.
+- Approve or reject booking requests on own cars.
 
-## 3. Global UI Elements
-Navbar
-- Shows public navigation links: Home, Explore, Prices, Blog, Contact.
-- Shows Messages icon with unread count for signed-in users.
-- Shows Dashboard and Become a Host (or Host Dashboard + List Your Car) based on host status.
-- Shows Sign In/Sign Up when logged out.
+### Admin
+Can:
+- Access admin portal after admin sign in.
+- Approve/reject host applications.
+- Review listings.
+- Edit users and listings.
+- Process refunds.
+- Moderate reviews.
+- Update disputes.
+- Manage make/model filter catalog.
+- Send official office messages to users.
 
-Footer
-- Shows company links (Pricing, Blog, Contact) and legal/support links (Privacy, Contact).
+## 3. Global Interface (Visible Across The Site)
 
-Navigation Loader
-- Displays a full-screen loading overlay on link navigation or form submits.
+### 3.1 Top Navigation Bar (Desktop)
+Always-visible links:
+- `Home` -> opens home page.
+- `Explore` -> opens listings browse page.
+- `Prices` -> opens pricing page.
+- `Blog` -> opens blog page.
+- `Contact` -> opens contact page.
 
-## 4. Public / Marketing Pages
-/
-- Hero section with background image and “Get started” button.
-- Search bar for region, city, car type, brand, model, and dates.
-- Featured cars grid (Supabase data if available, otherwise mock cars).
-- “How Hayame Works” steps and “Why Choose Hayame” section.
+Signed-out actions:
+- `Log in` -> opens login page.
+- `Sign up` -> opens signup page.
 
-/blog
-- Static list of blog posts with title, date, and tag. “Read more” links lead to Contact page.
+Signed-in actions:
+- Username pill -> shows signed-in user label.
+- Messages icon -> opens `/messages`.
+- Messages badge (`1`, `2`, `99+`) -> unread message count.
+- `Dashboard` -> renter dashboard (if not approved host).
+- `Become a Host` -> host application page (if not approved host).
+- `Application pending` -> same destination as Become a Host, label changes when host request is pending.
+- `Host dashboard` -> host dashboard (if approved host).
+- `Host dashboard` booking badge -> count of paid requests waiting for host decision.
+- `List Your Car & Earn` -> listing creation page.
+- `Sign out` -> logs out and returns to home page.
 
-/contact
-- Contact info (phone, email, address).
-- Contact form UI (name, email, message). This form does not submit to a backend.
+### 3.2 Mobile Top Bar
+Controls:
+- Messages icon (only if signed in) -> opens `/messages`.
+- Menu icon -> opens right-side menu panel.
 
-/prices
-- Static pricing tiers (Economy, Standard, Premium) with sample daily rates and features.
-- Note: This page contains copy saying Paystack is coming soon; the actual booking flow already uses Paystack.
+Inside menu panel:
+- Same page links as desktop.
+- Account actions based on role (`Dashboard`, `Host dashboard`, `Become a Host`, `List Your Car & Earn`, `Sign out`, `Log in`, `Sign up`).
 
-/privacy
-- Simple privacy statement.
+### 3.3 Footer
+Company links:
+- `Pricing`
+- `Blog`
+- `Contact`
 
-## 5. Explore and Search
-/explore
-- Loads cars from /api/cars (Supabase).
-- Filters by region, city, car type, brand, model, fuel type, price range, and features.
-- Search bar for car name or city.
-- Map placeholder panel (live map not implemented yet; shows a preview list).
-- Shows car cards with photo, type badge, location, price, and favorite button.
+Legal/support links:
+- `Privacy`
+- `Protection`
+- `Support` (opens Contact page)
 
-Search inputs (marketing hero + explore filters)
-- Region and city come from Ghana regions and districts (API with fallback list).
-- Car makes and models come from a catalog (admin-managed).
+### 3.4 Navigation Loading Overlay
+Behavior:
+- A spinner overlay appears when a page link or submit button triggers navigation.
+- It auto-clears after navigation completes.
+- Safety timeout also clears it if navigation hangs.
 
-## 6. Car Detail Page
-/cars/[id]
-- Large image gallery with full-screen viewer.
-- Car details: location, brand, model, type, seats, transmission, fuel, region.
-- Description and features list.
-- Availability summary from car availability windows.
-- Booking widget with date picker and Paystack payment.
-- Host card with basic profile info and link to host profile.
-- Message host card with quick prompts.
-- Reviews list and review form (only for users with completed bookings).
+## 4. Authentication Pages
 
-/vehicle-details/[id]
-- Redirects to /cars/[id].
+### 4.1 Login Page (`/auth/login`)
+Controls:
+- `Email` input.
+- `Password` input.
+- `Show` / `Hide` button -> toggles password visibility.
+- `Log in` button -> signs in and sends user to home page.
+- `Sign up` text link -> opens signup page.
 
-/hosts/[id]
-- Host profile page showing host name, avatar, location, and that host’s listings.
+Error behavior:
+- Invalid credentials show inline error text.
 
-## 7. Booking System (Full Flow)
-Important concepts
-- end_date is the checkout date and is exclusive for availability and pricing.
-- Booking statuses include: pending, awaiting_host, confirmed, rejected, cancelled, completed, refunded.
-- Payment statuses include: pending, paid, refunded, failed.
+### 4.2 Signup Page (`/auth/signup`)
+Controls:
+- `First name`
+- `Last name`
+- `Email`
+- `Region` dropdown
+- `City / Location` dropdown (enabled only after Region is chosen)
+- `Profile photo (optional)` file picker
+- `Password`
+- `Show` / `Hide` password toggle
+- `Sign up` button
+- `Log in` text link
 
-Step-by-step booking flow
-1. User picks dates in the Booking Widget.
-2. The widget loads blocked dates from /api/availability for the next 180 days.
-3. When the user clicks “Book now,” the app creates a 15-minute reservation hold:
-   - POST /api/bookings/hold
-   - A booking is created with status=pending and hold_expires_at=now+15m.
-4. The UI shows a countdown “Reserved for X minutes.”
-5. The Paystack popup opens for payment.
-6. On Paystack success, the app verifies payment and finalizes the booking:
-   - POST /api/bookings/paystack
-   - Conflicts are re-checked server-side.
-   - Total price is calculated as daily_price x nights (nights = end_date - start_date).
-7. Final status after payment:
-   - If instant_book=true for the car: status becomes confirmed and approved_at is set.
-   - Otherwise: status becomes awaiting_host (host must approve).
-8. The user is redirected to /dashboard/bookings.
+Post-submit behavior:
+- Shows verification info message.
+- Redirects to login page.
 
-Booking holds
-- Holds are valid for 15 minutes.
-- Expired holds are cleaned up opportunistically when availability or hold endpoints run.
-- Expired holds are marked cancelled and payment_status=failed.
+## 5. Public Marketing Pages
 
-Host approval
-- Host can approve or reject bookings in /host/bookings.
-- Approve sets status to confirmed and approved_at to now.
-- Reject triggers a Paystack refund and sets status to rejected and payment_status=refunded.
+### 5.1 Home (`/`)
+Sections include hero, search, trust blocks, featured cars, and info blocks.
 
-Availability and blocking
-- /api/availability returns a list of blocked dates.
-- Blocked dates include:
-  - Host availability blocks (car_availability with available=false).
-  - Bookings in pending/awaiting_host/confirmed where holds are not expired.
-- If cars.is_available is false, availability returns unavailable for the entire range.
+Main controls:
+- `Book Now` (hero button) -> opens Explore page.
 
-Weekly blocks
-- Hosts can choose weekdays to block (e.g., every Monday).
-- The system inserts one-day blocks only for the chosen weekdays within a horizon.
+Hero search controls (desktop and mobile versions):
+- Region dropdown
+- City dropdown (depends on selected region)
+- Car type dropdown
+- Brand dropdown
+- Model dropdown (depends on selected brand)
+- Date fields
+- Search text input (mobile)
+- `Search` button -> opens Explore with selected filters.
 
-Overlapping booking protection
-- A database trigger prevents overlapping bookings with status awaiting_host or confirmed.
-- It uses advisory locks to reduce race conditions.
+Mobile filter panel controls:
+- `Close` -> closes filter panel.
+- `Apply` -> applies current filters and searches.
 
-What is NOT automated
-- There is no automatic job to mark bookings as completed after end_date.
-- Completion must be updated manually or via future automation.
+Featured cars controls:
+- Car card click -> opens that car detail page.
+- Heart icon -> save/remove favorite (requires login).
+- `Previous featured cars` arrow and `Next featured cars` arrow are shown but currently do not move the list.
 
-## 8. Messaging System
-/messages
-- Two-column inbox and chat view.
-- Search bar and “All / Unread” tabs.
-- Unread badge shown in the navbar.
-- Realtime updates using Supabase Realtime on the messages table.
+### 5.2 Prices (`/prices`)
+Tier cards include:
+- `Start booking` button on each tier.
 
-Starting a conversation
-- A renter can open a chat from a car’s detail page.
-- The app creates or reuses a conversation for the renter and host.
+Current behavior:
+- This is a static button (no booking start action from this page).
 
-Sending messages
-- Messages are sent through /api/messages.
-- The recipient gets an email notification if email is configured.
+### 5.3 Blog (`/blog`)
+Each card has:
+- `Read more` -> opens Contact page.
 
-Read status
-- Messages are marked read when the conversation is opened.
+### 5.4 Contact (`/contact`)
+Form fields:
+- Name
+- Email
+- Message
+- `Submit` button
 
-Host contact reveal after booking
-- If the renter has an active booking (awaiting_host/confirmed/completed/refunded) for the host’s car, the chat header shows:
-  - Host full name
-  - Host location (city)
-  - Host phone number
+Current behavior:
+- Contact form is visual only right now (no backend sending).
 
-## 9. Favorites
-- Users can save cars by clicking the heart button.
-- Favorites are stored per user and are visible in /dashboard/favorites.
-- Hosts see favorite counts per listing in /host/favorites.
+### 5.5 Protection (`/protection`)
+Contains informational cards and:
+- `contact page` link.
 
-## 10. Reviews
-- Reviews are tied to completed bookings only.
-- Users can submit one review per completed booking.
-- Hosts see all reviews for their listings in /host/reviews.
+### 5.6 Privacy (`/privacy`)
+Informational text only (no form controls).
 
-## 11. User Dashboard
-/dashboard
-- Summary cards for Bookings, Favorites, Profile.
+### 5.7 Cancellation (`/cancellation`)
+Contains policy details and links:
+- `Messages`
+- `Contact`
 
-/dashboard/bookings
-- Shows user’s bookings in a table.
-- Displays booking status and payment status.
+### 5.8 SEO Landing Pages
+Pages include:
+- `/airport-car-rental-accra`
+- `/cheap-car-rental-ghana`
+- `/rent-a-car-accra`
+- `/suv-rental-ghana`
+- `/peer-to-peer-car-rental-ghana`
+- `/list-your-car-ghana`
 
-/dashboard/favorites
-- Shows saved cars list and a total count.
+Quick link buttons on these pages:
+- `Browse cars` -> Explore page
+- `Become a Host` -> host application page
+- `Host dashboard` -> host dashboard
 
-/dashboard/profile
-- Update profile name, avatar, region, and city.
-- Uses Supabase Storage for avatar uploads.
+## 6. Explore And Search (`/explore`)
 
-Dashboard redirects
-- /dashboard/cars, /dashboard/earnings, /dashboard/reviews
-  - If user is a host, these redirect to host dashboards.
-  - If not a host, they redirect to /become-host.
+### 6.1 Main Search Controls
+- Search input (`Search cars or cities`)
+- `Search` button
+- Sort dropdown (`Sort by`)
 
-## 12. Host Dashboard
-/host
-- Overview dashboard with stats and charts (currently mock/sample data).
-- Shows upcoming bookings (sample data).
+Sort options:
+- `Price (Low -> High)`
+- `Price (High -> Low)`
+- `Most booked`
+- `Top rated`
+- `New listings`
 
-/host/cars
-- Inventory list of the host’s cars.
-- Shows favorites count, location, type, price, and availability status.
-- Actions: edit or delete listings.
+Some sort options may show `Coming soon` when data is not available.
 
-/host/cars/new
-- Create a new listing with price, location, car type, brand, model, seats, transmission, fuel, features, availability, and instant book toggle.
-- Photo upload happens after saving (edit screen).
+### 6.2 Filters Panel
+Desktop has left sidebar. Mobile uses `Filters` button + slide panel.
 
-/host/cars/[id]/edit
-- Edit listing and manage availability.
-- Set explicit date blocks and recurring weekly blocks.
+All filter controls:
+- Region
+- City (depends on Region)
+- Car type
+- Brand
+- Model (depends on Brand)
+- Fuel
+- Price range slider
+- Min price
+- Max price
+- Transmission
+- Seats
+- Min year
+- Max year
+- Instant Book toggle
+- Delivery available toggle
+- Air conditioning toggle
+- Min rating
+- Host type
+- Feature checkboxes
+- `Reset filters` button
 
-/host/bookings
-- See bookings for host’s cars.
-- Approve or reject requests once payment is confirmed.
+Mobile panel extra control:
+- `Apply` button -> closes panel and applies filters.
 
-/host/earnings
-- Earnings summary and payout history (sample data).
+### 6.3 Map Panel Behavior
+- Map placeholder is shown only when no filters are active.
+- It is a visual placeholder, not a live map.
 
-/host/favorites
-- Overview of favorites across host cars.
+### 6.4 Car Card Controls
+On each card:
+- Card click -> opens car detail page.
+- Heart button -> save/remove favorite.
 
-/host/profile
-- Update host profile details and avatar.
+If user is not logged in and clicks heart:
+- App sends user to login page.
 
-/host/reviews
-- View reviews from guests for host listings.
+## 7. Car Detail Page (`/cars/[id]`)
 
-## 13. Host Application Process
-/become-host
-- Requires sign-in.
-- Host application form includes:
-  - Full name, phone, region, city
-  - ID type and ID number
-  - ID front and back images (uploaded to host-ids bucket)
-  - Hosting experience, fleet size, and notes
-- Application statuses: pending, approved, rejected.
-- If approved, the page shows a “Go to host dashboard” link.
+### 7.1 Top Controls
+- Heart button beside title -> save/remove favorite.
 
-Host activation
-- /api/host-activate checks if the latest host application is approved.
-- /api/host-status returns current host status for the navbar.
+### 7.2 Image Gallery Controls
+Main image area:
+- Click image -> opens full-screen viewer.
 
-## 14. Admin Console
-/admin
-- Admin login with ADMIN_USERNAME and ADMIN_PASSWORD (stored in a cookie).
-- Overview tab shows counts for users, cars, bookings, pending host applications.
-- Approved hosts list with vehicle counts.
-- Vehicles & availability overview with quick edit link.
-- Admin audit log for host approvals and rejections.
-- Host applications tab lists pending/approved/rejected applications with details and ID file links.
-- Admin can approve or reject host applications.
-- Approval/rejection triggers email notifications to the applicant (if email is configured).
+Thumbnail strip:
+- Click thumbnail -> switches active image.
 
-/admin/filters
-- Manage car makes and models that appear in search filters.
+Full-screen viewer:
+- `Close` (X)
+- `Previous image`
+- `Next image`
+- Thumbnail buttons
+- Keyboard arrows and swipe gestures also work.
 
-/admin/cars/[id]/edit
-- Admin can edit car details and availability.
+### 7.3 Availability Panel
+`Availability preview` card controls:
+- `Start` date
+- `End` date
+- `Check availability` button
 
-## 15. Payments (Paystack)
-- Paystack inline checkout is used on the booking widget.
-- The server verifies each transaction with the Paystack API before confirming bookings.
-- Amounts are in minor currency units (GHS x 100).
-- Refunds are triggered when a host rejects a booking.
+Result text shows whether chosen dates are available or unavailable.
 
-## 16. Email Notifications
-Emails are sent via Resend if configured.
+### 7.4 Booking Widget Controls
+Inputs and controls:
+- `Start date`
+- `End date`
+- Quick select buttons: `2 days`, `5 days`, `7 days`
+- Trip use `Region`
+- Trip use `City / district`
+- Trip use `Exact area / destination`
+- `View protection details` link
+- Main booking button label:
+  - `Instant Book` (for instant listings)
+  - `Book Now` (for host-approval listings)
 
-Triggers
-- New message received (message email with conversation link).
-- Booking payment verified (renter + host notice).
-- Host approves or rejects booking (renter notified).
-- Admin approves or rejects host application (applicant notified).
+Validation behavior before payment:
+- End date must be after start date.
+- Region, city, and exact area are required.
 
-Requirements
-- RESEND_API_KEY and RESEND_FROM must be set in environment.
-- SUPABASE_SERVICE_ROLE_KEY must be set in production to fetch recipient emails.
-- Email links use EMAIL_BASE_URL or NEXT_PUBLIC_SITE_URL (or VERCEL_URL fallback).
+Payment behavior:
+- Starts a temporary reservation hold.
+- Opens Paystack payment popup.
 
-Official footer
-- Every email includes an official notification footer and a “Visit Hayame” link.
+After successful payment:
+- User is redirected to Messages.
+- If a booking conversation exists, it opens that exact chat.
 
-## 17. Data Storage (Supabase)
-Database tables used
-- profiles
-- host_applications
-- cars
-- car_photos
-- car_availability
-- bookings
-- favorites
-- conversations
-- messages
-- reviews
-- locations, gh_regions, gh_districts
-- admin_actions
+### 7.5 Host Card Controls
+- `View host` button -> opens host profile page.
 
-Storage buckets
-- car-photos (public)
-- host-ids (private)
-- avatars (profile photos)
+### 7.6 Message Host Card Controls
+Quick prompt chips:
+- `Hi! Is this car available this week?`
+- `Can I pick up the car in the morning?`
+- `Do you offer delivery or pickup?`
+- `What documents do you require?`
 
-## 18. Availability Rules (Exact Behavior)
-- A date range blocks dates from start_date up to (but not including) end_date.
-- Weekly blocks insert one-day rows for each selected weekday.
-- Booking holds block dates only if hold_expires_at is in the future.
-- If cars.is_available is false, the entire requested range is treated as blocked.
+Actions:
+- `Send message` -> starts conversation and sends selected prompt.
+- `Chat without message` -> starts conversation without sending prompt.
+- `Sign in to message` -> shown when logged out.
 
-## 19. Fallbacks and Placeholders
-- Featured cars uses mock data if Supabase is unreachable.
-- Explore page map is a placeholder panel (map integration not implemented).
-- Host dashboard stats and earnings are sample data.
-- Blog posts and pricing tiers are static content.
+### 7.7 Review Form Controls
+If eligible:
+- Trip selector dropdown
+- Rating buttons `1`, `2`, `3`, `4`, `5`
+- Comment box
+- `Submit review`
 
-## 20. API Endpoints (What They Do)
-- /api/availability
-  - GET: returns blocked dates and availability
-  - POST: creates availability windows or weekly blocks
-- /api/bookings
-  - GET: list bookings for renter and host
-  - POST: disabled (Paystack flow required)
-- /api/bookings/hold
-  - Creates a 15-minute pending hold
-- /api/bookings/paystack
-  - Verifies payment and confirms booking
-- /api/bookings/[id]
-  - Host approve/reject booking
-- /api/cars
-  - GET: list cars
-  - POST: create car (host only)
-- /api/cars/[id]
-  - GET: car details
-  - PUT: update car (host/admin)
-  - DELETE: delete car (host/admin)
-- /api/conversations
-  - POST: start or reuse a conversation
-- /api/messages
-  - POST: send a message (triggers email)
-- /api/favorites
-  - GET: list user favorites
-  - POST: add/remove favorite
-- /api/reviews
-  - POST: create review for completed booking
-- /api/host-applications
-  - GET: fetch user’s latest application
-  - POST: submit application
-- /api/host-applications/[id]/files
-  - GET: signed URL for ID images (admin or owner)
-- /api/host-status
-  - GET: returns host status for navbar
-- /api/host-activate
-  - POST: verifies host approval status
-- /api/locations
-  - GET: Ghana regions and cities (fallback if not available)
-- /api/car-catalog
-  - GET: car makes and models
-- /api/vehicle-details/[id]
-  - GET: car detail payload (legacy endpoint)
-- /api/admin/car-makes
-  - Manage car makes (admin only)
-- /api/admin/car-models
-  - Manage car models (admin only)
-- /api/debug/car-fetch
-  - Diagnostics for car fetch via REST + Supabase client
+Review can only be submitted by:
+- Logged-in renter
+- Completed trip
+- Not already reviewed for that booking
 
-## 21. Important Notes and Known Gaps
-- Booking completion is not automated; bookings must be marked completed manually.
-- Some marketing copy (Prices page, Host dashboard) references “Paystack coming soon” while Paystack is already in use in bookings.
-- Contact form does not send messages yet (no backend).
-- Map view is a placeholder.
+### 7.8 Existing Booking Notice
+If current renter already booked that car:
+- Banner appears.
+- `Take me to my dashboard bookings` button -> opens renter bookings page.
 
-## 22. Summary for Non-Technical Stakeholders
-- Users can discover cars, book with online payment, and chat with hosts.
-- Hosts can list cars, manage availability, and approve bookings.
-- Admins can manage host approvals and car catalogs.
-- Email notifications are sent for messages and booking decisions when configured.
+## 8. Messaging (`/messages`)
 
-End of document.
+### 8.1 Conversation List Controls
+- Search input
+- Tab buttons: `All`, `Unread`
+- Conversation row click -> open that thread
+
+### 8.2 Thread Controls
+- Mobile `Back` button -> return to conversation list
+- `Load older messages` button (shown when enough history exists)
+- Composer text area
+- `Send` button
+
+### 8.3 Contact Reveal Rule
+Renter sees host full contact block in chat only when renter has an active valid booking status for that listing conversation.
+
+## 9. Renter Dashboard (`/dashboard`)
+
+### 9.1 Overview
+Cards and links:
+- `View bookings`
+- `View favorites`
+- `Edit profile`
+
+### 9.2 Bookings (`/dashboard/bookings`)
+Actions inside booking cards/table:
+- `Message` -> opens related chat
+- `Open dispute` -> shown for renter on paid bookings
+
+Status and trip details are visible in expanded booking cards.
+
+### 9.3 Favorites (`/dashboard/favorites`)
+Read-only list of saved cars.
+No direct action buttons on this page.
+
+### 9.4 Profile (`/dashboard/profile`)
+Controls:
+- `Upload photo`
+- `View current` (link if avatar exists)
+- Username / first name / last name / phone / region / city fields
+- `Save profile`
+
+Region-city dependency:
+- City choices depend on selected region.
+
+### 9.5 Renter Mobile Quick Nav
+Buttons:
+- `Overview`
+- `Bookings`
+- `Chats`
+- `Favorites`
+- `Profile`
+
+Unread chat badge appears on `Chats` when messages are unread.
+
+## 10. Become Host (`/become-host`)
+
+### 10.1 Host Application Form Controls
+Fields:
+- Full name
+- Phone
+- Region
+- City
+- ID type
+- ID number
+- ID front image upload
+- ID back image upload
+- Hosting experience
+- Fleet size
+- Notes
+
+Action button:
+- `Submit application`
+
+Status behavior:
+- If already pending: form locks with pending notice.
+- If rejected: rejection reason is shown.
+- If approved: form replaced with host dashboard link.
+
+### 10.2 Approved State Control
+- `Go to host dashboard` -> validates host access and opens host dashboard.
+
+## 11. Host Dashboard (`/host`)
+
+### 11.1 Host Overview Page
+Controls:
+- `Start Earning Today` -> opens new listing form.
+- `Review now` -> appears on urgent pending requests, opens host bookings.
+- `Open booking request` -> shown on mobile trip cards for awaiting host requests.
+
+Other controls:
+- Earnings calculator inputs:
+  - Price per day
+  - Days rented per month
+  - Platform fee percent
+
+### 11.2 Host Sidebar / Mobile Nav Buttons
+Sidebar links:
+- `Overview`
+- `Vehicles`
+- `Bookings`
+- `Favorites`
+- `Earnings`
+- `Reviews`
+- `Host settings`
+
+Mobile quick nav links:
+- `Overview`
+- `Vehicles`
+- `Bookings`
+- `Chats`
+- `Settings`
+
+Booking request and unread chat badges appear when counts are above zero.
+
+## 12. Host Cars And Listing Management
+
+### 12.1 My Cars (`/host/cars`)
+Controls:
+- `List Your Car & Earn` -> new listing page.
+- Per-car action icons:
+  - Edit (pencil) -> edit listing page
+  - Delete (trash) -> deletes listing after confirmation dialog
+
+### 12.2 New Listing (`/host/cars/new`) And Edit Listing (`/host/cars/[id]/edit`)
+
+#### A. Basic listing fields
+- Auto title preview (generated from brand + model + year)
+- Daily price
+- Region
+- City
+- Car type
+- Brand
+- Model
+- Seats
+- Car year
+- Transmission
+- Fuel
+- Cancellation policy
+- Description
+
+#### B. Fees and options
+- Delivery available toggle
+- Delivery fee (enabled only when delivery toggle is on)
+- Insurance fee
+- Deposit amount
+- Outside Accra surcharge
+
+#### C. Features
+- Priority feature checkboxes
+- Full feature checklist
+
+#### D. Photos section controls
+- File picker (multiple)
+- Existing photo controls:
+  - `Replace`
+  - `Remove`
+- New selected file control:
+  - `Remove`
+
+Photo rules shown in UI:
+- Recommended: 5 to 7 photos.
+- Hard cap: 7 photos.
+- Warnings are shown for quality and quantity.
+- Upload does not auto-reject because of quality; quality mainly affects approval outcome.
+
+#### E. Listing status toggles
+- `Available` checkbox
+- `Instant Book` checkbox
+
+#### F. Form actions
+- `Submit car` (new listing)
+- `Save car` (edit)
+- `Cancel`
+
+Post-submit behavior:
+- New and edited host listings redirect to host dashboard.
+- Listing goes to review workflow before public visibility.
+
+### 12.3 Availability Editor (on edit page)
+
+Block specific dates:
+- Date range picker
+- `Mark as available` checkbox
+- `Save date window`
+
+Weekly recurring blocks:
+- Day pills: `Mon`, `Tue`, `Wed`, `Thu`, `Fri`, `Sat`, `Sun`
+- Horizon dropdown: `30`, `60`, `90`, `180` days
+- `Save weekly blocks`
+
+## 13. Host Bookings, Favorites, Earnings, Reviews, Profile
+
+### 13.1 Host Bookings (`/host/bookings`)
+Per booking actions:
+- `Message`
+- `Approve` (host side, only when request is awaiting host and payment is paid)
+- `Reject` or `Reject & refund`
+- `Open dispute` may appear on renter-side entries shown in host combined view
+
+### 13.2 Host Favorites (`/host/favorites`)
+Shows metrics and favorites by car.
+No direct edit buttons.
+
+### 13.3 Host Earnings (`/host/earnings`)
+Shows sample cards/charts/table.
+No transactional payout action buttons.
+
+### 13.4 Host Reviews (`/host/reviews`)
+Read-only review table.
+
+### 13.5 Host Profile (`/host/profile`)
+Uses same profile controls as renter profile:
+- `Upload photo`
+- `View current`
+- Profile fields
+- `Save profile`
+
+## 14. Admin Portal
+
+## 14.1 Admin Sign-In (`/admin` when logged out)
+Controls:
+- Username field
+- Password field
+- `Sign in`
+
+If credentials are wrong, error text is shown.
+
+## 14.2 Admin Top Header Actions (logged in)
+- `Messages`
+- `Manage filters`
+- `Platform controls`
+- `Sign out`
+
+## 14.3 Admin Mobile Tab Switch
+Buttons:
+- `Overview`
+- `Applications`
+
+## 14.4 Admin Overview Section Controls
+
+Users card controls:
+- `Message` -> open office chat with user
+- `View` -> open detailed admin user page
+
+Vehicles and availability controls:
+- Per listing checkbox `Select`
+- `Delete selected`
+- `Preview`
+- `Edit`
+- `Delete`
+
+Platform card control:
+- `Open platform controls`
+
+## 14.5 Admin Host Applications Section Controls
+Filters and search:
+- Status pills: `pending`, `approved`, `rejected`
+- Search input (name/phone)
+
+Per pending application actions:
+- `Approve`
+- `Reject`
+- Optional rejection reason input (desktop)
+- `Front` and `Back` links for ID files
+
+## 14.6 Admin Platform Controls (`/admin/platform`)
+
+Listing approvals table actions:
+- `Demo preview`
+- `Approve`
+- `Reject`
+- `Delete`
+
+Refund control actions:
+- Reason input
+- `Refund`
+
+Review moderation actions:
+- `Hide` (with optional reason)
+- `Unhide`
+
+Disputes actions:
+- Status dropdown (`open`, `under_review`, `resolved`, `closed`)
+- Resolution note input
+- `Save`
+
+## 14.7 Admin Filter Catalog (`/admin/filters`)
+Make manager:
+- Add make input + `Add`
+- Per make `Delete`
+
+Model manager:
+- Make selector
+- Add model input + `Add`
+- Per model `Delete`
+
+## 14.8 Admin Office Messaging (`/admin/messages`)
+Left side:
+- User search
+- User row `Message` (starts office conversation)
+- Conversation row click (opens thread)
+
+Thread side:
+- Message input (`Send message as Hayame office...`)
+- `Send`
+
+## 14.9 Admin User Detail (`/admin/users/[id]`)
+Main form control:
+- `Save user changes`
+
+Editable groups include:
+- Personal info
+- Verification and host status
+- Host application details
+
+Evidence and read-only sections include:
+- Face photo
+- ID front/back previews + `Open original`
+- Listings/bookings/conversations tables
+
+## 14.10 Admin Listing Preview (`/admin/cars/[id]/preview`)
+Controls:
+- `Open live page`
+- `Edit listing`
+- `Back to approvals`
+
+## 14.11 Admin Listing Edit (`/admin/cars/[id]/edit`)
+Same listing edit controls as host listing form, plus:
+- `Back to admin`
+
+## 15. What Affects What (Dependency Map)
+
+1. Sign-in state affects:
+- Whether user can favorite, book, message, review, apply as host.
+- Navbar actions shown.
+
+2. Host application status affects:
+- Access to host pages.
+- Whether user sees `Become a Host`, `Application pending`, or `Host dashboard`.
+
+3. Listing approval status affects:
+- Public visibility in explore/home.
+- Pending/rejected listings stay out of normal public browse for non-owners.
+
+4. Listing availability toggle (`Available`) affects:
+- Whether any date can be booked.
+- If set off, system treats requested range as unavailable.
+
+5. Availability windows and weekly blocks affect:
+- Which dates are blocked in date pickers.
+- Which bookings are allowed.
+
+6. Temporary booking hold affects:
+- Date locking during payment window.
+- Hold expiration can release dates and cancel pending hold.
+
+7. Instant Book toggle affects:
+- Booking button label (`Instant Book` vs `Book Now`).
+- Post-payment status (`confirmed` immediately vs `awaiting_host`).
+
+8. Host booking decision affects:
+- Booking status (`confirmed` or `rejected`).
+- Rejection triggers refund path.
+
+9. Payment status affects:
+- Whether host action buttons are enabled in some booking rows.
+- Whether renter can open dispute from booking row.
+
+10. Trip-use location affects total price:
+- If trip-use area is outside Greater Accra, outside-Accra surcharge can be added.
+
+11. Region and brand selections affect dependent fields:
+- Region controls available city options.
+- Brand controls available model options.
+
+12. Unread messages affect badges:
+- Navbar message icon badge.
+- Mobile quick nav chat badge.
+
+13. Completed-trip requirement affects reviews:
+- Review form only works for completed bookings not already reviewed by same user.
+
+14. Active booking relationship affects chat contact reveal:
+- Host contact details in chat appear when renter has eligible booking status.
+
+15. Photo count and quality affect listing approval probability:
+- Upload is allowed with warnings.
+- Better quantity/quality generally improves approval chance.
+
+## 16. Status Definitions
+
+### 16.1 Booking status
+- `pending`: temporary hold before final payment confirmation.
+- `awaiting_host`: paid, waiting for host approval.
+- `confirmed`: booking approved and active.
+- `rejected`: host rejected request.
+- `cancelled`: booking cancelled/expired hold.
+- `completed`: trip finished.
+- `refunded`: booking refunded.
+
+### 16.2 Payment status
+- `pending`
+- `paid`
+- `refunded`
+- `failed`
+
+### 16.3 Host application status
+- `pending`
+- `approved`
+- `rejected`
+
+### 16.4 Listing approval status
+- `pending`
+- `approved`
+- `rejected`
+
+### 16.5 Dispute status
+- `open`
+- `under_review`
+- `resolved`
+- `closed`
+
+## 17. Current Placeholders / Coming Soon
+- Explore map is a placeholder, not a live interactive map.
+- Featured cars left/right arrows are visible but not active controls.
+- Contact page submit button is currently non-sending.
+- Some sort/filter capabilities can show `Coming soon` when data support is missing.
+- Protection page sections are informational placeholders.
+- Host earnings page uses sample payout/trend data.
+
+## 18. End-To-End User Flows
+
+### 18.1 Renter booking flow
+1. Search on Home/Explore.
+2. Open car page.
+3. Pick dates and trip-use location.
+4. Press `Book Now` or `Instant Book`.
+5. Complete payment popup.
+6. System creates/updates booking and opens Messages conversation.
+7. Track booking in dashboard bookings page.
+
+### 18.2 Host listing flow
+1. Apply via `Become a Host`.
+2. After approval, open `Host dashboard`.
+3. Use `List Your Car & Earn`.
+4. Fill listing form and upload photos.
+5. Submit listing.
+6. Listing enters review status.
+7. Manage updates, availability, and bookings from host pages.
+
+### 18.3 Admin moderation flow
+1. Sign in at admin portal.
+2. Review host applications and approve/reject.
+3. Review listings in platform controls.
+4. Refund, moderate reviews, and update disputes as needed.
+5. Communicate through admin office messaging.
+
+End of manual.

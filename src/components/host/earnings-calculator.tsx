@@ -13,13 +13,16 @@ export function EarningsCalculator({
   defaultPlatformFeePercent,
   isPlaceholderFee = false,
 }: Props) {
-  const [pricePerDay, setPricePerDay] = useState(300);
-  const [daysRentedPerMonth, setDaysRentedPerMonth] = useState(15);
-  const [platformFeePercent, setPlatformFeePercent] = useState(defaultPlatformFeePercent);
+  const [pricePerDay, setPricePerDay] = useState("300");
+  const [daysRentedPerMonth, setDaysRentedPerMonth] = useState("15");
+  const [platformFeePercent, setPlatformFeePercent] = useState(String(defaultPlatformFeePercent));
 
   const values = useMemo(() => {
-    const gross = Math.max(pricePerDay, 0) * Math.max(daysRentedPerMonth, 0);
-    const feeAmount = gross * (Math.max(platformFeePercent, 0) / 100);
+    const price = parseFieldValue(pricePerDay, { min: 0 });
+    const days = parseFieldValue(daysRentedPerMonth, { min: 0, max: 31 });
+    const feePercent = parseFieldValue(platformFeePercent, { min: 0, max: 100 });
+    const gross = price * days;
+    const feeAmount = gross * (feePercent / 100);
     const net = gross - feeAmount;
     return { gross, feeAmount, net };
   }, [daysRentedPerMonth, platformFeePercent, pricePerDay]);
@@ -38,12 +41,14 @@ export function EarningsCalculator({
           label="Price per day (GHS)"
           value={pricePerDay}
           onChange={setPricePerDay}
+          onBlur={setPricePerDay}
           min={0}
         />
         <Field
           label="Days rented / month"
           value={daysRentedPerMonth}
           onChange={setDaysRentedPerMonth}
+          onBlur={setDaysRentedPerMonth}
           min={0}
           max={31}
         />
@@ -51,6 +56,7 @@ export function EarningsCalculator({
           label="Platform fee (%)"
           value={platformFeePercent}
           onChange={setPlatformFeePercent}
+          onBlur={setPlatformFeePercent}
           min={0}
           max={100}
         />
@@ -68,12 +74,14 @@ function Field({
   label,
   value,
   onChange,
+  onBlur,
   min,
   max,
 }: {
   label: string;
-  value: number;
-  onChange: (value: number) => void;
+  value: string;
+  onChange: (value: string) => void;
+  onBlur: (value: string) => void;
   min?: number;
   max?: number;
 }) {
@@ -85,10 +93,31 @@ function Field({
         min={min}
         max={max}
         value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
+        onChange={(e) => onChange(sanitizeNumericInput(e.target.value))}
+        onBlur={(e) => onBlur(normalizeFieldValue(e.target.value, { min, max }))}
       />
     </div>
   );
+}
+
+function sanitizeNumericInput(value: string) {
+  return value.replace(/[^\d.]/g, "");
+}
+
+function parseFieldValue(value: string, { min, max }: { min?: number; max?: number } = {}) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return min ?? 0;
+  if (typeof min === "number" && parsed < min) return min;
+  if (typeof max === "number" && parsed > max) return max;
+  return parsed;
+}
+
+function normalizeFieldValue(value: string, { min, max }: { min?: number; max?: number } = {}) {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return typeof min === "number" ? String(min) : "0";
+  }
+  return String(parseFieldValue(trimmed, { min, max }));
 }
 
 function Metric({ label, value }: { label: string; value: string }) {
