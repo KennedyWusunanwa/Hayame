@@ -54,7 +54,7 @@ export default async function HostProfilePage({ params }: PageProps) {
     daily_price: Number(car.daily_price ?? 0),
     description: car.description ?? "",
     car_type: car.car_type ?? "",
-    image_url: car.car_photos?.[0]?.url ?? "/car-placeholder.jpg",
+    image_url: car.car_photos?.[0]?.url ?? "",
     host_type: hostBadgeType,
   }));
 

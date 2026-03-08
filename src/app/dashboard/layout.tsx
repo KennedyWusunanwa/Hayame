@@ -22,7 +22,7 @@ export default async function UserDashboardLayout({ children }: { children: Reac
 
   const userProfile = {
     name: profile?.full_name ?? (user.user_metadata as any)?.full_name ?? user.email ?? "User",
-    avatar: profile?.avatar_url ?? "/car-placeholder.jpg",
+    avatar: profile?.avatar_url?.trim() ?? "",
   };
 
   return (

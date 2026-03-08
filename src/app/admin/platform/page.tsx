@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { resolveCarImage } from "@/lib/car-images";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { refundPaystack } from "@/lib/paystack";
 import { getInitials } from "@/lib/utils";
@@ -258,7 +259,13 @@ export default async function AdminPlatformPage() {
             <TableBody>
               {(pendingListings.data ?? []).map((car: any) => {
                 const listingPhotos = listingPhotosByCar.get(car.id) ?? [];
-                const previewImage = listingPhotos[0] ?? "/car-placeholder.jpg";
+                const previewImage = resolveCarImage(listingPhotos[0], {
+                  id: car.id,
+                  title: car.title,
+                  city: car.city,
+                  region: car.region,
+                  carType: car.car_type,
+                });
 
                 return (
                   <TableRow key={car.id}>

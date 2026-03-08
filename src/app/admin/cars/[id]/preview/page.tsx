@@ -7,6 +7,7 @@ import { ImageGallery } from "@/components/image-gallery";
 import { VerificationBadges } from "@/components/verification-badges";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { resolveCarImages } from "@/lib/car-images";
 import { deriveHostBadgeType, hostBadgeLabel } from "@/lib/host-badges";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { formatCurrency, getInitials } from "@/lib/utils";
@@ -87,9 +88,16 @@ export default async function AdminListingPreviewPage({ params }: PageProps) {
   if (!car) return notFound();
 
   const { data: photoRows } = await admin.from("car_photos").select("url").eq("car_id", car.id);
-  const photos = Array.from(
-    new Set([...(photoRows ?? []).map((row: { url?: string | null }) => row.url).filter(Boolean), "/car-placeholder.jpg"]),
-  ) as string[];
+  const photos = resolveCarImages(
+    (photoRows ?? []).map((row: { url?: string | null }) => row.url),
+    {
+      id: car.id,
+      title: car.title,
+      city: car.city,
+      region: car.region,
+      carType: car.car_type,
+    },
+  );
 
   const hostType = deriveHostBadgeType({
     hostLevel: car.owner?.host_level,
@@ -133,7 +141,16 @@ export default async function AdminListingPreviewPage({ params }: PageProps) {
         <div className="space-y-6">
           <Card>
             <CardContent className="pt-6">
-              <ImageGallery images={photos} />
+              <ImageGallery
+                images={photos}
+                fallbackContext={{
+                  id: car.id,
+                  title: car.title,
+                  city: car.city,
+                  region: car.region,
+                  carType: car.car_type,
+                }}
+              />
             </CardContent>
           </Card>
 

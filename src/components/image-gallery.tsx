@@ -4,18 +4,18 @@ import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
+import { resolveCarImages, type CarImageFallbackInput } from "@/lib/car-images";
 
 type Props = {
   images: string[];
+  fallbackContext?: CarImageFallbackInput;
 };
 
-export function ImageGallery({ images }: Props) {
-  const safeImages = useMemo(() => {
-    const cleaned = (images ?? [])
-      .map((img) => (typeof img === "string" ? img.trim() : ""))
-      .filter(Boolean) as string[];
-    return cleaned.length > 0 ? cleaned : ["/car-placeholder.jpg"];
-  }, [images]);
+export function ImageGallery({ images, fallbackContext }: Props) {
+  const safeImages = useMemo(
+    () => resolveCarImages(images, fallbackContext),
+    [fallbackContext, images],
+  );
 
   const [active, setActive] = useState(0);
   const [open, setOpen] = useState(false);

@@ -82,9 +82,9 @@ export async function FeaturedCars() {
         reviews: Number(car.reviews_count ?? 0),
         car_type: car.car_type ?? "",
         description: car.description ?? "",
-        image_url: car.image_url ?? "/car-placeholder.jpg",
+        image_url: car.image_url ?? "",
         host_name: car.host_name ?? "Host",
-        host_avatar: car.host_avatar ?? "/car-placeholder.jpg",
+        host_avatar: car.host_avatar ?? "",
         host_type: deriveHostBadgeType({
           hostType: car.host_type,
           hostLevel: car.host_level,

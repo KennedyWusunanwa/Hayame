@@ -38,8 +38,7 @@ export const mockCars: MockCar[] = [
     transmission: "automatic",
     fuel: "Petrol",
     fuel_type: "petrol",
-    image:
-      "/car-placeholder.jpg",
+    image: "",
     features: ["Air Conditioning", "Automatic", "Bluetooth", "USB Port", "4x4"],
     description:
       "Clean and efficient SUV perfect for weekend getaways or business trips around Accra.",
@@ -63,8 +62,7 @@ export const mockCars: MockCar[] = [
     transmission: "automatic",
     fuel: "Petrol",
     fuel_type: "petrol",
-    image:
-      "/car-placeholder.jpg",
+    image: "",
     features: ["Leather Seats", "Bluetooth", "Automatic", "Sunroof"],
     description: "Luxury comfort with premium interior and seamless ride quality.",
     host: {
@@ -88,8 +86,7 @@ export const mockCars: MockCar[] = [
     transmission: "automatic",
     fuel: "Petrol",
     fuel_type: "petrol",
-    image:
-      "/car-placeholder.jpg",
+    image: "",
     features: ["Bluetooth", "Automatic", "USB Port", "Air Conditioning"],
     description: "Reliable sedan with great fuel economy for trips across Kumasi.",
     host: {
@@ -113,8 +110,7 @@ export const mockCars: MockCar[] = [
     transmission: "automatic",
     fuel: "Diesel",
     fuel_type: "diesel",
-    image:
-      "/car-placeholder.jpg",
+    image: "",
     features: ["4x4", "Automatic", "Bluetooth", "Air Conditioning"],
     description: "Comfortable SUV with ample boot space for coastal drives.",
     host: {
@@ -138,8 +134,7 @@ export const mockCars: MockCar[] = [
     transmission: "automatic",
     fuel: "Diesel",
     fuel_type: "diesel",
-    image:
-      "/car-placeholder.jpg",
+    image: "",
     features: ["4x4", "Leather Seats", "Automatic", "Air Conditioning"],
     description: "Built for the north - roomy, rugged, and comfortable for long trips.",
     host: {
@@ -163,8 +158,7 @@ export const mockCars: MockCar[] = [
     transmission: "automatic",
     fuel: "Petrol",
     fuel_type: "petrol",
-    image:
-      "/car-placeholder.jpg",
+    image: "",
     features: ["Automatic", "Bluetooth", "USB Port"],
     description: "Compact and easy to park - perfect for quick city errands.",
     host: {
@@ -188,8 +182,7 @@ export const mockCars: MockCar[] = [
     transmission: "automatic",
     fuel: "Diesel",
     fuel_type: "diesel",
-    image:
-      "/car-placeholder.jpg",
+    image: "",
     features: ["4x4", "Bluetooth", "Automatic", "USB Port"],
     description: "Powerful pickup ready for work trips and off-road adventures.",
     host: {
@@ -213,8 +206,7 @@ export const mockCars: MockCar[] = [
     transmission: "automatic",
     fuel: "Diesel",
     fuel_type: "diesel",
-    image:
-      "/car-placeholder.jpg",
+    image: "",
     features: ["Automatic", "Bluetooth", "USB Port", "Leather Seats"],
     description: "Family-sized comfort with sliding doors and plenty of space.",
     host: {

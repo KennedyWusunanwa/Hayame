@@ -187,7 +187,7 @@ function mapApiCars(rows: any[]): ExploreCar[] {
           car.host_avatar ??
           "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=300&q=80",
       },
-      image: car.image_url ?? car.car_photos?.[0]?.url ?? "/car-placeholder.jpg",
+      image: car.image_url ?? car.car_photos?.[0]?.url ?? "",
       instant_book: typeof car.instant_book === "boolean" ? car.instant_book : undefined,
       delivery_available:
         typeof car.delivery_available === "boolean" ? car.delivery_available : undefined,

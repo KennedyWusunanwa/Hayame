@@ -5,6 +5,7 @@ import Link from "next/link";
 import { BadgeCheck } from "lucide-react";
 import { FavoriteButton } from "@/components/favorite-button";
 import { Badge } from "@/components/ui/badge";
+import { resolveCarImage } from "@/lib/car-images";
 import { deriveHostBadgeType, hostBadgeLabel } from "@/lib/host-badges";
 import { formatCurrency } from "@/lib/utils";
 import type { Car } from "@/lib/types";
@@ -27,6 +28,13 @@ export function CarCard({ car, isFavorite = false, onToggleFavorite }: Props) {
   const displayTitle = year ? car.title.replace(year, "").replace(/\s+/g, " ").trim() : car.title;
   const location = [car.city, car.region].filter(Boolean).join(", ");
   const priceText = formatCurrency(car.daily_price);
+  const imageSrc = resolveCarImage(car.image_url, {
+    id: car.id,
+    title: car.title,
+    city: car.city,
+    region: car.region,
+    carType: car.car_type,
+  });
 
   return (
     <Link
@@ -36,7 +44,7 @@ export function CarCard({ car, isFavorite = false, onToggleFavorite }: Props) {
     >
       <div className="relative aspect-[4/3] w-full overflow-hidden rounded-xl bg-gray-100">
         <Image
-          src={car.image_url ?? "/car-placeholder.jpg"}
+          src={imageSrc}
           alt={car.title}
           fill
           className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"

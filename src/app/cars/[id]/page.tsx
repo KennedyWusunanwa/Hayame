@@ -116,10 +116,7 @@ export default async function CarDetailPage({ params }: PageProps) {
   }
 
   const galleryImages = Array.from(
-    new Set([
-      ...(car.photos?.map((p) => p.url).filter(Boolean) as string[]),
-      "/car-placeholder.jpg",
-    ]),
+    new Set((car.photos?.map((photo) => photo.url) ?? []).filter(Boolean) as string[]),
   );
 
   const addedDate = car.created_at ? new Date(car.created_at) : null;
@@ -210,7 +207,16 @@ export default async function CarDetailPage({ params }: PageProps) {
         {existingBooking ? <BookedNotice booking={existingBooking} /> : null}
         <div className="contents lg:block lg:space-y-6">
           <div className="order-1 lg:order-none">
-            <ImageGallery images={galleryImages} />
+            <ImageGallery
+              images={galleryImages}
+              fallbackContext={{
+                id: car.id,
+                title: car.title,
+                city: car.city,
+                region: car.region,
+                carType: car.car_type,
+              }}
+            />
           </div>
 
           <Card className="order-3 lg:order-none">

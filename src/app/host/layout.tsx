@@ -42,7 +42,7 @@ export default async function HostLayout({ children }: { children: ReactNode }) 
 
   const host = {
     name: profile?.full_name ?? (user.user_metadata as any)?.full_name ?? user.email ?? "Host",
-    avatar: profile?.avatar_url ?? "/car-placeholder.jpg",
+    avatar: profile?.avatar_url?.trim() ?? "",
   };
 
   return (

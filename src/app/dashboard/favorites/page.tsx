@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import Image from "next/image";
 import { Heart, MapPin } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { resolveCarImage } from "@/lib/car-images";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { formatCurrency } from "@/lib/utils";
 
@@ -101,7 +102,13 @@ async function loadUserFavorites() {
         region: car!.region ?? "-",
         price: Number(car!.daily_price ?? 0),
         type: car!.car_type ?? "",
-        image: car!.car_photos?.[0]?.url ?? "/car-placeholder.jpg",
+        image: resolveCarImage(car!.car_photos?.[0]?.url, {
+          id: car!.id,
+          title: car!.title,
+          city: car!.city,
+          region: car!.region,
+          carType: car!.car_type,
+        }),
       })) ?? [];
   } catch {
     return [];

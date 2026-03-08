@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { AdminTabs } from "@/components/admin/admin-tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { resolveCarImage } from "@/lib/car-images";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { buildHostApplicationDecisionEmail, sendEmailSafe } from "@/lib/email";
 import { getInitials } from "@/lib/utils";
@@ -569,7 +570,13 @@ export default async function AdminPage({
                       const bookings = bookingsByCar.get(car.id) ?? [];
                       const blocks = (blocksByCar.get(car.id) ?? []).filter((b: any) => b.available === false);
                       const listingPhotos = photosByCar.get(car.id) ?? [];
-                      const previewImage = listingPhotos[0] ?? "/car-placeholder.jpg";
+                      const previewImage = resolveCarImage(listingPhotos[0], {
+                        id: car.id,
+                        title: car.title,
+                        city: car.city,
+                        region: car.region,
+                        carType: car.car_type,
+                      });
                       return (
                         <div key={car.id} className="rounded-lg border border-border p-3">
                           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">

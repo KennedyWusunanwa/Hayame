@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { CarActions } from "@/components/dashboard/car-actions";
+import { resolveCarImage } from "@/lib/car-images";
 import { loadOwnerCarsWithFavorites } from "@/lib/owner-cars";
 import { formatCurrency } from "@/lib/utils";
 
@@ -68,7 +69,13 @@ export default async function DashboardCarsPage({ searchParams }: PageProps) {
               </TableHeader>
               <TableBody>
                 {cars.map((car) => {
-                  const imageSrc = car.image_url?.trim() ? car.image_url : "/car-placeholder.jpg";
+                  const imageSrc = resolveCarImage(car.image_url, {
+                    id: car.id,
+                    title: car.title,
+                    city: car.city,
+                    region: car.region,
+                    carType: car.car_type,
+                  });
 
                   return (
                     <TableRow key={car.id}>
@@ -123,7 +130,13 @@ export default async function DashboardCarsPage({ searchParams }: PageProps) {
 
           <div className="space-y-3 sm:hidden">
             {cars.map((car) => {
-              const imageSrc = car.image_url?.trim() ? car.image_url : "/car-placeholder.jpg";
+              const imageSrc = resolveCarImage(car.image_url, {
+                id: car.id,
+                title: car.title,
+                city: car.city,
+                region: car.region,
+                carType: car.car_type,
+              });
 
               return (
                 <div key={car.id} className="rounded-lg border border-border bg-white p-3 shadow-sm">
