@@ -1,6 +1,8 @@
+import { notFound } from "next/navigation";
 import { Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { siteFlags } from "@/lib/site-flags";
 import { formatCurrency } from "@/lib/utils";
 
 const tiers = [
@@ -26,6 +28,10 @@ const tiers = [
 ];
 
 export default function PricesPage() {
+  if (!siteFlags.marketing.pricesPage) {
+    notFound();
+  }
+
   return (
     <div className="mx-auto max-w-6xl px-6 py-12">
       <div className="max-w-3xl space-y-4">

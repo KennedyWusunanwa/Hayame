@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { siteFlags } from "@/lib/site-flags";
 
 export function Footer() {
   return (
@@ -22,12 +23,16 @@ export function Footer() {
         <div className="text-sm text-gray-600">
           <p className="font-semibold text-foreground">Company</p>
           <div className="mt-3 flex flex-col gap-2">
-            <Link href="/prices" className="hover:text-brand">
-              Pricing
-            </Link>
-            <Link href="/blog" className="hover:text-brand">
-              Blog
-            </Link>
+            {siteFlags.marketing.pricesPage ? (
+              <Link href="/prices" className="hover:text-brand">
+                Pricing
+              </Link>
+            ) : null}
+            {siteFlags.marketing.blogPage ? (
+              <Link href="/blog" className="hover:text-brand">
+                Blog
+              </Link>
+            ) : null}
             <Link href="/contact" className="hover:text-brand">
               Contact
             </Link>

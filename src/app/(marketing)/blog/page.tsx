@@ -1,6 +1,8 @@
+import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { siteFlags } from "@/lib/site-flags";
 
 const posts = [
   {
@@ -21,6 +23,10 @@ const posts = [
 ];
 
 export default function BlogPage() {
+  if (!siteFlags.marketing.blogPage) {
+    notFound();
+  }
+
   return (
     <div className="mx-auto max-w-6xl px-6 py-12">
       <div className="space-y-3">

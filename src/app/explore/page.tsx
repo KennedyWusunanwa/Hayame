@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { deriveHostBadgeType } from "@/lib/host-badges";
 import { mockCars, type MockCar } from "@/lib/mock-data";
+import { siteFlags } from "@/lib/site-flags";
 import { formatCurrency } from "@/lib/utils";
 
 type ExploreCar = Omit<MockCar, "rating"> & {
@@ -552,7 +553,7 @@ function ExploreContent() {
               Search
             </Button>
           </form>
-          {!hasActiveFilters ? (
+          {!hasActiveFilters && siteFlags.explore.showMapPanel ? (
             <div className="h-44 w-full overflow-hidden rounded-2xl border border-border bg-white shadow-soft sm:h-56 lg:h-64">
               <MapPanel markers={markers} className="h-full" />
             </div>

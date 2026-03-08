@@ -15,15 +15,16 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { siteFlags } from "@/lib/site-flags";
 import { useMessaging } from "@/components/messages/messaging-provider";
 
 const navLinks = [
   { href: "/", label: "Home" },
   { href: "/explore", label: "Explore" },
-  { href: "/prices", label: "Prices" },
-  { href: "/blog", label: "Blog" },
+  { href: "/prices", label: "Prices", enabled: siteFlags.marketing.pricesPage },
+  { href: "/blog", label: "Blog", enabled: siteFlags.marketing.blogPage },
   { href: "/contact", label: "Contact" },
-];
+].filter((link) => link.enabled ?? true);
 
 export function Navbar() {
   const pathname = usePathname();
