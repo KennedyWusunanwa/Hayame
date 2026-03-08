@@ -5,6 +5,32 @@ import { usePathname, useSearchParams } from "next/navigation";
 
 const HIDE_TIMEOUT_MS = 8000;
 
+function isModifiedEvent(event: MouseEvent) {
+  return event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey;
+}
+
+function shouldTrackAnchor(anchor: HTMLAnchorElement) {
+  if (anchor.hasAttribute("data-no-loading")) return false;
+  if (anchor.hasAttribute("download")) return false;
+  if (anchor.getAttribute("target") === "_blank") return false;
+  if (anchor.getAttribute("aria-disabled") === "true") return false;
+
+  const href = anchor.getAttribute("href") ?? "";
+  if (!href || href.startsWith("#") || href.startsWith("mailto:") || href.startsWith("tel:")) {
+    return false;
+  }
+
+  try {
+    const currentUrl = new URL(window.location.href);
+    const targetUrl = new URL(anchor.href, currentUrl);
+    if (targetUrl.origin !== currentUrl.origin) return false;
+
+    return !(targetUrl.pathname === currentUrl.pathname && targetUrl.search === currentUrl.search);
+  } catch {
+    return false;
+  }
+}
+
 export function NavigationLoader() {
   const [loading, setLoading] = useState(false);
   const timerRef = useRef<number | null>(null);
@@ -21,38 +47,31 @@ export function NavigationLoader() {
   }, [loading]);
 
   useEffect(() => {
-    if (loading) setLoading(false);
+    if (!loading) return;
+
+    const frame = window.requestAnimationFrame(() => setLoading(false));
+    return () => window.cancelAnimationFrame(frame);
   }, [pathname, searchParams, loading]);
 
   useEffect(() => {
     const handleClick = (event: MouseEvent) => {
       if (event.defaultPrevented) return;
+      if (isModifiedEvent(event)) return;
+
       const target = event.target as HTMLElement | null;
       if (!target) return;
+
       const anchor = target.closest("a") as HTMLAnchorElement | null;
-      if (anchor) {
-        const href = anchor.getAttribute("href") ?? "";
-        const isExternal =
-          href.startsWith("http") || href.startsWith("mailto:") || href.startsWith("tel:");
-        const isHash = href.startsWith("#");
-        const noLoading = anchor.hasAttribute("data-no-loading");
-        if (!isExternal && !isHash && !noLoading) {
-          setLoading(true);
-        }
-        return;
-      }
-      const button = target.closest("button") as HTMLButtonElement | null;
-      if (button) {
-        if (button.hasAttribute("data-no-loading")) return;
-        const type = (button.getAttribute("type") || "submit").toLowerCase();
-        if (type === "submit") setLoading(true);
-      }
+      if (!anchor || !shouldTrackAnchor(anchor)) return;
+
+      setLoading(true);
     };
 
     const handleSubmit = (event: Event) => {
       const form = event.target as HTMLFormElement | null;
       if (!form) return;
       if (form.hasAttribute("data-no-loading")) return;
+
       setLoading(true);
     };
 
