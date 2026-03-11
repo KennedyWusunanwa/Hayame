@@ -12,6 +12,7 @@ export async function createSupabaseServerClient() {
 
   const cookieStore = await cookies();
   const headerStore = await headers();
+  const authorizationHeader = headerStore.get("authorization") ?? undefined;
 
   return createServerClient<Database>(supabaseUrl, supabaseAnonKey, {
     cookies: {
@@ -38,8 +39,17 @@ export async function createSupabaseServerClient() {
         return headerStore.get(key) ?? undefined;
       },
     },
+    global: authorizationHeader
+      ? {
+          headers: {
+            Authorization: authorizationHeader,
+          },
+        }
+      : undefined,
   });
 }
+
+export const createClient = createSupabaseServerClient;
 
 export async function getUserSession() {
   try {
