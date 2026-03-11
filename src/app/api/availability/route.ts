@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { addDays, format, isAfter, parseISO } from "date-fns";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { getRequestUser } from "@/lib/supabase/request-auth";
 import { availabilitySchema } from "@/lib/validators";
 import { getHostStatus } from "@/lib/host-status";
 
@@ -130,9 +131,7 @@ export async function POST(req: Request) {
     const supa = admin ? (createSupabaseAdminClient() as any) : (supabase as any);
 
     if (!admin) {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const user = await getRequestUser(supabase as any, req);
       if (!user) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
 
       const { isHost } = await getHostStatus(supabase as any, user.id);

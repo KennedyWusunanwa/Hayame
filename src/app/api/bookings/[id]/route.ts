@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { getRequestUser } from "@/lib/supabase/request-auth";
 import { refundPaystack } from "@/lib/paystack";
 import { buildHostDecisionEmail, sendEmailSafe } from "@/lib/email";
 
@@ -16,10 +17,15 @@ export async function PATCH(req: Request, { params }: Params) {
   try {
     const resolvedParams = await params;
     const supabase = await createSupabaseServerClient();
-    const supa = supabase as any;
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const admin = (() => {
+      try {
+        return createSupabaseAdminClient() as any;
+      } catch {
+        return null;
+      }
+    })();
+    const db = admin ?? (supabase as any);
+    const user = await getRequestUser(supabase as any, req);
     if (!user) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
 
     const { id } = resolvedParams;
@@ -29,7 +35,7 @@ export async function PATCH(req: Request, { params }: Params) {
       return NextResponse.json({ message: "Invalid action" }, { status: 400 });
     }
 
-    const { data: booking, error: bookingError } = await supa
+    const { data: booking, error: bookingError } = await db
       .from("bookings")
       .select("*, cars:cars!inner(owner_id,title)")
       .eq("id", id)
@@ -45,16 +51,8 @@ export async function PATCH(req: Request, { params }: Params) {
       return NextResponse.json({ message: "Only pending approvals can be modified" }, { status: 400 });
     }
 
-    const admin = (() => {
-      try {
-        return createSupabaseAdminClient() as any;
-      } catch {
-        return null;
-      }
-    })();
-
     if (action === "approve") {
-      const { data, error } = await supa
+      const { data, error } = await db
         .from("bookings")
         .update({ status: "confirmed", approved_at: new Date().toISOString() })
         .eq("id", id)
@@ -93,7 +91,7 @@ export async function PATCH(req: Request, { params }: Params) {
       await refundPaystack(booking.payment_reference);
     }
 
-    const { data, error } = await supa
+    const { data, error } = await db
       .from("bookings")
       .update({
         status: "rejected",

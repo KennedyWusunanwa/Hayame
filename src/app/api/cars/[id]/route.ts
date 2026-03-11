@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { getRequestUser } from "@/lib/supabase/request-auth";
 import { carFormSchema } from "@/lib/validators";
 import { getHostStatus } from "@/lib/host-status";
 import { buildListingTitle } from "@/lib/listing-title";
@@ -27,14 +28,12 @@ type Params = {
   params: Promise<{ id: string }>;
 };
 
-export async function GET(_: Request, context: Params) {
+export async function GET(req: Request, context: Params) {
   const { id } = await context.params;
   try {
     const supabase = await createSupabaseServerClient();
     const supa = supabase as any;
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = await getRequestUser(supabase as any, req);
     const admin = await isAdmin();
 
     const { data, error } = await supa
@@ -96,9 +95,7 @@ export async function PUT(req: Request, context: Params) {
 
     const supabase = await createSupabaseServerClient();
     const supa = supabase as any;
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = await getRequestUser(supabase as any, req);
     if (!user) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
 
     const { isHost } = await getHostStatus(supa, user.id);
@@ -145,7 +142,7 @@ export async function PUT(req: Request, context: Params) {
   }
 }
 
-export async function DELETE(_: Request, context: Params) {
+export async function DELETE(req: Request, context: Params) {
   const { id } = await context.params;
   try {
     const admin = await isAdmin();
@@ -158,9 +155,7 @@ export async function DELETE(_: Request, context: Params) {
 
     const supabase = await createSupabaseServerClient();
     const supa = supabase as any;
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = await getRequestUser(supabase as any, req);
     if (!user) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
     const { isHost } = await getHostStatus(supa, user.id);
     if (!isHost) {

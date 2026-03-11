@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { getRequestUser } from "@/lib/supabase/request-auth";
 import { carFormSchema } from "@/lib/validators";
 import { getHostStatus } from "@/lib/host-status";
 import { buildListingTitle } from "@/lib/listing-title";
@@ -36,15 +38,24 @@ export async function GET(req: Request) {
     const supabase = await createSupabaseServerClient();
     const supa = supabase as any;
     const { searchParams } = new URL(req.url);
+    const mineOnly = parseBoolean(searchParams.get("mine")) === true;
     const limit = Math.min(Number(searchParams.get("limit") ?? 48), 100);
     const q = (searchParams.get("q") ?? "").trim();
     const sort = (searchParams.get("sort") ?? "").trim();
 
-    let query = supa
-      .from("car_search_view")
-      .select("*")
-      .eq("approval_status", "approved")
-      .limit(Number.isFinite(limit) ? limit : 48);
+    let ownerId: string | null = null;
+    if (mineOnly) {
+      const user = await getRequestUser(supabase as any, req);
+      if (!user) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+      ownerId = user.id;
+    }
+
+    let query = supa.from("car_search_view").select("*").limit(Number.isFinite(limit) ? limit : 48);
+    if (mineOnly) {
+      query = query.eq("owner_id", ownerId);
+    } else {
+      query = query.eq("approval_status", "approved");
+    }
 
     const region = searchParams.get("region");
     const city = searchParams.get("city");
@@ -134,18 +145,48 @@ export async function GET(req: Request) {
     let { data, error } = await query;
     if (error) {
       // Backward-compatible fallback if migration view is not yet applied.
-      const fallback = await supa.from("cars").select("*, car_photos(url)").limit(24);
+      const fallbackQuery = supa.from("cars").select("*, car_photos(url)").limit(24);
+      const fallback = mineOnly && ownerId
+        ? await fallbackQuery.eq("owner_id", ownerId)
+        : await fallbackQuery.eq("approval_status", "approved");
       if (fallback.error) throw fallback.error;
       data = fallback.data;
       error = null;
     }
 
-    const platformFeePercent = await getPlatformFeePercent(supa).catch(() => 10);
     const rows = Array.isArray(data) ? data : [];
-    const hasInstantBookListings = rows.some((row: any) => row?.instant_book === true);
+    let favoriteCounts: Record<string, number> = {};
+    if (mineOnly && rows.length > 0) {
+      const admin = (() => {
+        try {
+          return createSupabaseAdminClient() as any;
+        } catch {
+          return null;
+        }
+      })();
+      if (admin) {
+        const carIds = rows.map((row: any) => row.id).filter(Boolean);
+        if (carIds.length > 0) {
+          const { data: favoriteRows } = await admin.from("favorites").select("car_id").in("car_id", carIds);
+          for (const row of favoriteRows ?? []) {
+            const carId = String((row as any)?.car_id ?? "");
+            if (!carId) continue;
+            favoriteCounts[carId] = (favoriteCounts[carId] ?? 0) + 1;
+          }
+        }
+      }
+    }
+
+    const normalizedRows = rows.map((row: any) => ({
+      ...row,
+      favorites_count: mineOnly ? favoriteCounts[row?.id] ?? 0 : row?.favorites_count ?? 0,
+    }));
+
+    const platformFeePercent = await getPlatformFeePercent(supa).catch(() => 10);
+    const hasInstantBookListings = normalizedRows.some((row: any) => row?.instant_book === true);
 
     return NextResponse.json({
-      data,
+      data: normalizedRows,
       meta: {
         platform_fee_percent: platformFeePercent,
         capabilities: {
@@ -186,9 +227,7 @@ export async function POST(req: Request) {
     }
     const supabase = await createSupabaseServerClient();
     const supa = supabase as any;
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = await getRequestUser(supabase as any, req);
     if (!user) {
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
     }

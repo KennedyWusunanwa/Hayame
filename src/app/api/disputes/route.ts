@@ -1,23 +1,30 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { getRequestUser } from "@/lib/supabase/request-auth";
 import { disputeSchema } from "@/lib/validators";
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
     const supabase = await createSupabaseServerClient();
-    const supa = supabase as any;
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const admin = (() => {
+      try {
+        return createSupabaseAdminClient() as any;
+      } catch {
+        return null;
+      }
+    })();
+    const db = admin ?? (supabase as any);
+    const user = await getRequestUser(supabase as any, req);
     if (!user) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
 
-    const { data: renterBookings, error: renterError } = await supa
+    const { data: renterBookings, error: renterError } = await db
       .from("bookings")
       .select("id")
       .eq("renter_id", user.id);
     if (renterError) throw renterError;
 
-    const { data: ownedCars, error: ownedCarsError } = await supa
+    const { data: ownedCars, error: ownedCarsError } = await db
       .from("cars")
       .select("id")
       .eq("owner_id", user.id);
@@ -26,7 +33,7 @@ export async function GET() {
 
     const { data: ownerBookings, error: ownerError } =
       ownerCarIds.length > 0
-        ? await supa.from("bookings").select("id").in("car_id", ownerCarIds)
+        ? await db.from("bookings").select("id").in("car_id", ownerCarIds)
         : { data: [] as any[], error: null };
     if (ownerError) throw ownerError;
 
@@ -35,7 +42,7 @@ export async function GET() {
     );
     if (bookingIds.length === 0) return NextResponse.json({ data: [] });
 
-    const { data, error } = await supa
+    const { data, error } = await db
       .from("disputes")
       .select("id,booking_id,car_id,reason,status,resolution_note,created_at,updated_at,cars(title)")
       .in("booking_id", bookingIds)
@@ -51,16 +58,21 @@ export async function GET() {
 export async function POST(req: Request) {
   try {
     const supabase = await createSupabaseServerClient();
-    const supa = supabase as any;
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const admin = (() => {
+      try {
+        return createSupabaseAdminClient() as any;
+      } catch {
+        return null;
+      }
+    })();
+    const db = admin ?? (supabase as any);
+    const user = await getRequestUser(supabase as any, req);
     if (!user) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
 
     const body = await req.json();
     const parsed = disputeSchema.parse(body);
 
-    const { data: booking, error: bookingError } = await supa
+    const { data: booking, error: bookingError } = await db
       .from("bookings")
       .select("id,car_id,renter_id,cars:cars!inner(owner_id)")
       .eq("id", parsed.bookingId)
@@ -75,7 +87,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ message: "Forbidden" }, { status: 403 });
     }
 
-    const { data: existingDispute } = await supa
+    const { data: existingDispute } = await db
       .from("disputes")
       .select("id,booking_id,car_id,reason,status,resolution_note,created_at,updated_at")
       .eq("booking_id", booking.id)
@@ -89,7 +101,7 @@ export async function POST(req: Request) {
       });
     }
 
-    const { data: created, error } = await supa
+    const { data: created, error } = await db
       .from("disputes")
       .insert({
         booking_id: booking.id,

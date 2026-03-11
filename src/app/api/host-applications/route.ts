@@ -1,18 +1,25 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { getRequestUser } from "@/lib/supabase/request-auth";
 import { hostApplicationSchema } from "@/lib/validators";
 import { ZodError } from "zod";
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
     const supabase = await createSupabaseServerClient();
-    const supa = supabase as any;
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const admin = (() => {
+      try {
+        return createSupabaseAdminClient() as any;
+      } catch {
+        return null;
+      }
+    })();
+    const db = admin ?? (supabase as any);
+    const user = await getRequestUser(supabase as any, req);
     if (!user) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
 
-    const { data } = await supa
+    const { data } = await db
       .from("host_applications")
       .select("*")
       .eq("user_id", user.id)
@@ -31,13 +38,18 @@ export async function POST(req: Request) {
     const body = await req.json();
     const parsed = hostApplicationSchema.parse(body);
     const supabase = await createSupabaseServerClient();
-    const supa = supabase as any;
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const admin = (() => {
+      try {
+        return createSupabaseAdminClient() as any;
+      } catch {
+        return null;
+      }
+    })();
+    const db = admin ?? (supabase as any);
+    const user = await getRequestUser(supabase as any, req);
     if (!user) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
 
-    const { data: latest } = await supa
+    const { data: latest } = await db
       .from("host_applications")
       .select("id,status")
       .eq("user_id", user.id)
@@ -51,7 +63,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ message: "Application already pending." }, { status: 409 });
     }
 
-    await supa
+    await db
       .from("profiles")
       .upsert(
         {
@@ -63,7 +75,7 @@ export async function POST(req: Request) {
         { onConflict: "id" },
       );
 
-    const { data, error } = await supa
+    const { data, error } = await db
       .from("host_applications")
       .insert({
         user_id: user.id,

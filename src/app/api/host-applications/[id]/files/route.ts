@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getRequestUser } from "@/lib/supabase/request-auth";
 
 const COOKIE_NAME = "admin_auth";
 
@@ -20,20 +21,18 @@ async function isAdmin() {
   return cookie === token;
 }
 
-export async function GET(_: Request, context: { params: { id: string } | Promise<{ id: string }> }) {
+export async function GET(req: Request, context: { params: { id: string } | Promise<{ id: string }> }) {
   try {
     const resolvedParams = await context.params;
     const appId = resolvedParams.id;
-    const type = new URL(_.url).searchParams.get("type");
+    const type = new URL(req.url).searchParams.get("type");
     if (!type || !["front", "back"].includes(type)) {
       return NextResponse.json({ message: "Missing type" }, { status: 400 });
     }
 
     const admin = await isAdmin();
     const supabase = await createSupabaseServerClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = await getRequestUser(supabase as any, req);
 
     if (!admin && !user) {
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 });

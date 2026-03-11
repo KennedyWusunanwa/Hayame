@@ -329,7 +329,11 @@ function BookingsList({
                     </p>
                     <p className="text-xs text-gray-600">
                       Use: {tripUseLocation}
-                      {booking.trip_outside_accra ? " (Outside Accra)" : ""}
+                      {booking.trip_outside_listing_region
+                        ? " (Outside listing region)"
+                        : booking.trip_outside_accra
+                          ? " (Outside Accra)"
+                          : ""}
                     </p>
                     <p className="text-xs text-gray-600">Booked: {formatDateLabel(booking.created_at)}</p>
                     <p className="text-sm font-semibold text-foreground">{formatCurrency(booking.total_price)}</p>
@@ -397,7 +401,7 @@ function BookingsList({
                   <Detail label="Insurance fee" value={formatCurrency(Number(booking.insurance_fee ?? 0))} />
                   <Detail label="Delivery fee" value={formatCurrency(Number(booking.delivery_fee ?? 0))} />
                   <Detail
-                    label="Outside Accra fee"
+                    label="Outside listing region fee"
                     value={formatCurrency(Number(booking.outside_accra_surcharge ?? 0))}
                   />
                   <Detail label="Deposit" value={formatCurrency(Number(booking.deposit_amount ?? 0))} />
@@ -488,7 +492,11 @@ function BookingsList({
                       <div className="mt-1 text-sm text-gray-600">{durationNights} night(s)</div>
                       <div className="mt-1 text-xs text-gray-600">
                         Use: {tripUseLocation}
-                        {booking.trip_outside_accra ? " (Outside Accra)" : ""}
+                        {booking.trip_outside_listing_region
+                          ? " (Outside listing region)"
+                          : booking.trip_outside_accra
+                            ? " (Outside Accra)"
+                            : ""}
                       </div>
                       <div className="mt-1 text-sm text-gray-600">Booked: {formatDateLabel(booking.created_at)}</div>
                     </TableCell>

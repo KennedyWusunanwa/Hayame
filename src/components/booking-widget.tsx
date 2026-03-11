@@ -79,7 +79,7 @@ export function BookingWidget({
     tripRegion: tripUseRegion,
     listingRegion,
   });
-  const outsideAccraSurchargeAmount = tripOutsideAccra ? outsideAccraFeeValue : 0;
+  const outsideAccraSurchargeAmount = tripOutsideListingRegion ? outsideAccraFeeValue : 0;
   const total =
     baseTotal +
     platformFeeAmount +
@@ -381,13 +381,16 @@ export function BookingWidget({
           />
         </div>
         <div className="space-y-1 text-xs">
-          <p className={tripOutsideAccra ? "text-amber-700" : "text-emerald-700"}>
-            {tripOutsideAccra
-              ? `Outside Accra trip${outsideAccraFeeValue > 0 ? ` (+${formatCurrency(outsideAccraFeeValue)})` : ""}`
-              : "Within Accra (no outside-Accra surcharge)"}
+          <p className={tripOutsideListingRegion ? "text-amber-700" : "text-emerald-700"}>
+            {tripOutsideListingRegion
+              ? `Outside listing region trip${outsideAccraFeeValue > 0 ? ` (+${formatCurrency(outsideAccraFeeValue)})` : ""}`
+              : "Within listing region (no outside-region surcharge)"}
           </p>
           {tripOutsideListingRegion && listingRegion ? (
             <p className="text-gray-600">Trip use region differs from the listing region ({listingRegion}).</p>
+          ) : null}
+          {tripOutsideAccra ? (
+            <p className="text-gray-600">Trip use location is also outside Accra.</p>
           ) : null}
         </div>
       </div>
@@ -406,11 +409,11 @@ export function BookingWidget({
           label="Delivery fee"
           value={formatCurrency(deliveryFeeAmount)}
         />
-        {outsideAccraFeeValue > 0 || tripOutsideAccra ? (
+        {outsideAccraFeeValue > 0 || tripOutsideListingRegion ? (
           <PriceRow
-            label={tripOutsideAccra ? "Outside Accra surcharge" : "Outside Accra surcharge (not applied)"}
+            label={tripOutsideListingRegion ? "Outside listing region surcharge" : "Outside listing region surcharge (not applied)"}
             value={formatCurrency(outsideAccraSurchargeAmount)}
-            muted={!tripOutsideAccra}
+            muted={!tripOutsideListingRegion}
           />
         ) : null}
         <PriceRow

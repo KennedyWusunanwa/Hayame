@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { getRequestUser } from "@/lib/supabase/request-auth";
 
 const COOKIE_NAME = "admin_auth";
 const MAX_PHOTOS = 7;
@@ -53,7 +54,7 @@ function getStoragePathFromPublicUrl(publicUrl: string, bucket: string): string 
   }
 }
 
-async function canManageCar(carId: string) {
+async function canManageCar(carId: string, req?: Request) {
   const adminAllowed = await isAdmin();
   if (adminAllowed) {
     try {
@@ -74,9 +75,7 @@ async function canManageCar(carId: string) {
 
   const supabase = await createSupabaseServerClient();
   const client = supabase as any;
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getRequestUser(supabase as any, req);
   if (!user) {
     return { ok: false as const, status: 401, message: "Unauthorized" };
   }
@@ -94,10 +93,35 @@ type Params = {
   params: Promise<{ id: string }>;
 };
 
+export async function GET(req: Request, context: Params) {
+  const { id: carId } = await context.params;
+  try {
+    const access = await canManageCar(carId, req);
+    if (!access.ok) {
+      return NextResponse.json({ message: access.message }, { status: access.status });
+    }
+
+    const { data, error } = await access.client
+      .from("car_photos")
+      .select("id,url")
+      .eq("car_id", carId);
+    if (error) throw error;
+
+    return NextResponse.json({
+      data: data ?? [],
+      meta: {
+        max_photos: MAX_PHOTOS,
+      },
+    });
+  } catch (error: any) {
+    return NextResponse.json({ message: error.message ?? "Failed to load photos" }, { status: 400 });
+  }
+}
+
 export async function POST(req: Request, context: Params) {
   const { id: carId } = await context.params;
   try {
-    const access = await canManageCar(carId);
+    const access = await canManageCar(carId, req);
     if (!access.ok) {
       return NextResponse.json({ message: access.message }, { status: access.status });
     }
@@ -196,7 +220,7 @@ export async function POST(req: Request, context: Params) {
 export async function DELETE(req: Request, context: Params) {
   const { id: carId } = await context.params;
   try {
-    const access = await canManageCar(carId);
+    const access = await canManageCar(carId, req);
     if (!access.ok) {
       return NextResponse.json({ message: access.message }, { status: access.status });
     }

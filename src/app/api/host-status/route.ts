@@ -1,18 +1,42 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { getRequestUser } from "@/lib/supabase/request-auth";
 import { getHostStatus } from "@/lib/host-status";
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
     const supabase = await createSupabaseServerClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ is_host: false, status: null });
+    const user = await getRequestUser(supabase as any, req);
+    if (!user) {
+      return NextResponse.json({
+        is_host: false,
+        host_application_status: null,
+        status: null,
+      });
+    }
 
-    const { isHost, status } = await getHostStatus(supabase as any, user.id);
-    return NextResponse.json({ is_host: isHost, status });
+    const admin = (() => {
+      try {
+        return createSupabaseAdminClient() as any;
+      } catch {
+        return null;
+      }
+    })();
+
+    const statusClient = admin ?? (supabase as any);
+    const { isHost, status } = await getHostStatus(statusClient, user.id);
+    return NextResponse.json({
+      is_host: isHost,
+      host_application_status: status,
+      status,
+    });
   } catch (error: any) {
-    return NextResponse.json({ is_host: false, status: null, error: error.message ?? "Failed" });
+    return NextResponse.json({
+      is_host: false,
+      host_application_status: null,
+      status: null,
+      error: error.message ?? "Failed",
+    });
   }
 }

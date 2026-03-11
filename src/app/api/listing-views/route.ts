@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getRequestUser } from "@/lib/supabase/request-auth";
 
 export async function POST(req: Request) {
   try {
@@ -13,9 +14,7 @@ export async function POST(req: Request) {
 
     const supabase = await createSupabaseServerClient();
     const supa = supabase as any;
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = await getRequestUser(supabase as any, req);
 
     const payload = {
       car_id: body.carId,

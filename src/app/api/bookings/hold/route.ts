@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { addMinutes, isAfter, parseISO } from "date-fns";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { getRequestUser } from "@/lib/supabase/request-auth";
 import { bookingSchema } from "@/lib/validators";
 import { isLocationOutsideAccra, isOutsideListingRegion } from "@/lib/utils";
 
@@ -13,10 +14,15 @@ export async function POST(req: Request) {
     const body = await req.json();
     const parsed = bookingSchema.parse(body);
     const supabase = await createSupabaseServerClient();
-    const supa = supabase as any;
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const admin = (() => {
+      try {
+        return createSupabaseAdminClient() as any;
+      } catch {
+        return null;
+      }
+    })();
+    const db = admin ?? (supabase as any);
+    const user = await getRequestUser(supabase as any, req);
     if (!user) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
 
     const start = parseISO(parsed.startDate);
@@ -29,7 +35,7 @@ export async function POST(req: Request) {
     const tripUseCity = parsed.tripUseCity.trim();
     const tripUseAddress = parsed.tripUseAddress.trim();
 
-    const { data: car, error: carError } = await supa
+    const { data: car, error: carError } = await db
       .from("cars")
       .select("id,is_available,city,region,outside_accra_fee")
       .eq("id", parsed.carId)
@@ -46,16 +52,11 @@ export async function POST(req: Request) {
       tripRegion: tripUseRegion,
       listingRegion: (car as any).region ?? null,
     });
-    const outsideAccraSurcharge = tripOutsideAccra ? Math.max(Number((car as any).outside_accra_fee ?? 0), 0) : 0;
+    const outsideAccraSurcharge = tripOutsideListingRegion
+      ? Math.max(Number((car as any).outside_accra_fee ?? 0), 0)
+      : 0;
 
-    const admin = (() => {
-      try {
-        return createSupabaseAdminClient() as any;
-      } catch {
-        return null;
-      }
-    })();
-    const conflictClient = admin ?? supa;
+    const conflictClient = db;
     const now = new Date();
     const nowIso = now.toISOString();
 
@@ -68,7 +69,7 @@ export async function POST(req: Request) {
         .lt("hold_expires_at", nowIso);
     }
 
-    const { data: existingHold } = await supa
+    const { data: existingHold } = await db
       .from("bookings")
       .select(
         "id,hold_expires_at,trip_use_region,trip_use_city,trip_use_address,trip_outside_accra,trip_outside_listing_region,outside_accra_surcharge",
@@ -90,7 +91,7 @@ export async function POST(req: Request) {
         Number(existingHold.outside_accra_surcharge ?? 0) !== outsideAccraSurcharge;
 
       if (needsUpdate) {
-        await supa
+        await db
           .from("bookings")
           .update({
             trip_use_region: tripUseRegion,
@@ -132,7 +133,7 @@ export async function POST(req: Request) {
     }
 
     const holdExpiresAt = addMinutes(now, HOLD_MINUTES).toISOString();
-    const { data: hold, error } = await supa
+    const { data: hold, error } = await db
       .from("bookings")
       .insert({
         car_id: parsed.carId,

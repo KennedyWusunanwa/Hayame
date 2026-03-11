@@ -1,13 +1,12 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getRequestUser } from "@/lib/supabase/request-auth";
 import { getHostStatus } from "@/lib/host-status";
 
-export async function POST() {
+export async function POST(req: Request) {
   try {
     const supabase = await createSupabaseServerClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = await getRequestUser(supabase as any, req);
 
     if (!user) {
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 });

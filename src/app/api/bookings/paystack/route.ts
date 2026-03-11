@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { differenceInCalendarDays } from "date-fns";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { getRequestUser } from "@/lib/supabase/request-auth";
 import { verifyPaystackTransaction } from "@/lib/paystack";
 import { isLocationOutsideAccra, isOutsideListingRegion } from "@/lib/utils";
 import {
@@ -90,9 +91,7 @@ export async function POST(req: Request) {
   try {
     const supabase = await createSupabaseServerClient();
     const supa = supabase as any;
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = await getRequestUser(supabase as any, req);
     if (!user) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
 
     // Ensure profile exists for renter_id FK
@@ -281,7 +280,7 @@ export async function POST(req: Request) {
     const heldOutsideAccraSurcharge = Number(heldBooking?.outside_accra_surcharge);
     const outsideAccraSurcharge = Number.isFinite(heldOutsideAccraSurcharge)
       ? Math.max(heldOutsideAccraSurcharge, 0)
-      : tripOutsideAccra
+      : tripOutsideListingRegion
         ? Math.max(Number(car.outside_accra_fee ?? 0), 0)
         : 0;
     const total = subtotal + platformFee + insuranceFee + deliveryFee + outsideAccraSurcharge + depositAmount;

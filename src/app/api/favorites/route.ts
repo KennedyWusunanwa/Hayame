@@ -1,17 +1,24 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { getRequestUser } from "@/lib/supabase/request-auth";
 import { favoriteSchema } from "@/lib/validators";
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
     const supabase = await createSupabaseServerClient();
-    const supa = supabase as any;
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const admin = (() => {
+      try {
+        return createSupabaseAdminClient() as any;
+      } catch {
+        return null;
+      }
+    })();
+    const db = admin ?? (supabase as any);
+    const user = await getRequestUser(supabase as any, req);
     if (!user) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
 
-    const { data, error } = await supa.from("favorites").select("car_id").eq("user_id", user.id);
+    const { data, error } = await db.from("favorites").select("car_id").eq("user_id", user.id);
     if (error) throw error;
     return NextResponse.json({ data });
   } catch (error: any) {
@@ -24,20 +31,25 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { carId, isFavorite } = favoriteSchema.parse(body);
     const supabase = await createSupabaseServerClient();
-    const supa = supabase as any;
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const admin = (() => {
+      try {
+        return createSupabaseAdminClient() as any;
+      } catch {
+        return null;
+      }
+    })();
+    const db = admin ?? (supabase as any);
+    const user = await getRequestUser(supabase as any, req);
     if (!user) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
 
     if (isFavorite) {
-      const { error } = await supa.from("favorites").upsert({
+      const { error } = await db.from("favorites").upsert({
         car_id: carId,
         user_id: user.id,
       });
       if (error) throw error;
     } else {
-      const { error } = await supa.from("favorites").delete().eq("car_id", carId).eq("user_id", user.id);
+      const { error } = await db.from("favorites").delete().eq("car_id", carId).eq("user_id", user.id);
       if (error) throw error;
     }
 
