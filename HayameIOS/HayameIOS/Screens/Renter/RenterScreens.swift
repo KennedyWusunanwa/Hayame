@@ -2,8 +2,16 @@ import SwiftUI
 import PhotosUI
 import UIKit
 
+enum MoreRoute: String, Identifiable {
+    case messages
+    case dashboard
+
+    var id: String { rawValue }
+}
+
 struct RenterTabShell: View {
     @EnvironmentObject private var appState: AppState
+    @State private var moreRoute: MoreRoute?
 
     var body: some View {
         TabView(selection: $appState.renterTab) {
@@ -40,31 +48,37 @@ struct RenterTabShell: View {
             .tag(RenterTab.favorites)
 
             NavigationStack {
-                InboxScreen()
+                GuestProfileScreen(requestedRoute: $moreRoute)
             }
             .tabItem {
-                Label("Inbox", systemImage: "message")
+                Label("More", systemImage: "ellipsis")
             }
+            .tag(RenterTab.more)
             .badge(appState.unreadMessagesCount > 0 ? appState.unreadMessagesCount : 0)
-            .tag(RenterTab.inbox)
-
-            NavigationStack {
-                GuestProfileScreen()
-            }
-            .tabItem {
-                Label("Profile", systemImage: "person")
-            }
-            .tag(RenterTab.profile)
-
-            NavigationStack {
-                RenterDashboardScreen()
-            }
-            .tabItem {
-                Label("Dashboard", systemImage: "rectangle.grid.2x2.fill")
-            }
-            .tag(RenterTab.dashboard)
         }
         .tint(HayameTheme.brandBlue)
+        .toolbarBackground(.visible, for: .tabBar)
+        .onAppear {
+            routeLegacyTabIfNeeded(appState.renterTab)
+        }
+        .onChange(of: appState.renterTab) { _, newValue in
+            routeLegacyTabIfNeeded(newValue)
+        }
+    }
+
+    private func routeLegacyTabIfNeeded(_ tab: RenterTab) {
+        switch tab {
+        case .inbox:
+            moreRoute = .messages
+            appState.renterTab = .more
+        case .dashboard:
+            moreRoute = .dashboard
+            appState.renterTab = .more
+        case .profile:
+            appState.renterTab = .more
+        default:
+            break
+        }
     }
 }
 
@@ -78,7 +92,7 @@ struct RenterHomeScreen: View {
                     user: appState.currentUser,
                     unreadCount: appState.unreadMessagesCount,
                     onProfileTap: {
-                        appState.renterTab = .profile
+                        appState.renterTab = .more
                     },
                     onChatTap: {
                         appState.renterTab = .inbox
@@ -137,7 +151,7 @@ struct RenterHomeScreen: View {
 
                 Button("View protection details") {
                     // Intentionally routed from profile for clean tab UX.
-                    appState.renterTab = .profile
+                    appState.renterTab = .more
                 }
                 .buttonStyle(SecondaryPillButtonStyle())
 
@@ -282,7 +296,7 @@ private struct HomeFeaturedCarRow: View {
                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
 
             VStack(alignment: .leading, spacing: 4) {
-                Text("\(car.title) \(car.year)")
+                Text(car.displayTitle)
                     .font(.system(size: 15, weight: .bold, design: .rounded))
                     .foregroundStyle(HayameTheme.brandNavy)
                 Text("\(car.city), \(car.region)")
@@ -722,6 +736,10 @@ struct CarDetailScreen: View {
         max(1, Calendar.current.dateComponents([.day], from: startDate, to: endDate).day ?? 1)
     }
 
+    private var minimumEndDate: Date {
+        Calendar.current.date(byAdding: .day, value: 1, to: startDate) ?? startDate
+    }
+
     private var subtotal: Int {
         car.dailyPrice * daysCount
     }
@@ -756,14 +774,6 @@ struct CarDetailScreen: View {
 
     private var galleryImages: [String] {
         car.imageNames.isEmpty ? [""] : car.imageNames
-    }
-
-    private var displayTitle: String {
-        let titleLower = car.title.lowercased()
-        if titleLower.contains(String(car.year)) {
-            return car.title
-        }
-        return "\(car.title) \(car.year)"
     }
 
     private var addedDateLabel: String {
@@ -870,7 +880,7 @@ struct CarDetailScreen: View {
 
                     HStack(alignment: .top, spacing: 10) {
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(displayTitle)
+                            Text(car.displayTitle)
                                 .font(.system(size: 26, weight: .bold, design: .rounded))
                                 .foregroundStyle(HayameTheme.brandNavy)
                             Text("\(car.city), \(car.region)")
@@ -1100,9 +1110,7 @@ struct CarDetailScreen: View {
                     Text("AVAILABILITY PREVIEW")
                         .font(.system(size: 11, weight: .bold, design: .rounded))
                         .foregroundStyle(HayameTheme.mutedText)
-
-                    DatePicker("Start", selection: $startDate, displayedComponents: .date)
-                    DatePicker("End", selection: $endDate, in: startDate..., displayedComponents: .date)
+                    InfoLine(label: "Selected dates", value: "\(startDate.hayameDateLabel()) - \(endDate.hayameDateLabel())")
 
                     Button(isCheckingAvailability ? "Checking..." : "Check availability") {
                         Task { await checkAvailabilityNow() }
@@ -1140,6 +1148,12 @@ struct CarDetailScreen: View {
                     Label("Email Verified", systemImage: car.hostEmailVerified ? "envelope.badge.shield.half.filled" : "envelope.badge")
 
                     InfoLine(label: "Cancellation", value: car.cancellationPolicy)
+
+                    Text("TRIP DATES")
+                        .font(.system(size: 11, weight: .bold, design: .rounded))
+                        .foregroundStyle(HayameTheme.mutedText)
+                    DatePicker("Start date", selection: $startDate, in: Date()..., displayedComponents: .date)
+                    DatePicker("End date", selection: $endDate, in: minimumEndDate..., displayedComponents: .date)
 
                     Text("Quick select:")
                         .font(.system(size: 12, weight: .semibold, design: .rounded))
@@ -1204,6 +1218,9 @@ struct CarDetailScreen: View {
                             RoundedRectangle(cornerRadius: 10, style: .continuous)
                                 .stroke(Color.black.opacity(0.08), lineWidth: 1)
                         )
+                    Text("Minimum 3 characters.")
+                        .font(.system(size: 11, weight: .medium, design: .rounded))
+                        .foregroundStyle(HayameTheme.mutedText)
 
                     Text(
                         tripOutsideListingRegion
@@ -1239,7 +1256,7 @@ struct CarDetailScreen: View {
                         .foregroundStyle(HayameTheme.mutedText)
 
                     Button("View protection details") {
-                        appState.renterTab = .profile
+                        appState.renterTab = .more
                     }
                     .buttonStyle(SecondaryPillButtonStyle())
 
@@ -1349,6 +1366,12 @@ struct CarDetailScreen: View {
             }
         } message: {
             Text(authGateMessage)
+        }
+        .onChange(of: startDate) { _, newValue in
+            let minimum = Calendar.current.date(byAdding: .day, value: 1, to: newValue) ?? newValue
+            if endDate < minimum {
+                endDate = minimum
+            }
         }
     }
 
@@ -1542,8 +1565,8 @@ private struct BookingSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     let car: Car
-    let startDate: Date
-    let endDate: Date
+    @State private var startDate: Date
+    @State private var endDate: Date
 
     @State private var region: String
     @State private var city: String
@@ -1553,11 +1576,15 @@ private struct BookingSheet: View {
 
     init(car: Car, startDate: Date, endDate: Date, region: String, city: String, address: String) {
         self.car = car
-        self.startDate = startDate
-        self.endDate = endDate
+        _startDate = State(initialValue: startDate)
+        _endDate = State(initialValue: endDate > startDate ? endDate : (Calendar.current.date(byAdding: .day, value: 1, to: startDate) ?? startDate))
         _region = State(initialValue: MockDataService.normalizedRegion(region))
         _city = State(initialValue: city)
         _address = State(initialValue: address)
+    }
+
+    private var minimumEndDate: Date {
+        Calendar.current.date(byAdding: .day, value: 1, to: startDate) ?? startDate
     }
 
     private var nights: Int {
@@ -1599,6 +1626,20 @@ private struct BookingSheet: View {
     var body: some View {
         NavigationStack {
             Form {
+                Section("Trip dates") {
+                    DatePicker("Start date", selection: $startDate, in: Date()..., displayedComponents: .date)
+                    DatePicker("End date", selection: $endDate, in: minimumEndDate..., displayedComponents: .date)
+
+                    Text("Quick select days")
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .foregroundStyle(HayameTheme.brandNavy)
+                    HStack(spacing: 8) {
+                        quickDateButton(title: "2 days", days: 2)
+                        quickDateButton(title: "5 days", days: 5)
+                        quickDateButton(title: "7 days", days: 7)
+                    }
+                }
+
                 Section("Trip use location") {
                     Picker("Region", selection: $region) {
                         ForEach(MockDataService.regionsIncluding(region), id: \.self) { region in
@@ -1611,6 +1652,9 @@ private struct BookingSheet: View {
                         }
                     }
                     TextField("Exact area / destination", text: $address)
+                    Text("Minimum 3 characters.")
+                        .font(.system(size: 11, weight: .medium, design: .rounded))
+                        .foregroundStyle(HayameTheme.mutedText)
 
                     Text(
                         tripOutsideListingRegion
@@ -1635,7 +1679,7 @@ private struct BookingSheet: View {
                 }
 
                 Section("Summary") {
-                    InfoLine(label: "Car", value: "\(car.title) \(car.year)")
+                    InfoLine(label: "Car", value: car.displayTitle)
                     InfoLine(label: "Dates", value: "\(startDate.hayameDateLabel()) - \(endDate.hayameDateLabel())")
                     InfoLine(label: "Daily x \(nights)", value: "GHS\(subtotal)")
                     InfoLine(label: "Insurance fee", value: "GHS\(insuranceFee)")
@@ -1661,6 +1705,12 @@ private struct BookingSheet: View {
                 }
             }
             .navigationTitle("Checkout")
+            .onChange(of: startDate) { _, newValue in
+                let minimum = Calendar.current.date(byAdding: .day, value: 1, to: newValue) ?? newValue
+                if endDate < minimum {
+                    endDate = minimum
+                }
+            }
             .onChange(of: region) { _, newValue in
                 let options = MockDataService.cities(for: newValue, preferred: city)
                 if !options.contains(where: { $0.caseInsensitiveCompare(city) == .orderedSame }) {
@@ -1672,14 +1722,34 @@ private struct BookingSheet: View {
                     Button("Cancel") { dismiss() }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button(isProcessingPayment ? "Processing..." : "Pay Paystack") {
+                    Button {
                         Task { await payWithPaystack() }
+                    } label: {
+                        HStack(spacing: 8) {
+                            if isProcessingPayment {
+                                ProgressView().tint(.white)
+                            }
+                            Text(isProcessingPayment ? "Processing..." : "Pay Paystack")
+                        }
                     }
                     .bold()
                     .disabled(isProcessingPayment)
                 }
             }
+            .overlay {
+                if isProcessingPayment {
+                    PaymentProcessingOverlay()
+                }
+            }
+            .animation(.easeInOut(duration: 0.2), value: isProcessingPayment)
         }
+    }
+
+    private func quickDateButton(title: String, days: Int) -> some View {
+        Button(title) {
+            endDate = Calendar.current.date(byAdding: .day, value: days, to: startDate) ?? minimumEndDate
+        }
+        .buttonStyle(SecondaryPillButtonStyle())
     }
 
     @MainActor
@@ -1703,15 +1773,96 @@ private struct BookingSheet: View {
                 throw APIError(message: "Invalid Paystack checkout URL returned by server.")
             }
 
-            let callbackURL = try await InAppBrowserAuthenticator.shared.open(
-                url: checkoutURL,
-                callbackScheme: "hayame"
-            )
-            _ = try await appState.completeBookingPayment(checkout: checkout, callbackURL: callbackURL)
-            dismiss()
+            do {
+                let callbackURL = try await InAppBrowserAuthenticator.shared.open(
+                    url: checkoutURL,
+                    callbackScheme: "hayame"
+                )
+                _ = try await appState.completeBookingPayment(checkout: checkout, callbackURL: callbackURL)
+                appState.renterTab = .trips
+                dismiss()
+                return
+            } catch {
+                // If browser callback is interrupted/cancelled, verify by reference before failing.
+                if shouldAttemptReferenceFinalization(after: error) {
+                    _ = try await appState.completeBookingPayment(checkout: checkout, callbackURL: nil)
+                    appState.renterTab = .trips
+                    dismiss()
+                    return
+                }
+                throw error
+            }
         } catch {
             let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
             paymentMessage = message.isEmpty ? "Unable to complete payment." : message
+            appState.paymentFlowNotice = paymentMessage
+            appState.paymentFlowNoticeIsError = true
+        }
+    }
+
+    private func shouldAttemptReferenceFinalization(after error: Error) -> Bool {
+        guard let apiError = error as? APIError else { return false }
+        let message = apiError.message.lowercased()
+        return message.contains("cancelled") ||
+            message.contains("no callback url") ||
+            message.contains("missing payment reference")
+    }
+}
+
+private struct PaymentProcessingOverlay: View {
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.2).ignoresSafeArea()
+            VStack(spacing: 12) {
+                SmilingWheelSpinner(size: 72)
+                Text("Processing payment")
+                    .font(.system(size: 16, weight: .bold, design: .rounded))
+                    .foregroundStyle(HayameTheme.brandNavy)
+                Text("Please wait while we confirm your payment.")
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .foregroundStyle(HayameTheme.mutedText)
+                    .multilineTextAlignment(.center)
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 18)
+            .frame(maxWidth: 280)
+            .background(Color.white)
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(Color.black.opacity(0.06), lineWidth: 1)
+            )
+            .shadow(color: Color.black.opacity(0.12), radius: 14, x: 0, y: 6)
+        }
+    }
+}
+
+private struct SmilingWheelSpinner: View {
+    let size: CGFloat
+    @State private var spinning = false
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .stroke(HayameTheme.brandBlue.opacity(0.2), lineWidth: 6)
+            Circle()
+                .trim(from: 0.12, to: 0.9)
+                .stroke(
+                    AngularGradient(
+                        colors: [HayameTheme.brandBlue, HayameTheme.brandNavy, HayameTheme.brandBlue],
+                        center: .center
+                    ),
+                    style: StrokeStyle(lineWidth: 6, lineCap: .round)
+                )
+                .rotationEffect(.degrees(spinning ? 360 : 0))
+                .animation(.linear(duration: 1.0).repeatForever(autoreverses: false), value: spinning)
+            Image(systemName: "face.smiling")
+                .font(.system(size: size * 0.34, weight: .bold))
+                .foregroundStyle(HayameTheme.brandNavy)
+        }
+        .frame(width: size, height: size)
+        .onAppear {
+            spinning = true
         }
     }
 }
@@ -1790,7 +1941,7 @@ struct RenterDashboardScreen: View {
                     subtitle: "Update your details and contact info.",
                     systemImage: "person"
                 ) {
-                    appState.renterTab = .profile
+                    appState.renterTab = .more
                 }
 
                 DashboardNavRow(
@@ -1915,6 +2066,16 @@ struct TripsScreen: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
+                if let paymentNotice = appState.paymentFlowNotice, !paymentNotice.isEmpty {
+                    PaymentNoticeCard(
+                        message: paymentNotice,
+                        isError: appState.paymentFlowNoticeIsError
+                    ) {
+                        appState.paymentFlowNotice = nil
+                        appState.paymentFlowNoticeIsError = false
+                    }
+                }
+
                 if !appState.isAuthenticated {
                     EmptyStateView(
                         title: "Guest mode",
@@ -2010,6 +2171,33 @@ struct TripsScreen: View {
 private struct TripChatTarget: Identifiable, Hashable {
     let id: String
     let participantName: String
+}
+
+private struct PaymentNoticeCard: View {
+    let message: String
+    let isError: Bool
+    let dismiss: () -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: isError ? "xmark.octagon.fill" : "checkmark.circle.fill")
+                .font(.system(size: 18, weight: .bold))
+                .foregroundStyle(isError ? HayameTheme.danger : HayameTheme.success)
+
+            Text(message)
+                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                .foregroundStyle(isError ? HayameTheme.danger : HayameTheme.success)
+                .multilineTextAlignment(.leading)
+
+            Spacer(minLength: 8)
+
+            Button("Dismiss", action: dismiss)
+                .font(.system(size: 12, weight: .bold, design: .rounded))
+                .foregroundStyle(HayameTheme.brandBlue)
+        }
+        .padding(12)
+        .hayameCard()
+    }
 }
 
 private struct TripBookingCard: View {
@@ -2476,6 +2664,15 @@ struct ChatThreadScreen: View {
         appState.messagesByConversation[conversationID] ?? []
     }
 
+    private var messageIDs: [String] {
+        messages.map(\.id)
+    }
+
+    private var canSend: Bool {
+        appState.isAuthenticated &&
+            !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             ScrollViewReader { proxy in
@@ -2484,8 +2681,10 @@ struct ChatThreadScreen: View {
                         ForEach(messages) { message in
                             ChatBubble(message: message)
                                 .id(message.id)
+                                .transition(.move(edge: .bottom).combined(with: .opacity))
                         }
                     }
+                    .animation(.spring(response: 0.3, dampingFraction: 0.85), value: messageIDs)
                     .padding(16)
                 }
                 .onAppear {
@@ -2495,15 +2694,19 @@ struct ChatThreadScreen: View {
                         draft = queuedDraft
                     }
                     if let last = messages.last {
-                        proxy.scrollTo(last.id, anchor: .bottom)
+                        withAnimation(.easeOut(duration: 0.2)) {
+                            proxy.scrollTo(last.id, anchor: .bottom)
+                        }
                     }
                 }
                 .onDisappear {
                     appState.stopRealtimeMessages()
                 }
-                .onChange(of: messages.count) { _, _ in
+                .onChange(of: messageIDs) { _, _ in
                     if let last = messages.last {
-                        proxy.scrollTo(last.id, anchor: .bottom)
+                        withAnimation(.easeOut(duration: 0.2)) {
+                            proxy.scrollTo(last.id, anchor: .bottom)
+                        }
                     }
                 }
             }
@@ -2517,7 +2720,9 @@ struct ChatThreadScreen: View {
                     .disabled(!appState.isAuthenticated)
 
                 Button {
-                    appState.addMessage(conversationID: conversationID, body: draft, mine: true)
+                    let outgoing = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !outgoing.isEmpty else { return }
+                    appState.addMessage(conversationID: conversationID, body: outgoing, mine: true)
                     draft = ""
                 } label: {
                     Image(systemName: "paperplane.fill")
@@ -2527,7 +2732,8 @@ struct ChatThreadScreen: View {
                         .background(HayameTheme.brandBlue)
                         .clipShape(Circle())
                 }
-                .disabled(!appState.isAuthenticated)
+                .disabled(!canSend)
+                .opacity(canSend ? 1 : 0.5)
             }
             .padding(12)
             .background(HayameTheme.pageBackground)
@@ -2540,7 +2746,13 @@ struct ChatThreadScreen: View {
 
 struct GuestProfileScreen: View {
     @EnvironmentObject private var appState: AppState
+    @Binding var requestedRoute: MoreRoute?
     @State private var showEditProfile = false
+    @State private var activeMoreRoute: MoreRoute?
+
+    init(requestedRoute: Binding<MoreRoute?> = .constant(nil)) {
+        _requestedRoute = requestedRoute
+    }
 
     var body: some View {
         ScrollView(showsIndicators: false) {
@@ -2587,7 +2799,10 @@ struct GuestProfileScreen: View {
                         appState.renterTab = .trips
                     }
                     profileActionButton(title: "Messages", systemImage: "message") {
-                        appState.renterTab = .inbox
+                        activeMoreRoute = .messages
+                    }
+                    profileActionButton(title: "Dashboard", systemImage: "rectangle.grid.2x2.fill") {
+                        activeMoreRoute = .dashboard
                     }
                 }
                 .hayameCard()
@@ -2595,13 +2810,32 @@ struct GuestProfileScreen: View {
                 SectionHeader(title: "Hosting")
                 VStack(alignment: .leading, spacing: 10) {
                     if appState.hostAccessState == .host {
-                        Text("Host mode is enabled for this account.")
+                        Toggle(
+                            isOn: Binding(
+                                get: { appState.hostModeEnabled },
+                                set: { enabled in
+                                    if enabled {
+                                        withAnimation(.easeInOut(duration: 0.18)) {
+                                            appState.hostModeEnabled = true
+                                        }
+                                        appState.switchToHostMode()
+                                    } else {
+                                        withAnimation(.easeInOut(duration: 0.18)) {
+                                            appState.hostModeEnabled = false
+                                        }
+                                        appState.switchToGuestMode()
+                                    }
+                                }
+                            )
+                        ) {
+                            Text("Host mode")
+                                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                        }
+                        .toggleStyle(SwitchToggleStyle(tint: HayameTheme.brandBlue))
+
+                        Text("Turn on Host mode to access host dashboard, listings, bookings, and earnings. Turn it off anytime.")
                             .font(.system(size: 12, weight: .medium, design: .rounded))
                             .foregroundStyle(HayameTheme.mutedText)
-                        Button("Open host dashboard") {
-                            appState.switchToHostMode()
-                        }
-                        .buttonStyle(SecondaryPillButtonStyle())
                     } else if appState.hostAccessState == .pending {
                         if let hostApplication = appState.hostApplication {
                             InfoLine(label: "Application", value: hostApplication.status.rawValue.capitalized)
@@ -2650,10 +2884,26 @@ struct GuestProfileScreen: View {
             .padding(16)
         }
         .background(HayameTheme.pageBackground)
-        .navigationTitle("Profile")
+        .navigationTitle("More")
+        .navigationDestination(item: $activeMoreRoute) { route in
+            switch route {
+            case .messages:
+                InboxScreen()
+                    .environmentObject(appState)
+            case .dashboard:
+                RenterDashboardScreen()
+                    .environmentObject(appState)
+            }
+        }
         .sheet(isPresented: $showEditProfile) {
             ProfileEditSheet()
                 .environmentObject(appState)
+        }
+        .onAppear {
+            consumeRequestedRouteIfNeeded()
+        }
+        .onChange(of: requestedRoute) { _, _ in
+            consumeRequestedRouteIfNeeded()
         }
     }
 
@@ -2701,6 +2951,12 @@ struct GuestProfileScreen: View {
             .foregroundStyle(HayameTheme.brandNavy)
         }
         .buttonStyle(.plain)
+    }
+
+    private func consumeRequestedRouteIfNeeded() {
+        guard let requestedRoute else { return }
+        activeMoreRoute = requestedRoute
+        self.requestedRoute = nil
     }
 }
 

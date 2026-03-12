@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 function extractBearerToken(req: Request): string | null {
   const raw = req.headers.get("authorization") ?? "";
@@ -34,17 +35,68 @@ export async function GET(req: Request) {
       return NextResponse.json({ message: userError?.message ?? "Unauthorized" }, { status: 401 });
     }
 
-    const { data: profile, error: profileError } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("id", user.id)
-      .maybeSingle();
-
-    if (profileError) {
-      return NextResponse.json({ message: profileError.message ?? "Failed to load profile" }, { status: 400 });
+    let admin: any = null;
+    try {
+      admin = createSupabaseAdminClient() as any;
+    } catch {
+      admin = null;
     }
 
-    return NextResponse.json({ user, profile: profile ?? null });
+    let profile = null as { is_host?: boolean } | null;
+    if (admin) {
+      const { data: adminProfile } = await admin
+        .from("profiles")
+        .select("*")
+        .eq("id", user.id)
+        .maybeSingle();
+      profile = (adminProfile ?? null) as { is_host?: boolean } | null;
+    }
+    if (!profile) {
+      const { data: profileRow, error: profileError } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", user.id)
+        .maybeSingle();
+      if (profileError && profileError.code !== "PGRST116") {
+        return NextResponse.json({ message: profileError.message ?? "Failed to load profile" }, { status: 400 });
+      }
+      profile = (profileRow ?? null) as { is_host?: boolean } | null;
+    }
+
+    let hostApplicationRow: unknown = null;
+    if (admin) {
+      const { data: adminHostApplication } = await admin
+        .from("host_applications")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      hostApplicationRow = adminHostApplication ?? null;
+    }
+    if (!hostApplicationRow) {
+      const { data: userHostApplication } = await supabase
+        .from("host_applications")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      hostApplicationRow = userHostApplication ?? null;
+    }
+
+    const hostApplication = (hostApplicationRow ?? null) as { status?: "pending" | "approved" | "rejected" | null } | null;
+    const hostStatus = hostApplication?.status ?? null;
+    const isHost = Boolean(profile?.is_host) || hostStatus === "approved";
+
+    return NextResponse.json({
+      user,
+      profile: profile ?? null,
+      is_host: isHost,
+      host_status: hostStatus,
+      host_application_status: hostStatus,
+      host_application: hostApplication ?? null,
+    });
   } catch (error: any) {
     return NextResponse.json({ message: error?.message ?? "Failed to load user" }, { status: 400 });
   }

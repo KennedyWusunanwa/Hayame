@@ -40,6 +40,7 @@ struct AdminShellScreen: View {
             }
         }
         .tint(HayameTheme.brandBlue)
+        .toolbarBackground(.visible, for: .tabBar)
     }
 }
 
@@ -57,7 +58,7 @@ struct AdminHomeScreen: View {
 
             Section("Listing moderation") {
                 ForEach(appState.cars.prefix(5)) { car in
-                    NavigationLink(car.title) {
+                    NavigationLink(car.displayTitle) {
                         AdminCarPreviewScreen(car: car)
                     }
                 }
@@ -87,7 +88,7 @@ struct AdminPlatformScreen: View {
                 } else {
                     ForEach(pendingListings) { car in
                         VStack(alignment: .leading, spacing: 8) {
-                            Text(car.title)
+                            Text(car.displayTitle)
                                 .font(.system(size: 15, weight: .bold, design: .rounded))
                             Text("\(car.city), \(car.region)")
                                 .hayameCaptionStyle()
@@ -196,7 +197,7 @@ struct AdminCarPreviewScreen: View {
                     .frame(height: 220)
                     .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
 
-                Text("\(car.title) \(car.year)")
+                Text(car.displayTitle)
                     .font(.system(size: 24, weight: .bold, design: .rounded))
                     .foregroundStyle(HayameTheme.brandNavy)
 

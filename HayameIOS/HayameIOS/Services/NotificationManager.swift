@@ -89,10 +89,15 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
+        configureSystemBarAppearance()
         Task { @MainActor in
             NotificationManager.shared.configure()
         }
         return true
+    }
+
+    func applicationDidBecomeActive(_ application: UIApplication) {
+        configureSystemBarAppearance()
     }
 
     func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
@@ -105,5 +110,31 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         Task { @MainActor in
             NotificationManager.shared.handleRemoteNotificationRegistrationFailure(error)
         }
+    }
+
+    private func configureSystemBarAppearance() {
+        let pageBackground = UIColor(red: 0.97, green: 0.98, blue: 1.0, alpha: 1.0)
+        let brandBlue = UIColor(red: 0.08, green: 0.52, blue: 0.85, alpha: 1.0)
+        let brandNavy = UIColor(red: 0.04, green: 0.17, blue: 0.33, alpha: 1.0)
+
+        let navAppearance = UINavigationBarAppearance()
+        navAppearance.configureWithOpaqueBackground()
+        navAppearance.backgroundColor = pageBackground
+        navAppearance.shadowColor = UIColor.black.withAlphaComponent(0.06)
+        navAppearance.titleTextAttributes = [.foregroundColor: brandNavy]
+        navAppearance.largeTitleTextAttributes = [.foregroundColor: brandNavy]
+
+        let navBar = UINavigationBar.appearance()
+        navBar.standardAppearance = navAppearance
+        navBar.compactAppearance = navAppearance
+        navBar.scrollEdgeAppearance = navAppearance
+        if #available(iOS 15.0, *) {
+            navBar.compactScrollEdgeAppearance = navAppearance
+        }
+        navBar.tintColor = brandBlue
+
+        // Keep tab bar visuals under SwiftUI control to avoid intermittent
+        // transparent/glitched state after auth/root view transitions.
+        UITabBar.appearance().tintColor = brandBlue
     }
 }

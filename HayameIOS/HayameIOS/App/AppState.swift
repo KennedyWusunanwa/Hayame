@@ -41,6 +41,7 @@ final class AppState: ObservableObject {
 
     @Published var hostApplication: HostApplication?
     @Published var hostAccessState: HostAccessState = .unknown
+    @Published var hostModeEnabled = false
     @Published var hostApplicationStatus: String?
     @Published var publicCarsLoadState: ViewLoadState = .idle
     @Published var bookingsLoadState: ViewLoadState = .idle
@@ -51,6 +52,9 @@ final class AppState: ObservableObject {
     @Published var apiBaseURL: String = AppState.defaultAPIBaseURL()
     @Published var isSyncingRemote = false
     @Published var syncErrorMessage: String?
+    @Published var authInfoMessage: String?
+    @Published var paymentFlowNotice: String?
+    @Published var paymentFlowNoticeIsError = false
 
     private let api = APIClient.shared
     private let defaults = UserDefaults.standard
@@ -58,17 +62,22 @@ final class AppState: ObservableObject {
     private let authTokenKey = "hayame.auth_token"
     private let refreshTokenKey = "hayame.refresh_token"
     private let apiBaseURLKey = "hayame.api_base_url"
+    private let cachedUserNameKey = "hayame.cached_user_name"
+    private let cachedUserAvatarKey = "hayame.cached_user_avatar"
 
     private var authToken: String?
     private var refreshToken: String?
     private var pollTask: Task<Void, Never>?
     private var conversationRealtimeTask: Task<Void, Never>?
+    private var hasSyncedOwnedCarsOnce = false
     private var hasSyncedBookingsOnce = false
     private var hasSyncedConversationsOnce = false
     private var isSyncingCars = false
     private var isSyncingConversations = false
     private var loadingConversationIDs: Set<String> = []
     private var pendingMessageDraftByConversationID: [String: String] = [:]
+    private var lastServerMessageDateByConversationID: [String: Date] = [:]
+    private let localMessagePrefix = "local-msg-"
 
     static let iso8601WithFractional: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
@@ -106,9 +115,10 @@ final class AppState: ObservableObject {
         migrateLoopbackBaseURLIfNeeded()
         restorePersistedSession()
         Task {
-            await refreshReferenceData()
-            await syncPublicCars()
-            await bootstrapSessionIfNeeded()
+            async let referenceTask: Void = refreshReferenceData()
+            async let publicCarsTask: Void = syncPublicCars()
+            async let bootstrapTask: Void = bootstrapSessionIfNeeded()
+            _ = await (referenceTask, publicCarsTask, bootstrapTask)
         }
     }
 
@@ -232,6 +242,28 @@ final class AppState: ObservableObject {
         }
     }
 
+    func resendSignupConfirmation(email: String) {
+        let normalizedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !normalizedEmail.isEmpty else {
+            syncErrorMessage = "Enter your email to resend verification."
+            return
+        }
+        Task {
+            await resendSignupConfirmationRemote(email: normalizedEmail)
+        }
+    }
+
+    func requestPasswordReset(email: String) {
+        let normalizedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !normalizedEmail.isEmpty else {
+            syncErrorMessage = "Enter your email to reset password."
+            return
+        }
+        Task {
+            await requestPasswordResetRemote(email: normalizedEmail)
+        }
+    }
+
     func signOut() {
         stopPolling()
         stopRealtimeMessages()
@@ -248,14 +280,21 @@ final class AppState: ObservableObject {
         listingReviewsByCarID = [:]
         conversations = []
         messagesByConversation = [:]
+        lastServerMessageDateByConversationID = [:]
+        loadingConversationIDs = []
         pendingConversationID = nil
         pendingConversationParticipantName = nil
         pendingMessageDraftByConversationID = [:]
         hostApplication = nil
         hostApplicationStatus = nil
         hostAccessState = .unknown
+        hostModeEnabled = false
         ownedCars = []
         syncErrorMessage = nil
+        authInfoMessage = nil
+        paymentFlowNotice = nil
+        paymentFlowNoticeIsError = false
+        hasSyncedOwnedCarsOnce = false
         hasSyncedBookingsOnce = false
         hasSyncedConversationsOnce = false
         bookingsLoadState = .idle
@@ -284,14 +323,21 @@ final class AppState: ObservableObject {
         listingReviewsByCarID = [:]
         conversations = []
         messagesByConversation = [:]
+        lastServerMessageDateByConversationID = [:]
+        loadingConversationIDs = []
         pendingConversationID = nil
         pendingConversationParticipantName = nil
         pendingMessageDraftByConversationID = [:]
         hostApplication = nil
         hostApplicationStatus = nil
         hostAccessState = .renter
+        hostModeEnabled = false
         ownedCars = []
         syncErrorMessage = nil
+        authInfoMessage = nil
+        paymentFlowNotice = nil
+        paymentFlowNoticeIsError = false
+        hasSyncedOwnedCarsOnce = false
         hasSyncedBookingsOnce = false
         hasSyncedConversationsOnce = false
         bookingsLoadState = .idle
@@ -320,14 +366,21 @@ final class AppState: ObservableObject {
         listingReviewsByCarID = [:]
         conversations = []
         messagesByConversation = [:]
+        lastServerMessageDateByConversationID = [:]
+        loadingConversationIDs = []
         pendingConversationID = nil
         pendingConversationParticipantName = nil
         pendingMessageDraftByConversationID = [:]
         hostApplication = nil
         hostApplicationStatus = nil
         hostAccessState = .unknown
+        hostModeEnabled = false
         ownedCars = []
         syncErrorMessage = nil
+        authInfoMessage = nil
+        paymentFlowNotice = nil
+        paymentFlowNoticeIsError = false
+        hasSyncedOwnedCarsOnce = false
         hasSyncedBookingsOnce = false
         hasSyncedConversationsOnce = false
         bookingsLoadState = .idle
@@ -381,6 +434,7 @@ final class AppState: ObservableObject {
                 }
                 currentUser.phone = normalizedPhone
                 currentUser.avatar = normalizedAvatar
+                persistCachedUserSnapshot()
                 try await refreshCurrentUserContext()
                 syncErrorMessage = nil
             } catch {
@@ -392,15 +446,17 @@ final class AppState: ObservableObject {
     func startRealtimeMessages(for conversationID: String) {
         guard isAuthenticated else { return }
         stopRealtimeMessages()
-        markConversationRead(conversationID)
+        if let idx = conversations.firstIndex(where: { $0.id == conversationID }) {
+            conversations[idx].unreadCount = 0
+        }
 
         conversationRealtimeTask = Task { [weak self] in
+            guard let self else { return }
+            await self.loadMessages(for: conversationID, markRead: true, incremental: false)
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 4_000_000_000)
-                guard let self else { continue }
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
                 guard self.isAuthenticated else { continue }
-                await self.loadMessages(for: conversationID, markRead: true)
-                await self.syncConversations()
+                await self.loadMessages(for: conversationID, markRead: true, incremental: true)
             }
         }
     }
@@ -532,10 +588,15 @@ final class AppState: ObservableObject {
             syncErrorMessage = "Log in to access the host dashboard."
             return
         }
+        if hostAccessState == .host {
+            hostTab = .dashboard
+            hostModeEnabled = true
+        }
         Task {
             await syncHostApplication()
             if hostAccessState == .host {
                 hostTab = .dashboard
+                hostModeEnabled = true
             } else if hostAccessState == .pending {
                 syncErrorMessage = "Your host application is still pending review."
             } else {
@@ -544,17 +605,10 @@ final class AppState: ObservableObject {
         }
     }
 
-    func switchToAdminMode() {
-        guard isAuthenticated else {
-            syncErrorMessage = "Log in to access admin."
-            return
-        }
-        currentUser.role = .admin
-    }
-
     func switchToGuestMode() {
         currentUser.role = .guest
         renterTab = .home
+        hostModeEnabled = false
     }
 
     func submitHostApplication(_ application: HostApplication) {
@@ -604,9 +658,18 @@ final class AppState: ObservableObject {
                 syncErrorMessage = "Log in to send messages."
                 return
             }
+
+            let optimisticMessageID = appendLocalMessage(
+                conversationID: conversationID,
+                body: trimmed,
+                mine: true,
+                senderName: currentUser.fullName,
+                deliveryState: .sending
+            )
+
             Task {
                 do {
-                    _ = try await withAuthenticatedToken { token in
+                    let sent = try await withAuthenticatedToken { token in
                         try await api.sendMessage(
                             baseURL: apiBaseURL,
                             token: token,
@@ -614,9 +677,20 @@ final class AppState: ObservableObject {
                             body: trimmed
                         )
                     }
-                    await loadMessages(for: conversationID, markRead: false)
-                    await syncConversations()
+
+                    let participant = participantName(for: conversationID)
+                    let mapped = mapMessage(sent.data, participantName: participant)
+                    resolveLocalMessageSendSuccess(
+                        conversationID: conversationID,
+                        messageID: optimisticMessageID,
+                        serverMessage: mapped
+                    )
                 } catch {
+                    updateLocalMessageDeliveryState(
+                        conversationID: conversationID,
+                        messageID: optimisticMessageID,
+                        state: .failed
+                    )
                     syncErrorMessage = errorMessage(error, fallback: "Unable to send message.")
                 }
             }
@@ -666,6 +740,28 @@ final class AppState: ObservableObject {
 
         let canonical = RemoteImageURLResolver.canonicalString(uploadedURL) ?? uploadedURL
         currentUser.avatar = canonical
+        persistCachedUserSnapshot()
+
+        let nameValue = currentUser.fullName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedName = nameValue.isEmpty ? "Hayame User" : nameValue
+        let nameParts = normalizedName.split(separator: " ").map(String.init)
+        let firstName = nameParts.first ?? normalizedName
+        let lastName = nameParts.dropFirst().joined(separator: " ")
+        try await withAuthenticatedToken { token in
+            try await api.upsertProfile(
+                baseURL: apiBaseURL,
+                token: token,
+                userID: currentUser.id,
+                firstName: firstName,
+                lastName: lastName,
+                fullName: normalizedName,
+                city: currentUser.city,
+                region: currentUser.region,
+                phone: currentUser.phone,
+                avatarURL: canonical
+            )
+        }
+
         if let resolved = RemoteImageURLResolver.resolve(canonical) {
             await RemoteImagePipeline.shared.prefetch(
                 urls: [resolved],
@@ -674,6 +770,7 @@ final class AppState: ObservableObject {
                 maxConcurrent: 1
             )
         }
+        try await refreshCurrentUserContext()
         return canonical
     }
 
@@ -701,7 +798,7 @@ final class AppState: ObservableObject {
             conversations[idx].unreadCount = 0
         }
         Task {
-            await loadMessages(for: conversationID, markRead: true)
+            await loadMessages(for: conversationID, markRead: true, incremental: false)
         }
     }
 
@@ -764,65 +861,82 @@ final class AppState: ObservableObject {
     }
 
     func createListing(from draft: ListingDraft) {
-        guard authToken != nil else {
-            syncErrorMessage = "Log in to create a listing."
-            return
-        }
         Task {
             do {
-                let payload = listingPayload(from: draft)
-                let result = try await withAuthenticatedToken { token in
-                    try await api.createCar(baseURL: apiBaseURL, token: token, payload: payload)
-                }
-                let created = mapCar(result.data)
-                ownedCars.insert(created, at: 0)
-                if created.approvalStatus.lowercased() == "approved" {
-                    cars.insert(created, at: 0)
-                }
+                _ = try await createListingNow(from: draft)
             } catch {
                 syncErrorMessage = errorMessage(error, fallback: "Unable to create listing.")
             }
         }
     }
 
-    func updateListing(_ car: Car, from draft: ListingDraft) {
+    @discardableResult
+    func createListingNow(from draft: ListingDraft) async throws -> Car {
         guard authToken != nil else {
-            syncErrorMessage = "Log in to update a listing."
-            return
+            throw APIError(message: "Log in to create a listing.")
         }
+        let payload = listingPayload(from: draft)
+        let result = try await withAuthenticatedToken { token in
+            try await api.createCar(baseURL: apiBaseURL, token: token, payload: payload)
+        }
+        let created = mapCar(result.data)
+        replaceCar(created, in: &ownedCars)
+        if created.approvalStatus.lowercased() == "approved" {
+            replaceCar(created, in: &cars)
+        } else {
+            cars.removeAll { $0.id == created.id }
+        }
+        return created
+    }
 
+    func updateListing(_ car: Car, from draft: ListingDraft) {
         Task {
             do {
-                let payload = listingPayload(from: draft)
-                let result = try await withAuthenticatedToken { token in
-                    try await api.updateCar(baseURL: apiBaseURL, token: token, carID: car.id, payload: payload)
-                }
-                let updated = mapCar(result.data)
-                replaceCar(updated, in: &ownedCars)
-                replaceCar(updated, in: &cars)
+                _ = try await updateListingNow(car, from: draft)
             } catch {
                 syncErrorMessage = errorMessage(error, fallback: "Unable to update listing.")
             }
         }
     }
 
-    func deleteListing(_ car: Car) {
+    @discardableResult
+    func updateListingNow(_ car: Car, from draft: ListingDraft) async throws -> Car {
         guard authToken != nil else {
-            syncErrorMessage = "Log in to delete a listing."
-            return
+            throw APIError(message: "Log in to update a listing.")
         }
+        let payload = listingPayload(from: draft)
+        let result = try await withAuthenticatedToken { token in
+            try await api.updateCar(baseURL: apiBaseURL, token: token, carID: car.id, payload: payload)
+        }
+        let updated = mapCar(result.data)
+        replaceCar(updated, in: &ownedCars)
+        if updated.approvalStatus.lowercased() == "approved" {
+            replaceCar(updated, in: &cars)
+        } else {
+            cars.removeAll { $0.id == updated.id }
+        }
+        return updated
+    }
 
+    func deleteListing(_ car: Car) {
         Task {
             do {
-                try await withAuthenticatedToken { token in
-                    try await api.deleteCar(baseURL: apiBaseURL, token: token, carID: car.id)
-                }
-                ownedCars.removeAll { $0.id == car.id }
-                cars.removeAll { $0.id == car.id }
+                try await deleteListingNow(car)
             } catch {
                 syncErrorMessage = errorMessage(error, fallback: "Unable to delete listing.")
             }
         }
+    }
+
+    func deleteListingNow(_ car: Car) async throws {
+        guard authToken != nil else {
+            throw APIError(message: "Log in to delete a listing.")
+        }
+        try await withAuthenticatedToken { token in
+            try await api.deleteCar(baseURL: apiBaseURL, token: token, carID: car.id)
+        }
+        ownedCars.removeAll { $0.id == car.id }
+        cars.removeAll { $0.id == car.id }
     }
 
     func approveBooking(_ booking: Booking) {
@@ -873,6 +987,9 @@ final class AppState: ObservableObject {
             throw APIError(message: "Log in to book this car.")
         }
 
+        paymentFlowNotice = nil
+        paymentFlowNoticeIsError = false
+
         let startDate = Self.dateOnlyFormatter.string(from: start)
         let endDate = Self.dateOnlyFormatter.string(from: end)
         let normalizedRegion = MockDataService.normalizedRegion(region)
@@ -880,7 +997,7 @@ final class AppState: ObservableObject {
         let normalizedAddress = address.trimmingCharacters(in: .whitespacesAndNewlines)
 
         if normalizedCity.isEmpty || normalizedAddress.count < 3 {
-            throw APIError(message: "Trip use location is required.")
+            throw APIError(message: "Enter city and exact area/destination (minimum 3 characters).")
         }
 
         do {
@@ -936,7 +1053,7 @@ final class AppState: ObservableObject {
 
     func completeBookingPayment(
         checkout: PaystackCheckoutSession,
-        callbackURL: URL
+        callbackURL: URL? = nil
     ) async throws -> String? {
         guard authToken != nil else {
             throw APIError(message: "Log in to complete payment.")
@@ -966,9 +1083,13 @@ final class AppState: ObservableObject {
             await syncBookings()
             await syncConversations()
             syncErrorMessage = nil
+            paymentFlowNotice = "Payment successful. Your booking is now in Trips."
+            paymentFlowNoticeIsError = false
             return finalized.conversationId
         } catch {
             syncErrorMessage = errorMessage(error, fallback: "Payment completed but booking finalization failed.")
+            paymentFlowNotice = syncErrorMessage
+            paymentFlowNoticeIsError = true
             throw error
         }
     }
@@ -1120,6 +1241,7 @@ final class AppState: ObservableObject {
     private func signInRemote(email: String, password: String) async {
         isSyncingRemote = true
         syncErrorMessage = nil
+        authInfoMessage = nil
         defer { isSyncingRemote = false }
 
         do {
@@ -1157,6 +1279,7 @@ final class AppState: ObservableObject {
     ) async {
         isSyncingRemote = true
         syncErrorMessage = nil
+        authInfoMessage = nil
         defer { isSyncingRemote = false }
 
         do {
@@ -1171,7 +1294,7 @@ final class AppState: ObservableObject {
             )
 
             if session.requires_email_confirmation == true || session.access_token == nil || session.user == nil {
-                syncErrorMessage = "Account created. Verify your email, then log in."
+                authInfoMessage = "Account created. Check your inbox/spam for verification email, then log in."
                 return
             }
 
@@ -1194,7 +1317,7 @@ final class AppState: ObservableObject {
                     )
 
                     if session.requires_email_confirmation == true || session.access_token == nil || session.user == nil {
-                        syncErrorMessage = "Account created. Verify your email, then log in."
+                        authInfoMessage = "Account created. Check your inbox/spam for verification email, then log in."
                         return
                     }
 
@@ -1209,6 +1332,56 @@ final class AppState: ObservableObject {
                 }
             }
             syncErrorMessage = errorMessage(error, fallback: "Unable to sign up.")
+        }
+    }
+
+    private func resendSignupConfirmationRemote(email: String) async {
+        isSyncingRemote = true
+        syncErrorMessage = nil
+        authInfoMessage = nil
+        defer { isSyncingRemote = false }
+
+        do {
+            try await api.resendSignupConfirmation(baseURL: apiBaseURL, email: email)
+            authInfoMessage = "Verification email sent. Check inbox/spam."
+        } catch {
+            if shouldAutoSwitchToProductionBaseURL(after: error) {
+                switchToProductionBaseURL()
+                do {
+                    try await api.resendSignupConfirmation(baseURL: apiBaseURL, email: email)
+                    authInfoMessage = "Verification email sent. Check inbox/spam."
+                    return
+                } catch {
+                    syncErrorMessage = errorMessage(error, fallback: "Unable to resend verification email.")
+                    return
+                }
+            }
+            syncErrorMessage = errorMessage(error, fallback: "Unable to resend verification email.")
+        }
+    }
+
+    private func requestPasswordResetRemote(email: String) async {
+        isSyncingRemote = true
+        syncErrorMessage = nil
+        authInfoMessage = nil
+        defer { isSyncingRemote = false }
+
+        do {
+            try await api.requestPasswordReset(baseURL: apiBaseURL, email: email)
+            authInfoMessage = "Password reset email sent. Check inbox/spam."
+        } catch {
+            if shouldAutoSwitchToProductionBaseURL(after: error) {
+                switchToProductionBaseURL()
+                do {
+                    try await api.requestPasswordReset(baseURL: apiBaseURL, email: email)
+                    authInfoMessage = "Password reset email sent. Check inbox/spam."
+                    return
+                } catch {
+                    syncErrorMessage = errorMessage(error, fallback: "Unable to send password reset email.")
+                    return
+                }
+            }
+            syncErrorMessage = errorMessage(error, fallback: "Unable to send password reset email.")
         }
     }
 
@@ -1258,32 +1431,46 @@ final class AppState: ObservableObject {
     }
 
     private func bootstrapSessionIfNeeded() async {
-        guard authToken != nil else { return }
+        guard authToken?.isEmpty == false else { return }
+        isAuthenticated = true
+        isGuestMode = false
+
         do {
             try await refreshCurrentUserContext()
             await refreshAllRemoteData()
+            startPolling()
+            await NotificationManager.shared.enableUserNotifications()
+            await registerPushDeviceTokenIfAvailable()
         } catch {
-            let refreshed = await refreshAccessTokenIfPossible()
-            if refreshed {
-                do {
-                    try await refreshCurrentUserContext()
-                    await refreshAllRemoteData()
-                    startPolling()
-                    await NotificationManager.shared.enableUserNotifications()
-                    await registerPushDeviceTokenIfAvailable()
-                    return
-                } catch {}
+            if let apiError = error as? APIError, apiError.statusCode == 401 {
+                let refreshed = await refreshAccessTokenIfPossible()
+                if refreshed {
+                    do {
+                        try await refreshCurrentUserContext()
+                        await refreshAllRemoteData()
+                        startPolling()
+                        await NotificationManager.shared.enableUserNotifications()
+                        await registerPushDeviceTokenIfAvailable()
+                        return
+                    } catch {}
+                }
+                clearPersistedSession()
+                isAuthenticated = false
+                isGuestMode = false
+                currentUser = .anonymousGuest
+                hostApplication = nil
+                hostApplicationStatus = nil
+                hostAccessState = .unknown
+                ownedCars = []
+                hasSyncedOwnedCarsOnce = false
+                stopPolling()
+                stopRealtimeMessages()
+                return
             }
-            clearPersistedSession()
-            isAuthenticated = false
-            isGuestMode = false
-            currentUser = .anonymousGuest
-            hostApplication = nil
-            hostApplicationStatus = nil
-            hostAccessState = .unknown
-            ownedCars = []
-            stopPolling()
-            stopRealtimeMessages()
+
+            // Transient network/server failures should not force logout.
+            syncErrorMessage = errorMessage(error, fallback: "Unable to sync account data right now.")
+            startPolling()
         }
     }
 
@@ -1381,12 +1568,17 @@ final class AppState: ObservableObject {
         isAuthenticated = true
         isGuestMode = false
         currentUser = mapUserProfile(user: user, profile: profile, isHost: false, fallbackAvatar: currentUser.avatar)
+        persistCachedUserSnapshot()
         currentUser.role = .guest
+        hasSyncedOwnedCarsOnce = false
         hasSyncedBookingsOnce = false
         hasSyncedConversationsOnce = false
         let normalizedHostStatus = hostStatus?.lowercased()
         hostApplicationStatus = normalizedHostStatus
         hostAccessState = resolveHostAccess(isHost: isHost ?? false, status: normalizedHostStatus)
+        if hostAccessState != .host {
+            hostModeEnabled = false
+        }
         if hostAccessState == .host {
             currentUser.role = .host
         }
@@ -1417,6 +1609,7 @@ final class AppState: ObservableObject {
             try await api.getMe(baseURL: apiBaseURL, token: token)
         }
         currentUser = mapUserProfile(user: me.user, profile: me.profile, isHost: false, fallbackAvatar: currentUser.avatar)
+        persistCachedUserSnapshot()
         currentUser.role = .guest
 
         if let application = me.host_application {
@@ -1443,6 +1636,9 @@ final class AppState: ObservableObject {
 
         hostApplicationStatus = (me.host_application_status ?? me.host_status)?.lowercased()
         hostAccessState = resolveHostAccess(isHost: false, status: hostApplicationStatus)
+        if hostAccessState != .host {
+            hostModeEnabled = false
+        }
 
         isAuthenticated = true
         if let avatarURL = RemoteImageURLResolver.resolve(currentUser.avatar) {
@@ -1457,8 +1653,16 @@ final class AppState: ObservableObject {
     }
 
     private func restorePersistedSession() {
-        authToken = defaults.string(forKey: authTokenKey)
-        refreshToken = defaults.string(forKey: refreshTokenKey)
+        let persistedAuthToken = defaults.string(forKey: authTokenKey)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let persistedRefreshToken = defaults.string(forKey: refreshTokenKey)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        authToken = (persistedAuthToken?.isEmpty == false) ? persistedAuthToken : nil
+        refreshToken = (persistedRefreshToken?.isEmpty == false) ? persistedRefreshToken : nil
+        if authToken != nil {
+            isAuthenticated = true
+            isGuestMode = false
+            currentUser.role = .guest
+            restoreCachedUserSnapshot()
+        }
     }
 
     private func persistSession() {
@@ -1471,6 +1675,34 @@ final class AppState: ObservableObject {
         refreshToken = nil
         defaults.removeObject(forKey: authTokenKey)
         defaults.removeObject(forKey: refreshTokenKey)
+        defaults.removeObject(forKey: cachedUserNameKey)
+        defaults.removeObject(forKey: cachedUserAvatarKey)
+    }
+
+    private func persistCachedUserSnapshot(allowAvatarClear: Bool = false) {
+        let name = currentUser.fullName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let avatar = currentUser.avatar?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+        if !name.isEmpty {
+            defaults.set(name, forKey: cachedUserNameKey)
+        }
+        if !avatar.isEmpty {
+            defaults.set(avatar, forKey: cachedUserAvatarKey)
+        } else if allowAvatarClear {
+            defaults.removeObject(forKey: cachedUserAvatarKey)
+        }
+    }
+
+    private func restoreCachedUserSnapshot() {
+        let cachedName = defaults.string(forKey: cachedUserNameKey)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let cachedAvatar = defaults.string(forKey: cachedUserAvatarKey)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+        if !cachedName.isEmpty {
+            currentUser.fullName = cachedName
+        }
+        if !cachedAvatar.isEmpty {
+            currentUser.avatar = cachedAvatar
+        }
     }
 
     // MARK: - Sync
@@ -1532,10 +1764,17 @@ final class AppState: ObservableObject {
     private func syncOwnedCars() async {
         guard isAuthenticated else { return }
         do {
+            let previousByID = Dictionary(uniqueKeysWithValues: ownedCars.map { ($0.id, $0.approvalStatus.lowercased()) })
             let response = try await withAuthenticatedToken { token in
                 try await api.getMyCars(baseURL: apiBaseURL, token: token)
             }
-            ownedCars = response.data.map(mapCar)
+            let mapped = response.data.map(mapCar)
+            ownedCars = mapped
+            if hasSyncedOwnedCarsOnce {
+                await notifyOnOwnedListingApprovalChanges(previous: previousByID, current: mapped)
+            } else {
+                hasSyncedOwnedCarsOnce = true
+            }
         } catch {
             // Keep last known data
         }
@@ -1567,7 +1806,9 @@ final class AppState: ObservableObject {
             bookingsLoadState = .loading
         }
         do {
-            let previousByID = Dictionary(uniqueKeysWithValues: (renterBookings + hostBookings).map { ($0.id, $0) })
+            let previousByID = (renterBookings + hostBookings).reduce(into: [String: Booking]()) { partialResult, booking in
+                partialResult[booking.id] = booking
+            }
             let response = try await withAuthenticatedToken { token in
                 try await api.getBookings(baseURL: apiBaseURL, token: token)
             }
@@ -1578,7 +1819,9 @@ final class AppState: ObservableObject {
             hostBookings = nextHost
             bookingsLoadState = (nextRenter.isEmpty && nextHost.isEmpty) ? .empty : .loaded
 
-            let nextByID = Dictionary(uniqueKeysWithValues: (nextRenter + nextHost).map { ($0.id, $0) })
+            let nextByID = (nextRenter + nextHost).reduce(into: [String: Booking]()) { partialResult, booking in
+                partialResult[booking.id] = booking
+            }
             if hasSyncedBookingsOnce {
                 await notifyOnBookingChanges(previous: previousByID, next: nextByID)
             } else {
@@ -1599,7 +1842,9 @@ final class AppState: ObservableObject {
         }
 
         do {
-            let previousUnread = Dictionary(uniqueKeysWithValues: conversations.map { ($0.id, $0.unreadCount) })
+            let previousUnread = conversations.reduce(into: [String: Int]()) { partialResult, conversation in
+                partialResult[conversation.id] = conversation.unreadCount
+            }
             let response = try await withAuthenticatedToken { token in
                 try await api.getConversations(baseURL: apiBaseURL, token: token)
             }
@@ -1626,24 +1871,34 @@ final class AppState: ObservableObject {
         }
     }
 
-    private func loadMessages(for conversationID: String, markRead: Bool) async {
+    private func loadMessages(for conversationID: String, markRead: Bool, incremental: Bool = false) async {
         guard isAuthenticated else { return }
         guard !loadingConversationIDs.contains(conversationID) else { return }
         loadingConversationIDs.insert(conversationID)
         defer { loadingConversationIDs.remove(conversationID) }
         do {
+            let since = incremental
+                ? lastServerMessageDateByConversationID[conversationID].map(Self.iso8601WithFractional.string(from:))
+                : nil
             let response = try await withAuthenticatedToken { token in
                 try await api.getMessages(
                     baseURL: apiBaseURL,
                     token: token,
                     conversationID: conversationID,
-                    markRead: markRead
+                    markRead: markRead,
+                    since: since,
+                    limit: 200
                 )
             }
             let participant = participantName(for: conversationID)
-            messagesByConversation[conversationID] = response.data.map {
+            let mappedServerMessages = response.data.map {
                 mapMessage($0, participantName: participant)
             }
+            mergeServerMessages(
+                conversationID: conversationID,
+                serverMessages: mappedServerMessages,
+                isIncremental: incremental
+            )
 
             if markRead, let idx = conversations.firstIndex(where: { $0.id == conversationID }) {
                 conversations[idx].unreadCount = 0
@@ -1662,6 +1917,9 @@ final class AppState: ObservableObject {
             let resolvedStatus = (status.host_application_status ?? status.status)?.lowercased()
             hostApplicationStatus = resolvedStatus
             hostAccessState = resolveHostAccess(isHost: status.is_host, status: resolvedStatus)
+            if hostAccessState != .host {
+                hostModeEnabled = false
+            }
             currentUser.role = hostAccessState == .host ? .host : .guest
 
             if let statusRaw = resolvedStatus {
@@ -1780,28 +2038,189 @@ final class AppState: ObservableObject {
 
     // MARK: - Local Helpers
 
-    private func appendLocalMessage(conversationID: String, body: String, mine: Bool, senderName: String) {
+    @discardableResult
+    private func appendLocalMessage(
+        conversationID: String,
+        body: String,
+        mine: Bool,
+        senderName: String,
+        messageID: String = "local-msg-\(UUID().uuidString)",
+        createdAt: Date = .now,
+        deliveryState: ChatMessageDeliveryState = .sent
+    ) -> String {
         let message = ChatMessage(
-            id: "msg-\(UUID().uuidString)",
+            id: messageID,
             conversationID: conversationID,
             senderID: mine ? currentUser.id : "",
             senderName: senderName,
             body: body,
             isMine: mine,
-            createdAt: .now
+            createdAt: createdAt,
+            deliveryState: deliveryState
         )
 
-        messagesByConversation[conversationID, default: []].append(message)
+        var messages = messagesByConversation[conversationID, default: []]
+        messages.append(message)
+        messagesByConversation[conversationID] = normalizeMessages(messages)
 
         if let idx = conversations.firstIndex(where: { $0.id == conversationID }) {
             conversations[idx].lastMessagePreview = body
-            conversations[idx].updatedAt = .now
+            conversations[idx].updatedAt = createdAt
             if !mine {
                 conversations[idx].unreadCount += 1
             }
         }
 
         conversations.sort { $0.updatedAt > $1.updatedAt }
+        return messageID
+    }
+
+    private func resolveLocalMessageSendSuccess(
+        conversationID: String,
+        messageID: String,
+        serverMessage: ChatMessage
+    ) {
+        var messages = messagesByConversation[conversationID] ?? []
+        if let idx = messages.firstIndex(where: { $0.id == messageID }) {
+            messages[idx] = serverMessage
+        } else if let idx = matchingLocalPendingIndex(for: serverMessage, in: messages) {
+            messages[idx] = serverMessage
+        } else if let idx = messages.firstIndex(where: { $0.id == serverMessage.id }) {
+            messages[idx] = serverMessage
+        } else {
+            messages.append(serverMessage)
+        }
+        messagesByConversation[conversationID] = normalizeMessages(messages)
+        updateLastServerCursor(for: conversationID, serverMessages: [serverMessage])
+        updateConversationFromLatestMessage(conversationID)
+    }
+
+    private func updateLocalMessageDeliveryState(
+        conversationID: String,
+        messageID: String,
+        state: ChatMessageDeliveryState
+    ) {
+        guard var messages = messagesByConversation[conversationID] else { return }
+        guard let idx = messages.firstIndex(where: { $0.id == messageID }) else { return }
+        messages[idx].deliveryState = state
+        messagesByConversation[conversationID] = normalizeMessages(messages)
+        updateConversationFromLatestMessage(conversationID)
+    }
+
+    private func mergeServerMessages(
+        conversationID: String,
+        serverMessages: [ChatMessage],
+        isIncremental: Bool
+    ) {
+        let normalizedServer = serverMessages.map { message -> ChatMessage in
+            var copy = message
+            copy.deliveryState = .sent
+            return copy
+        }
+
+        var merged: [ChatMessage]
+        if isIncremental {
+            merged = messagesByConversation[conversationID] ?? []
+        } else {
+            // Keep unresolved local sends but refresh server-backed history from source of truth.
+            merged = (messagesByConversation[conversationID] ?? []).filter {
+                isLocalMessageID($0.id) && $0.deliveryState != .sent
+            }
+        }
+
+        for serverMessage in normalizedServer {
+            if let exactIdx = merged.firstIndex(where: { $0.id == serverMessage.id }) {
+                merged[exactIdx] = serverMessage
+                continue
+            }
+            if let optimisticIdx = matchingLocalPendingIndex(for: serverMessage, in: merged) {
+                merged[optimisticIdx] = serverMessage
+                continue
+            }
+            merged.append(serverMessage)
+        }
+
+        messagesByConversation[conversationID] = normalizeMessages(merged)
+        updateLastServerCursor(for: conversationID, serverMessages: normalizedServer)
+        updateConversationFromLatestMessage(conversationID)
+    }
+
+    private func matchingLocalPendingIndex(for serverMessage: ChatMessage, in messages: [ChatMessage]) -> Int? {
+        let tolerance: TimeInterval = 120
+        return messages.enumerated()
+            .filter { _, message in
+                guard isLocalMessageID(message.id) else { return false }
+                guard message.deliveryState != .sent else { return false }
+                guard message.isMine == serverMessage.isMine else { return false }
+                guard message.body == serverMessage.body else { return false }
+                let delta = abs(message.createdAt.timeIntervalSince(serverMessage.createdAt))
+                return delta <= tolerance
+            }
+            .min { lhs, rhs in
+                let lhsDelta = abs(lhs.element.createdAt.timeIntervalSince(serverMessage.createdAt))
+                let rhsDelta = abs(rhs.element.createdAt.timeIntervalSince(serverMessage.createdAt))
+                return lhsDelta < rhsDelta
+            }?
+            .offset
+    }
+
+    private func normalizeMessages(_ messages: [ChatMessage]) -> [ChatMessage] {
+        var byID: [String: ChatMessage] = [:]
+        for message in messages {
+            if let existing = byID[message.id] {
+                byID[message.id] = preferredMessage(existing, message)
+            } else {
+                byID[message.id] = message
+            }
+        }
+        return byID.values.sorted { lhs, rhs in
+            if lhs.createdAt != rhs.createdAt {
+                return lhs.createdAt < rhs.createdAt
+            }
+            return lhs.id < rhs.id
+        }
+    }
+
+    private func preferredMessage(_ lhs: ChatMessage, _ rhs: ChatMessage) -> ChatMessage {
+        let lhsRank = deliveryStateRank(lhs.deliveryState)
+        let rhsRank = deliveryStateRank(rhs.deliveryState)
+        if lhsRank != rhsRank {
+            return lhsRank > rhsRank ? lhs : rhs
+        }
+        if lhs.createdAt != rhs.createdAt {
+            return lhs.createdAt >= rhs.createdAt ? lhs : rhs
+        }
+        return rhs
+    }
+
+    private func deliveryStateRank(_ state: ChatMessageDeliveryState) -> Int {
+        switch state {
+        case .failed:
+            return 0
+        case .sending:
+            return 1
+        case .sent:
+            return 2
+        }
+    }
+
+    private func updateLastServerCursor(for conversationID: String, serverMessages: [ChatMessage]) {
+        guard let latest = serverMessages.map(\.createdAt).max() else { return }
+        let current = lastServerMessageDateByConversationID[conversationID]
+        if let current, current >= latest { return }
+        lastServerMessageDateByConversationID[conversationID] = latest
+    }
+
+    private func updateConversationFromLatestMessage(_ conversationID: String) {
+        guard let latest = messagesByConversation[conversationID]?.last else { return }
+        guard let idx = conversations.firstIndex(where: { $0.id == conversationID }) else { return }
+        conversations[idx].lastMessagePreview = latest.body
+        conversations[idx].updatedAt = latest.createdAt
+        conversations.sort { $0.updatedAt > $1.updatedAt }
+    }
+
+    private func isLocalMessageID(_ messageID: String) -> Bool {
+        messageID.hasPrefix(localMessagePrefix)
     }
 
     // MARK: - Mapping
@@ -1819,10 +2238,17 @@ final class AppState: ObservableObject {
             profile?.full_name ??
             metadataString(metadata, key: "full_name") ??
             [firstName, lastName].compactMap { $0 }.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
-        let avatarURL = profile?.avatar_url ?? metadataString(metadata, key: "avatar_url")
+        let avatarURL = preferredAvatarURL(
+            profile?.avatar_url,
+            profile?.avatar,
+            metadataString(metadata, key: "avatar_url"),
+            metadataString(metadata, key: "avatar"),
+            metadataString(metadata, key: "picture"),
+            metadataString(metadata, key: "photo_url"),
+            fallbackAvatar
+        )
         let resolvedIsHost = isHost || (profile?.is_host ?? false)
-        let canonicalAvatar = RemoteImageURLResolver.canonicalString(avatarURL) ??
-            RemoteImageURLResolver.canonicalString(fallbackAvatar)
+        let canonicalAvatar = RemoteImageURLResolver.canonicalString(avatarURL)
 
         return UserProfile(
             id: user.id,
@@ -1836,11 +2262,24 @@ final class AppState: ObservableObject {
         )
     }
 
+    private func preferredAvatarURL(_ candidates: String?...) -> String? {
+        for candidate in candidates {
+            guard let canonical = RemoteImageURLResolver.canonicalString(candidate) else { continue }
+            let lowered = canonical.lowercased()
+            if lowered.hasSuffix("/favicon.ico") || lowered.contains("/favicon.ico?") {
+                continue
+            }
+            return canonical
+        }
+        return nil
+    }
+
     private func mapCar(_ dto: CarDTO) -> Car {
         let imageURLs = dto.car_photos?.compactMap { RemoteImageURLResolver.canonicalString($0.url) } ?? []
         let fallbackImage = RemoteImageURLResolver.canonicalString(dto.image_url)
         let imageNames = imageURLs.isEmpty ? [fallbackImage].compactMap { $0 } : imageURLs
         let owner = dto.owner
+        let deliveryAvailable = dto.delivery_available ?? false
         var normalizedFeatures = (dto.features ?? []).map {
             $0.trimmingCharacters(in: .whitespacesAndNewlines)
         }.filter { !$0.isEmpty }
@@ -1879,9 +2318,9 @@ final class AppState: ObservableObject {
             hostEmailVerified: dto.email_verified ?? owner?.email_verified ?? idVerified,
             hostLevel: humanizeHostLevel(dto.host_level ?? owner?.host_level),
             instantBook: dto.instant_book ?? false,
-            deliveryAvailable: dto.delivery_available ?? false,
+            deliveryAvailable: deliveryAvailable,
             airConditioning: dto.air_conditioning ?? false,
-            deliveryFee: max(dto.delivery_fee?.intValue ?? 0, 0),
+            deliveryFee: deliveryAvailable ? max(dto.delivery_fee?.intValue ?? 0, 0) : 0,
             insuranceFee: max(dto.insurance_fee?.intValue ?? 0, 0),
             depositAmount: max(dto.deposit_amount?.intValue ?? 0, 0),
             outsideAccraFee: max(dto.outside_accra_fee?.intValue ?? 0, 0),
@@ -2048,7 +2487,8 @@ final class AppState: ObservableObject {
         }
     }
 
-    private func paystackReference(from callbackURL: URL) -> String? {
+    private func paystackReference(from callbackURL: URL?) -> String? {
+        guard let callbackURL else { return nil }
         guard let components = URLComponents(url: callbackURL, resolvingAgainstBaseURL: false) else {
             return nil
         }
@@ -2121,7 +2561,7 @@ final class AppState: ObservableObject {
             "instant_book": draft.instantBook,
             "delivery_available": draft.deliveryAvailable,
             "air_conditioning": draft.airConditioning,
-            "delivery_fee": draft.deliveryFee,
+            "delivery_fee": draft.deliveryAvailable ? draft.deliveryFee : 0,
             "insurance_fee": draft.insuranceFee,
             "deposit_amount": draft.depositAmount,
             "outside_accra_fee": draft.outsideAccraFee,
@@ -2133,9 +2573,12 @@ final class AppState: ObservableObject {
         stopPolling()
         pollTask = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 12_000_000_000)
+                try? await Task.sleep(nanoseconds: 8_000_000_000)
                 guard let self else { continue }
                 guard self.isAuthenticated else { continue }
+                if self.currentUser.id == UserProfile.anonymousGuest.id {
+                    try? await self.refreshCurrentUserContext()
+                }
                 await self.registerPushDeviceTokenIfAvailable()
                 await self.syncBookings()
                 await self.syncConversations()
@@ -2178,20 +2621,74 @@ final class AppState: ObservableObject {
 
     private func notifyOnBookingChanges(previous: [String: Booking], next: [String: Booking]) async {
         for booking in next.values {
+            let isHostContext = booking.hostID == currentUser.id
             if let existing = previous[booking.id] {
                 guard existing.status != booking.status else { continue }
-                await NotificationManager.shared.scheduleLocalNotification(
-                    title: "Trip updated",
-                    body: "\(booking.carTitle): \(booking.status.label)"
-                )
+
+                let title: String
+                let body: String
+                switch booking.status {
+                case .awaitingHost:
+                    title = isHostContext ? "New booking request" : "Booking request sent"
+                    body = isHostContext
+                        ? "\(booking.renterName) requested \(booking.carTitle)."
+                        : "Your request for \(booking.carTitle) is awaiting host approval."
+                case .confirmed:
+                    title = "Booking confirmed"
+                    body = isHostContext
+                        ? "You approved \(booking.renterName)'s booking for \(booking.carTitle)."
+                        : "Your trip for \(booking.carTitle) is confirmed."
+                case .rejected:
+                    title = isHostContext ? "Booking rejected" : "Booking request declined"
+                    body = isHostContext
+                        ? "You declined \(booking.renterName)'s request for \(booking.carTitle)."
+                        : "Your request for \(booking.carTitle) was declined."
+                case .cancelled:
+                    title = "Booking cancelled"
+                    body = "\(booking.carTitle) booking was cancelled."
+                case .completed:
+                    title = "Trip completed"
+                    body = "\(booking.carTitle) has been marked completed."
+                case .refunded:
+                    title = "Booking refunded"
+                    body = "\(booking.carTitle) payment has been refunded."
+                case .pending:
+                    title = "Booking updated"
+                    body = "\(booking.carTitle): \(booking.status.label)"
+                }
+                await NotificationManager.shared.scheduleLocalNotification(title: title, body: body)
             } else {
-                let isHostNotification = booking.hostID == currentUser.id
-                let title = isHostNotification ? "New booking request" : "Trip booked"
-                let body = isHostNotification
+                let title = isHostContext ? "New booking request" : "Booking request sent"
+                let body = isHostContext
                     ? "\(booking.renterName) requested \(booking.carTitle)."
-                    : "Your booking for \(booking.carTitle) is now \(booking.status.label.lowercased())."
+                    : "Your request for \(booking.carTitle) is \(booking.status.label.lowercased())."
                 await NotificationManager.shared.scheduleLocalNotification(title: title, body: body)
             }
+        }
+    }
+
+    private func notifyOnOwnedListingApprovalChanges(previous: [String: String], current: [Car]) async {
+        for car in current {
+            let currentStatus = car.approvalStatus.lowercased()
+            guard let previousStatus = previous[car.id], previousStatus != currentStatus else { continue }
+
+            let title: String
+            let body: String
+            switch currentStatus {
+            case "approved":
+                title = "Listing approved"
+                body = "\(car.displayTitle) is now live for guests."
+            case "rejected":
+                title = "Listing rejected"
+                body = "\(car.displayTitle) was rejected. Update details and resubmit."
+            case "pending":
+                title = "Listing pending review"
+                body = "\(car.displayTitle) is awaiting approval."
+            default:
+                continue
+            }
+
+            await NotificationManager.shared.scheduleLocalNotification(title: title, body: body)
         }
     }
 

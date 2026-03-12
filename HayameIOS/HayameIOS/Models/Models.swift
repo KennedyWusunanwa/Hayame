@@ -13,6 +13,7 @@ enum RenterTab: Hashable {
     case explore
     case trips
     case favorites
+    case more
     case inbox
     case profile
     case dashboard
@@ -136,6 +137,36 @@ struct Car: Identifiable, Hashable {
     var createdAt: Date = .now
 }
 
+extension Car {
+    var displayTitle: String {
+        let normalizedTitle = Self.normalizeDisplayTitle(title)
+        let yearString = String(year)
+        guard !normalizedTitle.isEmpty else { return yearString }
+
+        let escapedYear = NSRegularExpression.escapedPattern(for: yearString)
+        let yearPattern = "(^|\\D)\(escapedYear)(\\D|$)"
+        if normalizedTitle.range(of: yearPattern, options: .regularExpression) != nil {
+            return normalizedTitle
+        }
+
+        return "\(normalizedTitle) \(yearString)"
+    }
+
+    private static func normalizeDisplayTitle(_ rawTitle: String) -> String {
+        let normalizedYearSeparators = rawTitle.replacingOccurrences(
+            of: #"\b([12]),(\d{3})\b"#,
+            with: "$1$2",
+            options: .regularExpression
+        )
+        let compactWhitespace = normalizedYearSeparators.replacingOccurrences(
+            of: #"\s+"#,
+            with: " ",
+            options: .regularExpression
+        )
+        return compactWhitespace.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}
+
 struct Booking: Identifiable, Hashable {
     let id: String
     var carID: String
@@ -187,6 +218,12 @@ struct Conversation: Identifiable, Hashable {
     var unreadCount: Int
 }
 
+enum ChatMessageDeliveryState: String, Codable, Hashable {
+    case sending
+    case sent
+    case failed
+}
+
 struct ChatMessage: Identifiable, Hashable {
     let id: String
     var conversationID: String
@@ -195,6 +232,7 @@ struct ChatMessage: Identifiable, Hashable {
     var body: String
     var isMine: Bool
     var createdAt: Date
+    var deliveryState: ChatMessageDeliveryState = .sent
 }
 
 struct HostApplication: Identifiable, Hashable {
@@ -215,7 +253,7 @@ struct HostApplication: Identifiable, Hashable {
     var facePhotoURL: String? = nil
 }
 
-struct ListingDraft: Hashable {
+struct ListingDraft: Hashable, Codable {
     var id: String?
     var title: String = ""
     var brand: String = ""

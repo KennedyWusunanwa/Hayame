@@ -1,5 +1,7 @@
 import SwiftUI
 import PhotosUI
+import UIKit
+import UniformTypeIdentifiers
 
 struct HostApplicationPendingScreen: View {
     @EnvironmentObject private var appState: AppState
@@ -93,6 +95,7 @@ struct HostTabShell: View {
             .tag(HostTab.profile)
         }
         .tint(HayameTheme.brandBlue)
+        .toolbarBackground(.visible, for: .tabBar)
     }
 }
 
@@ -122,12 +125,44 @@ struct HostDashboardScreen: View {
         return Double(sum) / Double(appState.hostReviews.count)
     }
 
+    private var hostModeBinding: Binding<Bool> {
+        Binding(
+            get: { appState.hostModeEnabled },
+            set: { enabled in
+                if enabled {
+                    withAnimation(.easeInOut(duration: 0.18)) {
+                        appState.hostModeEnabled = true
+                    }
+                    appState.switchToHostMode()
+                } else {
+                    withAnimation(.easeInOut(duration: 0.18)) {
+                        appState.hostModeEnabled = false
+                    }
+                    appState.switchToGuestMode()
+                }
+            }
+        )
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 Text("Host Dashboard")
                     .font(.system(size: 24, weight: .bold, design: .rounded))
                     .foregroundStyle(HayameTheme.brandNavy)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Toggle(isOn: hostModeBinding) {
+                        Text("Host mode")
+                            .font(.system(size: 14, weight: .semibold, design: .rounded))
+                    }
+                    .toggleStyle(SwitchToggleStyle(tint: HayameTheme.brandBlue))
+
+                    Text("Turn off Host mode to move back to User mode.")
+                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                        .foregroundStyle(HayameTheme.mutedText)
+                }
+                .hayameCard()
 
                 HStack(spacing: 12) {
                     hostAvatar
@@ -352,6 +387,8 @@ private struct HostDashboardRowLabel: View {
 
 struct HostCarsScreen: View {
     @EnvironmentObject private var appState: AppState
+    @State private var deleteTarget: Car?
+    @State private var isDeleting = false
 
     var body: some View {
         List {
@@ -373,20 +410,21 @@ struct HostCarsScreen: View {
                     Text("No listings yet")
                 } else {
                     ForEach(appState.hostCars) { car in
+                        let status = listingStatusStyle(for: car.approvalStatus)
                         NavigationLink {
                             ListingEditorScreen(mode: .edit(car))
                         } label: {
                             VStack(alignment: .leading, spacing: 8) {
                                 HStack {
-                                    Text("\(car.title) \(car.year)")
+                                    Text(car.displayTitle)
                                         .font(.system(size: 15, weight: .bold, design: .rounded))
                                     Spacer()
-                                    Text(car.approvalStatus.capitalized)
+                                    Text(status.label)
                                         .font(.system(size: 10, weight: .bold, design: .rounded))
-                                        .foregroundStyle(car.approvalStatus == "approved" ? HayameTheme.success : HayameTheme.warning)
+                                        .foregroundStyle(status.color)
                                         .padding(.horizontal, 8)
                                         .padding(.vertical, 4)
-                                        .background((car.approvalStatus == "approved" ? HayameTheme.success : HayameTheme.warning).opacity(0.14))
+                                        .background(status.color.opacity(0.14))
                                         .clipShape(Capsule())
                                 }
 
@@ -403,10 +441,11 @@ struct HostCarsScreen: View {
                         }
                         .swipeActions(edge: .trailing) {
                             Button(role: .destructive) {
-                                appState.deleteListing(car)
+                                deleteTarget = car
                             } label: {
                                 Label("Delete", systemImage: "trash")
                             }
+                            .disabled(isDeleting)
                         }
                     }
                 }
@@ -415,6 +454,46 @@ struct HostCarsScreen: View {
         .scrollContentBackground(.hidden)
         .background(HayameTheme.pageBackground)
         .navigationTitle("My Cars")
+        .confirmationDialog(
+            "Delete this listing?",
+            isPresented: Binding(
+                get: { deleteTarget != nil },
+                set: { presented in
+                    if !presented { deleteTarget = nil }
+                }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Delete Listing", role: .destructive) {
+                guard let target = deleteTarget else { return }
+                isDeleting = true
+                Task {
+                    defer { isDeleting = false }
+                    do {
+                        try await appState.deleteListingNow(target)
+                    } catch {
+                        appState.syncErrorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                    }
+                    deleteTarget = nil
+                }
+            }
+            Button("Cancel", role: .cancel) {
+                deleteTarget = nil
+            }
+        } message: {
+            if let target = deleteTarget {
+                Text("This will permanently remove \(target.displayTitle) and its photos.")
+            }
+        }
+    }
+
+    private func listingStatusStyle(for rawStatus: String) -> (label: String, color: Color) {
+        switch rawStatus.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "approved":
+            return ("Approved", HayameTheme.success)
+        default:
+            return ("Pending", HayameTheme.warning)
+        }
     }
 }
 
@@ -430,6 +509,23 @@ struct ListingEditorScreen: View {
     let mode: ListingEditorMode
 
     @State private var draft = ListingDraft()
+    @State private var isSaving = false
+    @State private var editorNotice: String?
+    @State private var editorError: String?
+    @State private var pendingPickerItems: [PhotosPickerItem] = []
+    @State private var pendingUploads: [PendingListingUpload] = []
+    @State private var showFileImporter = false
+
+    private let maxPhotos = 7
+    private let maxPhotoBytes = 4 * 1024 * 1024
+    private let createDraftStorageKey = "hayame.host.create_listing_draft.v1"
+
+    private struct PendingListingUpload: Identifiable {
+        let id = UUID()
+        let name: String
+        let data: Data
+        let preview: UIImage?
+    }
 
     private var modelOptions: [String] {
         MockDataService.models(for: draft.brand, preferred: draft.model)
@@ -500,7 +596,16 @@ struct ListingEditorScreen: View {
                 Toggle("Instant Book", isOn: $draft.instantBook)
                 Toggle("Delivery available", isOn: $draft.deliveryAvailable)
                 Toggle("Air conditioning", isOn: $draft.airConditioning)
-                Stepper("Delivery fee: GHS\(draft.deliveryFee)", value: $draft.deliveryFee, in: 0...2000, step: 10)
+                if draft.deliveryAvailable {
+                    Stepper("Delivery fee: GHS\(draft.deliveryFee)", value: $draft.deliveryFee, in: 0...2000, step: 10)
+                } else {
+                    HStack {
+                        Text("Delivery fee")
+                        Spacer()
+                        Text("Disabled")
+                            .foregroundStyle(HayameTheme.mutedText)
+                    }
+                }
                 Stepper("Insurance fee: GHS\(draft.insuranceFee)", value: $draft.insuranceFee, in: 0...2000, step: 10)
                 Stepper("Deposit: GHS\(draft.depositAmount)", value: $draft.depositAmount, in: 0...5000, step: 50)
                 Stepper("Outside listing region fee: GHS\(draft.outsideAccraFee)", value: $draft.outsideAccraFee, in: 0...3000, step: 20)
@@ -512,24 +617,76 @@ struct ListingEditorScreen: View {
             }
 
             Section("Photos") {
-                Text("Use Xcode simulator photo picker or device photo library to upload listing photos. Max: 7 photos, 4MB each.")
+                Text("Upload from Photos or Files. Maximum 7 photos, up to 4MB each. Best quality: clear landscape shots around 1600x900 or higher.")
                     .font(.system(size: 12, weight: .medium, design: .rounded))
                     .foregroundStyle(HayameTheme.mutedText)
                 if case .edit(let car) = mode {
                     NavigationLink("Manage listing photos") {
-                        HostListingPhotosScreen(carID: car.id, carTitle: "\(car.title) \(car.year)")
+                        HostListingPhotosScreen(carID: car.id, carTitle: car.displayTitle)
                     }
                 } else {
-                    Text("Create the listing first, then upload and reorder photos.")
+                    if pendingUploads.isEmpty {
+                        Text("No photos selected yet.")
+                            .font(.system(size: 11, weight: .semibold, design: .rounded))
+                            .foregroundStyle(HayameTheme.mutedText)
+                    } else {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 10) {
+                                ForEach(pendingUploads) { pending in
+                                    ZStack(alignment: .topTrailing) {
+                                        if let preview = pending.preview {
+                                            Image(uiImage: preview)
+                                                .resizable()
+                                                .scaledToFill()
+                                                .frame(width: 96, height: 72)
+                                                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                        } else {
+                                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                                .fill(HayameTheme.brandLight)
+                                                .frame(width: 96, height: 72)
+                                        }
+
+                                        Button(role: .destructive) {
+                                            removePendingUpload(id: pending.id)
+                                        } label: {
+                                            Image(systemName: "xmark.circle.fill")
+                                                .font(.system(size: 16, weight: .bold))
+                                                .foregroundStyle(.white, HayameTheme.danger)
+                                        }
+                                        .offset(x: 4, y: -4)
+                                    }
+                                }
+                            }
+                            .padding(.vertical, 2)
+                        }
+                    }
+
+                    PhotosPicker(
+                        selection: $pendingPickerItems,
+                        maxSelectionCount: max(0, maxPhotos - pendingUploads.count),
+                        matching: .images
+                    ) {
+                        Text(pendingUploads.count >= maxPhotos ? "Photo limit reached" : "Add from Photos")
+                    }
+                    .buttonStyle(SecondaryPillButtonStyle())
+                    .disabled(isSaving || pendingUploads.count >= maxPhotos)
+
+                    Button("Add from Files") {
+                        showFileImporter = true
+                    }
+                    .buttonStyle(SecondaryPillButtonStyle())
+                    .disabled(isSaving || pendingUploads.count >= maxPhotos)
+
+                    Text("\(pendingUploads.count) / \(maxPhotos) selected. Selected images upload automatically after listing creation.")
                         .font(.system(size: 11, weight: .semibold, design: .rounded))
-                        .foregroundStyle(HayameTheme.warning)
+                        .foregroundStyle(HayameTheme.mutedText)
                 }
             }
 
             Section("Availability") {
                 if case .edit(let car) = mode {
                     NavigationLink("Edit blocked dates and weekly blocks") {
-                        HostAvailabilityEditorScreen(carID: car.id, carTitle: "\(car.title) \(car.year)")
+                        HostAvailabilityEditorScreen(carID: car.id, carTitle: car.displayTitle)
                     }
                 } else {
                     Text("Create the listing first, then configure availability windows.")
@@ -537,20 +694,41 @@ struct ListingEditorScreen: View {
                         .foregroundStyle(HayameTheme.warning)
                 }
             }
+
+            if let editorNotice, !editorNotice.isEmpty {
+                Section("Notice") {
+                    Text(editorNotice)
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .foregroundStyle(HayameTheme.success)
+                }
+            }
+
+            if let editorError, !editorError.isEmpty {
+                Section("Issue") {
+                    Text(editorError)
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .foregroundStyle(HayameTheme.danger)
+                }
+            }
         }
         .navigationTitle(modeTitle)
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button(modeSaveTitle) {
-                    switch mode {
-                    case .create:
-                        appState.createListing(from: draft)
-                    case .edit(let car):
-                        appState.updateListing(car, from: draft)
+            if case .create = mode {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Save Draft") {
+                        persistCreateDraftIfNeeded()
+                        editorNotice = "Draft saved on this device."
+                        editorError = nil
                     }
-                    dismiss()
+                    .disabled(isSaving)
+                }
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button(isSaving ? "Saving..." : modeSaveTitle) {
+                    Task { await saveListing() }
                 }
                 .bold()
+                .disabled(isSaving)
             }
         }
         .onChange(of: draft.region) { _, newValue in
@@ -567,31 +745,60 @@ struct ListingEditorScreen: View {
                 draft.model = options.first ?? ""
             }
         }
+        .onChange(of: draft.deliveryAvailable) { _, isAvailable in
+            if !isAvailable {
+                draft.deliveryFee = 0
+            }
+        }
+        .onChange(of: pendingPickerItems) { _, newItems in
+            guard !newItems.isEmpty else { return }
+            Task {
+                await queuePickerImages(newItems)
+                pendingPickerItems = []
+            }
+        }
+        .onChange(of: draft) { _, _ in
+            persistCreateDraftIfNeeded()
+        }
+        .fileImporter(
+            isPresented: $showFileImporter,
+            allowedContentTypes: [.image],
+            allowsMultipleSelection: true
+        ) { result in
+            Task { await queueFileImporterImages(result) }
+        }
         .onAppear {
-            guard case .edit(let car) = mode else { return }
-            draft = ListingDraft(
-                id: car.id,
-                title: car.title,
-                brand: MockDataService.normalizedMake(car.brand),
-                model: car.model.trimmingCharacters(in: .whitespacesAndNewlines),
-                year: car.year,
-                price: car.dailyPrice,
-                region: MockDataService.normalizedRegion(car.region),
-                city: car.city,
-                carType: car.type,
-                transmission: car.transmission,
-                fuelType: car.fuelType,
-                seats: car.seats,
-                description: car.description,
-                instantBook: car.instantBook,
-                deliveryAvailable: car.deliveryAvailable,
-                airConditioning: car.airConditioning,
-                deliveryFee: car.deliveryFee,
-                insuranceFee: car.insuranceFee,
-                depositAmount: car.depositAmount,
-                outsideAccraFee: car.outsideAccraFee,
-                cancellationPolicy: car.cancellationPolicy.isEmpty ? "Moderate" : car.cancellationPolicy
-            )
+            switch mode {
+            case .create:
+                restoreCreateDraftIfAvailable()
+            case .edit(let car):
+                draft = ListingDraft(
+                    id: car.id,
+                    title: car.title,
+                    brand: MockDataService.normalizedMake(car.brand),
+                    model: car.model.trimmingCharacters(in: .whitespacesAndNewlines),
+                    year: car.year,
+                    price: car.dailyPrice,
+                    region: MockDataService.normalizedRegion(car.region),
+                    city: car.city,
+                    carType: car.type,
+                    transmission: car.transmission,
+                    fuelType: car.fuelType,
+                    seats: car.seats,
+                    description: car.description,
+                    instantBook: car.instantBook,
+                    deliveryAvailable: car.deliveryAvailable,
+                    airConditioning: car.airConditioning,
+                    deliveryFee: car.deliveryAvailable ? car.deliveryFee : 0,
+                    insuranceFee: car.insuranceFee,
+                    depositAmount: car.depositAmount,
+                    outsideAccraFee: car.outsideAccraFee,
+                    cancellationPolicy: car.cancellationPolicy.isEmpty ? "Moderate" : car.cancellationPolicy
+                )
+            }
+        }
+        .onDisappear {
+            persistCreateDraftIfNeeded()
         }
     }
 
@@ -607,6 +814,153 @@ struct ListingEditorScreen: View {
         case .create: return "Create"
         case .edit: return "Save"
         }
+    }
+
+    @MainActor
+    private func saveListing() async {
+        guard !isSaving else { return }
+        isSaving = true
+        editorError = nil
+        editorNotice = nil
+        defer { isSaving = false }
+
+        do {
+            switch mode {
+            case .create:
+                let created = try await appState.createListingNow(from: draft)
+                var uploadedCount = 0
+                var uploadFailures: [String] = []
+                for pending in pendingUploads.prefix(maxPhotos) {
+                    do {
+                        _ = try await appState.uploadListingPhoto(
+                            carID: created.id,
+                            fileData: pending.data,
+                            fileName: "car-photo-\(UUID().uuidString).jpg",
+                            mimeType: "image/jpeg",
+                            replacePhotoID: nil
+                        )
+                        uploadedCount += 1
+                    } catch {
+                        uploadFailures.append((error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
+                    }
+                }
+                clearCreateDraft()
+                pendingUploads = []
+                draft = ListingDraft()
+                if uploadedCount > 0 {
+                    editorNotice = "Listing created and \(uploadedCount) photo(s) uploaded."
+                } else {
+                    editorNotice = "Listing created."
+                }
+                if !uploadFailures.isEmpty {
+                    appState.syncErrorMessage = "Listing created, but some photos failed to upload. Open the listing and add the remaining photos."
+                }
+                appState.hostTab = .cars
+                dismiss()
+            case .edit(let car):
+                _ = try await appState.updateListingNow(car, from: draft)
+                appState.hostTab = .cars
+                dismiss()
+            }
+        } catch {
+            editorError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        }
+    }
+
+    @MainActor
+    private func queuePickerImages(_ items: [PhotosPickerItem]) async {
+        guard case .create = mode else { return }
+        var imported = 0
+
+        for item in items {
+            guard pendingUploads.count < maxPhotos else { break }
+            do {
+                guard let rawData = try await item.loadTransferable(type: Data.self) else { continue }
+                let prepared = try prepareImageForListingUpload(rawData)
+                appendPendingUpload(data: prepared, name: "photo-\(pendingUploads.count + 1).jpg")
+                imported += 1
+            } catch {
+                editorError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            }
+        }
+
+        if imported > 0 {
+            editorNotice = "\(pendingUploads.count) photo(s) ready."
+        }
+    }
+
+    @MainActor
+    private func queueFileImporterImages(_ result: Result<[URL], Error>) async {
+        guard case .create = mode else { return }
+        switch result {
+        case .failure(let error):
+            editorError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        case .success(let urls):
+            var imported = 0
+            for url in urls {
+                guard pendingUploads.count < maxPhotos else { break }
+                let secured = url.startAccessingSecurityScopedResource()
+                do {
+                    let data = try Data(contentsOf: url)
+                    let prepared = try prepareImageForListingUpload(data)
+                    appendPendingUpload(data: prepared, name: url.lastPathComponent)
+                    imported += 1
+                } catch {
+                    editorError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                }
+                if secured {
+                    url.stopAccessingSecurityScopedResource()
+                }
+            }
+            if imported > 0 {
+                editorNotice = "\(pendingUploads.count) photo(s) ready."
+            }
+        }
+    }
+
+    private func appendPendingUpload(data: Data, name: String) {
+        guard pendingUploads.count < maxPhotos else { return }
+        pendingUploads.append(
+            PendingListingUpload(
+                name: name,
+                data: data,
+                preview: UIImage(data: data)
+            )
+        )
+    }
+
+    private func removePendingUpload(id: PendingListingUpload.ID) {
+        pendingUploads.removeAll { $0.id == id }
+        editorNotice = pendingUploads.isEmpty ? nil : "\(pendingUploads.count) photo(s) ready."
+    }
+
+    private func prepareImageForListingUpload(_ data: Data) throws -> Data {
+        try prepareListingImageForUpload(data: data, maxBytes: maxPhotoBytes)
+    }
+
+    private func persistCreateDraftIfNeeded() {
+        guard case .create = mode else { return }
+        let defaults = UserDefaults.standard
+        if draft == ListingDraft() {
+            defaults.removeObject(forKey: createDraftStorageKey)
+            return
+        }
+        if let encoded = try? JSONEncoder().encode(draft) {
+            defaults.set(encoded, forKey: createDraftStorageKey)
+        }
+    }
+
+    private func restoreCreateDraftIfAvailable() {
+        guard case .create = mode else { return }
+        let defaults = UserDefaults.standard
+        guard let data = defaults.data(forKey: createDraftStorageKey) else { return }
+        guard let decoded = try? JSONDecoder().decode(ListingDraft.self, from: data) else { return }
+        draft = decoded
+        editorNotice = "Draft restored."
+    }
+
+    private func clearCreateDraft() {
+        UserDefaults.standard.removeObject(forKey: createDraftStorageKey)
     }
 }
 
@@ -852,7 +1206,7 @@ struct HostFavoritesScreen: View {
                     ForEach(rankedCars) { car in
                         VStack(alignment: .leading, spacing: 8) {
                             HStack {
-                                Text("\(car.title) \(car.year)")
+                                Text(car.displayTitle)
                                     .font(.system(size: 15, weight: .bold, design: .rounded))
                                     .foregroundStyle(HayameTheme.brandNavy)
                                 Spacer()
@@ -951,17 +1305,8 @@ struct HostProfileScreen: View {
                 NavigationLink("Cancellation") { CancellationPolicyViewWrapper() }
             }
 
-            Section("Admin") {
-                NavigationLink("Admin Console") {
-                    AdminHomeScreen()
-                }
-                Button("Switch to Admin Mode") {
-                    appState.switchToAdminMode()
-                }
-            }
-
             Section {
-                Button("Switch to Guest App") {
+                Button("Turn off Host mode") {
                     appState.switchToGuestMode()
                 }
                 Button("Sign out", role: .destructive) {
@@ -1022,6 +1367,7 @@ struct HostListingPhotosScreen: View {
     @State private var errorMessage: String?
     @State private var successMessage: String?
     @State private var addPhotoItem: PhotosPickerItem?
+    @State private var showFileImporter = false
 
     var body: some View {
         List {
@@ -1085,7 +1431,13 @@ struct HostListingPhotosScreen: View {
                 .buttonStyle(PrimaryPillButtonStyle())
                 .disabled(isMutating || photos.count >= maxPhotos)
 
-                Text("Maximum \(maxPhotos) photos.")
+                Button("Add from Files") {
+                    showFileImporter = true
+                }
+                .buttonStyle(SecondaryPillButtonStyle())
+                .disabled(isMutating || photos.count >= maxPhotos)
+
+                Text("Maximum \(maxPhotos) photos, 4MB each. iOS will request photo-library permission when needed.")
                     .font(.system(size: 11, weight: .semibold, design: .rounded))
                     .foregroundStyle(HayameTheme.mutedText)
 
@@ -1113,6 +1465,13 @@ struct HostListingPhotosScreen: View {
                 await uploadPhoto(item: newValue, replacePhotoID: nil)
                 addPhotoItem = nil
             }
+        }
+        .fileImporter(
+            isPresented: $showFileImporter,
+            allowedContentTypes: [.image],
+            allowsMultipleSelection: true
+        ) { result in
+            Task { await handleFileImport(result) }
         }
     }
 
@@ -1149,22 +1508,69 @@ struct HostListingPhotosScreen: View {
             guard let data = try await item.loadTransferable(type: Data.self) else {
                 throw APIError(message: "Unable to read selected image.")
             }
-            let uploaded = try await appState.uploadListingPhoto(
-                carID: carID,
-                fileData: data,
-                fileName: "car-photo-\(UUID().uuidString).jpg",
-                mimeType: "image/jpeg",
-                replacePhotoID: replacePhotoID
-            )
-            if let replacePhotoID, let idx = photos.firstIndex(where: { $0.id == replacePhotoID }) {
-                photos[idx] = uploaded
-                successMessage = "Photo replaced."
-            } else {
-                photos.append(uploaded)
-                successMessage = "Photo uploaded."
-            }
+            try await uploadPhotoData(data: data, fileName: "car-photo-\(UUID().uuidString).jpg", replacePhotoID: replacePhotoID)
         } catch {
             errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        }
+    }
+
+    @MainActor
+    private func handleFileImport(_ result: Result<[URL], Error>) async {
+        guard !isMutating else { return }
+        guard photos.count < maxPhotos else {
+            errorMessage = "You already have the maximum number of photos."
+            return
+        }
+        isMutating = true
+        errorMessage = nil
+        successMessage = nil
+        defer { isMutating = false }
+
+        switch result {
+        case .failure(let error):
+            errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        case .success(let urls):
+            var uploadedCount = 0
+            for url in urls {
+                guard photos.count < maxPhotos else { break }
+                let secured = url.startAccessingSecurityScopedResource()
+                do {
+                    let rawData = try Data(contentsOf: url)
+                    try await uploadPhotoData(
+                        data: rawData,
+                        fileName: url.lastPathComponent.isEmpty ? "car-photo-\(UUID().uuidString).jpg" : url.lastPathComponent,
+                        replacePhotoID: nil
+                    )
+                    uploadedCount += 1
+                } catch {
+                    errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                }
+                if secured {
+                    url.stopAccessingSecurityScopedResource()
+                }
+            }
+            if uploadedCount > 0 {
+                successMessage = uploadedCount == 1 ? "Photo uploaded." : "\(uploadedCount) photos uploaded."
+            }
+        }
+    }
+
+    @MainActor
+    private func uploadPhotoData(data: Data, fileName: String, replacePhotoID: String?) async throws {
+        let prepared = try prepareListingImageForUpload(data: data, maxBytes: 4 * 1024 * 1024)
+        let uploaded = try await appState.uploadListingPhoto(
+            carID: carID,
+            fileData: prepared,
+            fileName: fileName.hasSuffix(".jpg") || fileName.hasSuffix(".jpeg") ? fileName : "car-photo-\(UUID().uuidString).jpg",
+            mimeType: "image/jpeg",
+            replacePhotoID: replacePhotoID
+        )
+        if let replacePhotoID, let idx = photos.firstIndex(where: { $0.id == replacePhotoID }) {
+            photos[idx] = uploaded
+            successMessage = "Photo replaced."
+        } else {
+            photos.append(uploaded)
+            successMessage = "Photo uploaded."
         }
     }
 
@@ -1189,6 +1595,63 @@ struct HostListingPhotosScreen: View {
             errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
     }
+}
+
+private func prepareListingImageForUpload(data: Data, maxBytes: Int = 4 * 1024 * 1024) throws -> Data {
+    if data.count <= maxBytes,
+       let image = UIImage(data: data),
+       let jpeg = image.jpegData(compressionQuality: 0.9),
+       jpeg.count <= maxBytes {
+        return jpeg
+    }
+
+    guard let sourceImage = UIImage(data: data) else {
+        throw APIError(message: "Unable to process selected image.")
+    }
+
+    var targetDimension = max(sourceImage.size.width, sourceImage.size.height)
+    if targetDimension > 2048 {
+        targetDimension = 2048
+    }
+    var quality: CGFloat = 0.82
+
+    func renderImage(maxDimension: CGFloat) -> UIImage {
+        let currentMax = max(sourceImage.size.width, sourceImage.size.height)
+        let scale = currentMax > maxDimension ? (maxDimension / currentMax) : 1
+        let outputSize = CGSize(
+            width: max(1, floor(sourceImage.size.width * scale)),
+            height: max(1, floor(sourceImage.size.height * scale))
+        )
+        let renderer = UIGraphicsImageRenderer(size: outputSize)
+        return renderer.image { _ in
+            sourceImage.draw(in: CGRect(origin: .zero, size: outputSize))
+        }
+    }
+
+    var preparedImage = renderImage(maxDimension: targetDimension)
+    var jpegData = preparedImage.jpegData(compressionQuality: quality)
+
+    while let bytes = jpegData?.count, bytes > maxBytes, quality > 0.25 {
+        quality -= 0.1
+        jpegData = preparedImage.jpegData(compressionQuality: quality)
+    }
+
+    while let bytes = jpegData?.count, bytes > maxBytes, targetDimension > 720 {
+        targetDimension *= 0.85
+        quality = 0.76
+        preparedImage = renderImage(maxDimension: targetDimension)
+        jpegData = preparedImage.jpegData(compressionQuality: quality)
+
+        while let currentBytes = jpegData?.count, currentBytes > maxBytes, quality > 0.25 {
+            quality -= 0.1
+            jpegData = preparedImage.jpegData(compressionQuality: quality)
+        }
+    }
+
+    guard let finalData = jpegData, finalData.count <= maxBytes else {
+        throw APIError(message: "Photo is too large after compression. Choose a smaller image under 4MB.")
+    }
+    return finalData
 }
 
 struct HostAvailabilityEditorScreen: View {

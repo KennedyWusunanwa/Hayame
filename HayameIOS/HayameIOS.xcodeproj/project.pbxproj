@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 77;
+	objectVersion = 63;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -40,7 +40,7 @@
 		90869CE125FCD22FD5450526 /* NotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationManager.swift; sourceTree = "<group>"; };
 		95B87581576C44D745F473DF /* LegalAndSupportScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegalAndSupportScreens.swift; sourceTree = "<group>"; };
 		A74C04F09A7EB5CEF79E3165 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
-		C33845704864DBB28CA7565E /* HayameIOS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = HayameIOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		C33845704864DBB28CA7565E /* HayameIOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = HayameIOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C35FF516F27CD52298E15051 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
 		C43DD509D97C8BC09DFDAEEC /* HostScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostScreens.swift; sourceTree = "<group>"; };
 		D724F9AC0077635E90869BDD /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
@@ -204,7 +204,6 @@
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
 					8BE9D151498C4A21007CC694 = {
-						DevelopmentTeam = "";
 						ProvisioningStyle = Automatic;
 					};
 				};
@@ -219,7 +218,6 @@
 			);
 			mainGroup = 71DA4A9A584AD2D806E5CC82;
 			minimizedProjectReferenceProxies = 1;
-			preferredProjectObjectVersion = 77;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -340,6 +338,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				DEVELOPMENT_TEAM = AUF9LKGT7P;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = HayameIOS/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -347,7 +346,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.hayame.ios;
+				PRODUCT_BUNDLE_IDENTIFIER = com.hayame.app;
 				PRODUCT_NAME = HayameIOS;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = 1;
@@ -420,6 +419,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				DEVELOPMENT_TEAM = AUF9LKGT7P;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = HayameIOS/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -427,7 +427,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.hayame.ios;
+				PRODUCT_BUNDLE_IDENTIFIER = com.hayame.app;
 				PRODUCT_NAME = HayameIOS;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = 1;

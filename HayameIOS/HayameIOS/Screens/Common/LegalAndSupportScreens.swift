@@ -150,7 +150,7 @@ struct HostPublicProfileScreen: View {
 
                 ForEach(hostCars) { car in
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("\(car.title) \(car.year)")
+                        Text(car.displayTitle)
                             .font(.system(size: 15, weight: .bold, design: .rounded))
                             .foregroundStyle(HayameTheme.brandNavy)
                         Text("\(car.city), \(car.region)")

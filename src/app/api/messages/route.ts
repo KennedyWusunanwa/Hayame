@@ -34,8 +34,10 @@ export async function GET(req: Request) {
 
     const { searchParams } = new URL(req.url);
     const conversationId = (searchParams.get("conversationId") ?? "").trim();
-    const limit = Math.min(Number(searchParams.get("limit") ?? 200), 500);
+    const rawLimit = Number(searchParams.get("limit") ?? 200);
+    const limit = Number.isFinite(rawLimit) ? Math.max(1, Math.min(rawLimit, 500)) : 200;
     const markRead = ["1", "true", "yes"].includes((searchParams.get("markRead") ?? "").toLowerCase());
+    const since = (searchParams.get("since") ?? "").trim();
     if (!conversationId) {
       return NextResponse.json({ message: "Missing conversationId" }, { status: 400 });
     }
@@ -52,13 +54,21 @@ export async function GET(req: Request) {
       return NextResponse.json({ message: "Forbidden" }, { status: 403 });
     }
 
-    const { data, error } = await db
+    let query = db
       .from("messages")
       .select("id,conversation_id,sender_id,body,created_at,read_at")
-      .eq("conversation_id", conversationId)
-      .order("created_at", { ascending: true })
-      .limit(Number.isFinite(limit) ? limit : 200);
+      .eq("conversation_id", conversationId);
+
+    if (since) {
+      query = query.gt("created_at", since).order("created_at", { ascending: true });
+    } else {
+      // Fetch the most recent messages by default, then return in ascending order for UI.
+      query = query.order("created_at", { ascending: false });
+    }
+
+    const { data, error } = await query.limit(limit);
     if (error) throw error;
+    const orderedMessages = since ? data ?? [] : (data ?? []).slice().reverse();
 
     if (markRead) {
       await db
@@ -69,7 +79,7 @@ export async function GET(req: Request) {
         .neq("sender_id", user.id);
     }
 
-    return NextResponse.json({ data: data ?? [] });
+    return NextResponse.json({ data: orderedMessages });
   } catch (error: any) {
     return NextResponse.json({ message: error.message ?? "Failed to load messages" }, { status: 400 });
   }

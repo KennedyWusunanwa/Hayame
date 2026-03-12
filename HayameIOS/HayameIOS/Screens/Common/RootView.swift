@@ -6,9 +6,7 @@ struct RootView: View {
     var body: some View {
         Group {
             if appState.hasAppAccess {
-                if appState.currentUser.role == .admin {
-                    AdminShellScreen()
-                } else if appState.isAuthenticated && appState.hostAccessState == .host {
+                if appState.isAuthenticated && appState.hostAccessState == .host && appState.hostModeEnabled {
                     HostTabShell()
                 } else if appState.isAuthenticated && appState.hostAccessState == .pending {
                     HostApplicationPendingScreen()

@@ -38,6 +38,12 @@
 	<string></string>
 	<key>HAYAMESupabaseAnonKey</key>
 	<string>eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9zdmp4c2JzdWl4ZnNnYWR6eHpvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY3ODEwMjAsImV4cCI6MjA4MjM1NzAyMH0.C-S46gCdGSD4Bm7JZoACyMmb9hh3Mk7joGdTtEh50kc</string>
+	<key>HAYAMESupabaseAvatarBucket</key>
+	<string>car-photos</string>
+	<key>HAYAMESupabaseHostIDBucket</key>
+	<string>host-ids</string>
+	<key>HAYAMESupabaseStorageBucket</key>
+	<string>car-photos</string>
 	<key>HAYAMESupabaseURL</key>
 	<string>https://osvjxsbsuixfsgadzxzo.supabase.co</string>
 	<key>NSAppTransportSecurity</key>

@@ -26,6 +26,10 @@ private struct SupabaseAuthErrorEnvelope: Decodable {
 
 private struct EmptyResponse: Codable {}
 
+private struct APIMessageResponse: Decodable {
+    let message: String?
+}
+
 private struct AnyEncodable: Encodable {
     private let encodeFunc: (Encoder) throws -> Void
 
@@ -69,7 +73,7 @@ struct MobileAuthSessionDTO: Decodable {
 struct MobileMeDTO: Decodable {
     let user: MobileAuthUserDTO
     let profile: ProfileDTO?
-    let is_host: Bool
+    let is_host: Bool?
     let host_status: String?
     let host_application_status: String?
     let host_application: HostApplicationDTO?
@@ -85,6 +89,7 @@ struct ProfileDTO: Decodable {
     let city: String?
     let region: String?
     let avatar_url: String?
+    let avatar: String?
     let is_host: Bool?
     let id_verified: Bool?
     let phone_verified: Bool?
@@ -482,6 +487,42 @@ struct APIClient {
         }
     }
 
+    func resendSignupConfirmation(baseURL: String, email: String) async throws {
+        struct Payload: Encodable {
+            let email: String
+        }
+        do {
+            _ = try await request(
+                path: "/api/mobile/auth/resend-confirmation",
+                method: .POST,
+                body: Payload(email: email),
+                baseURL: baseURL,
+                token: nil
+            ) as APIMessageResponse
+        } catch {
+            guard isMissingMobileRoute(error) else { throw error }
+            try await resendSignupConfirmationViaSupabase(email: email)
+        }
+    }
+
+    func requestPasswordReset(baseURL: String, email: String) async throws {
+        struct Payload: Encodable {
+            let email: String
+        }
+        do {
+            _ = try await request(
+                path: "/api/mobile/auth/forgot-password",
+                method: .POST,
+                body: Payload(email: email),
+                baseURL: baseURL,
+                token: nil
+            ) as APIMessageResponse
+        } catch {
+            guard isMissingMobileRoute(error) else { throw error }
+            try await requestPasswordResetViaSupabase(email: email)
+        }
+    }
+
     func refreshToken(baseURL: String, refreshToken: String) async throws -> MobileAuthSessionDTO {
         struct Payload: Encodable {
             let refresh_token: String
@@ -502,13 +543,28 @@ struct APIClient {
 
     func getMe(baseURL: String, token: String) async throws -> MobileMeDTO {
         do {
-            return try await request(
+            let response: MobileMeDTO = try await request(
                 path: "/api/mobile/me",
                 method: .GET,
                 body: nil as EmptyResponse?,
                 baseURL: baseURL,
                 token: token
             )
+
+            if response.profile == nil {
+                if let fallback = try? await getMeViaSupabase(baseURL: baseURL, token: token), fallback.profile != nil {
+                    return MobileMeDTO(
+                        user: response.user,
+                        profile: fallback.profile,
+                        is_host: response.is_host ?? fallback.is_host,
+                        host_status: response.host_status ?? fallback.host_status,
+                        host_application_status: response.host_application_status ?? fallback.host_application_status,
+                        host_application: response.host_application ?? fallback.host_application
+                    )
+                }
+            }
+
+            return response
         } catch {
             guard isMissingMobileRoute(error) else { throw error }
             return try await getMeViaSupabase(baseURL: baseURL, token: token)
@@ -710,15 +766,35 @@ struct APIClient {
         _ = baseURL
         let cleanExtension = sanitizeFileExtension(fileExtension, fallback: "jpg")
         let path = "\(userID)/avatar-\(Int(Date().timeIntervalSince1970)).\(cleanExtension)"
-        let bucket = configuredBucketName(primaryKeys: ["HAYAMESupabaseAvatarBucket", "HAYAMESupabaseStorageBucket"], fallback: "avatars")
-        return try await uploadSupabaseStorageObject(
-            token: token,
-            bucket: bucket,
-            path: path,
-            fileData: fileData,
-            mimeType: mimeType,
-            returnPublicURL: true
+        let bucketCandidates = configuredBucketNames(
+            primaryKeys: ["HAYAMESupabaseAvatarBucket", "HAYAMESupabaseStorageBucket"],
+            fallbacks: ["car-photos", "avatars"]
         )
+
+        var lastError: Error?
+        for bucket in bucketCandidates {
+            do {
+                return try await uploadSupabaseStorageObject(
+                    token: token,
+                    bucket: bucket,
+                    path: path,
+                    fileData: fileData,
+                    mimeType: mimeType,
+                    returnPublicURL: true
+                )
+            } catch {
+                lastError = error
+                if isBucketNotFoundError(error) {
+                    continue
+                }
+                throw error
+            }
+        }
+
+        if let apiError = lastError as? APIError {
+            throw APIError(message: apiError.message, statusCode: apiError.statusCode)
+        }
+        throw APIError(message: "Unable to upload profile photo. Configure a valid Supabase storage bucket.")
     }
 
     func uploadHostIdentityDocument(
@@ -1004,12 +1080,25 @@ struct APIClient {
         }
     }
 
-    func getMessages(baseURL: String, token: String, conversationID: String, markRead: Bool = true) async throws -> MessagesEnvelopeDTO {
+    func getMessages(
+        baseURL: String,
+        token: String,
+        conversationID: String,
+        markRead: Bool = true,
+        since: String? = nil,
+        limit: Int = 200
+    ) async throws -> MessagesEnvelopeDTO {
         let encodedConversation = conversationID.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? conversationID
         let mark = markRead ? "1" : "0"
+        let safeLimit = max(1, min(limit, 500))
+        var path = "/api/messages?conversationId=\(encodedConversation)&markRead=\(mark)&limit=\(safeLimit)"
+        if let since, !since.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let encodedSince = since.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? since
+            path += "&since=\(encodedSince)"
+        }
         do {
             return try await request(
-                path: "/api/messages?conversationId=\(encodedConversation)&markRead=\(mark)",
+                path: path,
                 method: .GET,
                 body: nil as EmptyResponse?,
                 baseURL: baseURL,
@@ -1017,7 +1106,13 @@ struct APIClient {
             )
         } catch {
             guard shouldFallbackToSupabase(error) else { throw error }
-            return try await getMessagesViaSupabase(token: token, conversationID: conversationID, markRead: markRead)
+            return try await getMessagesViaSupabase(
+                token: token,
+                conversationID: conversationID,
+                markRead: markRead,
+                since: since,
+                limit: safeLimit
+            )
         }
     }
 
@@ -1073,6 +1168,20 @@ struct APIClient {
         let anonKey = rawAnonKey.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !url.isEmpty, !anonKey.isEmpty else { return nil }
         return (url, anonKey)
+    }
+
+    private func defaultConfirmationRedirectURL() -> String {
+        if
+            let raw = Bundle.main.object(forInfoDictionaryKey: "HAYAMEAPIBaseURL") as? String,
+            !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        {
+            let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.hasPrefix("http://") || trimmed.hasPrefix("https://") {
+                return trimmed
+            }
+            return "https://\(trimmed)"
+        }
+        return "https://www.hayamegh.com"
     }
 
     private func loginViaSupabase(email: String, password: String) async throws -> MobileAuthSessionDTO {
@@ -1154,6 +1263,48 @@ struct APIClient {
             host_application_status: nil,
             requires_email_confirmation: session.access_token == nil
         )
+    }
+
+    private func resendSignupConfirmationViaSupabase(email: String) async throws {
+        guard let config = supabaseConfig() else {
+            throw APIError(message: "Server route not found (404) and Supabase fallback is not configured.")
+        }
+        guard let url = URL(string: "\(config.baseURL)/auth/v1/resend") else {
+            throw APIError(message: "Invalid Supabase URL")
+        }
+
+        _ = try await supabaseRequest(
+            url: url,
+            method: .POST,
+            jsonBody: [
+                "type": "signup",
+                "email": email,
+                "options": [
+                    "email_redirect_to": defaultConfirmationRedirectURL()
+                ]
+            ],
+            anonKey: config.anonKey,
+            bearerToken: nil
+        ) as APIMessageResponse
+    }
+
+    private func requestPasswordResetViaSupabase(email: String) async throws {
+        guard let config = supabaseConfig() else {
+            throw APIError(message: "Server route not found (404) and Supabase fallback is not configured.")
+        }
+        guard let url = URL(string: "\(config.baseURL)/auth/v1/recover") else {
+            throw APIError(message: "Invalid Supabase URL")
+        }
+
+        _ = try await supabaseRequest(
+            url: url,
+            method: .POST,
+            jsonBody: [
+                "email": email
+            ],
+            anonKey: config.anonKey,
+            bearerToken: nil
+        ) as APIMessageResponse
     }
 
     private func refreshViaSupabase(refreshToken: String) async throws -> MobileAuthSessionDTO {
@@ -1537,19 +1688,33 @@ struct APIClient {
         return ConversationCreateDTO(id: inserted.id)
     }
 
-    private func getMessagesViaSupabase(token: String, conversationID: String, markRead: Bool) async throws -> MessagesEnvelopeDTO {
+    private func getMessagesViaSupabase(
+        token: String,
+        conversationID: String,
+        markRead: Bool,
+        since: String?,
+        limit: Int
+    ) async throws -> MessagesEnvelopeDTO {
         guard let config = supabaseConfig() else {
             throw APIError(message: "Supabase fallback is not configured.")
         }
+        var queryItems: [URLQueryItem] = [
+            URLQueryItem(name: "select", value: "id,conversation_id,sender_id,body,created_at,read_at"),
+            URLQueryItem(name: "conversation_id", value: "eq.\(conversationID)")
+        ]
+        if let since, !since.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            queryItems.append(URLQueryItem(name: "created_at", value: "gt.\(since)"))
+            queryItems.append(URLQueryItem(name: "order", value: "created_at.asc"))
+        } else {
+            queryItems.append(URLQueryItem(name: "order", value: "created_at.desc"))
+        }
+        queryItems.append(URLQueryItem(name: "limit", value: String(max(1, min(limit, 500)))))
+
         guard
             let messagesURL = supabaseURL(
                 baseURL: config.baseURL,
                 path: "/rest/v1/messages",
-                queryItems: [
-                    URLQueryItem(name: "select", value: "id,conversation_id,sender_id,body,created_at,read_at"),
-                    URLQueryItem(name: "conversation_id", value: "eq.\(conversationID)"),
-                    URLQueryItem(name: "order", value: "created_at.asc"),
-                ]
+                queryItems: queryItems
             )
         else {
             throw APIError(message: "Invalid Supabase URL")
@@ -1584,7 +1749,10 @@ struct APIClient {
             }
         }
 
-        return MessagesEnvelopeDTO(data: messages)
+        let ordered = (since?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+            ? messages.reversed()
+            : messages
+        return MessagesEnvelopeDTO(data: Array(ordered))
     }
 
     private func sendMessageViaSupabase(token: String, conversationID: String, body: String) async throws -> MessageEnvelopeDTO {
@@ -1811,6 +1979,47 @@ struct APIClient {
             }
         }
         return fallback
+    }
+
+    private func configuredBucketNames(primaryKeys: [String], fallbacks: [String]) -> [String] {
+        var values: [String] = []
+        for key in primaryKeys {
+            if let value = Bundle.main.object(forInfoDictionaryKey: key) as? String {
+                let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty {
+                    values.append(trimmed)
+                }
+            }
+        }
+        for fallback in fallbacks {
+            let trimmed = fallback.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                values.append(trimmed)
+            }
+        }
+
+        var uniqueValues: [String] = []
+        var seen = Set<String>()
+        for value in values {
+            let key = value.lowercased()
+            if seen.contains(key) {
+                continue
+            }
+            seen.insert(key)
+            uniqueValues.append(value)
+        }
+        return uniqueValues
+    }
+
+    private func isBucketNotFoundError(_ error: Error) -> Bool {
+        let message: String
+        if let apiError = error as? APIError {
+            message = apiError.message
+        } else {
+            message = error.localizedDescription
+        }
+        let lowered = message.lowercased()
+        return lowered.contains("bucket not found") || (lowered.contains("bucket") && lowered.contains("not found"))
     }
 
     private func sanitizeFileExtension(_ value: String, fallback: String) -> String {

@@ -27,9 +27,11 @@ enum RemoteImageURLResolver {
         } else if candidate.hasPrefix("//") {
             absolute = "https:\(candidate)"
         } else if candidate.hasPrefix("/") {
-            absolute = "\(apiBaseURL())\(candidate)"
+            let base = isSupabaseStoragePath(candidate) ? supabaseBaseURL() : apiBaseURL()
+            absolute = "\(base)\(candidate)"
         } else {
-            absolute = "\(apiBaseURL())/\(candidate)"
+            let base = isSupabaseStoragePath(candidate) ? supabaseBaseURL() : apiBaseURL()
+            absolute = "\(base)/\(candidate)"
         }
 
         return sanitizeAbsoluteURL(absolute)
@@ -45,6 +47,13 @@ enum RemoteImageURLResolver {
         return components.scheme != nil
     }
 
+    private static func isSupabaseStoragePath(_ value: String) -> Bool {
+        let normalized = value
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        return normalized.hasPrefix("/storage/v1/object/") || normalized.hasPrefix("storage/v1/object/")
+    }
+
     private static func apiBaseURL() -> String {
         let bundled = (Bundle.main.object(forInfoDictionaryKey: "HAYAMEAPIBaseURL") as? String)?
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -56,6 +65,46 @@ enum RemoteImageURLResolver {
             base.removeLast()
         }
         return base
+    }
+
+    private static func supabaseBaseURL() -> String {
+        let bundled = (Bundle.main.object(forInfoDictionaryKey: "HAYAMESupabaseURL") as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        var base = (bundled?.isEmpty == false ? bundled : nil) ?? apiBaseURL()
+        if !base.contains("://") {
+            base = "https://\(base)"
+        }
+        while base.hasSuffix("/") {
+            base.removeLast()
+        }
+        return base
+    }
+
+    private static func shouldUpgradeHTTPToHTTPS(host: String) -> Bool {
+        let lowered = host.lowercased()
+        if lowered == "localhost" || lowered == "127.0.0.1" || lowered == "::1" || lowered.hasSuffix(".local") {
+            return false
+        }
+        if isPrivateIPv4Address(lowered) {
+            return false
+        }
+        return true
+    }
+
+    private static func isPrivateIPv4Address(_ host: String) -> Bool {
+        let octets = host.split(separator: ".")
+        guard octets.count == 4 else { return false }
+        guard let a = Int(octets[0]), let b = Int(octets[1]), let c = Int(octets[2]), let d = Int(octets[3]) else {
+            return false
+        }
+        guard (0...255).contains(a), (0...255).contains(b), (0...255).contains(c), (0...255).contains(d) else {
+            return false
+        }
+        if a == 10 || a == 127 { return true }
+        if a == 192 && b == 168 { return true }
+        if a == 172 && (16...31).contains(b) { return true }
+        if a == 169 && b == 254 { return true }
+        return false
     }
 
     private static func sanitizeAbsoluteURL(_ raw: String) -> String? {
@@ -73,7 +122,9 @@ enum RemoteImageURLResolver {
                     components.host = "www.hayamegh.com"
                     components.port = nil
                 }
-            } else if components.scheme?.lowercased() == "http" {
+            } else if components.scheme?.lowercased() == "http",
+                      let host = components.host?.lowercased(),
+                      shouldUpgradeHTTPToHTTPS(host: host) {
                 // iOS image loading is more reliable over TLS for remote assets.
                 components.scheme = "https"
                 if components.port == 80 {
@@ -420,7 +471,7 @@ struct CarCardView: View {
             }
 
             VStack(alignment: .leading, spacing: 6) {
-                Text("\(car.title) \(car.year)")
+                Text(car.displayTitle)
                     .font(.system(size: 15, weight: .bold, design: .rounded))
                     .foregroundStyle(HayameTheme.brandNavy)
                     .lineLimit(1)
@@ -639,9 +690,15 @@ struct ChatBubble: View {
                 Text(message.body)
                     .font(.system(size: 14, weight: .medium, design: .rounded))
                     .foregroundStyle(message.isMine ? .white : HayameTheme.brandNavy)
-                Text(message.createdAt.hayameTimeLabel())
-                    .font(.system(size: 10, weight: .medium, design: .rounded))
-                    .foregroundStyle(message.isMine ? .white.opacity(0.8) : HayameTheme.mutedText)
+                if message.isMine {
+                    Text(statusText)
+                        .font(.system(size: 10, weight: .medium, design: .rounded))
+                        .foregroundStyle(statusColor)
+                } else {
+                    Text(message.createdAt.hayameTimeLabel())
+                        .font(.system(size: 10, weight: .medium, design: .rounded))
+                        .foregroundStyle(HayameTheme.mutedText)
+                }
             }
             .padding(10)
             .background(message.isMine ? HayameTheme.brandBlue : Color.white)
@@ -652,6 +709,26 @@ struct ChatBubble: View {
             )
 
             if !message.isMine { Spacer(minLength: 40) }
+        }
+    }
+
+    private var statusText: String {
+        switch message.deliveryState {
+        case .sending:
+            return "Sending..."
+        case .failed:
+            return "Failed to send"
+        case .sent:
+            return message.createdAt.hayameTimeLabel()
+        }
+    }
+
+    private var statusColor: Color {
+        switch message.deliveryState {
+        case .failed:
+            return Color(red: 1, green: 0.86, blue: 0.86)
+        case .sending, .sent:
+            return .white.opacity(0.8)
         }
     }
 }

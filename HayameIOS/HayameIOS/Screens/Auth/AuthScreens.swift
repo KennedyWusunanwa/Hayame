@@ -36,29 +36,6 @@ struct AuthFlowScreen: View {
                         }
                     }
 
-                    VStack(alignment: .leading, spacing: 10) {
-                        Label("Native Paystack integration", systemImage: "checkmark.seal.fill")
-                            .font(.system(size: 13, weight: .semibold, design: .rounded))
-                            .foregroundStyle(HayameTheme.brandBlue)
-
-                        Button {
-                            // Placeholder for native paystack launch
-                        } label: {
-                            HStack {
-                                Spacer()
-                                Text("Pay Paystack")
-                                Spacer()
-                            }
-                        }
-                        .buttonStyle(PrimaryPillButtonStyle())
-
-                        Text("with paystack")
-                            .font(.system(size: 11, weight: .medium, design: .rounded))
-                            .foregroundStyle(HayameTheme.mutedText)
-                            .frame(maxWidth: .infinity, alignment: .center)
-                    }
-                    .hayameCard()
-
                     Button("Continue as guest") {
                         appState.continueAsGuest()
                     }
@@ -129,16 +106,43 @@ private struct LoginScreenView: View {
                 .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.black.opacity(0.08), lineWidth: 1))
             }
 
-            Button("Log in") {
+            Button {
                 appState.signIn(email: email, password: password)
+            } label: {
+                HStack(spacing: 8) {
+                    if appState.isSyncingRemote {
+                        ProgressView().tint(.white)
+                    }
+                    Text(appState.isSyncingRemote ? "Logging in..." : "Log in")
+                }
             }
             .buttonStyle(PrimaryPillButtonStyle())
+            .disabled(appState.isSyncingRemote)
+
+            Button("Forgot password?") {
+                appState.requestPasswordReset(email: email)
+            }
+            .font(.system(size: 13, weight: .semibold, design: .rounded))
+            .foregroundStyle(HayameTheme.brandBlue)
             .disabled(appState.isSyncingRemote)
 
             if let message = appState.syncErrorMessage {
                 Text(message)
                     .font(.system(size: 12, weight: .semibold, design: .rounded))
                     .foregroundStyle(HayameTheme.danger)
+            }
+            if let info = appState.authInfoMessage {
+                Text(info)
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .foregroundStyle(HayameTheme.success)
+            }
+
+            if !email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Button("Resend verification email") {
+                    appState.resendSignupConfirmation(email: email)
+                }
+                .buttonStyle(SecondaryPillButtonStyle())
+                .disabled(appState.isSyncingRemote)
             }
 
             HStack(spacing: 4) {
@@ -225,7 +229,7 @@ private struct SignupScreenView: View {
                 .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.black.opacity(0.08), lineWidth: 1))
             }
 
-            Button("Sign up") {
+            Button {
                 appState.signUp(
                     firstName: firstName,
                     lastName: lastName,
@@ -234,6 +238,13 @@ private struct SignupScreenView: View {
                     region: region,
                     password: password
                 )
+            } label: {
+                HStack(spacing: 8) {
+                    if appState.isSyncingRemote {
+                        ProgressView().tint(.white)
+                    }
+                    Text(appState.isSyncingRemote ? "Creating account..." : "Sign up")
+                }
             }
             .buttonStyle(PrimaryPillButtonStyle())
             .disabled(appState.isSyncingRemote)
@@ -242,6 +253,19 @@ private struct SignupScreenView: View {
                 Text(message)
                     .font(.system(size: 12, weight: .semibold, design: .rounded))
                     .foregroundStyle(HayameTheme.danger)
+            }
+            if let info = appState.authInfoMessage {
+                Text(info)
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .foregroundStyle(HayameTheme.success)
+            }
+
+            if !email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Button("Resend verification email") {
+                    appState.resendSignupConfirmation(email: email)
+                }
+                .buttonStyle(SecondaryPillButtonStyle())
+                .disabled(appState.isSyncingRemote)
             }
 
             HStack(spacing: 4) {
