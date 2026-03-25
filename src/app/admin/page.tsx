@@ -8,6 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { resolveCarImage } from "@/lib/car-images";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { buildHostApplicationDecisionEmail, sendEmailSafe } from "@/lib/email";
+import { sendPushNotificationsToUsers } from "@/lib/push";
 import { getInitials } from "@/lib/utils";
 
 const COOKIE_NAME = "admin_auth";
@@ -137,6 +138,26 @@ async function reviewAction(formData: FormData) {
           idempotencyKey: `host-application:${applicationId}:approved`,
         });
       }
+
+      try {
+        const pushResult = await sendPushNotificationsToUsers({
+          adminClient: admin,
+          userIds: [userId],
+          title: "Host application approved",
+          body: "Your host application is approved. You can now list cars and host trips.",
+          collapseId: `host-application:${applicationId}`,
+          data: {
+            type: "host_application",
+            status: "approved",
+            applicationId,
+          },
+        });
+        if (pushResult.skipped || pushResult.delivered === 0) {
+          console.warn("[admin] host approval push skipped or undelivered", pushResult);
+        }
+      } catch (pushError) {
+        console.error("[admin] host approval push failed", pushError);
+      }
     }
   }
 
@@ -181,6 +202,26 @@ async function reviewAction(formData: FormData) {
           ...template,
           idempotencyKey: `host-application:${applicationId}:rejected`,
         });
+      }
+
+      try {
+        const pushResult = await sendPushNotificationsToUsers({
+          adminClient: admin,
+          userIds: [userId],
+          title: "Host application update",
+          body: `Your host application was rejected.${rejectionReason ? ` Reason: ${rejectionReason}` : ""}`,
+          collapseId: `host-application:${applicationId}`,
+          data: {
+            type: "host_application",
+            status: "rejected",
+            applicationId,
+          },
+        });
+        if (pushResult.skipped || pushResult.delivered === 0) {
+          console.warn("[admin] host rejection push skipped or undelivered", pushResult);
+        }
+      } catch (pushError) {
+        console.error("[admin] host rejection push failed", pushError);
       }
     }
   }

@@ -85,6 +85,22 @@ struct RenterTabShell: View {
 struct RenterHomeScreen: View {
     @EnvironmentObject private var appState: AppState
 
+    private var profileCity: String {
+        appState.currentUser.city.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var profileRegion: String {
+        appState.currentUser.region.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var selectedCarType: String {
+        appState.exploreFilters.carType.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var hasSummaryChips: Bool {
+        !profileCity.isEmpty || !profileRegion.isEmpty || !selectedCarType.isEmpty
+    }
+
     var body: some View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 16) {
@@ -110,10 +126,18 @@ struct RenterHomeScreen: View {
                 HomeQuickFiltersCard()
                     .environmentObject(appState)
 
-                HStack(spacing: 10) {
-                    SearchChip(title: appState.currentUser.city, icon: "mappin.circle")
-                    SearchChip(title: appState.currentUser.region, icon: "globe")
-                    SearchChip(title: "Economy", icon: "car.side")
+                if hasSummaryChips {
+                    HStack(spacing: 10) {
+                        if !profileCity.isEmpty {
+                            SearchChip(title: profileCity, icon: "mappin.circle")
+                        }
+                        if !profileRegion.isEmpty {
+                            SearchChip(title: profileRegion, icon: "globe")
+                        }
+                        if !selectedCarType.isEmpty {
+                            SearchChip(title: selectedCarType, icon: "car.side")
+                        }
+                    }
                 }
 
                 HStack(spacing: 10) {
@@ -125,26 +149,48 @@ struct RenterHomeScreen: View {
                     appState.renterTab = .explore
                 }
 
-                VStack(spacing: 12) {
-                    ForEach(appState.cars.prefix(3), id: \.id) { car in
-                        ZStack(alignment: .topTrailing) {
-                            NavigationLink {
-                                CarDetailScreen(car: car)
-                            } label: {
-                                HomeFeaturedCarRow(
-                                    car: car,
-                                    isFavorite: appState.favoriteCarIDs.contains(car.id),
-                                    showsFavoriteButton: false
-                                ) {
+                if case .loading = appState.publicCarsLoadState {
+                    VStack(spacing: 12) {
+                        ForEach(0..<3, id: \.self) { _ in
+                            ListingRowPlaceholderCard()
+                        }
+                    }
+                } else if case .error(let message) = appState.publicCarsLoadState, appState.cars.isEmpty {
+                    ErrorStateCard(
+                        title: "Listings unavailable",
+                        message: message,
+                        actionTitle: "Refresh"
+                    ) {
+                        appState.retryCars()
+                    }
+                } else if appState.cars.isEmpty {
+                    EmptyStateView(
+                        title: "No listings yet",
+                        message: "Pull down to refresh and try again.",
+                        systemImage: "car.rear.and.tire.marks"
+                    )
+                } else {
+                    VStack(spacing: 12) {
+                        ForEach(appState.cars.prefix(3), id: \.id) { car in
+                            ZStack(alignment: .topTrailing) {
+                                NavigationLink {
+                                    CarDetailScreen(car: car)
+                                } label: {
+                                    HomeFeaturedCarRow(
+                                        car: car,
+                                        isFavorite: appState.favoriteCarIDs.contains(car.id),
+                                        showsFavoriteButton: false
+                                    ) {
+                                        appState.toggleFavorite(carID: car.id)
+                                    }
+                                }
+                                .buttonStyle(.plain)
+
+                                FavoriteBadgeButton(isFavorite: appState.favoriteCarIDs.contains(car.id)) {
                                     appState.toggleFavorite(carID: car.id)
                                 }
+                                .padding(8)
                             }
-                            .buttonStyle(.plain)
-
-                            FavoriteBadgeButton(isFavorite: appState.favoriteCarIDs.contains(car.id)) {
-                                appState.toggleFavorite(carID: car.id)
-                            }
-                            .padding(8)
                         }
                     }
                 }
@@ -165,6 +211,9 @@ struct RenterHomeScreen: View {
         }
         .background(HayameTheme.pageBackground)
         .toolbar(.hidden, for: .navigationBar)
+        .refreshable {
+            await appState.refreshAllRemoteData()
+        }
     }
 }
 
@@ -456,6 +505,7 @@ private struct HomeQuickFiltersCard: View {
 struct ExploreScreen: View {
     @EnvironmentObject private var appState: AppState
     @State private var showFilters = false
+    @FocusState private var isSearchFieldFocused: Bool
 
     private let columns = [GridItem(.flexible()), GridItem(.flexible())]
 
@@ -469,6 +519,7 @@ struct ExploreScreen: View {
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .submitLabel(.search)
+                        .focused($isSearchFieldFocused)
 
                     if !appState.exploreSearchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         Button {
@@ -497,6 +548,10 @@ struct ExploreScreen: View {
                             .clipShape(Capsule())
                     }
 
+                    ExploreLayoutToggle(selectedLayout: appState.exploreLayoutMode) { layout in
+                        appState.exploreLayoutMode = layout
+                    }
+
                     Button {
                         showFilters = true
                     } label: {
@@ -509,47 +564,196 @@ struct ExploreScreen: View {
                 .background(.white)
                 .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.black.opacity(0.06), lineWidth: 1))
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    isSearchFieldFocused = true
+                }
+                .zIndex(1)
 
-                LazyVGrid(columns: columns, spacing: 12) {
-                    ForEach(appState.filteredCars) { car in
-                        ZStack(alignment: .topTrailing) {
-                            NavigationLink {
-                                CarDetailScreen(car: car)
-                            } label: {
-                                CarCardView(
-                                    car: car,
-                                    isFavorite: appState.favoriteCarIDs.contains(car.id),
-                                    showsFavoriteButton: false,
-                                    favoriteAction: {}
-                                )
+                if case .loading = appState.publicCarsLoadState {
+                    if appState.exploreLayoutMode == .grid {
+                        LazyVGrid(columns: columns, spacing: 12) {
+                            ForEach(0..<6, id: \.self) { _ in
+                                ListingGridPlaceholderCard()
                             }
-                            .buttonStyle(.plain)
-
-                            FavoriteBadgeButton(isFavorite: appState.favoriteCarIDs.contains(car.id)) {
-                                appState.toggleFavorite(carID: car.id)
+                        }
+                    } else {
+                        LazyVStack(spacing: 12) {
+                            ForEach(0..<6, id: \.self) { _ in
+                                ListingRowPlaceholderCard()
                             }
-                            .padding(8)
                         }
                     }
-                }
+                } else if case .error(let message) = appState.publicCarsLoadState, appState.cars.isEmpty {
+                    ErrorStateCard(
+                        title: "Listings unavailable",
+                        message: message,
+                        actionTitle: "Refresh"
+                    ) {
+                        appState.retryCars()
+                    }
+                } else {
+                    if appState.exploreLayoutMode == .grid {
+                        LazyVGrid(columns: columns, spacing: 12) {
+                            ForEach(appState.filteredCars) { car in
+                                ZStack(alignment: .topTrailing) {
+                                    NavigationLink {
+                                        CarDetailScreen(car: car)
+                                    } label: {
+                                        CarCardView(
+                                            car: car,
+                                            isFavorite: appState.favoriteCarIDs.contains(car.id),
+                                            showsFavoriteButton: false,
+                                            favoriteAction: {}
+                                        )
+                                    }
+                                    .buttonStyle(.plain)
 
-                if appState.filteredCars.isEmpty {
-                    EmptyStateView(
-                        title: "No cars found",
-                        message: "Try changing city, price range, or filter options.",
-                        systemImage: "car.rear.and.tire.marks"
-                    )
+                                    FavoriteBadgeButton(isFavorite: appState.favoriteCarIDs.contains(car.id)) {
+                                        appState.toggleFavorite(carID: car.id)
+                                    }
+                                    .padding(8)
+                                }
+                            }
+                        }
+                        .allowsHitTesting(!isSearchFieldFocused)
+                    } else {
+                        LazyVStack(spacing: 12) {
+                            ForEach(appState.filteredCars) { car in
+                                NavigationLink {
+                                    CarDetailScreen(car: car)
+                                } label: {
+                                    ExploreListRow(
+                                        car: car,
+                                        isFavorite: appState.favoriteCarIDs.contains(car.id)
+                                    ) {
+                                        appState.toggleFavorite(carID: car.id)
+                                    }
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .allowsHitTesting(!isSearchFieldFocused)
+                    }
+
+                    if appState.filteredCars.isEmpty {
+                        EmptyStateView(
+                            title: "No cars found",
+                            message: "Try changing city, price range, or filter options.",
+                            systemImage: "car.rear.and.tire.marks"
+                        )
+                    }
                 }
             }
             .padding(16)
         }
         .background(HayameTheme.pageBackground)
         .navigationTitle("Explore")
+        .scrollDismissesKeyboard(.interactively)
+        .refreshable {
+            await appState.refreshAllRemoteData()
+        }
         .sheet(isPresented: $showFilters) {
             NavigationStack {
                 ExploreFilterSheet()
             }
         }
+    }
+}
+
+private struct ExploreLayoutToggle: View {
+    let selectedLayout: ExploreLayoutMode
+    let onSelect: (ExploreLayoutMode) -> Void
+
+    var body: some View {
+        HStack(spacing: 4) {
+            ExploreLayoutToggleButton(
+                systemName: "list.bullet.rectangle",
+                isSelected: selectedLayout == .list,
+                accessibilityLabel: "Default list view"
+            ) {
+                onSelect(.list)
+            }
+
+            ExploreLayoutToggleButton(
+                systemName: "rectangle.grid.2x2",
+                isSelected: selectedLayout == .grid,
+                accessibilityLabel: "2 by 2 grid view"
+            ) {
+                onSelect(.grid)
+            }
+        }
+        .padding(4)
+        .background(Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(Color.black.opacity(0.06), lineWidth: 1)
+        )
+    }
+}
+
+private struct ExploreLayoutToggleButton: View {
+    let systemName: String
+    let isSelected: Bool
+    let accessibilityLabel: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(isSelected ? HayameTheme.brandBlue : HayameTheme.brandNavy)
+                .frame(width: 30, height: 30)
+                .background(isSelected ? HayameTheme.brandBlue.opacity(0.14) : Color.clear)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(accessibilityLabel)
+    }
+}
+
+private struct ExploreListRow: View {
+    let car: Car
+    let isFavorite: Bool
+    let favoriteAction: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            NetworkOrFallbackImage(
+                urlString: car.imageNames.first,
+                targetSize: CGSize(width: 188, height: 144)
+            )
+                .frame(width: 94, height: 72)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(car.displayTitle)
+                    .font(.system(size: 15, weight: .bold, design: .rounded))
+                    .foregroundStyle(HayameTheme.brandNavy)
+                    .lineLimit(1)
+
+                Text("\(car.city), \(car.region)")
+                    .hayameCaptionStyle()
+                    .lineLimit(1)
+
+                Text("GHS\(car.dailyPrice)/day")
+                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                    .foregroundStyle(HayameTheme.brandBlue)
+                    .lineLimit(1)
+            }
+
+            Spacer()
+
+            FavoriteBadgeButton(isFavorite: isFavorite, action: favoriteAction)
+        }
+        .padding(10)
+        .background(.white)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color.black.opacity(0.06), lineWidth: 1)
+        )
     }
 }
 
@@ -2083,40 +2287,55 @@ struct TripsScreen: View {
                         systemImage: "person.crop.circle.badge.exclamationmark"
                     )
                 } else if case .loading = appState.bookingsLoadState {
-                    LoadingStateCard(title: "Loading bookings", message: "Syncing your latest trips.")
+                    SectionHeader(title: "Upcoming bookings")
+                    ForEach(0..<2, id: \.self) { _ in
+                        BookingPlaceholderCard()
+                    }
+                    SectionHeader(title: "Past trips")
+                    ForEach(0..<2, id: \.self) { _ in
+                        BookingPlaceholderCard()
+                    }
                 } else if case .error(let message) = appState.bookingsLoadState {
                     ErrorStateCard(
                         title: "Bookings unavailable",
                         message: message,
-                        actionTitle: "Retry"
+                        actionTitle: "Refresh"
                     ) {
                         appState.retryBookings()
                     }
-                }
-
-                SectionHeader(title: "Upcoming bookings")
-                if upcoming.isEmpty {
-                    EmptyStateView(title: "No upcoming trips", message: "Book your next ride from Explore.", systemImage: "calendar.badge.exclamationmark")
                 } else {
-                    ForEach(upcoming) { booking in
-                        TripBookingCard(
-                            booking: booking,
-                            onMessage: { openBookingChat(for: booking) },
-                            onDispute: { disputeBooking = booking }
+                    SectionHeader(title: "Upcoming bookings")
+                    if upcoming.isEmpty {
+                        EmptyStateView(
+                            title: "No upcoming trips",
+                            message: "Book your next ride from Explore.",
+                            systemImage: "calendar.badge.exclamationmark"
                         )
+                    } else {
+                        ForEach(upcoming) { booking in
+                            TripBookingCard(
+                                booking: booking,
+                                onMessage: { openBookingChat(for: booking) },
+                                onDispute: { disputeBooking = booking }
+                            )
+                        }
                     }
-                }
 
-                SectionHeader(title: "Past trips")
-                if past.isEmpty {
-                    EmptyStateView(title: "No past trips", message: "Completed trips appear here.", systemImage: "clock.arrow.circlepath")
-                } else {
-                    ForEach(past) { booking in
-                        TripBookingCard(
-                            booking: booking,
-                            onMessage: { openBookingChat(for: booking) },
-                            onDispute: { disputeBooking = booking }
+                    SectionHeader(title: "Past trips")
+                    if past.isEmpty {
+                        EmptyStateView(
+                            title: "No past trips",
+                            message: "Completed trips appear here.",
+                            systemImage: "clock.arrow.circlepath"
                         )
+                    } else {
+                        ForEach(past) { booking in
+                            TripBookingCard(
+                                booking: booking,
+                                onMessage: { openBookingChat(for: booking) },
+                                onDispute: { disputeBooking = booking }
+                            )
+                        }
                     }
                 }
             }
@@ -2124,6 +2343,9 @@ struct TripsScreen: View {
         }
         .background(HayameTheme.pageBackground)
         .navigationTitle("Trips")
+        .refreshable {
+            await appState.refreshAllRemoteData()
+        }
         .navigationDestination(item: $activeChatTarget) { target in
             ChatThreadScreen(conversationID: target.id, participantName: target.participantName)
                 .environmentObject(appState)
@@ -2483,12 +2705,14 @@ struct FavoritesScreen: View {
                         systemImage: "person.crop.circle.badge.exclamationmark"
                     )
                 } else if case .loading = appState.favoritesLoadState {
-                    LoadingStateCard(title: "Loading favorites", message: "Fetching your saved cars.")
+                    ForEach(0..<3, id: \.self) { _ in
+                        ListingRowPlaceholderCard()
+                    }
                 } else if case .error(let message) = appState.favoritesLoadState {
                     ErrorStateCard(
                         title: "Favorites unavailable",
                         message: message,
-                        actionTitle: "Retry"
+                        actionTitle: "Refresh"
                     ) {
                         appState.retryFavorites()
                     }
@@ -2539,6 +2763,9 @@ struct FavoritesScreen: View {
         }
         .background(HayameTheme.pageBackground)
         .navigationTitle("Saved")
+        .refreshable {
+            await appState.refreshAllRemoteData()
+        }
     }
 }
 
@@ -2559,48 +2786,44 @@ struct InboxScreen: View {
     }
 
     var body: some View {
-        VStack(spacing: 12) {
-            if !appState.isAuthenticated {
-                EmptyStateView(
-                    title: "Log in to use messages",
-                    message: "Conversation history and live chat are available after sign in.",
-                    systemImage: "person.crop.circle.badge.exclamationmark"
-                )
-                .padding(.horizontal, 16)
-
-                Spacer()
-            } else if case .loading = appState.conversationsLoadState {
-                LoadingStateCard(title: "Loading messages", message: "Syncing conversations.")
-                    .padding(.horizontal, 16)
-                Spacer()
-            } else if case .error(let message) = appState.conversationsLoadState {
-                ErrorStateCard(
-                    title: "Messages unavailable",
-                    message: message,
-                    actionTitle: "Retry"
-                ) {
-                    appState.retryConversations()
-                }
-                .padding(.horizontal, 16)
-                Spacer()
-            } else {
-                HStack(spacing: 8) {
-                    Image(systemName: "magnifyingglass")
-                        .foregroundStyle(HayameTheme.mutedText)
-                    TextField("Search", text: $search)
-                }
-                .padding(12)
-                .background(.white)
-                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.black.opacity(0.06), lineWidth: 1))
-                .padding(.horizontal, 16)
-
-                if filtered.isEmpty {
-                    EmptyStateView(title: "No conversations", message: "Start chatting from a car detail page.", systemImage: "bubble.left.and.bubble.right")
-                        .padding(.horizontal, 16)
-                    Spacer()
+        ScrollView {
+            VStack(spacing: 12) {
+                if !appState.isAuthenticated {
+                    EmptyStateView(
+                        title: "Log in to use messages",
+                        message: "Conversation history and live chat are available after sign in.",
+                        systemImage: "person.crop.circle.badge.exclamationmark"
+                    )
+                } else if case .loading = appState.conversationsLoadState {
+                    ForEach(0..<6, id: \.self) { _ in
+                        ConversationPlaceholderRow()
+                    }
+                } else if case .error(let message) = appState.conversationsLoadState {
+                    ErrorStateCard(
+                        title: "Messages unavailable",
+                        message: message,
+                        actionTitle: "Refresh"
+                    ) {
+                        appState.retryConversations()
+                    }
                 } else {
-                    ScrollView {
+                    HStack(spacing: 8) {
+                        Image(systemName: "magnifyingglass")
+                            .foregroundStyle(HayameTheme.mutedText)
+                        TextField("Search", text: $search)
+                    }
+                    .padding(12)
+                    .background(.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.black.opacity(0.06), lineWidth: 1))
+
+                    if filtered.isEmpty {
+                        EmptyStateView(
+                            title: "No conversations",
+                            message: "Start chatting from a car detail page.",
+                            systemImage: "bubble.left.and.bubble.right"
+                        )
+                    } else {
                         VStack(spacing: 10) {
                             ForEach(filtered) { conversation in
                                 Button {
@@ -2611,13 +2834,16 @@ struct InboxScreen: View {
                                 .buttonStyle(.plain)
                             }
                         }
-                        .padding(16)
                     }
                 }
             }
+            .padding(16)
         }
         .background(HayameTheme.pageBackground)
         .navigationTitle("Messages")
+        .refreshable {
+            await appState.refreshAllRemoteData()
+        }
         .navigationDestination(item: $activeChatTarget) { target in
             ChatThreadScreen(conversationID: target.id, participantName: target.participantName)
                 .environmentObject(appState)
@@ -2776,7 +3002,12 @@ struct GuestProfileScreen: View {
                         Spacer()
                     }
 
-                    InfoLine(label: "Location", value: "\(appState.currentUser.city), \(appState.currentUser.region)")
+                    let profileCity = appState.currentUser.city.trimmingCharacters(in: .whitespacesAndNewlines)
+                    let profileRegion = appState.currentUser.region.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !profileCity.isEmpty || !profileRegion.isEmpty {
+                        let location = [profileCity, profileRegion].filter { !$0.isEmpty }.joined(separator: ", ")
+                        InfoLine(label: "Location", value: location)
+                    }
                     if appState.isAuthenticated && !appState.currentUser.phone.isEmpty {
                         InfoLine(label: "Phone", value: appState.currentUser.phone)
                     }

@@ -11,6 +11,7 @@ import {
   buildHostBookingNoticeEmail,
   sendEmailSafe,
 } from "@/lib/email";
+import { sendPushNotificationsToUsers } from "@/lib/push";
 
 type Body = {
   carId?: string;
@@ -449,6 +450,63 @@ export async function POST(req: Request) {
       }
     };
 
+    const sendBookingPushNotifications = async (booking: any, conversationId: string | null) => {
+      try {
+        const bookingIdValue = String(booking?.id ?? "");
+        const carTitle = String(car.title ?? "your trip");
+        const isInstantBook = finalStatus === "confirmed";
+        const hostUserId = String(car.owner_id ?? "");
+        const renterUserId = String(booking?.renter_id ?? user.id ?? "");
+        const sharedData = {
+          type: "booking",
+          bookingId: bookingIdValue,
+          carId: String(carId ?? ""),
+          conversationId: conversationId ?? null,
+          status: finalStatus,
+        } as const;
+
+        if (hostUserId) {
+          const hostPushResult = await sendPushNotificationsToUsers({
+            adminClient: maybeAdmin,
+            userIds: [hostUserId],
+            title: isInstantBook ? "New instant booking" : "New booking request",
+            body: isInstantBook
+              ? `${carTitle} has been booked and confirmed.`
+              : `${carTitle} has a new request awaiting your approval.`,
+            collapseId: bookingIdValue ? `booking:${bookingIdValue}` : "booking:new",
+            data: {
+              ...sharedData,
+              recipientRole: "host",
+            },
+          });
+          if (hostPushResult.skipped || hostPushResult.delivered === 0) {
+            console.warn("[bookings/paystack] host push skipped or undelivered", hostPushResult);
+          }
+        }
+
+        if (renterUserId) {
+          const renterPushResult = await sendPushNotificationsToUsers({
+            adminClient: maybeAdmin,
+            userIds: [renterUserId],
+            title: isInstantBook ? "Booking confirmed" : "Booking request sent",
+            body: isInstantBook
+              ? `Your trip for ${carTitle} is confirmed.`
+              : `Your request for ${carTitle} is awaiting host approval.`,
+            collapseId: bookingIdValue ? `booking:${bookingIdValue}` : "booking:new",
+            data: {
+              ...sharedData,
+              recipientRole: "renter",
+            },
+          });
+          if (renterPushResult.skipped || renterPushResult.delivered === 0) {
+            console.warn("[bookings/paystack] renter push skipped or undelivered", renterPushResult);
+          }
+        }
+      } catch (pushError) {
+        console.error("[bookings/paystack] push notifications failed", pushError);
+      }
+    };
+
     if (bookingId) {
       const { data, error } = await supa
         .from("bookings")
@@ -488,6 +546,7 @@ export async function POST(req: Request) {
         bookingId: data.id,
       });
       await sendBookingEmails(data, conversationId);
+      await sendBookingPushNotifications(data, conversationId);
       return NextResponse.json({ data, conversationId });
     }
 
@@ -550,6 +609,7 @@ export async function POST(req: Request) {
       bookingId: data.id,
     });
     await sendBookingEmails(data, conversationId);
+    await sendBookingPushNotifications(data, conversationId);
     return NextResponse.json({ data, conversationId });
   } catch (error: any) {
     return NextResponse.json({ message: error.message ?? "Failed to create booking" }, { status: 400 });

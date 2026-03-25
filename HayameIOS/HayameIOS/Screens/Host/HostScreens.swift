@@ -5,11 +5,19 @@ import UniformTypeIdentifiers
 
 struct HostApplicationPendingScreen: View {
     @EnvironmentObject private var appState: AppState
+    let onLeave: () -> Void
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
+                    Button {
+                        onLeave()
+                    } label: {
+                        Label("Back", systemImage: "chevron.left")
+                    }
+                    .buttonStyle(SecondaryPillButtonStyle())
+
                     EmptyStateView(
                         title: "Host Application Pending",
                         message: "Your host application is still under review. You can continue browsing as a renter while we process it.",
@@ -31,11 +39,25 @@ struct HostApplicationPendingScreen: View {
                         Task { await appState.refreshAllRemoteData() }
                     }
                     .buttonStyle(SecondaryPillButtonStyle())
+
+                    Button("Continue browsing as renter") {
+                        onLeave()
+                    }
+                    .buttonStyle(PrimaryPillButtonStyle())
                 }
                 .padding(16)
             }
             .background(HayameTheme.pageBackground)
             .navigationTitle("Host Review")
+            .navigationBarTitleDisplayMode(.inline)
+            .refreshable {
+                await appState.refreshAllRemoteData()
+            }
+            .task {
+                try? await Task.sleep(nanoseconds: 10_000_000_000)
+                guard !Task.isCancelled else { return }
+                onLeave()
+            }
         }
     }
 }
@@ -297,6 +319,9 @@ struct HostDashboardScreen: View {
         }
         .background(HayameTheme.pageBackground)
         .navigationTitle("Dashboard")
+        .refreshable {
+            await appState.refreshAllRemoteData()
+        }
     }
 
     @ViewBuilder
@@ -406,7 +431,19 @@ struct HostCarsScreen: View {
             }
 
             Section("My car listing") {
-                if appState.hostCars.isEmpty {
+                if case .loading = appState.publicCarsLoadState, appState.hostCars.isEmpty {
+                    ForEach(0..<4, id: \.self) { _ in
+                        HostListingPlaceholderRow()
+                    }
+                } else if case .error(let message) = appState.publicCarsLoadState, appState.hostCars.isEmpty {
+                    ErrorStateCard(
+                        title: "Listings unavailable",
+                        message: message,
+                        actionTitle: "Refresh"
+                    ) {
+                        appState.retryCars()
+                    }
+                } else if appState.hostCars.isEmpty {
                     Text("No listings yet")
                 } else {
                     ForEach(appState.hostCars) { car in
@@ -454,6 +491,9 @@ struct HostCarsScreen: View {
         .scrollContentBackground(.hidden)
         .background(HayameTheme.pageBackground)
         .navigationTitle("My Cars")
+        .refreshable {
+            await appState.refreshAllRemoteData()
+        }
         .confirmationDialog(
             "Delete this listing?",
             isPresented: Binding(
@@ -509,6 +549,7 @@ struct ListingEditorScreen: View {
     let mode: ListingEditorMode
 
     @State private var draft = ListingDraft()
+    @State private var yearInput: String = ""
     @State private var isSaving = false
     @State private var editorNotice: String?
     @State private var editorError: String?
@@ -519,6 +560,15 @@ struct ListingEditorScreen: View {
     private let maxPhotos = 7
     private let maxPhotoBytes = 4 * 1024 * 1024
     private let createDraftStorageKey = "hayame.host.create_listing_draft.v1"
+    private let minListingYear = 2000
+
+    private var maxListingYear: Int {
+        Calendar.current.component(.year, from: Date()) + 1
+    }
+
+    private var listingYearRangeLabel: String {
+        "Valid range: " + String(minListingYear) + "-" + String(maxListingYear)
+    }
 
     private struct PendingListingUpload: Identifiable {
         let id = UUID()
@@ -549,8 +599,58 @@ struct ListingEditorScreen: View {
                         }
                     }
                 }
-                Stepper("Year: \(draft.year)", value: $draft.year, in: 2000...(Calendar.current.component(.year, from: Date()) + 1))
-                Stepper("Price (GHS): \(draft.price)", value: $draft.price, in: 50...10000, step: 50)
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text("Year")
+                        Spacer()
+                        Text(String(draft.year))
+                            .foregroundStyle(HayameTheme.brandBlue)
+                            .font(.system(size: 14, weight: .bold, design: .rounded))
+                    }
+                    TextField("Enter year", text: Binding(
+                        get: { yearInput },
+                        set: { updateYearInput($0) }
+                    ))
+                    .keyboardType(.numberPad)
+                    .textInputAutocapitalization(.never)
+                    .disableAutocorrection(true)
+                    .padding(.horizontal, 12)
+                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(Color.white)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .stroke(Color.black.opacity(0.08), lineWidth: 1)
+                    )
+
+                    Text(listingYearRangeLabel)
+                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        .foregroundStyle(HayameTheme.mutedText)
+                }
+            }
+
+            Section("Pricing") {
+                CurrencyInput(
+                    label: "Daily Price",
+                    value: $draft.price,
+                    range: 50...10_000,
+                    step: 50,
+                    suffix: "/day"
+                )
+                CurrencyInput(
+                    label: "Insurance (per trip)",
+                    value: $draft.insuranceFee,
+                    range: 0...2_000,
+                    step: 10
+                )
+                CurrencyInput(
+                    label: "Security Deposit",
+                    value: $draft.depositAmount,
+                    range: 0...5_000,
+                    step: 50
+                )
             }
 
             Section("Location") {
@@ -596,24 +696,32 @@ struct ListingEditorScreen: View {
                 Toggle("Instant Book", isOn: $draft.instantBook)
                 Toggle("Delivery available", isOn: $draft.deliveryAvailable)
                 Toggle("Air conditioning", isOn: $draft.airConditioning)
-                if draft.deliveryAvailable {
-                    Stepper("Delivery fee: GHS\(draft.deliveryFee)", value: $draft.deliveryFee, in: 0...2000, step: 10)
-                } else {
-                    HStack {
-                        Text("Delivery fee")
-                        Spacer()
-                        Text("Disabled")
-                            .foregroundStyle(HayameTheme.mutedText)
-                    }
-                }
-                Stepper("Insurance fee: GHS\(draft.insuranceFee)", value: $draft.insuranceFee, in: 0...2000, step: 10)
-                Stepper("Deposit: GHS\(draft.depositAmount)", value: $draft.depositAmount, in: 0...5000, step: 50)
-                Stepper("Outside listing region fee: GHS\(draft.outsideAccraFee)", value: $draft.outsideAccraFee, in: 0...3000, step: 20)
                 Picker("Cancellation", selection: $draft.cancellationPolicy) {
                     Text("Flexible").tag("Flexible")
                     Text("Moderate").tag("Moderate")
                     Text("Strict").tag("Strict")
                 }
+            }
+
+            Section("Extra Fees") {
+                if draft.deliveryAvailable {
+                    CurrencyInput(
+                        label: "Delivery Fee",
+                        value: $draft.deliveryFee,
+                        range: 0...2_000,
+                        step: 10
+                    )
+                } else {
+                    Text("Delivery fee is disabled until delivery is enabled.")
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .foregroundStyle(HayameTheme.mutedText)
+                }
+                CurrencyInput(
+                    label: "Outside Listing Region Fee",
+                    value: $draft.outsideAccraFee,
+                    range: 0...3_000,
+                    step: 20
+                )
             }
 
             Section("Photos") {
@@ -712,6 +820,8 @@ struct ListingEditorScreen: View {
             }
         }
         .navigationTitle(modeTitle)
+        .scrollDismissesKeyboard(.interactively)
+        .dismissKeyboardOnNonInputTap()
         .toolbar {
             if case .create = mode {
                 ToolbarItem(placement: .topBarLeading) {
@@ -748,6 +858,12 @@ struct ListingEditorScreen: View {
         .onChange(of: draft.deliveryAvailable) { _, isAvailable in
             if !isAvailable {
                 draft.deliveryFee = 0
+            }
+        }
+        .onChange(of: draft.year) { _, newValue in
+            let normalized = String(newValue)
+            if yearInput != normalized {
+                yearInput = normalized
             }
         }
         .onChange(of: pendingPickerItems) { _, newItems in
@@ -796,6 +912,7 @@ struct ListingEditorScreen: View {
                     cancellationPolicy: car.cancellationPolicy.isEmpty ? "Moderate" : car.cancellationPolicy
                 )
             }
+            yearInput = String(draft.year)
         }
         .onDisappear {
             persistCreateDraftIfNeeded()
@@ -962,6 +1079,207 @@ struct ListingEditorScreen: View {
     private func clearCreateDraft() {
         UserDefaults.standard.removeObject(forKey: createDraftStorageKey)
     }
+
+    private func updateYearInput(_ rawValue: String) {
+        let digitsOnly = String(rawValue.filter(\.isNumber).prefix(4))
+        yearInput = digitsOnly
+
+        guard !digitsOnly.isEmpty else { return }
+        guard let parsed = Int(digitsOnly) else { return }
+
+        if parsed > maxListingYear {
+            draft.year = maxListingYear
+            yearInput = String(maxListingYear)
+            return
+        }
+
+        if digitsOnly.count == 4 {
+            let clamped = min(max(parsed, minListingYear), maxListingYear)
+            draft.year = clamped
+            if clamped != parsed {
+                yearInput = String(clamped)
+            }
+            return
+        }
+
+        if parsed >= minListingYear && parsed <= maxListingYear {
+            draft.year = parsed
+        }
+    }
+}
+
+private struct CurrencyInput: View {
+    let label: String
+    @Binding var value: Int
+    let range: ClosedRange<Int>
+    let step: Int
+    var placeholder: String = "Enter amount"
+    var suffix: String? = nil
+    var showsQuickAdjustButtons: Bool = true
+
+    @State private var textValue: String = ""
+
+    private static let formatter: NumberFormatter = {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.maximumFractionDigits = 0
+        formatter.minimumFractionDigits = 0
+        return formatter
+    }()
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .center, spacing: 8) {
+                Text(label)
+                    .font(.system(size: 16, weight: .semibold, design: .rounded))
+                    .foregroundStyle(HayameTheme.brandNavy)
+                Spacer()
+                Text(formattedValueLabel)
+                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                    .foregroundStyle(HayameTheme.brandBlue)
+            }
+
+            TextField(placeholder, text: Binding(
+                get: { textValue },
+                set: { updateFromInput($0) }
+            ))
+            .keyboardType(.numberPad)
+            .textInputAutocapitalization(.never)
+            .disableAutocorrection(true)
+            .padding(.horizontal, 12)
+            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Color.white)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(Color.black.opacity(0.08), lineWidth: 1)
+            )
+
+            if showsQuickAdjustButtons {
+                HStack(spacing: 8) {
+                    Spacer()
+                    Button {
+                        adjust(by: -step)
+                    } label: {
+                        Image(systemName: "minus")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(HayameTheme.brandNavy)
+                            .frame(width: 44, height: 44)
+                            .background(HayameTheme.brandLight)
+                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(value <= range.lowerBound)
+
+                    Button {
+                        adjust(by: step)
+                    } label: {
+                        Image(systemName: "plus")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(HayameTheme.brandNavy)
+                            .frame(width: 44, height: 44)
+                            .background(HayameTheme.brandLight)
+                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(value >= range.upperBound)
+                }
+            }
+        }
+        .padding(.vertical, 4)
+        .onAppear {
+            textValue = String(value)
+        }
+        .onChange(of: value) { _, newValue in
+            let normalized = String(newValue)
+            if textValue != normalized {
+                textValue = normalized
+            }
+        }
+    }
+
+    private var formattedValueLabel: String {
+        let base = Self.formatter.string(from: NSNumber(value: value)) ?? String(value)
+        let suffixText = suffix?.isEmpty == false ? suffix! : ""
+        return "₵\(base)\(suffixText)"
+    }
+
+    private func adjust(by delta: Int) {
+        let next = min(max(value + delta, range.lowerBound), range.upperBound)
+        value = next
+        textValue = String(next)
+    }
+
+    private func updateFromInput(_ rawValue: String) {
+        let digitsOnly = rawValue.filter(\.isNumber)
+        textValue = digitsOnly
+        guard !digitsOnly.isEmpty else { return }
+        guard let parsed = Int(digitsOnly) else { return }
+        let clamped = min(max(parsed, range.lowerBound), range.upperBound)
+        value = clamped
+        if clamped != parsed {
+            textValue = String(clamped)
+        }
+    }
+}
+
+private extension View {
+    func dismissKeyboardOnNonInputTap() -> some View {
+        modifier(KeyboardDismissOnTapModifier())
+    }
+}
+
+private struct KeyboardDismissOnTapModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        content.background(KeyboardDismissTapView())
+    }
+}
+
+private struct KeyboardDismissTapView: UIViewRepresentable {
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView(frame: .zero)
+        view.backgroundColor = .clear
+
+        let recognizer = UITapGestureRecognizer(
+            target: context.coordinator,
+            action: #selector(Coordinator.handleTap)
+        )
+        recognizer.cancelsTouchesInView = false
+        recognizer.delegate = context.coordinator
+        view.addGestureRecognizer(recognizer)
+        return view
+    }
+
+    func updateUIView(_ uiView: UIView, context: Context) {}
+
+    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        @objc
+        func handleTap() {
+            UIApplication.shared.sendAction(
+                #selector(UIResponder.resignFirstResponder),
+                to: nil,
+                from: nil,
+                for: nil
+            )
+        }
+
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+            var current: UIView? = touch.view
+            while let view = current {
+                if view is UITextField || view is UITextView {
+                    return false
+                }
+                current = view.superview
+            }
+            return true
+        }
+    }
 }
 
 struct HostBookingsScreen: View {
@@ -970,82 +1288,97 @@ struct HostBookingsScreen: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
-                ForEach(appState.hostBookings) { booking in
-                    let canAct = booking.status == .awaitingHost && booking.paymentStatus == .paid
+                if case .loading = appState.bookingsLoadState {
+                    ForEach(0..<4, id: \.self) { _ in
+                        BookingPlaceholderCard()
+                    }
+                } else if case .error(let message) = appState.bookingsLoadState, appState.hostBookings.isEmpty {
+                    ErrorStateCard(
+                        title: "Bookings unavailable",
+                        message: message,
+                        actionTitle: "Refresh"
+                    ) {
+                        appState.retryBookings()
+                    }
+                } else if appState.hostBookings.isEmpty {
+                    EmptyStateView(title: "No host bookings", message: "Requests will show here when guests book your cars.", systemImage: "calendar.badge.plus")
+                } else {
+                    ForEach(appState.hostBookings) { booking in
+                        let canAct = booking.status == .awaitingHost && booking.paymentStatus == .paid
 
-                    VStack(alignment: .leading, spacing: 10) {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Booking Request")
-                                    .font(.system(size: 11, weight: .bold, design: .rounded))
-                                    .foregroundStyle(HayameTheme.mutedText)
-                                Text(booking.renterName)
-                                    .font(.system(size: 16, weight: .bold, design: .rounded))
-                                    .foregroundStyle(HayameTheme.brandNavy)
-                                Text(booking.carTitle)
-                                    .font(.system(size: 13, weight: .semibold, design: .rounded))
-                                    .foregroundStyle(HayameTheme.brandBlue)
-                            }
-                            Spacer()
-                            BookingStatusBadge(status: booking.status)
-                        }
-
-                        InfoLine(label: "Trip", value: "\(booking.startDate.hayameDateLabel()) - \(booking.endDate.hayameDateLabel())")
-                        InfoLine(label: "Trip use", value: booking.tripUseAddress)
-                        InfoLine(label: "Payment", value: booking.paymentStatus.rawValue.capitalized)
-                        InfoLine(label: "Total", value: "GHS\(booking.totalPrice)")
-
-                        HStack(spacing: 10) {
-                            Button("Message") {
-                                Task {
-                                    guard let id = await appState.ensureConversation(
-                                        hostID: appState.currentUser.id,
-                                        participantID: booking.renterID,
-                                        carID: booking.carID,
-                                        participantName: booking.renterName
-                                    ) else {
-                                        return
-                                    }
-                                    appState.addMessage(
-                                        conversationID: id,
-                                        body: "Hi \(booking.renterName), your booking update is available.",
-                                        mine: true
-                                    )
-                                    appState.hostTab = .inbox
+                        VStack(alignment: .leading, spacing: 10) {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Booking Request")
+                                        .font(.system(size: 11, weight: .bold, design: .rounded))
+                                        .foregroundStyle(HayameTheme.mutedText)
+                                    Text(booking.renterName)
+                                        .font(.system(size: 16, weight: .bold, design: .rounded))
+                                        .foregroundStyle(HayameTheme.brandNavy)
+                                    Text(booking.carTitle)
+                                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+                                        .foregroundStyle(HayameTheme.brandBlue)
                                 }
+                                Spacer()
+                                BookingStatusBadge(status: booking.status)
                             }
-                            .buttonStyle(SecondaryPillButtonStyle())
 
-                            if canAct {
-                                Button("Reject") {
-                                    appState.rejectBooking(booking)
+                            InfoLine(label: "Trip", value: "\(booking.startDate.hayameDateLabel()) - \(booking.endDate.hayameDateLabel())")
+                            InfoLine(label: "Trip use", value: booking.tripUseAddress)
+                            InfoLine(label: "Payment", value: booking.paymentStatus.rawValue.capitalized)
+                            InfoLine(label: "Total", value: "GHS\(booking.totalPrice)")
+
+                            HStack(spacing: 10) {
+                                Button("Message") {
+                                    Task {
+                                        guard let id = await appState.ensureConversation(
+                                            hostID: appState.currentUser.id,
+                                            participantID: booking.renterID,
+                                            carID: booking.carID,
+                                            participantName: booking.renterName
+                                        ) else {
+                                            return
+                                        }
+                                        appState.addMessage(
+                                            conversationID: id,
+                                            body: "Hi \(booking.renterName), your booking update is available.",
+                                            mine: true
+                                        )
+                                        appState.hostTab = .inbox
+                                    }
                                 }
                                 .buttonStyle(SecondaryPillButtonStyle())
 
-                                Button("Approve") {
-                                    appState.approveBooking(booking)
+                                if canAct {
+                                    Button("Reject") {
+                                        appState.rejectBooking(booking)
+                                    }
+                                    .buttonStyle(SecondaryPillButtonStyle())
+
+                                    Button("Approve") {
+                                        appState.approveBooking(booking)
+                                    }
+                                    .buttonStyle(PrimaryPillButtonStyle())
                                 }
-                                .buttonStyle(PrimaryPillButtonStyle())
+                            }
+
+                            if booking.status == .awaitingHost && booking.paymentStatus != .paid {
+                                Text("Waiting for renter payment before approval.")
+                                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                    .foregroundStyle(HayameTheme.warning)
                             }
                         }
-
-                        if booking.status == .awaitingHost && booking.paymentStatus != .paid {
-                            Text("Waiting for renter payment before approval.")
-                                .font(.system(size: 12, weight: .semibold, design: .rounded))
-                                .foregroundStyle(HayameTheme.warning)
-                        }
+                        .hayameCard()
                     }
-                    .hayameCard()
-                }
-
-                if appState.hostBookings.isEmpty {
-                    EmptyStateView(title: "No host bookings", message: "Requests will show here when guests book your cars.", systemImage: "calendar.badge.plus")
                 }
             }
             .padding(16)
         }
         .background(HayameTheme.pageBackground)
         .navigationTitle("Host Bookings")
+        .refreshable {
+            await appState.refreshAllRemoteData()
+        }
     }
 }
 
@@ -1181,6 +1514,9 @@ struct HostEarningsScreen: View {
         }
         .background(HayameTheme.pageBackground)
         .navigationTitle("Earnings")
+        .refreshable {
+            await appState.refreshAllRemoteData()
+        }
     }
 }
 

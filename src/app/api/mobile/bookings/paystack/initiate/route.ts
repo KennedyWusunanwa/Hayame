@@ -23,7 +23,13 @@ function sanitizeCallbackUrl(raw?: string) {
   try {
     const parsed = new URL(trimmed);
     const protocol = parsed.protocol.toLowerCase();
-    if (protocol === "https:" || protocol === "http:" || protocol === "hayameios:" || protocol === "hayame:") {
+    if (
+      protocol === "https:" ||
+      protocol === "http:" ||
+      protocol === "hayameios:" ||
+      protocol === "hayameandroid:" ||
+      protocol === "hayame:"
+    ) {
       return parsed.toString();
     }
     return fallback;

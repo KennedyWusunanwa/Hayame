@@ -319,21 +319,58 @@ struct BecomeHostScreen: View {
     @State private var isUploadingIDFront = false
     @State private var isUploadingIDBack = false
     @State private var isUploadingFace = false
+    @State private var isSubmittingApplication = false
+    @State private var showSubmissionAlert = false
+    @State private var submissionAlertMessage = ""
+    @State private var showSubmissionErrorAlert = false
+    @State private var submissionErrorMessage = ""
 
     private let idTypes = ["Ghana Card", "NHIS", "Voters ID", "Driving Licence"]
     private var isUploading: Bool { isUploadingIDFront || isUploadingIDBack || isUploadingFace }
+    private var isApplicationUnderReview: Bool {
+        appState.hostAccessState == .pending || appState.hostApplication?.status == .pending
+    }
+
+    private var submitBlockingReason: String? {
+        if !appState.isAuthenticated {
+            return "Sign in to submit your host application."
+        }
+        if isApplicationUnderReview {
+            return "Your application is under review."
+        }
+        if isUploading {
+            return "Please wait for uploads to finish."
+        }
+        if fullName.trimmingCharacters(in: .whitespacesAndNewlines).count < 2 {
+            return "Enter your full name (at least 2 characters)."
+        }
+        if phone.trimmingCharacters(in: .whitespacesAndNewlines).count < 6 {
+            return "Enter a valid phone number (at least 6 digits)."
+        }
+        if region.trimmingCharacters(in: .whitespacesAndNewlines).count < 2 ||
+            city.trimmingCharacters(in: .whitespacesAndNewlines).count < 2 {
+            return "Select your region and city."
+        }
+        if idType.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return "Select an ID type."
+        }
+        if idNumber.trimmingCharacters(in: .whitespacesAndNewlines).count < 4 {
+            return "Enter your ID number (at least 4 characters)."
+        }
+        if idFrontPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return "Upload your ID front image."
+        }
+        if idBackPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return "Upload your ID back image."
+        }
+        if experience.trimmingCharacters(in: .whitespacesAndNewlines).count < 3 {
+            return "Add a short hosting experience (at least 3 characters)."
+        }
+        return nil
+    }
+
     private var canSubmit: Bool {
-        appState.isAuthenticated &&
-        !isUploading &&
-        !fullName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-        !phone.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-        !region.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-        !city.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-        !idType.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-        !idNumber.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-        !idFrontPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-        !idBackPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-        experience.trimmingCharacters(in: .whitespacesAndNewlines).count >= 10
+        submitBlockingReason == nil
     }
 
     var body: some View {
@@ -459,7 +496,23 @@ struct BecomeHostScreen: View {
                             .foregroundStyle(HayameTheme.danger)
                     }
 
-                    Button(isUploading ? "Uploading..." : "Submit application") {
+                    if let syncMessage = appState.syncErrorMessage, !syncMessage.isEmpty {
+                        Text(syncMessage)
+                            .font(.system(size: 12, weight: .semibold, design: .rounded))
+                            .foregroundStyle(HayameTheme.danger)
+                    }
+
+                    if let submitBlockingReason, !submitBlockingReason.isEmpty {
+                        Text(submitBlockingReason)
+                            .font(.system(size: 12, weight: .semibold, design: .rounded))
+                            .foregroundStyle(HayameTheme.warning)
+                    }
+
+                    Button(
+                        isUploading
+                            ? "Uploading..."
+                            : (isSubmittingApplication ? "Submitting..." : "Submit application")
+                    ) {
                         let application = HostApplication(
                             id: UUID().uuidString,
                             fullName: fullName,
@@ -477,16 +530,44 @@ struct BecomeHostScreen: View {
                             idBackPath: idBackPath,
                             facePhotoURL: facePhotoURL
                         )
-                        appState.submitHostApplication(application)
+                        Task {
+                            guard !isSubmittingApplication else { return }
+                            isSubmittingApplication = true
+                            let submitted = await appState.submitHostApplicationNow(application)
+                            isSubmittingApplication = false
+                            if submitted {
+                                submissionAlertMessage = "Your host request is being reviewed. We will email you once there is an update."
+                                showSubmissionAlert = true
+                            } else {
+                                submissionErrorMessage = appState.syncErrorMessage?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+                                    ? appState.syncErrorMessage!
+                                    : "Unable to submit application. Please check your details and try again."
+                                showSubmissionErrorAlert = true
+                            }
+                        }
                     }
                     .buttonStyle(PrimaryPillButtonStyle())
-                    .disabled(!canSubmit)
+                    .disabled(!canSubmit || isSubmittingApplication)
+                    .opacity((canSubmit && !isSubmittingApplication) ? 1 : 0.55)
                 }
             }
             .padding(16)
         }
         .background(HayameTheme.pageBackground)
         .navigationTitle("Become Host")
+        .alert("Application submitted", isPresented: $showSubmissionAlert) {
+            Button("Go to dashboard") {
+                appState.renterTab = .dashboard
+                dismiss()
+            }
+        } message: {
+            Text(submissionAlertMessage)
+        }
+        .alert("Unable to submit", isPresented: $showSubmissionErrorAlert) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(submissionErrorMessage)
+        }
         .onChange(of: region) { _, newValue in
             let options = MockDataService.cities(for: newValue, preferred: city)
             if !options.contains(where: { $0.caseInsensitiveCompare(city) == .orderedSame }) {

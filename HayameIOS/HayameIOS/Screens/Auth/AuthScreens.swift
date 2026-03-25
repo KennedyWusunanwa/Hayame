@@ -169,6 +169,7 @@ private struct SignupScreenView: View {
     @State private var city = "Accra"
     @State private var password = ""
     @State private var showPassword = false
+    @State private var showSignupConfirmationAlert = false
 
     let goToLogin: () -> Void
 
@@ -284,6 +285,18 @@ private struct SignupScreenView: View {
             if !options.contains(where: { $0.caseInsensitiveCompare(city) == .orderedSame }) {
                 city = options.first ?? city
             }
+        }
+        .onChange(of: appState.signupConfirmationPromptMessage) { _, newValue in
+            guard newValue != nil else { return }
+            showSignupConfirmationAlert = true
+        }
+        .alert("Confirm your email", isPresented: $showSignupConfirmationAlert) {
+            Button("Go to log in") {
+                appState.consumeSignupConfirmationPrompt()
+                goToLogin()
+            }
+        } message: {
+            Text(appState.signupConfirmationPromptMessage ?? "Account created. Check your inbox/spam for verification email, then log in.")
         }
     }
 

@@ -2,11 +2,17 @@ import Foundation
 import UIKit
 import UserNotifications
 
+extension Notification.Name {
+    static let hayameDidRegisterPushToken = Notification.Name("hayameDidRegisterPushToken")
+    static let hayamePushRegistrationFailed = Notification.Name("hayamePushRegistrationFailed")
+}
+
 @MainActor
 final class NotificationManager: NSObject, ObservableObject {
     static let shared = NotificationManager()
 
     @Published private(set) var authorizationStatus: UNAuthorizationStatus = .notDetermined
+    @Published private(set) var registrationErrorMessage: String?
 
     private let defaults = UserDefaults.standard
     private let apnsTokenDefaultsKey = "hayame.apns.device_token"
@@ -62,10 +68,19 @@ final class NotificationManager: NSObject, ObservableObject {
     func handleRegisteredDeviceToken(_ deviceToken: Data) {
         let token = deviceToken.map { String(format: "%02x", $0) }.joined()
         defaults.set(token, forKey: apnsTokenDefaultsKey)
+        registrationErrorMessage = nil
+        NotificationCenter.default.post(name: .hayameDidRegisterPushToken, object: nil)
     }
 
     func handleRemoteNotificationRegistrationFailure(_ error: Error) {
         defaults.removeObject(forKey: apnsTokenDefaultsKey)
+        registrationErrorMessage = error.localizedDescription
+        NotificationCenter.default.post(
+            name: .hayamePushRegistrationFailed,
+            object: nil,
+            userInfo: ["error": error.localizedDescription]
+        )
+        print("[push] APNs registration failed:", error.localizedDescription)
     }
 
     private func refreshAuthorizationStatus() async {

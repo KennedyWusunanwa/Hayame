@@ -3,6 +3,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getRequestUser } from "@/lib/supabase/request-auth";
 import { hostApplicationSchema } from "@/lib/validators";
+import { buildHostApplicationSubmittedEmail, sendEmailSafe } from "@/lib/email";
 import { ZodError } from "zod";
 
 export async function GET(req: Request) {
@@ -96,6 +97,15 @@ export async function POST(req: Request) {
       .select()
       .single();
     if (error) throw error;
+
+    if (user.email) {
+      const template = buildHostApplicationSubmittedEmail({ hostName: parsed.full_name });
+      await sendEmailSafe({
+        to: user.email,
+        ...template,
+        idempotencyKey: `host-application:${data?.id ?? user.id}:submitted`,
+      });
+    }
 
     return NextResponse.json({ data });
   } catch (error: any) {

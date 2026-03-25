@@ -19,19 +19,24 @@ targets:
       - path: HayameIOS
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.hayame.ios
-        PRODUCT_NAME: HayameIOS
+        PRODUCT_BUNDLE_IDENTIFIER: com.hayame.app
+        PRODUCT_NAME: Hayame
         INFOPLIST_FILE: HayameIOS/Info.plist
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         GENERATE_INFOPLIST_FILE: NO
         TARGETED_DEVICE_FAMILY: "1"
+      configs:
+        Debug:
+          CODE_SIGN_ENTITLEMENTS: HayameIOS/HayameIOS.Debug.entitlements
+        Release:
+          CODE_SIGN_ENTITLEMENTS: HayameIOS/HayameIOS.Release.entitlements
     info:
       path: HayameIOS/Info.plist
       properties:
         CFBundleDisplayName: Hayame
         CFBundleURLTypes:
-          - CFBundleURLName: com.hayame.ios.paystack
+          - CFBundleURLName: com.hayame.app.paystack
             CFBundleURLSchemes:
               - hayameios
         UILaunchScreen: {}
@@ -50,7 +55,7 @@ targets:
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true
 schemes:
-  HayameIOS:
+  Hayame:
     build:
       targets:
         HayameIOS: all

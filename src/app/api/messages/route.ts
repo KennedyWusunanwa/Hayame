@@ -3,6 +3,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getRequestUser } from "@/lib/supabase/request-auth";
 import { buildMessageEmail, sendEmailSafe } from "@/lib/email";
+import { sendPushNotificationsToUsers } from "@/lib/push";
 
 const SITE_URL =
   process.env.NEXT_PUBLIC_SITE_URL ??
@@ -101,8 +102,8 @@ export async function POST(req: Request) {
 
     const payload = (await req.json().catch(() => ({}))) as Body;
     const conversationId = payload.conversationId;
-    const body = (payload.body ?? "").trim();
-    if (!conversationId || !body) {
+    const messageBody = (payload.body ?? "").trim();
+    if (!conversationId || !messageBody) {
       return NextResponse.json({ message: "Missing conversation or message body" }, { status: 400 });
     }
 
@@ -120,13 +121,17 @@ export async function POST(req: Request) {
 
     const { data: message, error } = await db
       .from("messages")
-      .insert({ conversation_id: conversationId, sender_id: user.id, body })
+      .insert({ conversation_id: conversationId, sender_id: user.id, body: messageBody })
       .select()
       .single();
     if (error) throw error;
 
     // Notify recipient via email (best effort)
     const recipientId = user.id === conversation.host_id ? conversation.user_id : conversation.host_id;
+    let senderName =
+      (user.user_metadata as any)?.full_name ??
+      user.email ??
+      "User";
     if (adminClient) {
       const [recipientAuthResult, senderProfileResult] = await Promise.all([
         adminClient.auth.admin.getUserById(recipientId).catch(() => null),
@@ -134,7 +139,7 @@ export async function POST(req: Request) {
       ]);
 
       const recipientEmail = extractAuthEmail(recipientAuthResult);
-      const senderName =
+      senderName =
         ((senderProfileResult as any)?.data as { full_name?: string | null } | null)?.full_name ??
         (user.user_metadata as any)?.full_name ??
         user.email ??
@@ -145,7 +150,7 @@ export async function POST(req: Request) {
       if (recipientEmail) {
         const email = buildMessageEmail({
           senderName,
-          messageBody: body,
+          messageBody,
           conversationUrl,
           carTitle,
         });
@@ -155,6 +160,29 @@ export async function POST(req: Request) {
           idempotencyKey: `message:${message.id}`,
         });
       }
+    }
+
+    try {
+      const trimmedPreview = messageBody.trim();
+      const preview = trimmedPreview.length > 120 ? `${trimmedPreview.slice(0, 117)}...` : trimmedPreview;
+      const pushResult = await sendPushNotificationsToUsers({
+        adminClient,
+        userIds: [recipientId],
+        title: `New message from ${senderName}`,
+        body: preview || "You have a new message.",
+        collapseId: `message:${conversationId}`,
+        data: {
+          type: "message",
+          conversationId,
+          messageId: String(message.id ?? ""),
+          senderId: user.id,
+        },
+      });
+      if (pushResult.skipped || pushResult.delivered === 0) {
+        console.warn("[messages] push skipped or undelivered", pushResult);
+      }
+    } catch (pushError) {
+      console.error("[messages] push notification failed", pushError);
     }
 
     return NextResponse.json({ data: message });

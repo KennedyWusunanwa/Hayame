@@ -185,6 +185,12 @@ struct PaystackFinalizeEnvelopeDTO: Decodable {
     let conversationId: String?
 }
 
+struct PushRegisterResponseDTO: Decodable {
+    let registered: Bool?
+    let warning: String?
+    let message: String?
+}
+
 struct BookingDTO: Decodable {
     let id: String
     let car_id: String?
@@ -1137,18 +1143,18 @@ struct APIClient {
 
     // MARK: - Push
 
-    func registerPushToken(baseURL: String, token: String, deviceToken: String) async throws {
+    func registerPushToken(baseURL: String, token: String, deviceToken: String) async throws -> PushRegisterResponseDTO {
         struct Payload: Encodable {
             let deviceToken: String
             let platform: String
         }
-        _ = try await request(
+        return try await request(
             path: "/api/mobile/push/register",
             method: .POST,
             body: Payload(deviceToken: deviceToken, platform: "ios"),
             baseURL: baseURL,
             token: token
-        ) as EmptyResponse
+        )
     }
 
     private func isMissingMobileRoute(_ error: Error) -> Bool {

@@ -395,3 +395,29 @@ export function buildHostApplicationDecisionEmail(params: {
 
   return { subject, ...withOfficialFooter(html, text) };
 }
+
+export function buildHostApplicationSubmittedEmail(params: {
+  hostName?: string | null;
+}) {
+  const hostName = escapeHtml(params.hostName || "Host");
+  const subject = `${appName}: Host application received`;
+  const html = `
+    <div style="font-family: Arial, sans-serif; line-height: 1.5;">
+      <h2>Your host application has been received.</h2>
+      <p>Hi ${hostName},</p>
+      <p>Thanks for applying to become a host on ${appName}. Your request is now under review.</p>
+      <p>Most applications are reviewed within 1-2 business days.</p>
+      <p><a href="${siteUrl}/become-host" style="color:#2563eb;">View your host application</a></p>
+      <p style="color:#6b7280; font-size: 12px;">${appName}</p>
+    </div>
+  `;
+  const text = `Your host application has been received.
+Hi ${params.hostName ?? "Host"},
+Thanks for applying to become a host on ${appName}. Your request is now under review.
+Most applications are reviewed within 1-2 business days.
+View your host application: ${siteUrl}/become-host
+
+${appName}`;
+
+  return { subject, ...withOfficialFooter(html, text) };
+}

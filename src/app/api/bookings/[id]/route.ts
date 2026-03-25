@@ -4,9 +4,24 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getRequestUser } from "@/lib/supabase/request-auth";
 import { refundPaystack } from "@/lib/paystack";
 import { buildHostDecisionEmail, sendEmailSafe } from "@/lib/email";
+import { sendPushNotificationsToUsers } from "@/lib/push";
 
 function extractAuthEmail(result: any): string | null {
   return result?.data?.user?.email ?? result?.user?.email ?? result?.email ?? null;
+}
+
+function extractRefundReference(payload: any): string | null {
+  const candidates = [
+    payload?.reference,
+    payload?.refund_reference,
+    payload?.transaction_reference,
+    payload?.id,
+  ];
+  for (const candidate of candidates) {
+    const value = String(candidate ?? "").trim();
+    if (value) return value;
+  }
+  return null;
 }
 
 type Params = {
@@ -83,12 +98,35 @@ export async function PATCH(req: Request, { params }: Params) {
         }
       }
 
+      try {
+        const pushResult = await sendPushNotificationsToUsers({
+          adminClient: admin,
+          userIds: [String(booking.renter_id ?? "")],
+          title: "Booking confirmed",
+          body: `Your trip for ${booking?.cars?.title ?? "your booking"} is confirmed.`,
+          collapseId: `booking:${booking.id}:status`,
+          data: {
+            type: "booking_status",
+            bookingId: String(booking.id ?? ""),
+            carId: String(booking.car_id ?? ""),
+            status: "confirmed",
+          },
+        });
+        if (pushResult.skipped || pushResult.delivered === 0) {
+          console.warn("[bookings/:id] approval push skipped or undelivered", pushResult);
+        }
+      } catch (pushError) {
+        console.error("[bookings/:id] approval push failed", pushError);
+      }
+
       return NextResponse.json({ data });
     }
 
     // reject path
+    let refundReference: string | null = null;
     if (booking.payment_provider === "paystack" && booking.payment_reference) {
-      await refundPaystack(booking.payment_reference);
+      const refundData = await refundPaystack(booking.payment_reference);
+      refundReference = extractRefundReference(refundData) ?? booking.payment_reference;
     }
 
     const { data, error } = await db
@@ -96,6 +134,7 @@ export async function PATCH(req: Request, { params }: Params) {
       .update({
         status: "rejected",
         payment_status: "refunded",
+        refund_reference: refundReference,
         rejected_at: new Date().toISOString(),
         rejection_reason: payload?.reason ?? "Rejected by host",
       })
@@ -126,6 +165,29 @@ export async function PATCH(req: Request, { params }: Params) {
           idempotencyKey: `booking:${booking.id}:rejected`,
         });
       }
+    }
+
+    try {
+      const reasonText = String(payload?.reason ?? booking?.rejection_reason ?? "Rejected by host").trim();
+      const pushResult = await sendPushNotificationsToUsers({
+        adminClient: admin,
+        userIds: [String(booking.renter_id ?? "")],
+        title: "Booking request declined",
+        body: reasonText ? `${booking?.cars?.title ?? "Your booking"} was declined: ${reasonText}` : "Your booking was declined and refunded.",
+        collapseId: `booking:${booking.id}:status`,
+        data: {
+          type: "booking_status",
+          bookingId: String(booking.id ?? ""),
+          carId: String(booking.car_id ?? ""),
+          status: "rejected",
+          refunded: true,
+        },
+      });
+      if (pushResult.skipped || pushResult.delivered === 0) {
+        console.warn("[bookings/:id] rejection push skipped or undelivered", pushResult);
+      }
+    } catch (pushError) {
+      console.error("[bookings/:id] rejection push failed", pushError);
     }
 
     return NextResponse.json({ data });

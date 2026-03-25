@@ -11,6 +11,13 @@ enum ExploreSortOption: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
+enum ExploreLayoutMode: String, CaseIterable, Identifiable {
+    case list
+    case grid
+
+    var id: String { rawValue }
+}
+
 @MainActor
 final class AppState: ObservableObject {
     @Published var isAuthenticated = false
@@ -38,6 +45,7 @@ final class AppState: ObservableObject {
     @Published var exploreSearchText = ""
     @Published var exploreFilters = ExploreFilterState()
     @Published var exploreSortOption: ExploreSortOption = .recommended
+    @Published var exploreLayoutMode: ExploreLayoutMode = .list
 
     @Published var hostApplication: HostApplication?
     @Published var hostAccessState: HostAccessState = .unknown
@@ -53,6 +61,7 @@ final class AppState: ObservableObject {
     @Published var isSyncingRemote = false
     @Published var syncErrorMessage: String?
     @Published var authInfoMessage: String?
+    @Published var signupConfirmationPromptMessage: String?
     @Published var paymentFlowNotice: String?
     @Published var paymentFlowNoticeIsError = false
 
@@ -69,6 +78,8 @@ final class AppState: ObservableObject {
     private var refreshToken: String?
     private var pollTask: Task<Void, Never>?
     private var conversationRealtimeTask: Task<Void, Never>?
+    private var pushTokenObserver: NSObjectProtocol?
+    private var pushRegistrationFailureObserver: NSObjectProtocol?
     private var hasSyncedOwnedCarsOnce = false
     private var hasSyncedBookingsOnce = false
     private var hasSyncedConversationsOnce = false
@@ -114,6 +125,39 @@ final class AppState: ObservableObject {
         }
         migrateLoopbackBaseURLIfNeeded()
         restorePersistedSession()
+        pushTokenObserver = NotificationCenter.default.addObserver(
+            forName: .hayameDidRegisterPushToken,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self else { return }
+            Task { @MainActor in
+                await self.registerPushDeviceTokenIfAvailable()
+            }
+        }
+        pushRegistrationFailureObserver = NotificationCenter.default.addObserver(
+            forName: .hayamePushRegistrationFailed,
+            object: nil,
+            queue: .main
+        ) { [weak self] note in
+            guard let self else { return }
+            let message = (note.userInfo?["error"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let lowered = (message ?? "").lowercased()
+            let isExpectedUnavailableCase =
+                lowered.contains("aps-environment") ||
+                lowered.contains("entitlement") ||
+                lowered.contains("does not support remote notifications")
+            if isExpectedUnavailableCase {
+                return
+            }
+            Task { @MainActor in
+                if let message, !message.isEmpty {
+                    self.syncErrorMessage = "Push registration failed: \(message)"
+                } else {
+                    self.syncErrorMessage = "Push registration failed."
+                }
+            }
+        }
         Task {
             async let referenceTask: Void = refreshReferenceData()
             async let publicCarsTask: Void = syncPublicCars()
@@ -264,6 +308,10 @@ final class AppState: ObservableObject {
         }
     }
 
+    func consumeSignupConfirmationPrompt() {
+        signupConfirmationPromptMessage = nil
+    }
+
     func signOut() {
         stopPolling()
         stopRealtimeMessages()
@@ -292,6 +340,7 @@ final class AppState: ObservableObject {
         ownedCars = []
         syncErrorMessage = nil
         authInfoMessage = nil
+        signupConfirmationPromptMessage = nil
         paymentFlowNotice = nil
         paymentFlowNoticeIsError = false
         hasSyncedOwnedCarsOnce = false
@@ -335,6 +384,7 @@ final class AppState: ObservableObject {
         ownedCars = []
         syncErrorMessage = nil
         authInfoMessage = nil
+        signupConfirmationPromptMessage = nil
         paymentFlowNotice = nil
         paymentFlowNoticeIsError = false
         hasSyncedOwnedCarsOnce = false
@@ -378,6 +428,7 @@ final class AppState: ObservableObject {
         ownedCars = []
         syncErrorMessage = nil
         authInfoMessage = nil
+        signupConfirmationPromptMessage = nil
         paymentFlowNotice = nil
         paymentFlowNoticeIsError = false
         hasSyncedOwnedCarsOnce = false
@@ -612,7 +663,13 @@ final class AppState: ObservableObject {
     }
 
     func submitHostApplication(_ application: HostApplication) {
-        Task { await submitHostApplicationRemote(application) }
+        Task {
+            _ = await submitHostApplicationRemote(application)
+        }
+    }
+
+    func submitHostApplicationNow(_ application: HostApplication) async -> Bool {
+        await submitHostApplicationRemote(application)
     }
 
     func approveHostApplicationForDemo() {
@@ -1242,6 +1299,7 @@ final class AppState: ObservableObject {
         isSyncingRemote = true
         syncErrorMessage = nil
         authInfoMessage = nil
+        signupConfirmationPromptMessage = nil
         defer { isSyncingRemote = false }
 
         do {
@@ -1280,10 +1338,11 @@ final class AppState: ObservableObject {
         isSyncingRemote = true
         syncErrorMessage = nil
         authInfoMessage = nil
+        signupConfirmationPromptMessage = nil
         defer { isSyncingRemote = false }
 
         do {
-            let session = try await api.signup(
+            _ = try await api.signup(
                 baseURL: apiBaseURL,
                 firstName: firstName,
                 lastName: lastName,
@@ -1292,21 +1351,15 @@ final class AppState: ObservableObject {
                 city: city,
                 region: region
             )
-
-            if session.requires_email_confirmation == true || session.access_token == nil || session.user == nil {
-                authInfoMessage = "Account created. Check your inbox/spam for verification email, then log in."
-                return
-            }
-
-            try await establishAuthenticatedSession(
-                from: session,
-                missingSessionMessage: "Signup succeeded without an active session."
-            )
+            let confirmationMessage = "Account created. Check your inbox/spam for verification email, then log in."
+            authInfoMessage = confirmationMessage
+            signupConfirmationPromptMessage = confirmationMessage
+            return
         } catch {
             if shouldAutoSwitchToProductionBaseURL(after: error) {
                 switchToProductionBaseURL()
                 do {
-                    let session = try await api.signup(
+                    _ = try await api.signup(
                         baseURL: apiBaseURL,
                         firstName: firstName,
                         lastName: lastName,
@@ -1315,16 +1368,9 @@ final class AppState: ObservableObject {
                         city: city,
                         region: region
                     )
-
-                    if session.requires_email_confirmation == true || session.access_token == nil || session.user == nil {
-                        authInfoMessage = "Account created. Check your inbox/spam for verification email, then log in."
-                        return
-                    }
-
-                    try await establishAuthenticatedSession(
-                        from: session,
-                        missingSessionMessage: "Signup succeeded without an active session."
-                    )
+                    let confirmationMessage = "Account created. Check your inbox/spam for verification email, then log in."
+                    authInfoMessage = confirmationMessage
+                    signupConfirmationPromptMessage = confirmationMessage
                     return
                 } catch {
                     syncErrorMessage = errorMessage(error, fallback: "Unable to sign up.")
@@ -1735,30 +1781,55 @@ final class AppState: ObservableObject {
         }
 
         do {
-            let response = try await api.getCars(baseURL: apiBaseURL, token: authToken)
-            cars = response.data.map(mapCar)
-            publicCarsLoadState = cars.isEmpty ? .empty : .loaded
-            let imageURLs = cars.prefix(80).compactMap { car in
-                RemoteImageURLResolver.resolve(car.imageNames.first)
+            let response: CarsEnvelopeDTO
+            if let token = authToken, !token.isEmpty {
+                do {
+                    response = try await api.getCars(baseURL: apiBaseURL, token: token)
+                } catch {
+                    guard shouldRetryPublicCarsWithoutToken(after: error) else { throw error }
+                    response = try await api.getCars(baseURL: apiBaseURL, token: nil)
+                }
+            } else {
+                response = try await api.getCars(baseURL: apiBaseURL, token: nil)
             }
-            let avatarURLs = cars.prefix(80).compactMap { car in
-                RemoteImageURLResolver.resolve(car.hostAvatar)
-            }
-            await RemoteImagePipeline.shared.prefetch(
-                urls: imageURLs,
-                limit: 80,
-                targetPixelSize: CGSize(width: 900, height: 620),
-                maxConcurrent: 8
-            )
-            await RemoteImagePipeline.shared.prefetch(
-                urls: avatarURLs,
-                limit: 80,
-                targetPixelSize: CGSize(width: 140, height: 140),
-                maxConcurrent: 6
-            )
+            await applyPublicCars(response)
         } catch {
             publicCarsLoadState = cars.isEmpty ? .error(errorMessage(error, fallback: "Unable to load listings.")) : .loaded
         }
+    }
+
+    private func shouldRetryPublicCarsWithoutToken(after error: Error) -> Bool {
+        guard let apiError = error as? APIError else { return false }
+        if apiError.statusCode == 401 || apiError.statusCode == 403 {
+            return true
+        }
+
+        let lowered = apiError.message.lowercased()
+        return lowered.contains("jwt") || lowered.contains("unauthorized") || lowered.contains("token")
+    }
+
+    private func applyPublicCars(_ response: CarsEnvelopeDTO) async {
+        cars = response.data.map(mapCar)
+        publicCarsLoadState = cars.isEmpty ? .empty : .loaded
+
+        let imageURLs = cars.prefix(80).compactMap { car in
+            RemoteImageURLResolver.resolve(car.imageNames.first)
+        }
+        let avatarURLs = cars.prefix(80).compactMap { car in
+            RemoteImageURLResolver.resolve(car.hostAvatar)
+        }
+        await RemoteImagePipeline.shared.prefetch(
+            urls: imageURLs,
+            limit: 80,
+            targetPixelSize: CGSize(width: 900, height: 620),
+            maxConcurrent: 8
+        )
+        await RemoteImagePipeline.shared.prefetch(
+            urls: avatarURLs,
+            limit: 80,
+            targetPixelSize: CGSize(width: 140, height: 140),
+            maxConcurrent: 6
+        )
     }
 
     private func syncOwnedCars() async {
@@ -1969,9 +2040,37 @@ final class AppState: ObservableObject {
                 try await api.getHostApplication(baseURL: apiBaseURL, token: token)
             }
             if let data = application.data {
-                hostApplication = mapHostApplication(data)
-                if hostApplication?.status == .pending, hostAccessState != .host {
-                    hostAccessState = .pending
+                let mappedApplication = mapHostApplication(data)
+                hostApplication = mappedApplication
+
+                switch mappedApplication.status {
+                case .approved:
+                    hostApplicationStatus = "approved"
+                    hostAccessState = .host
+                    currentUser.role = .host
+                case .pending:
+                    if hostAccessState != .host {
+                        hostApplicationStatus = "pending"
+                        hostAccessState = .pending
+                        hostModeEnabled = false
+                        currentUser.role = .guest
+                    }
+                case .rejected:
+                    if hostAccessState != .host {
+                        hostApplicationStatus = "rejected"
+                        hostAccessState = .renter
+                        hostModeEnabled = false
+                        currentUser.role = .guest
+                    }
+                case .draft:
+                    if hostAccessState != .host {
+                        hostApplicationStatus = "draft"
+                        if hostAccessState == .unknown {
+                            hostAccessState = .renter
+                        }
+                        hostModeEnabled = false
+                        currentUser.role = .guest
+                    }
                 }
             }
         } catch {}
@@ -1994,10 +2093,10 @@ final class AppState: ObservableObject {
 
     // MARK: - Host Application
 
-    private func submitHostApplicationRemote(_ application: HostApplication) async {
+    private func submitHostApplicationRemote(_ application: HostApplication) async -> Bool {
         guard authToken != nil else {
             syncErrorMessage = "Log in to submit a host application."
-            return
+            return false
         }
 
         do {
@@ -2029,10 +2128,21 @@ final class AppState: ObservableObject {
             }
             hostAccessState = .pending
             hostApplicationStatus = "pending"
+            syncErrorMessage = nil
             await syncHostApplication()
+            return true
         } catch {
+            if let apiError = error as? APIError,
+               apiError.statusCode == 409 || apiError.message.localizedCaseInsensitiveContains("already pending") {
+                hostAccessState = .pending
+                hostApplicationStatus = "pending"
+                syncErrorMessage = nil
+                await syncHostApplication()
+                return true
+            }
             syncErrorMessage = errorMessage(error, fallback: "Unable to submit host application.")
             await syncHostApplication()
+            return false
         }
     }
 
@@ -2250,13 +2360,19 @@ final class AppState: ObservableObject {
         let resolvedIsHost = isHost || (profile?.is_host ?? false)
         let canonicalAvatar = RemoteImageURLResolver.canonicalString(avatarURL)
 
+        let resolvedCity = (profile?.city ?? metadataString(metadata, key: "city") ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let rawRegion = (profile?.region ?? metadataString(metadata, key: "region") ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedRegion = rawRegion.isEmpty ? "" : MockDataService.normalizedRegion(rawRegion)
+
         return UserProfile(
             id: user.id,
             fullName: fullName.isEmpty ? "Hayame User" : fullName,
             email: profile?.email ?? user.email ?? "",
             phone: profile?.phone ?? "",
-            city: profile?.city ?? metadataString(metadata, key: "city") ?? "Accra",
-            region: MockDataService.normalizedRegion(profile?.region ?? metadataString(metadata, key: "region") ?? MockDataService.defaultRegion),
+            city: resolvedCity,
+            region: resolvedRegion,
             avatar: canonicalAvatar,
             role: resolvedIsHost ? .host : .guest
         )
@@ -2595,8 +2711,13 @@ final class AppState: ObservableObject {
         guard isAuthenticated else { return }
         guard let deviceToken = NotificationManager.shared.apnsDeviceToken else { return }
         do {
-            try await withAuthenticatedToken { token in
+            let registration = try await withAuthenticatedToken { token in
                 try await api.registerPushToken(baseURL: apiBaseURL, token: token, deviceToken: deviceToken)
+            }
+            if let warning = registration.warning?.trimmingCharacters(in: .whitespacesAndNewlines), !warning.isEmpty {
+                syncErrorMessage = warning
+            } else if registration.registered == false {
+                syncErrorMessage = registration.message ?? "Push token registration failed."
             }
         } catch let apiError as APIError {
             // Push registration endpoint may not be deployed yet.
@@ -2699,14 +2820,7 @@ final class AppState: ObservableObject {
         if let urlError = error as? URLError {
             switch urlError.code {
             case .cannotConnectToHost, .cannotFindHost, .networkConnectionLost, .notConnectedToInternet, .timedOut:
-                if Self.isLoopbackBaseURL(apiBaseURL) {
-#if targetEnvironment(simulator)
-                    return "Cannot reach \(apiBaseURL). Start your web server first (for example: npm run dev)."
-#else
-                    return "Cannot reach \(apiBaseURL) from iPhone. Set HAYAMEAPIBaseURL (or HAYAMEDevMachineIP) to your Mac LAN IP, e.g. http://192.168.1.20:3000."
-#endif
-                }
-                return "Cannot reach \(apiBaseURL). Check server/network and try again."
+                return "Poor network, please refresh."
             default:
                 break
             }
@@ -2714,14 +2828,7 @@ final class AppState: ObservableObject {
 
         let nsError = error as NSError
         if nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorCannotConnectToHost {
-            if Self.isLoopbackBaseURL(apiBaseURL) {
-#if targetEnvironment(simulator)
-                return "Cannot reach \(apiBaseURL). Start your web server first (for example: npm run dev)."
-#else
-                return "Cannot reach \(apiBaseURL) from iPhone. Set HAYAMEAPIBaseURL (or HAYAMEDevMachineIP) to your Mac LAN IP, e.g. http://192.168.1.20:3000."
-#endif
-            }
-            return "Cannot reach \(apiBaseURL). Check server/network and try again."
+            return "Poor network, please refresh."
         }
         return error.localizedDescription.isEmpty ? fallback : error.localizedDescription
     }
@@ -2729,6 +2836,12 @@ final class AppState: ObservableObject {
     deinit {
         pollTask?.cancel()
         conversationRealtimeTask?.cancel()
+        if let pushTokenObserver {
+            NotificationCenter.default.removeObserver(pushTokenObserver)
+        }
+        if let pushRegistrationFailureObserver {
+            NotificationCenter.default.removeObserver(pushRegistrationFailureObserver)
+        }
     }
 
     private static func defaultAPIBaseURL() -> String {

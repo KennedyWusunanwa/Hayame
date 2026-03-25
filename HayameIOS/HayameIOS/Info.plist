@@ -22,7 +22,7 @@
 	<array>
 		<dict>
 			<key>CFBundleURLName</key>
-			<string>com.hayame.ios.paystack</string>
+			<string>com.hayame.app.paystack</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>hayame</string>

@@ -40,7 +40,7 @@
 		90869CE125FCD22FD5450526 /* NotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationManager.swift; sourceTree = "<group>"; };
 		95B87581576C44D745F473DF /* LegalAndSupportScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegalAndSupportScreens.swift; sourceTree = "<group>"; };
 		A74C04F09A7EB5CEF79E3165 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
-		C33845704864DBB28CA7565E /* HayameIOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = HayameIOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		C33845704864DBB28CA7565E /* Hayame.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Hayame.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C35FF516F27CD52298E15051 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
 		C43DD509D97C8BC09DFDAEEC /* HostScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostScreens.swift; sourceTree = "<group>"; };
 		D724F9AC0077635E90869BDD /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
@@ -110,7 +110,7 @@
 		92A8540D4AE0721CFE0A6791 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				C33845704864DBB28CA7565E /* HayameIOS.app */,
+				C33845704864DBB28CA7565E /* Hayame.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -190,8 +190,8 @@
 			name = HayameIOS;
 			packageProductDependencies = (
 			);
-			productName = HayameIOS;
-			productReference = C33845704864DBB28CA7565E /* HayameIOS.app */;
+			productName = Hayame;
+			productReference = C33845704864DBB28CA7565E /* Hayame.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -337,6 +337,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = HayameIOS/HayameIOS.Release.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				DEVELOPMENT_TEAM = AUF9LKGT7P;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -347,7 +348,7 @@
 					"@executable_path/Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.hayame.app;
-				PRODUCT_NAME = HayameIOS;
+				PRODUCT_NAME = Hayame;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = 1;
 			};
@@ -418,6 +419,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = HayameIOS/HayameIOS.Debug.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				DEVELOPMENT_TEAM = AUF9LKGT7P;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -428,7 +430,7 @@
 					"@executable_path/Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.hayame.app;
-				PRODUCT_NAME = HayameIOS;
+				PRODUCT_NAME = Hayame;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = 1;
 			};

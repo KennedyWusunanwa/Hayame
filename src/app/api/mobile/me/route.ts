@@ -14,6 +14,36 @@ function methodNotAllowed() {
   return NextResponse.json({ message: "Method not allowed" }, { status: 405 });
 }
 
+function storageBucketCandidates() {
+  return [
+    process.env.NEXT_PUBLIC_SUPABASE_AVATAR_BUCKET?.trim(),
+    process.env.SUPABASE_AVATAR_BUCKET?.trim(),
+    process.env.NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET?.trim(),
+    process.env.SUPABASE_STORAGE_BUCKET?.trim(),
+    "avatars",
+    "car-photos",
+  ].filter((value, index, array): value is string => Boolean(value) && array.indexOf(value) === index);
+}
+
+function isAvatarObjectName(name: string | null | undefined) {
+  const normalized = String(name ?? "").trim().toLowerCase();
+  return normalized.startsWith("avatar-");
+}
+
+async function resolveStoredAvatarUrl(admin: any, userId: string): Promise<string | null> {
+  for (const bucket of storageBucketCandidates()) {
+    const { data } = await admin.storage.from(bucket).list(userId, {
+      limit: 30,
+      sortBy: { column: "name", order: "desc" },
+    });
+    const match = (data ?? []).find((item: { name?: string | null }) => isAvatarObjectName(item.name));
+    if (!match?.name) continue;
+    const { data: publicData } = admin.storage.from(bucket).getPublicUrl(`${userId}/${match.name}`);
+    if (publicData?.publicUrl) return publicData.publicUrl;
+  }
+  return null;
+}
+
 export function POST() {
   return methodNotAllowed();
 }
@@ -42,14 +72,14 @@ export async function GET(req: Request) {
       admin = null;
     }
 
-    let profile = null as { is_host?: boolean } | null;
+    let profile = null as { avatar_url?: string | null; is_host?: boolean } | null;
     if (admin) {
       const { data: adminProfile } = await admin
         .from("profiles")
         .select("*")
         .eq("id", user.id)
         .maybeSingle();
-      profile = (adminProfile ?? null) as { is_host?: boolean } | null;
+      profile = (adminProfile ?? null) as { avatar_url?: string | null; is_host?: boolean } | null;
     }
     if (!profile) {
       const { data: profileRow, error: profileError } = await supabase
@@ -60,7 +90,17 @@ export async function GET(req: Request) {
       if (profileError && profileError.code !== "PGRST116") {
         return NextResponse.json({ message: profileError.message ?? "Failed to load profile" }, { status: 400 });
       }
-      profile = (profileRow ?? null) as { is_host?: boolean } | null;
+      profile = (profileRow ?? null) as { avatar_url?: string | null; is_host?: boolean } | null;
+    }
+
+    if (admin && !profile?.avatar_url) {
+      const fallbackAvatarUrl = await resolveStoredAvatarUrl(admin, user.id);
+      if (fallbackAvatarUrl) {
+        profile = {
+          ...(profile ?? {}),
+          avatar_url: fallbackAvatarUrl,
+        };
+      }
     }
 
     let hostApplicationRow: unknown = null;

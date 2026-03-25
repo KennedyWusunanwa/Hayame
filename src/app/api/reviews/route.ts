@@ -7,11 +7,29 @@ export async function GET(req: Request) {
   try {
     const supabase = await createSupabaseServerClient();
     const supa = supabase as any;
-    const user = await getRequestUser(supabase as any, req);
-    if (!user) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
-
     const { searchParams } = new URL(req.url);
     const scope = (searchParams.get("scope") ?? "host").toLowerCase();
+    const carId = (searchParams.get("carId") ?? "").trim();
+
+    if (scope === "public" || carId) {
+      if (!carId) {
+        return NextResponse.json({ data: [] });
+      }
+
+      const { data, error } = await supa
+        .from("reviews")
+        .select(
+          "id,car_id,booking_id,user_id,rating,comment,created_at,cars(title),reviewer:profiles!reviews_user_id_fkey(full_name,avatar_url)",
+        )
+        .eq("car_id", carId)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+
+      return NextResponse.json({ data: data ?? [] });
+    }
+
+    const user = await getRequestUser(supabase as any, req);
+    if (!user) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
 
     if (scope === "mine") {
       const { data, error } = await supa

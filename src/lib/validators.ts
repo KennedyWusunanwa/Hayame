@@ -70,6 +70,6 @@ export const hostApplicationSchema = z.object({
   id_front_path: z.string().min(4).optional(),
   id_back_path: z.string().min(4).optional(),
   note: z.string().optional(),
-  experience: z.string().min(10),
+  experience: z.string().min(3),
   fleet_size: z.coerce.number().int().min(0).max(1000).optional(),
 });

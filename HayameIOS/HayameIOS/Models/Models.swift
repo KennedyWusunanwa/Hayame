@@ -90,8 +90,8 @@ struct UserProfile: Identifiable, Hashable {
         fullName: "Guest User",
         email: "",
         phone: "",
-        city: "Accra",
-        region: "Greater Accra Region",
+        city: "",
+        region: "",
         avatar: nil,
         role: .guest
     )

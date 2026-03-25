@@ -855,3 +855,149 @@ struct ErrorStateCard: View {
         .hayameCard()
     }
 }
+
+struct SkeletonBlock: View {
+    var width: CGFloat? = nil
+    var height: CGFloat
+    var cornerRadius: CGFloat = 10
+
+    @State private var shimmerOffset: CGFloat = -160
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            .fill(Color.black.opacity(0.08))
+            .overlay(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [.clear, Color.white.opacity(0.5), .clear],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .rotationEffect(.degrees(18))
+                    .offset(x: shimmerOffset)
+            )
+            .frame(width: width, height: height)
+            .clipped()
+            .onAppear {
+                shimmerOffset = -160
+                withAnimation(.linear(duration: 1.05).repeatForever(autoreverses: false)) {
+                    shimmerOffset = 320
+                }
+            }
+    }
+}
+
+struct ListingGridPlaceholderCard: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            SkeletonBlock(height: 120, cornerRadius: 14)
+
+            VStack(alignment: .leading, spacing: 6) {
+                SkeletonBlock(width: 126, height: 14, cornerRadius: 6)
+                SkeletonBlock(width: 90, height: 12, cornerRadius: 6)
+                HStack {
+                    SkeletonBlock(width: 52, height: 10, cornerRadius: 5)
+                    Spacer()
+                    SkeletonBlock(width: 56, height: 18, cornerRadius: 9)
+                }
+                SkeletonBlock(width: 88, height: 17, cornerRadius: 6)
+            }
+        }
+        .padding(10)
+        .background(Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.black.opacity(0.05), lineWidth: 1)
+        )
+    }
+}
+
+struct ListingRowPlaceholderCard: View {
+    var body: some View {
+        HStack(spacing: 12) {
+            SkeletonBlock(width: 94, height: 72, cornerRadius: 12)
+
+            VStack(alignment: .leading, spacing: 6) {
+                SkeletonBlock(width: 150, height: 14, cornerRadius: 6)
+                SkeletonBlock(width: 110, height: 12, cornerRadius: 6)
+                SkeletonBlock(width: 84, height: 12, cornerRadius: 6)
+            }
+
+            Spacer()
+        }
+        .padding(10)
+        .background(Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color.black.opacity(0.06), lineWidth: 1)
+        )
+    }
+}
+
+struct BookingPlaceholderCard: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                VStack(alignment: .leading, spacing: 6) {
+                    SkeletonBlock(width: 132, height: 15, cornerRadius: 6)
+                    SkeletonBlock(width: 170, height: 12, cornerRadius: 6)
+                }
+                Spacer()
+                SkeletonBlock(width: 72, height: 22, cornerRadius: 11)
+            }
+
+            HStack(spacing: 8) {
+                SkeletonBlock(width: 120, height: 11, cornerRadius: 6)
+                SkeletonBlock(width: 84, height: 11, cornerRadius: 6)
+            }
+
+            HStack(spacing: 10) {
+                SkeletonBlock(width: 90, height: 34, cornerRadius: 17)
+                SkeletonBlock(width: 90, height: 34, cornerRadius: 17)
+            }
+        }
+        .hayameCard()
+    }
+}
+
+struct ConversationPlaceholderRow: View {
+    var body: some View {
+        HStack(spacing: 12) {
+            SkeletonBlock(width: 48, height: 48, cornerRadius: 24)
+
+            VStack(alignment: .leading, spacing: 6) {
+                SkeletonBlock(width: 118, height: 13, cornerRadius: 6)
+                SkeletonBlock(width: 188, height: 11, cornerRadius: 6)
+            }
+
+            Spacer()
+
+            SkeletonBlock(width: 34, height: 10, cornerRadius: 5)
+        }
+        .padding(12)
+        .background(Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color.black.opacity(0.05), lineWidth: 1)
+        )
+    }
+}
+
+struct HostListingPlaceholderRow: View {
+    var body: some View {
+        HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 6) {
+                SkeletonBlock(width: 154, height: 14, cornerRadius: 6)
+                SkeletonBlock(width: 120, height: 12, cornerRadius: 6)
+            }
+            Spacer()
+            SkeletonBlock(width: 84, height: 20, cornerRadius: 10)
+        }
+        .padding(.vertical, 8)
+    }
+}

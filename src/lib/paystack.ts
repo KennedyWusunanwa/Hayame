@@ -69,8 +69,14 @@ export async function refundPaystack(reference: string) {
     body: JSON.stringify({ transaction: reference }),
   });
   const payload = (await res.json()) as any;
-  if (!res.ok) {
-    throw new Error(payload?.message ?? "Failed to refund Paystack transaction");
+  const message = String(payload?.message ?? "");
+  const loweredMessage = message.toLowerCase();
+  const alreadyRefunded = loweredMessage.includes("already") && loweredMessage.includes("refund");
+
+  if (!res.ok || payload?.status === false) {
+    if (!alreadyRefunded) {
+      throw new Error(message || "Failed to refund Paystack transaction");
+    }
   }
   return payload.data ?? payload;
 }

@@ -8,6 +8,22 @@ type Body = {
   platform?: string;
 };
 
+function isPlaceholderValue(value: string) {
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) return true;
+  if (normalized === "your_apple_team_id" || normalized === "your_apns_key_id") return true;
+  if (normalized.includes("your_apns_p8_key")) return true;
+  if (normalized.includes("replace_me") || normalized.includes("placeholder")) return true;
+  return false;
+}
+
+function hasConfiguredValue(value: string | undefined | null) {
+  if (!value) return false;
+  const normalized = value.trim();
+  if (!normalized) return false;
+  return !isPlaceholderValue(normalized);
+}
+
 export async function POST(req: Request) {
   try {
     const supabase = await createSupabaseServerClient();
@@ -19,6 +35,9 @@ export async function POST(req: Request) {
     const platform = String(payload.platform ?? "ios").trim().toLowerCase();
     if (!deviceToken) {
       return NextResponse.json({ message: "deviceToken is required." }, { status: 400 });
+    }
+    if (platform !== "ios" && platform !== "android") {
+      return NextResponse.json({ message: "platform must be ios or android." }, { status: 400 });
     }
 
     const admin = (() => {
@@ -57,6 +76,26 @@ export async function POST(req: Request) {
         });
       }
       return NextResponse.json({ message }, { status: 400 });
+    }
+
+    const apnsConfigured =
+      hasConfiguredValue(process.env.APNS_TEAM_ID) &&
+      hasConfiguredValue(process.env.APNS_KEY_ID) &&
+      hasConfiguredValue(process.env.APNS_PRIVATE_KEY);
+    const fcmConfigured =
+      hasConfiguredValue(process.env.FCM_SERVER_KEY) || hasConfiguredValue(process.env.FIREBASE_SERVER_KEY);
+
+    if (platform === "ios" && !apnsConfigured) {
+      return NextResponse.json({
+        registered: true,
+        warning: "Push token saved, but APNS server config is missing or still using placeholders.",
+      });
+    }
+    if (platform === "android" && !fcmConfigured) {
+      return NextResponse.json({
+        registered: true,
+        warning: "Push token saved, but FCM server config is missing or still using placeholders.",
+      });
     }
 
     return NextResponse.json({ registered: true });
