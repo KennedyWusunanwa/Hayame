@@ -7,7 +7,8 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
-type HostApplicationRow = Database["public"]["Tables"]["host_applications"]["Row"];
+type HostApplicationRow =
+  Database["public"]["Tables"]["host_applications"]["Row"];
 
 export default async function BecomeHostPage() {
   const supabase = await createSupabaseServerClient();
@@ -30,10 +31,12 @@ export default async function BecomeHostPage() {
     <div className="mx-auto max-w-3xl px-6 py-10">
       <div className="space-y-2">
         <p className="text-sm font-semibold text-primary">Become a Host</p>
-        <h1 className="text-3xl font-semibold text-foreground">Apply to list your cars</h1>
+        <h1 className="text-3xl font-semibold text-foreground">
+          Apply to list your cars
+        </h1>
         <p className="text-sm text-gray-600">
-          We verify every host to keep the marketplace safe. Applications are typically reviewed within 1-2 business
-          days.
+          We verify every host to keep the marketplace safe. Applications are
+          typically reviewed within 1-2 business days.
         </p>
       </div>
 

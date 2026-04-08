@@ -28,9 +28,18 @@ export async function HomeMetrics() {
   return (
     <section className="mx-auto hidden max-w-6xl px-6 md:block">
       <div className="grid gap-3 rounded-2xl border border-border bg-white p-4 shadow-soft sm:grid-cols-3">
-        <MetricItem label="Cars listed" value={metrics.carsCount.toLocaleString()} />
-        <MetricItem label="Bookings recorded" value={metrics.bookingsCount.toLocaleString()} />
-        <MetricItem label="Approved hosts" value={metrics.hostsCount.toLocaleString()} />
+        <MetricItem
+          label="Cars listed"
+          value={metrics.carsCount.toLocaleString()}
+        />
+        <MetricItem
+          label="Bookings recorded"
+          value={metrics.bookingsCount.toLocaleString()}
+        />
+        <MetricItem
+          label="Approved hosts"
+          value={metrics.hostsCount.toLocaleString()}
+        />
       </div>
     </section>
   );
@@ -39,7 +48,9 @@ export async function HomeMetrics() {
 function MetricItem({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl bg-gray-50 px-4 py-3">
-      <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">{label}</p>
+      <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+        {label}
+      </p>
       <p className="text-2xl font-semibold text-foreground">{value}</p>
     </div>
   );
@@ -48,10 +59,17 @@ function MetricItem({ label, value }: { label: string; value: string }) {
 async function loadMetrics() {
   try {
     const admin = createSupabaseAdminClient() as any;
-    const [{ count: carsCount }, { count: bookingsCount }, { count: hostsCount }] = await Promise.all([
+    const [
+      { count: carsCount },
+      { count: bookingsCount },
+      { count: hostsCount },
+    ] = await Promise.all([
       admin.from("cars").select("id", { count: "exact", head: true }),
       admin.from("bookings").select("id", { count: "exact", head: true }),
-      admin.from("profiles").select("id", { count: "exact", head: true }).eq("is_host", true),
+      admin
+        .from("profiles")
+        .select("id", { count: "exact", head: true })
+        .eq("is_host", true),
     ]);
 
     if (

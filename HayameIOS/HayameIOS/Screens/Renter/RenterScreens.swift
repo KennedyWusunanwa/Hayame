@@ -3083,6 +3083,49 @@ struct GuestProfileScreen: View {
                 }
                 .hayameCard()
 
+                if appState.isAuthenticated {
+                    SectionHeader(title: "Notifications")
+                    VStack(alignment: .leading, spacing: 12) {
+                        notificationPreferenceToggle(
+                            title: "Trips & bookings",
+                            subtitle: "Booking approvals, changes, and trip reminders.",
+                            isOn: Binding(
+                                get: { appState.notificationPreferences.bookingUpdates },
+                                set: { appState.updateNotificationPreference(bookingUpdates: $0) }
+                            )
+                        )
+                        notificationPreferenceToggle(
+                            title: "Messages",
+                            subtitle: "New chats and replies from renters or hosts.",
+                            isOn: Binding(
+                                get: { appState.notificationPreferences.messages },
+                                set: { appState.updateNotificationPreference(messages: $0) }
+                            )
+                        )
+                        notificationPreferenceToggle(
+                            title: "Account & security",
+                            subtitle: "Verification, login, and account notices.",
+                            isOn: Binding(
+                                get: { appState.notificationPreferences.accountSecurity },
+                                set: { appState.updateNotificationPreference(accountSecurity: $0) }
+                            )
+                        )
+                        notificationPreferenceToggle(
+                            title: "News & announcements",
+                            subtitle: "Optional product updates, releases, and notices.",
+                            isOn: Binding(
+                                get: { appState.notificationPreferences.newsAnnouncements },
+                                set: { appState.updateNotificationPreference(newsAnnouncements: $0) }
+                            )
+                        )
+
+                        Text("Operational alerts stay on by default. News & announcements are optional.")
+                            .font(.system(size: 12, weight: .medium, design: .rounded))
+                            .foregroundStyle(HayameTheme.mutedText)
+                    }
+                    .hayameCard()
+                }
+
                 SectionHeader(title: "Support")
                 VStack(alignment: .leading, spacing: 10) {
                     NavigationLink("Contact", destination: ContactScreen())
@@ -3136,6 +3179,25 @@ struct GuestProfileScreen: View {
         .onChange(of: requestedRoute) { _, _ in
             consumeRequestedRouteIfNeeded()
         }
+    }
+
+    @ViewBuilder
+    private func notificationPreferenceToggle(
+        title: String,
+        subtitle: String,
+        isOn: Binding<Bool>
+    ) -> some View {
+        Toggle(isOn: isOn) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                    .foregroundStyle(HayameTheme.brandNavy)
+                Text(subtitle)
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .foregroundStyle(HayameTheme.mutedText)
+            }
+        }
+        .toggleStyle(SwitchToggleStyle(tint: HayameTheme.brandBlue))
     }
 
     @ViewBuilder

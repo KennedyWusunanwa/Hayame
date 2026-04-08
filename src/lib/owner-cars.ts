@@ -31,7 +31,9 @@ export async function loadOwnerCarsWithFavorites(): Promise<{
 
     const { data: carData } = await supabase
       .from("cars")
-      .select("id,title,city,region,car_type,daily_price,is_available,approval_status,created_at")
+      .select(
+        "id,title,city,region,car_type,daily_price,is_available,approval_status,created_at",
+      )
       .eq("owner_id", user.id)
       .order("created_at", { ascending: false });
 
@@ -53,18 +55,17 @@ export async function loadOwnerCarsWithFavorites(): Promise<{
       });
     }
 
-    const cars: OwnerCar[] =
-      carRows.map((car) => ({
-        id: car.id,
-        title: car.title,
-        city: car.city,
-        region: car.region,
-        car_type: car.car_type,
-        daily_price: Number(car.daily_price ?? 0),
-        is_available: car.is_available,
-        approval_status: car.approval_status,
-        image_url: firstPhotoByCarId[car.id] ?? null,
-      }));
+    const cars: OwnerCar[] = carRows.map((car) => ({
+      id: car.id,
+      title: car.title,
+      city: car.city,
+      region: car.region,
+      car_type: car.car_type,
+      daily_price: Number(car.daily_price ?? 0),
+      is_available: car.is_available,
+      approval_status: car.approval_status,
+      image_url: firstPhotoByCarId[car.id] ?? null,
+    }));
 
     const favoriteCounts: Record<string, number> = {};
     if (cars.length > 0) {

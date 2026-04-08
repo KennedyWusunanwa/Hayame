@@ -1,0 +1,7 @@
+.next
+coverage
+node_modules
+android-native/.gradle
+android-native/build
+android-native/**/build
+HayameIOS/**/xcuserdata

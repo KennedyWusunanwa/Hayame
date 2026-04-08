@@ -4,7 +4,14 @@ import Link from "next/link";
 import { PlusCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { CarActions } from "@/components/dashboard/car-actions";
 import { resolveCarImage } from "@/lib/car-images";
 import { loadOwnerCarsWithFavorites } from "@/lib/owner-cars";
@@ -82,8 +89,11 @@ export default async function DashboardCarsPage({ searchParams }: PageProps) {
                       <TableCell className="font-semibold">
                         <div className="flex items-center gap-3">
                           <div className="relative h-12 w-16 overflow-hidden rounded-md border border-border bg-gray-100">
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={imageSrc} alt={car.title} className="h-full w-full object-cover" />
+                            <img
+                              src={imageSrc}
+                              alt={car.title}
+                              className="h-full w-full object-cover"
+                            />
                           </div>
                           <span className="line-clamp-2">{car.title}</span>
                         </div>
@@ -91,7 +101,9 @@ export default async function DashboardCarsPage({ searchParams }: PageProps) {
                       <TableCell>
                         {car.city}, {car.region}
                       </TableCell>
-                      <TableCell className="font-semibold">{favoriteCounts[car.id] ?? 0}</TableCell>
+                      <TableCell className="font-semibold">
+                        {favoriteCounts[car.id] ?? 0}
+                      </TableCell>
                       <TableCell>{car.car_type}</TableCell>
                       <TableCell>{formatCurrency(car.daily_price)}</TableCell>
                       <TableCell>
@@ -139,18 +151,28 @@ export default async function DashboardCarsPage({ searchParams }: PageProps) {
               });
 
               return (
-                <div key={car.id} className="rounded-lg border border-border bg-white p-3 shadow-sm">
+                <div
+                  key={car.id}
+                  className="rounded-lg border border-border bg-white p-3 shadow-sm"
+                >
                   <div className="flex items-start gap-3">
                     <div className="relative h-20 w-28 shrink-0 overflow-hidden rounded-md border border-border bg-gray-100">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={imageSrc} alt={car.title} className="h-full w-full object-cover" />
+                      <img
+                        src={imageSrc}
+                        alt={car.title}
+                        className="h-full w-full object-cover"
+                      />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-base font-semibold text-foreground line-clamp-2">{car.title}</p>
+                      <p className="text-base font-semibold text-foreground line-clamp-2">
+                        {car.title}
+                      </p>
                       <p className="text-sm text-gray-600">
                         {car.city}, {car.region}
                       </p>
-                      <p className="text-sm text-gray-700">{formatCurrency(car.daily_price)} / day</p>
+                      <p className="text-sm text-gray-700">
+                        {formatCurrency(car.daily_price)} / day
+                      </p>
                     </div>
                     <div className="shrink-0">
                       <CarActions carId={car.id} />
@@ -160,7 +182,11 @@ export default async function DashboardCarsPage({ searchParams }: PageProps) {
                     <span className="rounded-full bg-gray-100 px-2 py-1">
                       Favorites {favoriteCounts[car.id] ?? 0}
                     </span>
-                    {car.car_type ? <span className="rounded-full bg-gray-100 px-2 py-1">{car.car_type}</span> : null}
+                    {car.car_type ? (
+                      <span className="rounded-full bg-gray-100 px-2 py-1">
+                        {car.car_type}
+                      </span>
+                    ) : null}
                     <span
                       className={
                         car.is_available

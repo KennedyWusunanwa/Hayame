@@ -23,7 +23,7 @@ Set these Gradle properties (for example in `~/.gradle/gradle.properties` or pro
 ## Run
 
 1. Open `android-native` in Android Studio.
-2. Let Android Studio create/sync Gradle wrapper if missing.
+2. Use JDK 17 for Gradle sync and command-line builds.
 3. Add `google-services.json` for FCM token provisioning.
 4. Build and run on device/emulator.
 
@@ -32,4 +32,4 @@ Set these Gradle properties (for example in `~/.gradle/gradle.properties` or pro
 - API contracts are aligned to current Hayame routes under `/api/*`.
 - Booking flow uses hold -> Paystack initiate -> finalize.
 - Push registration uses `/api/mobile/push/register` with `platform = android`.
-- Server-side push dispatch currently targets APNs/iOS tokens in `src/lib/push.ts`; add FCM send path for Android background delivery parity.
+- Server-side push dispatch supports both APNs and FCM in `src/lib/push.ts`.

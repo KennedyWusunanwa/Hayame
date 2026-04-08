@@ -15,7 +15,8 @@ export async function GET(req: Request) {
     })();
     const db = admin ?? (supabase as any);
     const user = await getRequestUser(supabase as any, req);
-    if (!user) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+    if (!user)
+      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
 
     const today = new Date().toISOString().slice(0, 10);
     await db
@@ -25,7 +26,10 @@ export async function GET(req: Request) {
       .eq("status", "confirmed")
       .lt("end_date", today);
 
-    const { data: ownedCars } = await db.from("cars").select("id").eq("owner_id", user.id);
+    const { data: ownedCars } = await db
+      .from("cars")
+      .select("id")
+      .eq("owner_id", user.id);
     const ownerCarIds = (ownedCars as any)?.map((c: any) => c.id) ?? [];
 
     if (ownerCarIds.length > 0) {
@@ -61,9 +65,16 @@ export async function GET(req: Request) {
       throw renterBookings.error ?? ownerBookings.error;
     }
 
-    const combined = [...(renterBookings.data ?? []), ...(ownerBookings.data ?? [])] as any[];
-    const unique = Array.from(new Map(combined.map((item) => [item.id, item])).values());
-    const carIds = Array.from(new Set(unique.map((item) => item.car_id).filter(Boolean)));
+    const combined = [
+      ...(renterBookings.data ?? []),
+      ...(ownerBookings.data ?? []),
+    ] as any[];
+    const unique = Array.from(
+      new Map(combined.map((item) => [item.id, item])).values(),
+    );
+    const carIds = Array.from(
+      new Set(unique.map((item) => item.car_id).filter(Boolean)),
+    );
     const { data: conversationRows } =
       carIds.length > 0
         ? await db
@@ -83,9 +94,17 @@ export async function GET(req: Request) {
       if (item.renter_id === user.id) role.push("renter");
       if (ownerCarIds.includes(item.car_id)) role.push("owner");
       const hostId = item?.cars?.owner_id ?? null;
-      const conversationKey = hostId ? `${hostId}|${item.renter_id}|${item.car_id}` : null;
-      const conversationId = conversationKey ? conversationByPair.get(conversationKey) ?? null : null;
-      return { ...item, role: role.join("+") || "guest", conversation_id: conversationId };
+      const conversationKey = hostId
+        ? `${hostId}|${item.renter_id}|${item.car_id}`
+        : null;
+      const conversationId = conversationKey
+        ? (conversationByPair.get(conversationKey) ?? null)
+        : null;
+      return {
+        ...item,
+        role: role.join("+") || "guest",
+        conversation_id: conversationId,
+      };
     });
     const sorted = [...withRole].sort((a: any, b: any) => {
       const createdA = Date.parse(a?.created_at ?? "");
@@ -103,11 +122,15 @@ export async function GET(req: Request) {
     });
     return NextResponse.json({ data: sorted });
   } catch (error: any) {
-    return NextResponse.json({ message: error.message ?? "Failed to load bookings" }, { status: 400 });
+    return NextResponse.json(
+      { message: error.message ?? "Failed to load bookings" },
+      { status: 400 },
+    );
   }
 }
 
-export async function POST(req: Request) {
-  const message = "Direct booking is disabled. Use the Paystack flow to pay before host approval.";
+export async function POST() {
+  const message =
+    "Direct booking is disabled. Use the Paystack flow to pay before host approval.";
   return NextResponse.json({ message }, { status: 400 });
 }

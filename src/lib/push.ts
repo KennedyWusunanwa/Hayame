@@ -1,6 +1,10 @@
 import "server-only";
 import { connect } from "node:http2";
 import { createSign } from "node:crypto";
+import {
+  type NotificationPreferenceKey,
+  getUsersAllowedForPreference,
+} from "@/lib/notifications";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 type PushDataValue = string | number | boolean | null | undefined;
@@ -36,6 +40,8 @@ type PushSendInput = {
   data?: Record<string, PushDataValue>;
   adminClient?: any;
   collapseId?: string;
+  preferenceKey?: NotificationPreferenceKey | null;
+  notificationCategory?: string | null;
 };
 
 type CachedJwt = {
@@ -52,10 +58,20 @@ type PushSendResult = {
   reason?: string;
 };
 
+type BroadcastPushInput = Omit<PushSendInput, "userIds">;
+
 const APNS_PRODUCTION_HOST = "api.push.apple.com";
 const APNS_SANDBOX_HOST = "api.sandbox.push.apple.com";
-const INVALID_TOKEN_REASONS = new Set(["BadDeviceToken", "DeviceTokenNotForTopic", "Unregistered"]);
-const INVALID_FCM_TOKEN_REASONS = new Set(["InvalidRegistration", "NotRegistered", "MismatchSenderId"]);
+const INVALID_TOKEN_REASONS = new Set([
+  "BadDeviceToken",
+  "DeviceTokenNotForTopic",
+  "Unregistered",
+]);
+const INVALID_FCM_TOKEN_REASONS = new Set([
+  "InvalidRegistration",
+  "NotRegistered",
+  "MismatchSenderId",
+]);
 const MESSAGE_FALLBACK = "You have a new notification.";
 
 let cachedJwt: CachedJwt | null = null;
@@ -67,9 +83,11 @@ function normalizeEnvValue(value: string | undefined | null) {
 function isPlaceholderValue(value: string) {
   const normalized = value.trim().toLowerCase();
   if (!normalized) return true;
-  if (normalized === "your_apple_team_id" || normalized === "your_apns_key_id") return true;
+  if (normalized === "your_apple_team_id" || normalized === "your_apns_key_id")
+    return true;
   if (normalized.includes("your_apns_p8_key")) return true;
-  if (normalized.includes("replace_me") || normalized.includes("placeholder")) return true;
+  if (normalized.includes("replace_me") || normalized.includes("placeholder"))
+    return true;
   return false;
 }
 
@@ -95,7 +113,11 @@ function resolvePushConfig(): PushConfig | null {
     return null;
   }
 
-  if (!hasConfiguredValue(teamId) || !hasConfiguredValue(keyId) || !hasConfiguredValue(privateKeyRaw)) {
+  if (
+    !hasConfiguredValue(teamId) ||
+    !hasConfiguredValue(keyId) ||
+    !hasConfiguredValue(privateKeyRaw)
+  ) {
     return null;
   }
 
@@ -110,7 +132,8 @@ function resolvePushConfig(): PushConfig | null {
 
 function resolveFcmConfig(): FcmConfig | null {
   const serverKey =
-    normalizeEnvValue(process.env.FCM_SERVER_KEY) || normalizeEnvValue(process.env.FIREBASE_SERVER_KEY);
+    normalizeEnvValue(process.env.FCM_SERVER_KEY) ||
+    normalizeEnvValue(process.env.FIREBASE_SERVER_KEY);
   if (!hasConfiguredValue(serverKey)) {
     return null;
   }
@@ -128,7 +151,11 @@ function base64Url(input: string | Buffer) {
 function buildApnsJwt(config: PushConfig) {
   const now = Math.floor(Date.now() / 1000);
   const cacheKey = `${config.teamId}:${config.keyId}:${config.topic}:${config.useSandbox ? "sandbox" : "prod"}`;
-  if (cachedJwt && cachedJwt.cacheKey === cacheKey && cachedJwt.expiresAt > now + 60) {
+  if (
+    cachedJwt &&
+    cachedJwt.cacheKey === cacheKey &&
+    cachedJwt.expiresAt > now + 60
+  ) {
     return cachedJwt.token;
   }
 
@@ -157,7 +184,12 @@ function sanitizeData(data: Record<string, PushDataValue> | undefined) {
   const clean: Record<string, string | number | boolean | null> = {};
   for (const [key, value] of Object.entries(data)) {
     if (value === undefined) continue;
-    if (typeof value === "string" || typeof value === "number" || typeof value === "boolean" || value === null) {
+    if (
+      typeof value === "string" ||
+      typeof value === "number" ||
+      typeof value === "boolean" ||
+      value === null
+    ) {
       clean[key] = value;
     } else {
       clean[key] = String(value);
@@ -229,7 +261,8 @@ async function sendToApnsHost(params: {
     });
     request.on("response", (headers) => {
       const rawStatus = headers[":status"];
-      statusCode = typeof rawStatus === "number" ? rawStatus : Number(rawStatus ?? 0);
+      statusCode =
+        typeof rawStatus === "number" ? rawStatus : Number(rawStatus ?? 0);
     });
     request.on("data", (chunk: string) => {
       responseBuffer += chunk;
@@ -293,8 +326,12 @@ async function sendApnsPush(params: {
       reason: "jwt_build_failed",
     } as ApnsSendResult;
   }
-  const primaryHost = params.config.useSandbox ? APNS_SANDBOX_HOST : APNS_PRODUCTION_HOST;
-  const fallbackHost = params.config.useSandbox ? APNS_PRODUCTION_HOST : APNS_SANDBOX_HOST;
+  const primaryHost = params.config.useSandbox
+    ? APNS_SANDBOX_HOST
+    : APNS_PRODUCTION_HOST;
+  const fallbackHost = params.config.useSandbox
+    ? APNS_PRODUCTION_HOST
+    : APNS_SANDBOX_HOST;
 
   const first = await sendToApnsHost({
     host: primaryHost,
@@ -308,7 +345,10 @@ async function sendApnsPush(params: {
   });
   if (first.ok) return first;
 
-  if (first.reason === "BadDeviceToken" || first.reason === "DeviceTokenNotForTopic") {
+  if (
+    first.reason === "BadDeviceToken" ||
+    first.reason === "DeviceTokenNotForTopic"
+  ) {
     return await sendToApnsHost({
       host: fallbackHost,
       deviceToken: params.deviceToken,
@@ -345,7 +385,12 @@ async function sendFcmPush(params: {
     payload.collapse_key = params.collapseId;
   }
   if (params.data && Object.keys(params.data).length > 0) {
-    payload.data = Object.fromEntries(Object.entries(params.data).map(([key, value]) => [key, String(value ?? "")]));
+    payload.data = Object.fromEntries(
+      Object.entries(params.data).map(([key, value]) => [
+        key,
+        String(value ?? ""),
+      ]),
+    );
   }
 
   try {
@@ -366,7 +411,10 @@ async function sendFcmPush(params: {
           error?: string;
           results?: Array<{ error?: string }>;
         };
-        reason = parsed.error ?? parsed.results?.find((item) => item?.error)?.error ?? null;
+        reason =
+          parsed.error ??
+          parsed.results?.find((item) => item?.error)?.error ??
+          null;
       } catch {
         reason = null;
       }
@@ -394,16 +442,20 @@ export async function sendPushNotificationsToUsers({
   data,
   adminClient,
   collapseId,
+  preferenceKey,
+  notificationCategory,
 }: PushSendInput): Promise<PushSendResult> {
-  const uniqueUserIds = Array.from(new Set(userIds.map((value) => value.trim()).filter(Boolean)));
-  if (uniqueUserIds.length === 0) {
-    return { attempted: 0, delivered: 0, cleanedUpTokens: 0, skipped: true, reason: "no-users" };
-  }
-
-  const apnsConfig = resolvePushConfig();
-  const fcmConfig = resolveFcmConfig();
-  if (!apnsConfig && !fcmConfig) {
-    return { attempted: 0, delivered: 0, cleanedUpTokens: 0, skipped: true, reason: "push-not-configured" };
+  const requestedUserIds = Array.from(
+    new Set(userIds.map((value) => value.trim()).filter(Boolean)),
+  );
+  if (requestedUserIds.length === 0) {
+    return {
+      attempted: 0,
+      delivered: 0,
+      cleanedUpTokens: 0,
+      skipped: true,
+      reason: "no-users",
+    };
   }
 
   const admin =
@@ -416,7 +468,40 @@ export async function sendPushNotificationsToUsers({
       }
     })();
   if (!admin) {
-    return { attempted: 0, delivered: 0, cleanedUpTokens: 0, skipped: true, reason: "admin-client-missing" };
+    return {
+      attempted: 0,
+      delivered: 0,
+      cleanedUpTokens: 0,
+      skipped: true,
+      reason: "admin-client-missing",
+    };
+  }
+
+  const uniqueUserIds = await getUsersAllowedForPreference({
+    admin,
+    userIds: requestedUserIds,
+    preferenceKey,
+  }).catch(() => requestedUserIds);
+  if (uniqueUserIds.length === 0) {
+    return {
+      attempted: 0,
+      delivered: 0,
+      cleanedUpTokens: 0,
+      skipped: true,
+      reason: "preference-blocked",
+    };
+  }
+
+  const apnsConfig = resolvePushConfig();
+  const fcmConfig = resolveFcmConfig();
+  if (!apnsConfig && !fcmConfig) {
+    return {
+      attempted: 0,
+      delivered: 0,
+      cleanedUpTokens: 0,
+      skipped: true,
+      reason: "push-not-configured",
+    };
   }
 
   const { data: tokenRows, error } = await admin
@@ -424,25 +509,49 @@ export async function sendPushNotificationsToUsers({
     .select("id,user_id,device_token,platform")
     .in("user_id", uniqueUserIds);
   if (error) {
-    return { attempted: 0, delivered: 0, cleanedUpTokens: 0, skipped: true, reason: error.message };
+    return {
+      attempted: 0,
+      delivered: 0,
+      cleanedUpTokens: 0,
+      skipped: true,
+      reason: error.message,
+    };
   }
 
   const rows = (tokenRows ?? []).filter((row: any) => {
     const token = String(row?.device_token ?? "").trim();
     return token.length > 0;
   });
-  const iosRows = rows.filter((row: any) => String(row?.platform ?? "").toLowerCase() === "ios");
-  const androidRows = rows.filter((row: any) => String(row?.platform ?? "").toLowerCase() === "android");
+  const iosRows = rows.filter(
+    (row: any) => String(row?.platform ?? "").toLowerCase() === "ios",
+  );
+  const androidRows = rows.filter(
+    (row: any) => String(row?.platform ?? "").toLowerCase() === "android",
+  );
 
   const attemptedIosRows = apnsConfig ? iosRows : [];
   const attemptedAndroidRows = fcmConfig ? androidRows : [];
   const attemptedRows = [...attemptedIosRows, ...attemptedAndroidRows];
 
   if (attemptedRows.length === 0) {
-    return { attempted: 0, delivered: 0, cleanedUpTokens: 0, skipped: true, reason: "no-device-tokens" };
+    return {
+      attempted: 0,
+      delivered: 0,
+      cleanedUpTokens: 0,
+      skipped: true,
+      reason: "no-device-tokens",
+    };
   }
 
-  const cleanData = sanitizeData(data);
+  const cleanData = sanitizeData({
+    ...data,
+    notificationCategory:
+      notificationCategory ??
+      preferenceKey ??
+      (typeof data?.notificationCategory === "string"
+        ? data.notificationCategory
+        : undefined),
+  });
   let delivered = 0;
   const invalidTokenIds: string[] = [];
 
@@ -487,7 +596,11 @@ export async function sendPushNotificationsToUsers({
     }
 
     const tokenId = String((row as any).id ?? "");
-    if (tokenId && result.reason && INVALID_FCM_TOKEN_REASONS.has(result.reason)) {
+    if (
+      tokenId &&
+      result.reason &&
+      INVALID_FCM_TOKEN_REASONS.has(result.reason)
+    ) {
       invalidTokenIds.push(tokenId);
     }
   }
@@ -510,4 +623,64 @@ export async function sendPushNotificationsToUsers({
     cleanedUpTokens,
     skipped: false,
   };
+}
+
+export async function sendBroadcastPushNotifications({
+  title,
+  body,
+  data,
+  adminClient,
+  collapseId,
+  preferenceKey,
+  notificationCategory,
+}: BroadcastPushInput): Promise<PushSendResult> {
+  const admin =
+    adminClient ??
+    (() => {
+      try {
+        return createSupabaseAdminClient() as any;
+      } catch {
+        return null;
+      }
+    })();
+  if (!admin) {
+    return {
+      attempted: 0,
+      delivered: 0,
+      cleanedUpTokens: 0,
+      skipped: true,
+      reason: "admin-client-missing",
+    };
+  }
+
+  const { data: tokenRows, error } = await admin
+    .from("mobile_push_tokens")
+    .select("user_id");
+  if (error) {
+    return {
+      attempted: 0,
+      delivered: 0,
+      cleanedUpTokens: 0,
+      skipped: true,
+      reason: error.message,
+    };
+  }
+
+  const mappedUserIds: string[] = (tokenRows ?? []).map((row: any): string =>
+    String(row?.user_id ?? "").trim(),
+  );
+  const userIds: string[] = Array.from(
+    new Set(mappedUserIds.filter((userId) => userId.length > 0)),
+  );
+
+  return sendPushNotificationsToUsers({
+    userIds,
+    title,
+    body,
+    data,
+    adminClient: admin,
+    collapseId,
+    preferenceKey,
+    notificationCategory,
+  });
 }

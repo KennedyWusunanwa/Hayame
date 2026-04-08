@@ -1,27 +1,11 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
+import { requireAdminApi } from "@/lib/admin-auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getRequestUser } from "@/lib/supabase/request-auth";
 
-const COOKIE_NAME = "admin_auth";
 const MAX_PHOTOS = 7;
 const MAX_PHOTO_FILE_BYTES = 4 * 1024 * 1024;
-
-function adminToken() {
-  const username = process.env.ADMIN_USERNAME ?? "";
-  const password = process.env.ADMIN_PASSWORD ?? "";
-  if (!username || !password) return null;
-  return Buffer.from(`${username}:${password}`).toString("base64");
-}
-
-async function isAdmin() {
-  const token = adminToken();
-  if (!token) return false;
-  const cookieStore = await cookies();
-  const cookie = cookieStore.get(COOKIE_NAME)?.value;
-  return cookie === token;
-}
 
 function getPhotoBucketName() {
   const configured =
@@ -42,7 +26,10 @@ function getPhotoBucketName() {
   return configured;
 }
 
-function getStoragePathFromPublicUrl(publicUrl: string, bucket: string): string | null {
+function getStoragePathFromPublicUrl(
+  publicUrl: string,
+  bucket: string,
+): string | null {
   try {
     const url = new URL(publicUrl);
     const prefix = `/storage/v1/object/public/${bucket}/`;
@@ -55,20 +42,30 @@ function getStoragePathFromPublicUrl(publicUrl: string, bucket: string): string 
 }
 
 async function canManageCar(carId: string, req?: Request) {
-  const adminAllowed = await isAdmin();
+  const adminAllowed = await requireAdminApi();
   if (adminAllowed) {
     try {
       const adminClient = createSupabaseAdminClient() as any;
-      const { data: car, error } = await adminClient.from("cars").select("id,owner_id").eq("id", carId).single();
+      const { data: car, error } = await adminClient
+        .from("cars")
+        .select("id,owner_id")
+        .eq("id", carId)
+        .single();
       if (error || !car) {
         return { ok: false as const, status: 404, message: "Car not found" };
       }
-      return { ok: true as const, client: adminClient, car, isAdmin: true as const };
+      return {
+        ok: true as const,
+        client: adminClient,
+        car,
+        isAdmin: true as const,
+      };
     } catch {
       return {
         ok: false as const,
         status: 500,
-        message: "Server storage configuration error. Missing service role key.",
+        message:
+          "Server storage configuration error. Missing service role key.",
       };
     }
   }
@@ -79,7 +76,11 @@ async function canManageCar(carId: string, req?: Request) {
   if (!user) {
     return { ok: false as const, status: 401, message: "Unauthorized" };
   }
-  const { data: car, error } = await client.from("cars").select("id,owner_id").eq("id", carId).single();
+  const { data: car, error } = await client
+    .from("cars")
+    .select("id,owner_id")
+    .eq("id", carId)
+    .single();
   if (error || !car) {
     return { ok: false as const, status: 404, message: "Car not found" };
   }
@@ -98,7 +99,10 @@ export async function GET(req: Request, context: Params) {
   try {
     const access = await canManageCar(carId, req);
     if (!access.ok) {
-      return NextResponse.json({ message: access.message }, { status: access.status });
+      return NextResponse.json(
+        { message: access.message },
+        { status: access.status },
+      );
     }
 
     const { data, error } = await access.client
@@ -114,7 +118,10 @@ export async function GET(req: Request, context: Params) {
       },
     });
   } catch (error: any) {
-    return NextResponse.json({ message: error.message ?? "Failed to load photos" }, { status: 400 });
+    return NextResponse.json(
+      { message: error.message ?? "Failed to load photos" },
+      { status: 400 },
+    );
   }
 }
 
@@ -123,7 +130,10 @@ export async function POST(req: Request, context: Params) {
   try {
     const access = await canManageCar(carId, req);
     if (!access.ok) {
-      return NextResponse.json({ message: access.message }, { status: access.status });
+      return NextResponse.json(
+        { message: access.message },
+        { status: access.status },
+      );
     }
 
     const formData = await req.formData();
@@ -132,23 +142,33 @@ export async function POST(req: Request, context: Params) {
       return NextResponse.json({ message: "Missing file" }, { status: 400 });
     }
     if (!file.type?.startsWith("image/")) {
-      return NextResponse.json({ message: "Only image files are allowed" }, { status: 400 });
+      return NextResponse.json(
+        { message: "Only image files are allowed" },
+        { status: 400 },
+      );
     }
     if (file.size > MAX_PHOTO_FILE_BYTES) {
       return NextResponse.json(
-        { message: "Photo upload failed because the image file is too large. Please use a photo under 4MB." },
+        {
+          message:
+            "Photo upload failed because the image file is too large. Please use a photo under 4MB.",
+        },
         { status: 413 },
       );
     }
 
-    const replacePhotoId = String(formData.get("replacePhotoId") ?? "").trim() || null;
+    const replacePhotoId =
+      String(formData.get("replacePhotoId") ?? "").trim() || null;
     const client = access.client;
     const existingPhotoCount = await client
       .from("car_photos")
       .select("id", { count: "exact", head: true })
       .eq("car_id", carId);
     if (!replacePhotoId && (existingPhotoCount.count ?? 0) >= MAX_PHOTOS) {
-      return NextResponse.json({ message: `Maximum ${MAX_PHOTOS} photos allowed.` }, { status: 400 });
+      return NextResponse.json(
+        { message: `Maximum ${MAX_PHOTOS} photos allowed.` },
+        { status: 400 },
+      );
     }
 
     const oldPhoto = replacePhotoId
@@ -167,11 +187,13 @@ export async function POST(req: Request, context: Params) {
     const ext = (file.name.split(".").pop() ?? "jpg").toLowerCase();
     const path = `${access.car.owner_id}/${carId}/${Date.now()}-${crypto.randomUUID()}.${ext}`;
     const bytes = Buffer.from(await file.arrayBuffer());
-    const { error: uploadError } = await client.storage.from(bucket).upload(path, bytes, {
-      cacheControl: "3600",
-      contentType: file.type || "image/jpeg",
-      upsert: false,
-    });
+    const { error: uploadError } = await client.storage
+      .from(bucket)
+      .upload(path, bytes, {
+        cacheControl: "3600",
+        contentType: file.type || "image/jpeg",
+        upsert: false,
+      });
     if (uploadError) throw uploadError;
 
     const {
@@ -222,7 +244,10 @@ export async function DELETE(req: Request, context: Params) {
   try {
     const access = await canManageCar(carId, req);
     if (!access.ok) {
-      return NextResponse.json({ message: access.message }, { status: access.status });
+      return NextResponse.json(
+        { message: access.message },
+        { status: access.status },
+      );
     }
 
     const body = (await req.json().catch(() => ({}))) as { photoId?: string };
@@ -257,6 +282,9 @@ export async function DELETE(req: Request, context: Params) {
 
     return NextResponse.json({ ok: true });
   } catch (error: any) {
-    return NextResponse.json({ message: error.message ?? "Failed to delete photo" }, { status: 400 });
+    return NextResponse.json(
+      { message: error.message ?? "Failed to delete photo" },
+      { status: 400 },
+    );
   }
 }

@@ -26,7 +26,11 @@ export function EarningsChart({ data }: Props) {
             </linearGradient>
           </defs>
           <XAxis dataKey="month" tickLine={false} axisLine={false} />
-          <YAxis tickFormatter={(v) => `₵${v}`} tickLine={false} axisLine={false} />
+          <YAxis
+            tickFormatter={(v) => `₵${v}`}
+            tickLine={false}
+            axisLine={false}
+          />
           <Tooltip
             formatter={(value: number) => formatCurrency(value)}
             contentStyle={{ borderRadius: 12, borderColor: "#e5e7eb" }}

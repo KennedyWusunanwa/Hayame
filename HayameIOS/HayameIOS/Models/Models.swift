@@ -97,6 +97,88 @@ struct UserProfile: Identifiable, Hashable {
     )
 }
 
+struct NotificationPreferences: Hashable {
+    var bookingUpdates: Bool
+    var messages: Bool
+    var accountSecurity: Bool
+    var newsAnnouncements: Bool
+
+    static let defaults = NotificationPreferences(
+        bookingUpdates: true,
+        messages: true,
+        accountSecurity: true,
+        newsAnnouncements: false
+    )
+}
+
+extension NotificationPreferences {
+    init(dto: NotificationPreferencesDTO?) {
+        self = NotificationPreferences(
+            bookingUpdates: dto?.booking_updates ?? Self.defaults.bookingUpdates,
+            messages: dto?.messages ?? Self.defaults.messages,
+            accountSecurity: dto?.account_security ?? Self.defaults.accountSecurity,
+            newsAnnouncements: dto?.news_announcements ?? Self.defaults.newsAnnouncements
+        )
+    }
+}
+
+struct AppAnnouncement: Identifiable, Hashable {
+    let id: String
+    var title: String
+    var body: String
+    var category: String
+    var delivery: String
+    var audience: String
+    var showOnce: Bool
+    var ctaLabel: String?
+    var ctaURL: String?
+    var startsAt: String?
+    var endsAt: String?
+    var publishedAt: String?
+    var seen: Bool
+
+    func shouldDisplay(locallySeen: Set<String>) -> Bool {
+        let trimmedID = id.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedBody = body.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedID.isEmpty, !trimmedTitle.isEmpty, !trimmedBody.isEmpty else { return false }
+        if !showOnce { return true }
+        if seen { return false }
+        return !locallySeen.contains(trimmedID)
+    }
+}
+
+extension AppAnnouncement {
+    init?(dto: AppAnnouncementDTO) {
+        let resolvedID = dto.id.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedTitle = (dto.title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedBody = (dto.body ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !resolvedID.isEmpty, !resolvedTitle.isEmpty, !resolvedBody.isEmpty else { return nil }
+
+        self.init(
+            id: resolvedID,
+            title: resolvedTitle,
+            body: resolvedBody,
+            category: (dto.category ?? "system").trimmingCharacters(in: .whitespacesAndNewlines),
+            delivery: (dto.delivery ?? "in_app").trimmingCharacters(in: .whitespacesAndNewlines),
+            audience: (dto.audience ?? "all").trimmingCharacters(in: .whitespacesAndNewlines),
+            showOnce: dto.show_once ?? true,
+            ctaLabel: dto.cta_label?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
+            ctaURL: dto.cta_url?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
+            startsAt: dto.starts_at?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
+            endsAt: dto.ends_at?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
+            publishedAt: dto.published_at?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
+            seen: dto.seen ?? false
+        )
+    }
+}
+
+private extension String {
+    var nilIfEmpty: String? {
+        isEmpty ? nil : self
+    }
+}
+
 struct Car: Identifiable, Hashable {
     let id: String
     var ownerID: String = ""

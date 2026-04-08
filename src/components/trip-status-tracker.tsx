@@ -10,14 +10,21 @@ type Props = {
 const steps = ["Pending", "Confirmed", "Ongoing", "Completed"];
 const compactSteps = ["Pending", "Confirm", "Ongoing", "Done"];
 
-export function TripStatusTracker({ status, startDate, endDate, compact = false }: Props) {
+export function TripStatusTracker({
+  status,
+  startDate,
+  endDate,
+  compact = false,
+}: Props) {
   const normalized = (status ?? "").toLowerCase();
   const labels = compact ? compactSteps : steps;
 
   if (["cancelled", "rejected", "refunded"].includes(normalized)) {
     return (
       <div className="mt-1 flex items-center gap-2 text-[10px] pointer-events-none select-none">
-        <span className="rounded-full bg-red-50 px-2 py-1 font-semibold text-red-700">Cancelled</span>
+        <span className="rounded-full bg-red-50 px-2 py-1 font-semibold text-red-700">
+          Cancelled
+        </span>
       </div>
     );
   }

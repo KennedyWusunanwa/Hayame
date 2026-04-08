@@ -18,7 +18,9 @@ export async function verifyPaystackTransaction(reference: string) {
   });
   const payload = (await res.json()) as any;
   if (!res.ok || payload?.data?.status !== "success") {
-    throw new Error(payload?.message ?? "Failed to verify Paystack transaction");
+    throw new Error(
+      payload?.message ?? "Failed to verify Paystack transaction",
+    );
   }
   return payload.data;
 }
@@ -49,7 +51,9 @@ export async function initializePaystackTransaction(params: {
   });
   const payload = (await res.json()) as any;
   if (!res.ok || payload?.status === false) {
-    throw new Error(payload?.message ?? "Failed to initialize Paystack transaction");
+    throw new Error(
+      payload?.message ?? "Failed to initialize Paystack transaction",
+    );
   }
   if (!payload?.data?.authorization_url || !payload?.data?.reference) {
     throw new Error("Paystack initialize response missing checkout URL");
@@ -71,7 +75,8 @@ export async function refundPaystack(reference: string) {
   const payload = (await res.json()) as any;
   const message = String(payload?.message ?? "");
   const loweredMessage = message.toLowerCase();
-  const alreadyRefunded = loweredMessage.includes("already") && loweredMessage.includes("refund");
+  const alreadyRefunded =
+    loweredMessage.includes("already") && loweredMessage.includes("refund");
 
   if (!res.ok || payload?.status === false) {
     if (!alreadyRefunded) {

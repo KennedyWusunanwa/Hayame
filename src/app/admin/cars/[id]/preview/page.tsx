@@ -1,33 +1,16 @@
 import Image from "next/image";
 import Link from "next/link";
-import { cookies } from "next/headers";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { BadgeCheck, CarFront, Gauge, MapPin } from "lucide-react";
 import { ImageGallery } from "@/components/image-gallery";
 import { VerificationBadges } from "@/components/verification-badges";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { requireAdminPage } from "@/lib/admin-auth";
 import { resolveCarImages } from "@/lib/car-images";
 import { deriveHostBadgeType, hostBadgeLabel } from "@/lib/host-badges";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { formatCurrency, getInitials } from "@/lib/utils";
-
-const COOKIE_NAME = "admin_auth";
-
-function adminToken() {
-  const username = process.env.ADMIN_USERNAME ?? "";
-  const password = process.env.ADMIN_PASSWORD ?? "";
-  if (!username || !password) return null;
-  return Buffer.from(`${username}:${password}`).toString("base64");
-}
-
-async function requireAdmin() {
-  const token = adminToken();
-  if (!token) redirect("/admin?error=missing");
-  const cookieStore = await cookies();
-  const cookie = cookieStore.get(COOKIE_NAME)?.value;
-  if (cookie !== token) redirect("/admin");
-}
 
 type PageProps = {
   params: { id: string } | Promise<{ id: string }>;
@@ -72,7 +55,7 @@ type AdminPreviewCar = {
 export const dynamic = "force-dynamic";
 
 export default async function AdminListingPreviewPage({ params }: PageProps) {
-  await requireAdmin();
+  await requireAdminPage();
   const resolvedParams = await params;
   const admin = createSupabaseAdminClient();
 
@@ -87,7 +70,10 @@ export default async function AdminListingPreviewPage({ params }: PageProps) {
 
   if (!car) return notFound();
 
-  const { data: photoRows } = await admin.from("car_photos").select("url").eq("car_id", car.id);
+  const { data: photoRows } = await admin
+    .from("car_photos")
+    .select("url")
+    .eq("car_id", car.id);
   const photos = resolveCarImages(
     (photoRows ?? []).map((row: { url?: string | null }) => row.url),
     {
@@ -112,9 +98,16 @@ export default async function AdminListingPreviewPage({ params }: PageProps) {
     <div className="mx-auto max-w-6xl space-y-6 px-4 py-6 sm:px-6 sm:py-8">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <p className="text-sm font-semibold text-primary">Admin demo preview</p>
-          <h1 className="text-2xl font-semibold text-foreground">{car.title}</h1>
-          <p className="text-xs text-gray-600">This preview helps approve or reject the listing with real listing context.</p>
+          <p className="text-sm font-semibold text-primary">
+            Admin demo preview
+          </p>
+          <h1 className="text-2xl font-semibold text-foreground">
+            {car.title}
+          </h1>
+          <p className="text-xs text-gray-600">
+            This preview helps approve or reject the listing with real listing
+            context.
+          </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Link
@@ -131,7 +124,10 @@ export default async function AdminListingPreviewPage({ params }: PageProps) {
           >
             Edit listing
           </Link>
-          <Link href="/admin/platform" className="rounded-md bg-brand px-3 py-2 text-sm font-semibold text-white">
+          <Link
+            href="/admin/platform"
+            className="rounded-md bg-brand px-3 py-2 text-sm font-semibold text-white"
+          >
             Back to approvals
           </Link>
         </div>
@@ -163,20 +159,38 @@ export default async function AdminListingPreviewPage({ params }: PageProps) {
                 <DetailItem
                   icon={MapPin}
                   label="Location"
-                  value={[car.city, car.region].filter(Boolean).join(", ") || "-"}
+                  value={
+                    [car.city, car.region].filter(Boolean).join(", ") || "-"
+                  }
                 />
-                <DetailItem icon={CarFront} label="Type" value={car.car_type ?? "-"} />
-                <DetailItem icon={CarFront} label="Brand / model" value={`${car.brand ?? "-"} ${car.model ?? ""}`.trim()} />
-                <DetailItem icon={Gauge} label="Year / seats" value={`${car.car_year ?? "-"} | ${car.seats ?? "-"} seats`} />
+                <DetailItem
+                  icon={CarFront}
+                  label="Type"
+                  value={car.car_type ?? "-"}
+                />
+                <DetailItem
+                  icon={CarFront}
+                  label="Brand / model"
+                  value={`${car.brand ?? "-"} ${car.model ?? ""}`.trim()}
+                />
+                <DetailItem
+                  icon={Gauge}
+                  label="Year / seats"
+                  value={`${car.car_year ?? "-"} | ${car.seats ?? "-"} seats`}
+                />
               </div>
-              <p className="text-sm text-gray-700">{car.description ?? "No description provided."}</p>
+              <p className="text-sm text-gray-700">
+                {car.description ?? "No description provided."}
+              </p>
               <div className="flex flex-wrap gap-2">
                 {(car.features ?? []).map((feature: string) => (
                   <Badge key={feature} variant="outline">
                     {feature}
                   </Badge>
                 ))}
-                {(car.features ?? []).length === 0 ? <p className="text-xs text-gray-600">No features selected.</p> : null}
+                {(car.features ?? []).length === 0 ? (
+                  <p className="text-xs text-gray-600">No features selected.</p>
+                ) : null}
               </div>
             </CardContent>
           </Card>
@@ -190,29 +204,43 @@ export default async function AdminListingPreviewPage({ params }: PageProps) {
             <CardContent className="space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-sm text-gray-600">Status</span>
-                <Badge variant={car.approval_status === "pending" ? "secondary" : "outline"}>
+                <Badge
+                  variant={
+                    car.approval_status === "pending" ? "secondary" : "outline"
+                  }
+                >
                   {car.approval_status ?? "pending"}
                 </Badge>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-gray-600">Daily price</span>
-                <span className="text-sm font-semibold text-foreground">{formatCurrency(Number(car.daily_price ?? 0))}</span>
+                <span className="text-sm font-semibold text-foreground">
+                  {formatCurrency(Number(car.daily_price ?? 0))}
+                </span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-gray-600">Delivery fee</span>
-                <span className="text-sm text-foreground">{formatCurrency(Number(car.delivery_fee ?? 0))}</span>
+                <span className="text-sm text-foreground">
+                  {formatCurrency(Number(car.delivery_fee ?? 0))}
+                </span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-gray-600">Insurance fee</span>
-                <span className="text-sm text-foreground">{formatCurrency(Number(car.insurance_fee ?? 0))}</span>
+                <span className="text-sm text-foreground">
+                  {formatCurrency(Number(car.insurance_fee ?? 0))}
+                </span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-gray-600">Deposit</span>
-                <span className="text-sm text-foreground">{formatCurrency(Number(car.deposit_amount ?? 0))}</span>
+                <span className="text-sm text-foreground">
+                  {formatCurrency(Number(car.deposit_amount ?? 0))}
+                </span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-gray-600">Cancellation</span>
-                <span className="text-sm text-foreground capitalize">{car.cancellation_policy ?? "moderate"}</span>
+                <span className="text-sm text-foreground capitalize">
+                  {car.cancellation_policy ?? "moderate"}
+                </span>
               </div>
             </CardContent>
           </Card>
@@ -223,10 +251,18 @@ export default async function AdminListingPreviewPage({ params }: PageProps) {
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="flex items-center gap-3">
-                <ProfileAvatar src={car.owner?.avatar_url} name={car.owner?.full_name ?? "Host"} className="h-12 w-12" />
+                <ProfileAvatar
+                  src={car.owner?.avatar_url}
+                  name={car.owner?.full_name ?? "Host"}
+                  className="h-12 w-12"
+                />
                 <div>
-                  <p className="text-sm font-semibold text-foreground">{car.owner?.full_name ?? "Host"}</p>
-                  <p className="text-xs text-gray-600">{car.owner?.city ?? "No city set"}</p>
+                  <p className="text-sm font-semibold text-foreground">
+                    {car.owner?.full_name ?? "Host"}
+                  </p>
+                  <p className="text-xs text-gray-600">
+                    {car.owner?.city ?? "No city set"}
+                  </p>
                   {hostLabel ? (
                     <p className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-brand">
                       <BadgeCheck className="h-3 w-3" />
@@ -241,7 +277,8 @@ export default async function AdminListingPreviewPage({ params }: PageProps) {
                 emailVerified={car.owner?.email_verified}
               />
               <p className="text-xs text-gray-600">
-                Use this host summary to confirm trust signals before approving the listing.
+                Use this host summary to confirm trust signals before approving
+                the listing.
               </p>
             </CardContent>
           </Card>
@@ -263,8 +300,16 @@ function ProfileAvatar({
   const initials = getInitials(name ?? "User") || "U";
   if (src) {
     return (
-      <div className={`relative shrink-0 overflow-hidden rounded-full border border-border ${className}`}>
-        <Image src={src} alt={name ?? "User"} fill className="object-cover" sizes="48px" />
+      <div
+        className={`relative shrink-0 overflow-hidden rounded-full border border-border ${className}`}
+      >
+        <Image
+          src={src}
+          alt={name ?? "User"}
+          fill
+          className="object-cover"
+          sizes="48px"
+        />
       </div>
     );
   }
@@ -293,7 +338,9 @@ function DetailItem({
         <Icon className="h-4 w-4" />
       </div>
       <div>
-        <p className="text-[11px] uppercase tracking-wide text-gray-500">{label}</p>
+        <p className="text-[11px] uppercase tracking-wide text-gray-500">
+          {label}
+        </p>
         <p className="text-sm font-semibold text-foreground">{value}</p>
       </div>
     </div>

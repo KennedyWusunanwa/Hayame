@@ -60,7 +60,9 @@ export function HostMessageCard({ hostId, hostName, carId }: Props) {
   return (
     <div className="rounded-2xl border border-border bg-background p-4 shadow-soft">
       <p className="text-sm font-semibold text-foreground">Message {label}</p>
-      <p className="mt-1 text-xs text-gray-600">Use a quick prompt to start the chat.</p>
+      <p className="mt-1 text-xs text-gray-600">
+        Use a quick prompt to start the chat.
+      </p>
       <div className="mt-3 flex flex-wrap gap-2">
         {presets.map((preset) => (
           <button
@@ -68,7 +70,9 @@ export function HostMessageCard({ hostId, hostName, carId }: Props) {
             type="button"
             onClick={() => setSelected(preset)}
             className={`rounded-full border px-3 py-1 text-xs font-semibold ${
-              selected === preset ? "border-brand bg-brand text-white" : "border-border text-gray-700"
+              selected === preset
+                ? "border-brand bg-brand text-white"
+                : "border-border text-gray-700"
             }`}
           >
             {preset}
@@ -79,15 +83,28 @@ export function HostMessageCard({ hostId, hostName, carId }: Props) {
       <div className="mt-3 flex flex-wrap gap-2">
         {userId ? (
           <>
-            <Button size="sm" onClick={() => startConversation(true)} disabled={sending}>
+            <Button
+              size="sm"
+              onClick={() => startConversation(true)}
+              disabled={sending}
+            >
               {sending ? "Opening..." : "Send message"}
             </Button>
-            <Button size="sm" variant="outline" onClick={() => startConversation(false)} disabled={sending}>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => startConversation(false)}
+              disabled={sending}
+            >
               Chat without message
             </Button>
           </>
         ) : (
-          <Button size="sm" variant="outline" onClick={() => router.push("/auth/login")}>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => router.push("/auth/login")}
+          >
             Sign in to message
           </Button>
         )}

@@ -6,6 +6,7 @@ Source of truth: current routes and API handlers in this repository (`src/app/**
 ## 1) Product goal
 
 Build a fully functional iOS/Android app for Hayame that supports:
+
 - Guest flows: discover, book, pay, message, favorites, profile.
 - Host flows: onboarding, listing creation/editing, availability, booking approvals, earnings, reviews.
 - Optional admin flows (recommended web-only first).
@@ -115,6 +116,7 @@ Recommendation: keep these as web pages and open in in-app browser when needed.
 ## 5.1 Auth and account
 
 ### Login
+
 - Route parity: `/auth/login`
 - Purpose: sign in existing users.
 - Inputs: email, password, show/hide password.
@@ -122,6 +124,7 @@ Recommendation: keep these as web pages and open in in-app browser when needed.
 - Failure: inline error.
 
 ### Signup
+
 - Route parity: `/auth/signup`
 - Purpose: create account.
 - Inputs: first name, last name, email, password, region, city, optional avatar.
@@ -129,6 +132,7 @@ Recommendation: keep these as web pages and open in in-app browser when needed.
 - Success: show verification guidance, navigate to login.
 
 ### Profile
+
 - Route parity: `/dashboard/profile`, `/host/profile`
 - Purpose: manage name, username, phone, city, avatar.
 - Actions: update profile fields and avatar.
@@ -136,62 +140,74 @@ Recommendation: keep these as web pages and open in in-app browser when needed.
 ## 5.2 Discovery and booking
 
 ### Home
+
 - Route parity: `/`
 - Purpose: entry, search CTA, featured cars, trust signals.
 - Actions: quick search to Explore.
 
 ### Explore
+
 - Route parity: `/explore`
 - Purpose: list cars with filters and sorting.
 - Filters: region/city, car type, brand/model, fuel, transmission, seats, year, price, instant book, delivery, AC, rating, host type.
 - Actions: open listing, favorite listing.
 
 ### Car Detail
+
 - Route parity: `/cars/[id]`
 - Purpose: gallery, details, host trust, availability, booking widget, messaging, reviews.
 - Actions: favorite, choose dates, set trip-use location, place booking hold, pay via Paystack, start chat, submit review when eligible.
 
 ### Favorites
+
 - Route parity: `/dashboard/favorites` (and host variant `/host/favorites`)
 - Purpose: saved listings and host save analytics.
 
 ### Trips / Bookings
+
 - Route parity: `/dashboard/bookings` and `/host/bookings`
 - Guest actions: view trip status, message host, open dispute.
 - Host actions: approve/reject awaiting_host bookings, message guest.
 
 ### Messages
+
 - Route parity: `/messages`
 - Purpose: conversation list + thread view.
 - Actions: open conversation, send message, unread badge handling, deep link support (`?conversation=`).
 
 ### Reviews
+
 - Route parity: listing-level review form + host reviews page `/host/reviews`
 - Rules: only completed trips can be reviewed; one review per booking per user.
 
 ## 5.3 Host lifecycle
 
 ### Become Host
+
 - Route parity: `/become-host`
 - Inputs: personal info, location, ID type/number, ID front/back uploads, experience, fleet size, note.
 - States: pending, approved, rejected.
 
 ### Host Dashboard
+
 - Route parity: `/host`
 - Purpose: KPIs, urgent awaiting_host bookings, conversion/performance snapshots.
 
 ### Host Cars
+
 - Route parity: `/host/cars`
 - Purpose: inventory list with approval status, availability status, favorite counts.
 - Actions: create, edit, delete listing.
 
 ### Create/Edit Car
+
 - Route parity: `/host/cars/new`, `/host/cars/[id]/edit`
 - Fields: brand/model/year, generated title, location, price, type, transmission, fuel, seats, features, instant book, delivery settings, fees, cancellation policy, description.
 - Photo rules: 5+ recommended, max 7, max 4MB each.
 - Availability management: add blocked windows and recurring day blocks.
 
 ### Host Earnings
+
 - Route parity: `/host/earnings`
 - Purpose: payout trend, payout history, stats.
 
@@ -208,6 +224,7 @@ Recommendation: keep these as web pages and open in in-app browser when needed.
 ## 6.1 Core app endpoints
 
 ### Cars and discovery
+
 - `GET /api/cars`: listing feed with filters/sort + capability metadata.
 - `GET /api/cars/[id]`: single listing.
 - `POST /api/cars`: create listing (host only).
@@ -222,14 +239,17 @@ Recommendation: keep these as web pages and open in in-app browser when needed.
 - `GET /api/locations`: region/city catalog.
 
 ### Favorites
+
 - `GET /api/favorites`: current user's favorites.
 - `POST /api/favorites`: toggle favorite.
 
 ### Conversations and messages
+
 - `POST /api/conversations`: create/find conversation.
 - `POST /api/messages`: send message.
 
 ### Bookings and payments
+
 - `GET /api/bookings`: guest + host booking lists with roles.
 - `POST /api/bookings/hold`: reserve date window before payment.
 - `POST /api/bookings/paystack`: verify payment and finalize booking.
@@ -237,11 +257,13 @@ Recommendation: keep these as web pages and open in in-app browser when needed.
 - `POST /api/bookings`: intentionally disabled for direct booking.
 
 ### Reviews and disputes
+
 - `POST /api/reviews`: submit review for completed trip.
 - `GET /api/disputes`: list disputes linked to current user bookings.
 - `POST /api/disputes`: open dispute.
 
 ### Host onboarding and status
+
 - `GET /api/host-applications`: get latest application.
 - `POST /api/host-applications`: submit application.
 - `GET /api/host-applications/[id]/files?type=front|back`: secure file access.
@@ -249,6 +271,7 @@ Recommendation: keep these as web pages and open in in-app browser when needed.
 - `POST /api/host-activate`: activation gate for approved hosts.
 
 ### Profile bootstrapping
+
 - `POST /api/profiles/upsert`: create/update user profile after signup.
 
 ## 6.2 Optional admin endpoints
@@ -262,6 +285,7 @@ Recommendation: keep these as web pages and open in in-app browser when needed.
 Current API routes use browser cookie sessions (`createSupabaseServerClient` with cookies). Native apps do not automatically send these web cookies.
 
 Before native production, add one of these patterns:
+
 - Preferred: bearer-token auth support on API routes (read `Authorization: Bearer <jwt>` and validate against Supabase).
 - Alternative: create dedicated mobile API/Edge Functions with token auth.
 
@@ -294,17 +318,21 @@ Without this, many routes will return unauthorized from native clients.
 ## 10) Phase plan
 
 ### Phase 0: backend readiness
+
 - Add mobile token auth path for required API routes.
 - Standardize API error format and status codes.
 - Add monitoring for booking/payment/message failures.
 
 ### Phase 1: renter MVP
+
 - Auth, Home, Explore, Car Detail, Favorites, Messages, Bookings, Profile, legal/support.
 
 ### Phase 2: host parity
+
 - Become Host, Host Dashboard, Cars CRUD, availability, host bookings, host earnings, host reviews.
 
 ### Phase 3: admin and growth
+
 - Optional admin native tools, push notification campaigns, analytics funnels, SEO page in-app webviews.
 
 ## 11) Risks and controls

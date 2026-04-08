@@ -1,6 +1,8 @@
 package com.hayame.app.ui.navigation
 
 import android.Manifest
+import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -23,6 +25,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -79,6 +82,8 @@ fun HayameNavApp(
     val bootstrapping by viewModel.bootstrapping.collectAsState()
     val snackbarMessage by viewModel.snackbar.collectAsState()
     val authPrompt by viewModel.authPrompt.collectAsState()
+    val activeAnnouncement by viewModel.activeAnnouncement.collectAsState()
+    val context = LocalContext.current
 
     var pendingProtectedRoute by rememberSaveable { mutableStateOf<String?>(null) }
     var authRouteOverride by rememberSaveable { mutableStateOf<String?>(null) }
@@ -153,6 +158,41 @@ fun HayameNavApp(
             launchSingleTop = true
         }
         onConversationConsumed()
+    }
+
+    activeAnnouncement?.let { announcement ->
+        val ctaUrl = announcement.cta_url?.takeIf { it.isNotBlank() }
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissActiveAnnouncement() },
+            title = { Text(announcement.title ?: "Hayame") },
+            text = { Text(announcement.body ?: "") },
+            confirmButton = {
+                if (ctaUrl != null) {
+                    TextButton(
+                        onClick = {
+                            runCatching {
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(ctaUrl)).apply {
+                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                }
+                                context.startActivity(intent)
+                            }
+                            viewModel.dismissActiveAnnouncement()
+                        },
+                    ) {
+                        Text(announcement.cta_label ?: "Open")
+                    }
+                } else {
+                    Button(onClick = { viewModel.dismissActiveAnnouncement() }) {
+                        Text("OK")
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.dismissActiveAnnouncement() }) {
+                    Text("Dismiss")
+                }
+            },
+        )
     }
 
     Scaffold(

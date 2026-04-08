@@ -23,7 +23,8 @@ class HayameFirebaseMessagingService : FirebaseMessagingService() {
 
     override fun onMessageReceived(message: RemoteMessage) {
         super.onMessageReceived(message)
-        ensureChannel()
+        val category = message.data["notificationCategory"].orEmpty()
+        val channelId = ensureChannel(category)
 
         val title = message.notification?.title ?: message.data["title"] ?: "Hayame"
         val body = message.notification?.body ?: message.data["body"] ?: "You have a new update."
@@ -43,7 +44,7 @@ class HayameFirebaseMessagingService : FirebaseMessagingService() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
 
-        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
+        val notification = NotificationCompat.Builder(this, channelId)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle(title)
             .setContentText(body)
@@ -56,23 +57,55 @@ class HayameFirebaseMessagingService : FirebaseMessagingService() {
             .notify((System.currentTimeMillis() % Int.MAX_VALUE).toInt(), notification)
     }
 
-    private fun ensureChannel() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+    private fun ensureChannel(category: String): String {
+        val channelId = channelIdFor(category)
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return channelId
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        val existing = manager.getNotificationChannel(CHANNEL_ID)
-        if (existing != null) return
-
-        val channel = NotificationChannel(
-            CHANNEL_ID,
-            "Hayame updates",
-            NotificationManager.IMPORTANCE_HIGH,
-        ).apply {
-            description = "Booking, message and host updates"
+        if (manager.getNotificationChannel(channelId) == null) {
+            manager.createNotificationChannel(
+                NotificationChannel(
+                    channelId,
+                    channelNameFor(category),
+                    NotificationManager.IMPORTANCE_HIGH,
+                ).apply {
+                    description = channelDescriptionFor(category)
+                },
+            )
         }
-        manager.createNotificationChannel(channel)
+        return channelId
     }
 
     companion object {
         const val CHANNEL_ID = "hayame_updates"
+
+        private fun channelIdFor(category: String): String {
+            return when (category.trim().lowercase()) {
+                "messages" -> "hayame_messages"
+                "booking_updates" -> "hayame_bookings"
+                "news_announcements" -> "hayame_news"
+                "account_security" -> "hayame_account"
+                else -> CHANNEL_ID
+            }
+        }
+
+        private fun channelNameFor(category: String): String {
+            return when (category.trim().lowercase()) {
+                "messages" -> "Messages"
+                "booking_updates" -> "Trips & bookings"
+                "news_announcements" -> "News & announcements"
+                "account_security" -> "Account & security"
+                else -> "Hayame updates"
+            }
+        }
+
+        private fun channelDescriptionFor(category: String): String {
+            return when (category.trim().lowercase()) {
+                "messages" -> "New messages and conversation replies"
+                "booking_updates" -> "Trip approvals, confirmations, and booking changes"
+                "news_announcements" -> "Optional Hayame news and announcement updates"
+                "account_security" -> "Identity, host application, and critical account notices"
+                else -> "General Hayame updates"
+            }
+        }
     }
 }

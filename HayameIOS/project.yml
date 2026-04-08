@@ -52,8 +52,6 @@ targets:
         UIBackgroundModes:
           - fetch
           - remote-notification
-        NSAppTransportSecurity:
-          NSAllowsArbitraryLoads: true
 schemes:
   Hayame:
     build:

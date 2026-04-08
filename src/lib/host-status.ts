@@ -18,8 +18,12 @@ export async function getHostStatus(
     supabase.from("profiles").select("is_host").eq("id", userId).maybeSingle(),
   ]);
 
-  const profileIsHost = Boolean((profileResult.data as { is_host?: boolean } | null)?.is_host);
-  const status = (applicationResult.data as { status?: HostApplicationStatus } | null)?.status ?? null;
+  const profileIsHost = Boolean(
+    (profileResult.data as { is_host?: boolean } | null)?.is_host,
+  );
+  const status =
+    (applicationResult.data as { status?: HostApplicationStatus } | null)
+      ?.status ?? null;
 
   // If profiles.is_host is already true, keep host access even if the latest application row is stale/pending.
   if (profileIsHost) {

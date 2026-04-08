@@ -33,7 +33,9 @@ export function GET() {
 export async function POST(req: Request) {
   try {
     const body = (await req.json().catch(() => ({}))) as Body;
-    const email = String(body.email ?? "").trim().toLowerCase();
+    const email = String(body.email ?? "")
+      .trim()
+      .toLowerCase();
     const password = String(body.password ?? "");
     const firstName = String(body.first_name ?? "").trim();
     const lastName = String(body.last_name ?? "").trim();
@@ -42,7 +44,10 @@ export async function POST(req: Request) {
     const fullName = [firstName, lastName].filter(Boolean).join(" ").trim();
 
     if (!email || !password) {
-      return NextResponse.json({ message: "email and password are required" }, { status: 400 });
+      return NextResponse.json(
+        { message: "email and password are required" },
+        { status: 400 },
+      );
     }
 
     const supabase = await createClient();
@@ -62,7 +67,10 @@ export async function POST(req: Request) {
     });
 
     if (error || !data.user) {
-      return NextResponse.json({ message: error?.message ?? "Unable to sign up" }, { status: 400 });
+      return NextResponse.json(
+        { message: error?.message ?? "Unable to sign up" },
+        { status: 400 },
+      );
     }
 
     return NextResponse.json({
@@ -72,6 +80,9 @@ export async function POST(req: Request) {
       requires_email_confirmation: !data.session,
     });
   } catch (error: any) {
-    return NextResponse.json({ message: error?.message ?? "Unable to sign up" }, { status: 400 });
+    return NextResponse.json(
+      { message: error?.message ?? "Unable to sign up" },
+      { status: 400 },
+    );
   }
 }

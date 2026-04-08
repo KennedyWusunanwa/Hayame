@@ -88,7 +88,9 @@ export function AvailabilityForm({ carId }: Props) {
   return (
     <div className="space-y-4 rounded-lg border border-border bg-white p-4">
       <div className="space-y-3">
-        <p className="text-sm font-semibold text-foreground">Block specific dates</p>
+        <p className="text-sm font-semibold text-foreground">
+          Block specific dates
+        </p>
         <DateRangePicker
           startDate={startDate}
           endDate={endDate}
@@ -98,16 +100,25 @@ export function AvailabilityForm({ carId }: Props) {
           }}
         />
         <label className="flex items-center gap-2 text-sm text-gray-700">
-          <Checkbox checked={available} onChange={() => setAvailable((v) => !v)} />
+          <Checkbox
+            checked={available}
+            onChange={() => setAvailable((v) => !v)}
+          />
           Mark as available (uncheck to block these dates)
         </label>
-        <Button type="button" onClick={submitRange} disabled={saving || !startDate || !endDate}>
+        <Button
+          type="button"
+          onClick={submitRange}
+          disabled={saving || !startDate || !endDate}
+        >
           {saving ? "Saving..." : "Save date window"}
         </Button>
       </div>
 
       <div className="space-y-3 border-t border-border/60 pt-3">
-        <p className="text-sm font-semibold text-foreground">Weekly blocks (never available)</p>
+        <p className="text-sm font-semibold text-foreground">
+          Weekly blocks (never available)
+        </p>
         <div className="flex flex-wrap gap-2">
           {weekdays.map((day) => {
             const active = repeatDays.includes(day.key);
@@ -118,7 +129,9 @@ export function AvailabilityForm({ carId }: Props) {
                 className={`rounded-full border px-3 py-1 text-sm ${active ? "border-primary bg-primary/10 text-primary" : "border-border text-gray-700"}`}
                 onClick={() => {
                   setRepeatDays((prev) =>
-                    prev.includes(day.key) ? prev.filter((d) => d !== day.key) : [...prev, day.key],
+                    prev.includes(day.key)
+                      ? prev.filter((d) => d !== day.key)
+                      : [...prev, day.key],
                   );
                 }}
               >
@@ -140,7 +153,12 @@ export function AvailabilityForm({ carId }: Props) {
             <option value={180}>180 days</option>
           </select>
         </label>
-        <Button type="button" variant="secondary" onClick={submitRecurring} disabled={saving || repeatDays.length === 0}>
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={submitRecurring}
+          disabled={saving || repeatDays.length === 0}
+        >
           {saving ? "Saving..." : "Save weekly blocks"}
         </Button>
       </div>

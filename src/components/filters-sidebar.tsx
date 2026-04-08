@@ -18,7 +18,12 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 
-export type SortBy = "price_low" | "price_high" | "most_booked" | "top_rated" | "new_listings";
+export type SortBy =
+  | "price_low"
+  | "price_high"
+  | "most_booked"
+  | "top_rated"
+  | "new_listings";
 
 export type Filters = {
   query?: string;
@@ -73,7 +78,11 @@ const DEFAULT_CAPABILITIES: FilterCapabilities = {
   hostType: true,
 };
 
-export function FiltersSidebar({ filters, onChange, capabilities = {} }: Props) {
+export function FiltersSidebar({
+  filters,
+  onChange,
+  capabilities = {},
+}: Props) {
   const { regions, citiesByRegion } = useLocations();
   const { makes } = useCarCatalog();
   const support = { ...DEFAULT_CAPABILITIES, ...capabilities };
@@ -82,7 +91,7 @@ export function FiltersSidebar({ filters, onChange, capabilities = {} }: Props) 
   const maxPriceValue = filters.maxPrice ?? maxPriceFallback;
 
   const cities = useMemo(
-    () => (filters.region ? citiesByRegion[filters.region] ?? [] : []),
+    () => (filters.region ? (citiesByRegion[filters.region] ?? []) : []),
     [filters.region, citiesByRegion],
   );
   const models = useMemo(() => {
@@ -100,7 +109,9 @@ export function FiltersSidebar({ filters, onChange, capabilities = {} }: Props) 
         <label className="text-sm font-semibold text-gray-800">Region</label>
         <Select
           value={filters.region ?? ""}
-          onChange={(e) => onChange({ ...filters, region: e.target.value, city: "" })}
+          onChange={(e) =>
+            onChange({ ...filters, region: e.target.value, city: "" })
+          }
         >
           <option value="">Any</option>
           {regions.map((region) => (
@@ -143,7 +154,9 @@ export function FiltersSidebar({ filters, onChange, capabilities = {} }: Props) 
         <label className="text-sm font-semibold text-gray-800">Brand</label>
         <Select
           value={filters.brand ?? ""}
-          onChange={(e) => onChange({ ...filters, brand: e.target.value, model: "" })}
+          onChange={(e) =>
+            onChange({ ...filters, brand: e.target.value, model: "" })
+          }
         >
           <option value="">Any</option>
           {makes.map((make) => (
@@ -182,10 +195,16 @@ export function FiltersSidebar({ filters, onChange, capabilities = {} }: Props) 
             </option>
           ))}
         </Select>
-        {!support.fuelType ? <p className="text-xs text-amber-700">Fuel filter wiring coming soon.</p> : null}
+        {!support.fuelType ? (
+          <p className="text-xs text-amber-700">
+            Fuel filter wiring coming soon.
+          </p>
+        ) : null}
       </div>
       <div className="space-y-3 rounded-lg border border-border bg-gray-50 p-3">
-        <label className="text-sm font-semibold text-gray-800">Price range (GHS)</label>
+        <label className="text-sm font-semibold text-gray-800">
+          Price range (GHS)
+        </label>
         <input
           type="range"
           min={50}
@@ -203,7 +222,9 @@ export function FiltersSidebar({ filters, onChange, capabilities = {} }: Props) 
         />
         <div className="grid grid-cols-2 gap-3">
           <div className="flex flex-col gap-2">
-            <label className="text-sm font-semibold text-gray-800">Min price</label>
+            <label className="text-sm font-semibold text-gray-800">
+              Min price
+            </label>
             <Input
               type="number"
               placeholder="200"
@@ -217,7 +238,9 @@ export function FiltersSidebar({ filters, onChange, capabilities = {} }: Props) 
             />
           </div>
           <div className="flex flex-col gap-2">
-            <label className="text-sm font-semibold text-gray-800">Max price</label>
+            <label className="text-sm font-semibold text-gray-800">
+              Max price
+            </label>
             <Input
               type="number"
               placeholder="1500"
@@ -234,10 +257,17 @@ export function FiltersSidebar({ filters, onChange, capabilities = {} }: Props) 
       </div>
       <div className="grid grid-cols-2 gap-3 rounded-lg border border-border bg-white p-3">
         <div className="flex flex-col gap-2">
-          <label className="text-sm font-semibold text-gray-800">Transmission</label>
+          <label className="text-sm font-semibold text-gray-800">
+            Transmission
+          </label>
           <Select
             value={filters.transmission ?? ""}
-            onChange={(e) => onChange({ ...filters, transmission: e.target.value as Filters["transmission"] })}
+            onChange={(e) =>
+              onChange({
+                ...filters,
+                transmission: e.target.value as Filters["transmission"],
+              })
+            }
             disabled={!support.transmission}
           >
             <option value="">Any</option>
@@ -249,7 +279,12 @@ export function FiltersSidebar({ filters, onChange, capabilities = {} }: Props) 
           <label className="text-sm font-semibold text-gray-800">Seats</label>
           <Select
             value={filters.seatsCapacity ?? ""}
-            onChange={(e) => onChange({ ...filters, seatsCapacity: e.target.value as Filters["seatsCapacity"] })}
+            onChange={(e) =>
+              onChange({
+                ...filters,
+                seatsCapacity: e.target.value as Filters["seatsCapacity"],
+              })
+            }
             disabled={!support.seats}
           >
             <option value="">Any</option>
@@ -263,7 +298,9 @@ export function FiltersSidebar({ filters, onChange, capabilities = {} }: Props) 
       </div>
       <div className="grid grid-cols-2 gap-3 rounded-lg border border-border bg-white p-3">
         <div className="flex flex-col gap-2">
-          <label className="text-sm font-semibold text-gray-800">Min year</label>
+          <label className="text-sm font-semibold text-gray-800">
+            Min year
+          </label>
           <Input
             type="number"
             min={2000}
@@ -279,7 +316,9 @@ export function FiltersSidebar({ filters, onChange, capabilities = {} }: Props) 
           />
         </div>
         <div className="flex flex-col gap-2">
-          <label className="text-sm font-semibold text-gray-800">Max year</label>
+          <label className="text-sm font-semibold text-gray-800">
+            Max year
+          </label>
           <Input
             type="number"
             min={2000}
@@ -295,7 +334,11 @@ export function FiltersSidebar({ filters, onChange, capabilities = {} }: Props) 
           />
         </div>
       </div>
-      {!support.year ? <p className="-mt-3 text-xs text-amber-700">Car year filter coming soon.</p> : null}
+      {!support.year ? (
+        <p className="-mt-3 text-xs text-amber-700">
+          Car year filter coming soon.
+        </p>
+      ) : null}
       <div className="grid gap-2 rounded-lg border border-border bg-white p-3">
         {support.instantBook || Boolean(filters.instantBook) ? (
           <label className="flex items-center justify-between gap-3 text-sm text-gray-700">
@@ -308,10 +351,14 @@ export function FiltersSidebar({ filters, onChange, capabilities = {} }: Props) 
           </label>
         ) : null}
         <label className="flex items-center justify-between gap-3 text-sm text-gray-700">
-          <span className="font-semibold text-gray-800">Delivery available</span>
+          <span className="font-semibold text-gray-800">
+            Delivery available
+          </span>
           <Checkbox
             checked={Boolean(filters.deliveryAvailable)}
-            onChange={(e) => updateCheckbox("deliveryAvailable", e.target.checked)}
+            onChange={(e) =>
+              updateCheckbox("deliveryAvailable", e.target.checked)
+            }
             disabled={!support.deliveryAvailable}
           />
         </label>
@@ -319,20 +366,28 @@ export function FiltersSidebar({ filters, onChange, capabilities = {} }: Props) 
           <span className="font-semibold text-gray-800">Air conditioning</span>
           <Checkbox
             checked={Boolean(filters.airConditioning)}
-            onChange={(e) => updateCheckbox("airConditioning", e.target.checked)}
+            onChange={(e) =>
+              updateCheckbox("airConditioning", e.target.checked)
+            }
             disabled={!support.airConditioning}
           />
         </label>
       </div>
       {!support.deliveryAvailable ? (
-        <p className="-mt-3 text-xs text-amber-700">Delivery filter wiring coming soon.</p>
+        <p className="-mt-3 text-xs text-amber-700">
+          Delivery filter wiring coming soon.
+        </p>
       ) : null}
       {!support.airConditioning ? (
-        <p className="-mt-3 text-xs text-amber-700">Air conditioning flag coming soon.</p>
+        <p className="-mt-3 text-xs text-amber-700">
+          Air conditioning flag coming soon.
+        </p>
       ) : null}
       <div className="grid grid-cols-2 gap-3 rounded-lg border border-border bg-white p-3">
         <div className="flex flex-col gap-2">
-          <label className="text-sm font-semibold text-gray-800">Min rating</label>
+          <label className="text-sm font-semibold text-gray-800">
+            Min rating
+          </label>
           <Select
             value={String(filters.minRating ?? "")}
             onChange={(e) =>
@@ -352,10 +407,17 @@ export function FiltersSidebar({ filters, onChange, capabilities = {} }: Props) 
           </Select>
         </div>
         <div className="flex flex-col gap-2">
-          <label className="text-sm font-semibold text-gray-800">Host type</label>
+          <label className="text-sm font-semibold text-gray-800">
+            Host type
+          </label>
           <Select
             value={filters.hostType ?? ""}
-            onChange={(e) => onChange({ ...filters, hostType: e.target.value as Filters["hostType"] })}
+            onChange={(e) =>
+              onChange({
+                ...filters,
+                hostType: e.target.value as Filters["hostType"],
+              })
+            }
             disabled={!support.hostType}
           >
             <option value="">Any</option>
@@ -364,15 +426,26 @@ export function FiltersSidebar({ filters, onChange, capabilities = {} }: Props) 
           </Select>
         </div>
       </div>
-      {!support.rating ? <p className="-mt-3 text-xs text-amber-700">Rating filter coming soon.</p> : null}
-      {!support.hostType ? <p className="-mt-3 text-xs text-amber-700">Host level filter coming soon.</p> : null}
+      {!support.rating ? (
+        <p className="-mt-3 text-xs text-amber-700">
+          Rating filter coming soon.
+        </p>
+      ) : null}
+      {!support.hostType ? (
+        <p className="-mt-3 text-xs text-amber-700">
+          Host level filter coming soon.
+        </p>
+      ) : null}
       <div className="flex flex-col gap-3">
         <label className="text-sm font-semibold text-gray-800">Features</label>
         <div className="grid grid-cols-2 gap-2 text-sm">
           {featureOptions.map((feature) => {
             const checked = filters.features?.includes(feature) ?? false;
             return (
-              <label key={feature} className="flex items-center gap-2 text-gray-700">
+              <label
+                key={feature}
+                className="flex items-center gap-2 text-gray-700"
+              >
                 <Checkbox
                   checked={checked}
                   onChange={() => {

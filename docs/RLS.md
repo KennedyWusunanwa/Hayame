@@ -3,6 +3,7 @@
 All tables are protected with row-level security. Service role key is **only** used for local seeding (`db/seed.ts`) and must never be exposed to the browser. Application code uses the anon key with session cookies so RLS enforces ownership.
 
 ## Tables & policies
+
 - **profiles**
   - `select/update`: `id = auth.uid()`.
   - `select` (host contact reveal): renters can read host profile when a qualifying booking exists
@@ -29,10 +30,12 @@ All tables are protected with row-level security. Service role key is **only** u
   - Update/Delete: author only.
 
 ## Storage
+
 - Bucket: `car-photos` (public read, owner write).
   - Select: `bucket_id = 'car-photos'`.
   - Insert/Update/Delete: `bucket_id = 'car-photos' AND owner = auth.uid()` (set owner on upload).
 
 ## Auth
+
 - Supabase email/password auth via `@supabase/ssr`. Dashboard routes call `requireUser` to enforce authentication on the server.
 - Route handlers run with the anon key + user session so RLS is authoritative; no service key is used in API handlers.

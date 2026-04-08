@@ -1,5 +1,12 @@
 import Link from "next/link";
-import { BadgeCheck, CreditCard, Crown, Shield, Truck, Zap } from "lucide-react";
+import {
+  BadgeCheck,
+  CreditCard,
+  Crown,
+  Shield,
+  Truck,
+  Zap,
+} from "lucide-react";
 
 const items = [
   { label: "Verified identity checks", Icon: BadgeCheck },

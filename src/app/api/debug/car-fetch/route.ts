@@ -3,10 +3,17 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/database.types";
 
 export async function GET(req: NextRequest) {
+  if (process.env.ENABLE_DEBUG_ROUTES !== "1") {
+    return NextResponse.json({ message: "Not found" }, { status: 404 });
+  }
+
   const url = new URL(req.url);
   const id = url.searchParams.get("id");
   if (!id) {
-    return NextResponse.json({ error: "Missing id query param" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Missing id query param" },
+      { status: 400 },
+    );
   }
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -24,18 +31,28 @@ export async function GET(req: NextRequest) {
   if (supabaseUrl && supabaseAnonKey) {
     try {
       const params = new URLSearchParams({ id: `eq.${id}`, select: "*" });
-      const res = await fetch(`${supabaseUrl}/rest/v1/cars?${params.toString()}`, {
-        headers: {
-          apikey: supabaseAnonKey,
-          Authorization: `Bearer ${supabaseAnonKey}`,
+      const res = await fetch(
+        `${supabaseUrl}/rest/v1/cars?${params.toString()}`,
+        {
+          headers: {
+            apikey: supabaseAnonKey,
+            Authorization: `Bearer ${supabaseAnonKey}`,
+          },
+          cache: "no-store",
         },
-        cache: "no-store",
-      });
-      const data = (await res.json()) as Database["public"]["Tables"]["cars"]["Row"][] | { message?: string };
+      );
+      const data = (await res.json()) as
+        | Database["public"]["Tables"]["cars"]["Row"][]
+        | { message?: string };
       if (Array.isArray(data)) {
         result.rest = { ok: res.ok, status: res.status, count: data.length };
       } else {
-        result.rest = { ok: res.ok, status: res.status, count: 0, error: (data as any)?.message };
+        result.rest = {
+          ok: res.ok,
+          status: res.status,
+          count: 0,
+          error: (data as any)?.message,
+        };
       }
     } catch (error: any) {
       result.rest = { ok: false, error: error?.message ?? "REST fetch failed" };
@@ -45,14 +62,22 @@ export async function GET(req: NextRequest) {
   // Supabase client check
   try {
     const supabase = await createSupabaseServerClient();
-    const { data, error } = await supabase.from("cars").select("*").eq("id", id).maybeSingle();
+    const { data, error } = await supabase
+      .from("cars")
+      .select("*")
+      .eq("id", id)
+      .maybeSingle();
     result.client = {
       ok: !error,
       found: Boolean(data),
       error: error?.message,
     };
   } catch (error: any) {
-    result.client = { ok: false, found: false, error: error?.message ?? "Client fetch failed" };
+    result.client = {
+      ok: false,
+      found: false,
+      error: error?.message ?? "Client fetch failed",
+    };
   }
 
   return NextResponse.json(result);

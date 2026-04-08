@@ -47,34 +47,45 @@ export default function LoginPage() {
     <div className="mx-auto flex min-h-[70vh] max-w-5xl items-center justify-center px-6 py-12">
       <Card className="w-full max-w-md border border-border shadow-soft">
         <CardHeader>
-          <CardTitle className="text-2xl font-semibold text-foreground">Log in</CardTitle>
+          <CardTitle className="text-2xl font-semibold text-foreground">
+            Log in
+          </CardTitle>
           <p className="text-sm text-gray-600">Welcome back to Hayame.</p>
         </CardHeader>
         <CardContent>
           <form className="space-y-4" onSubmit={handleSubmit(onSubmit)}>
             <div className="space-y-2">
-              <label className="text-sm font-semibold text-gray-700">Email</label>
-              <Input type="email" placeholder="you@example.com" {...register("email")} required />
-            </div>
-          <div className="space-y-2">
-            <label className="text-sm font-semibold text-gray-700">Password</label>
-            <div className="relative">
+              <label className="text-sm font-semibold text-gray-700">
+                Email
+              </label>
               <Input
-                type={showPassword ? "text" : "password"}
-                placeholder="••••••••"
-                {...register("password")}
+                type="email"
+                placeholder="you@example.com"
+                {...register("email")}
                 required
               />
-              <button
-                type="button"
-                onClick={() => setShowPassword((p) => !p)}
-                className="absolute inset-y-0 right-3 text-xs font-semibold text-gray-600"
-              >
-                {showPassword ? "Hide" : "Show"}
-              </button>
             </div>
-          </div>
-          {error ? <p className="text-sm text-red-600">{error}</p> : null}
+            <div className="space-y-2">
+              <label className="text-sm font-semibold text-gray-700">
+                Password
+              </label>
+              <div className="relative">
+                <Input
+                  type={showPassword ? "text" : "password"}
+                  placeholder="••••••••"
+                  {...register("password")}
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((p) => !p)}
+                  className="absolute inset-y-0 right-3 text-xs font-semibold text-gray-600"
+                >
+                  {showPassword ? "Hide" : "Show"}
+                </button>
+              </div>
+            </div>
+            {error ? <p className="text-sm text-red-600">{error}</p> : null}
             <Button className="w-full" type="submit" disabled={isSubmitting}>
               {isSubmitting ? "Signing in..." : "Log in"}
             </Button>

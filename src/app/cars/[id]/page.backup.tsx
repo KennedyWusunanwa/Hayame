@@ -3,7 +3,6 @@ import Link from "next/link";
 import { format } from "date-fns";
 import { MapPin, Shield, Star } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { headers } from "next/headers";
 import { BookingWidget } from "@/components/booking-widget";
 import { FavoriteButton } from "@/components/favorite-button";
 import { ImageGallery } from "@/components/image-gallery";
@@ -80,7 +79,10 @@ export default async function CarDetailPage({ params }: PageProps) {
     ]),
   );
   const addedDate = car.created_at ? new Date(car.created_at) : null;
-  const addedLabel = addedDate && !isNaN(addedDate.getTime()) ? format(addedDate, "MMM d, yyyy") : null;
+  const addedLabel =
+    addedDate && !isNaN(addedDate.getTime())
+      ? format(addedDate, "MMM d, yyyy")
+      : null;
   const featureItems = (car.features ?? []).map((feature) => ({
     label: feature,
     Icon: getFeatureIcon(feature),
@@ -124,13 +126,25 @@ export default async function CarDetailPage({ params }: PageProps) {
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-3">
-            <p className="text-sm font-semibold text-brand">Car in {car.city ?? "ΓÇö"}</p>
-            {car.car_type ? <Badge variant="muted">{car.car_type}</Badge> : null}
-            {addedLabel ? <Badge variant="outline">Added {addedLabel}</Badge> : null}
+            <p className="text-sm font-semibold text-brand">
+              Car in {car.city ?? "ΓÇö"}
+            </p>
+            {car.car_type ? (
+              <Badge variant="muted">{car.car_type}</Badge>
+            ) : null}
+            {addedLabel ? (
+              <Badge variant="outline">Added {addedLabel}</Badge>
+            ) : null}
           </div>
           <div className="flex items-start gap-3">
-            <h1 className="text-3xl font-semibold text-foreground">{car.title}</h1>
-            <FavoriteButton carId={car.id} initialIsFavorited={isFavorite} className="mt-1" />
+            <h1 className="text-3xl font-semibold text-foreground">
+              {car.title}
+            </h1>
+            <FavoriteButton
+              carId={car.id}
+              initialIsFavorited={isFavorite}
+              className="mt-1"
+            />
           </div>
           <div className="flex flex-wrap items-center gap-3 text-sm text-gray-700">
             <span className="flex items-center gap-1">
@@ -140,14 +154,18 @@ export default async function CarDetailPage({ params }: PageProps) {
             {car.rating ? (
               <span className="flex items-center gap-1 text-amber-600">
                 <Star className="h-4 w-4" /> {car.rating}{" "}
-                {car.reviews ? <span className="text-gray-600">({car.reviews} reviews)</span> : null}
+                {car.reviews ? (
+                  <span className="text-gray-600">({car.reviews} reviews)</span>
+                ) : null}
               </span>
             ) : null}
           </div>
         </div>
         <div className="rounded-xl border border-border bg-white px-4 py-3 text-right shadow-sm">
           <p className="text-xs uppercase text-gray-500">Daily rate</p>
-          <p className="text-2xl font-semibold text-foreground">{formatCurrency(car.daily_price)}</p>
+          <p className="text-2xl font-semibold text-foreground">
+            {formatCurrency(car.daily_price)}
+          </p>
         </div>
       </div>
 
@@ -161,7 +179,12 @@ export default async function CarDetailPage({ params }: PageProps) {
             </CardHeader>
             <CardContent className="grid gap-4 sm:grid-cols-2">
               {details.map((detail) => (
-                <DetailRow key={detail.label} label={detail.label} value={detail.value} Icon={detail.icon} />
+                <DetailRow
+                  key={detail.label}
+                  label={detail.label}
+                  value={detail.value}
+                  Icon={detail.icon}
+                />
               ))}
             </CardContent>
           </Card>
@@ -210,7 +233,10 @@ export default async function CarDetailPage({ params }: PageProps) {
         </div>
 
         <div className="space-y-4 lg:sticky lg:top-6">
-          <AvailabilitySummary availability={availability} isAvailable={car.is_available} />
+          <AvailabilitySummary
+            availability={availability}
+            isAvailable={car.is_available}
+          />
           <BookingWidget carId={car.id} dailyPrice={car.daily_price} />
           <HostCard owner={car.owner} />
         </div>
@@ -407,28 +433,39 @@ function AvailabilitySummary({
                 className="flex items-center justify-between rounded-lg border border-border/70 px-3 py-2"
               >
                 {(() => {
-                  const start = slot.start_date ? new Date(slot.start_date) : null;
+                  const start = slot.start_date
+                    ? new Date(slot.start_date)
+                    : null;
                   const end = slot.end_date ? new Date(slot.end_date) : null;
                   const validRange =
-                    start && end && !Number.isNaN(start.getTime()) && !Number.isNaN(end.getTime());
+                    start &&
+                    end &&
+                    !Number.isNaN(start.getTime()) &&
+                    !Number.isNaN(end.getTime());
                   const label = validRange
                     ? `${format(start, "MMM d")} - ${format(end, "MMM d")}`
                     : "Dates TBD";
                   return (
                     <div>
                       <p className="text-xs uppercase text-gray-500">Window</p>
-                      <p className="text-sm font-semibold text-foreground">{label}</p>
+                      <p className="text-sm font-semibold text-foreground">
+                        {label}
+                      </p>
                     </div>
                   );
                 })()}
-                <Badge variant={slot.available === false ? "outline" : "secondary"}>
+                <Badge
+                  variant={slot.available === false ? "outline" : "secondary"}
+                >
                   {slot.available === false ? "Unavailable" : "Open"}
                 </Badge>
               </div>
             ))}
           </div>
         ) : (
-          <p className="text-sm text-gray-600">No availability windows posted yet.</p>
+          <p className="text-sm text-gray-600">
+            No availability windows posted yet.
+          </p>
         )}
       </CardContent>
     </Card>
@@ -445,21 +482,25 @@ function HostCard({ owner }: { owner?: Owner | null }) {
       <CardContent className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="relative h-12 w-12 overflow-hidden rounded-full border border-border">
-            <Image src={avatar} alt={owner?.full_name ?? "Host"} fill className="object-cover" sizes="60px" />
+            <Image
+              src={avatar}
+              alt={owner?.full_name ?? "Host"}
+              fill
+              className="object-cover"
+              sizes="60px"
+            />
           </div>
           <div>
-            <p className="text-sm font-semibold text-foreground">{owner?.full_name ?? "Host"}</p>
+            <p className="text-sm font-semibold text-foreground">
+              {owner?.full_name ?? "Host"}
+            </p>
             <p className="flex items-center gap-1 text-xs text-gray-600">
-              <Shield className="h-3 w-3 text-primary" /> {owner?.city ?? "Location TBD"}
+              <Shield className="h-3 w-3 text-primary" />{" "}
+              {owner?.city ?? "Location TBD"}
             </p>
           </div>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          asChild
-          className="shrink-0"
-        >
+        <Button variant="outline" size="sm" asChild className="shrink-0">
           <Link href="#" onClick={(e) => e.preventDefault()}>
             View host
           </Link>
@@ -469,7 +510,15 @@ function HostCard({ owner }: { owner?: Owner | null }) {
   );
 }
 
-function ReviewCard({ name, text, rating }: { name: string; text: string; rating: number }) {
+function ReviewCard({
+  name,
+  text,
+  rating,
+}: {
+  name: string;
+  text: string;
+  rating: number;
+}) {
   return (
     <div className="rounded-lg border border-border bg-white p-3">
       <div className="flex items-center justify-between">
@@ -491,7 +540,9 @@ function NotFoundState() {
       <Card className="border-dashed">
         <CardContent className="space-y-4 py-10 text-center">
           <p className="text-sm font-semibold text-primary">Car not found</p>
-          <p className="text-lg text-foreground">We could not find that car. Try exploring the catalog.</p>
+          <p className="text-lg text-foreground">
+            We could not find that car. Try exploring the catalog.
+          </p>
           <Button asChild>
             <Link href="/explore">Back to explore</Link>
           </Button>

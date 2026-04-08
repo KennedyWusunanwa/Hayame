@@ -15,15 +15,18 @@ export default function PeerToPeerCarRentalGhanaPage() {
       faqs={[
         {
           question: "What is peer-to-peer car rental?",
-          answer: "It allows vehicle owners to list cars for guests to book directly on the platform.",
+          answer:
+            "It allows vehicle owners to list cars for guests to book directly on the platform.",
         },
         {
           question: "How are bookings confirmed?",
-          answer: "Some listings support Instant Book; others are confirmed after host approval.",
+          answer:
+            "Some listings support Instant Book; others are confirmed after host approval.",
         },
         {
           question: "Can hosts manage blocked dates?",
-          answer: "Yes. Hosts can set one-off and recurring availability blocks from the dashboard.",
+          answer:
+            "Yes. Hosts can set one-off and recurring availability blocks from the dashboard.",
         },
       ]}
     />

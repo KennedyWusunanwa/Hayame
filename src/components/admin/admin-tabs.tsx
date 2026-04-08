@@ -42,8 +42,12 @@ export function AdminTabs({ overview, applications }: AdminTabsProps) {
         </div>
       </div>
 
-      <div className={cn(tab === "overview" ? "block" : "hidden", "md:block")}>{overview}</div>
-      <div className={cn(tab === "applications" ? "block" : "hidden", "md:block")}>
+      <div className={cn(tab === "overview" ? "block" : "hidden", "md:block")}>
+        {overview}
+      </div>
+      <div
+        className={cn(tab === "applications" ? "block" : "hidden", "md:block")}
+      >
         {applications}
       </div>
     </div>

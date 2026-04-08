@@ -15,15 +15,18 @@ export default function CheapCarRentalGhanaPage() {
       faqs={[
         {
           question: "How can I find lower-priced cars?",
-          answer: "Use min and max price filters, then sort by Price (Low -> High).",
+          answer:
+            "Use min and max price filters, then sort by Price (Low -> High).",
         },
         {
           question: "Are prices shown per day?",
-          answer: "Yes. Listing cards and booking summaries show daily pricing in GHS.",
+          answer:
+            "Yes. Listing cards and booking summaries show daily pricing in GHS.",
         },
         {
           question: "Are extra fees always included?",
-          answer: "Booking summaries clearly show charged amounts and items marked as coming soon.",
+          answer:
+            "Booking summaries clearly show charged amounts and items marked as coming soon.",
         },
       ]}
     />

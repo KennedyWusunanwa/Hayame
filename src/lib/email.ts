@@ -3,6 +3,7 @@ import { Resend } from "resend";
 
 type SendEmailInput = {
   to: string | string[];
+  replyTo?: string | string[];
   subject: string;
   html: string;
   text?: string;
@@ -13,7 +14,9 @@ const appName = process.env.APP_NAME ?? "Hayame";
 const siteUrl =
   process.env.EMAIL_BASE_URL ??
   process.env.NEXT_PUBLIC_SITE_URL ??
-  (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "https://hayame.vercel.app");
+  (process.env.VERCEL_URL
+    ? `https://${process.env.VERCEL_URL}`
+    : "https://hayame.vercel.app");
 
 function escapeHtml(input: string) {
   return input
@@ -34,7 +37,9 @@ function withOfficialFooter(html: string, text: string) {
   const closing = "</div>";
   const idx = html.lastIndexOf(closing);
   const nextHtml =
-    idx === -1 ? `${html}${footerHtml}` : `${html.slice(0, idx)}${footerHtml}${closing}`;
+    idx === -1
+      ? `${html}${footerHtml}`
+      : `${html.slice(0, idx)}${footerHtml}${closing}`;
   return {
     html: nextHtml,
     text: `${text}${footerText}`,
@@ -62,10 +67,13 @@ export async function sendEmailSafe(input: SendEmailInput) {
   const resend = getResend();
   const from = process.env.RESEND_FROM;
   if (!resend || !from) {
-    console.warn("[email] Skipping send; missing RESEND_API_KEY or RESEND_FROM.", {
-      to: input.to,
-      subject: input.subject,
-    });
+    console.warn(
+      "[email] Skipping send; missing RESEND_API_KEY or RESEND_FROM.",
+      {
+        to: input.to,
+        subject: input.subject,
+      },
+    );
     return { skipped: true };
   }
 
@@ -73,6 +81,7 @@ export async function sendEmailSafe(input: SendEmailInput) {
     const payload: Record<string, unknown> = {
       from,
       to: input.to,
+      replyTo: input.replyTo,
       subject: input.subject,
       html: input.html,
       text: input.text,
@@ -126,7 +135,9 @@ export function buildHostDecisionEmail(params: {
   reason?: string | null;
 }) {
   const hostName = escapeHtml(params.hostName || "Host");
-  const carTitle = params.carTitle ? escapeHtml(params.carTitle) : "your booking";
+  const carTitle = params.carTitle
+    ? escapeHtml(params.carTitle)
+    : "your booking";
   const subject = params.approved
     ? `${appName}: Booking confirmed by ${hostName}`
     : `${appName}: Booking rejected by ${hostName}`;
@@ -167,11 +178,15 @@ export function buildBookingPaidEmail(params: {
   bookedAt?: string | null;
   conversationUrl?: string | null;
 }) {
-  const carTitle = params.carTitle ? escapeHtml(params.carTitle) : "your booking";
+  const carTitle = params.carTitle
+    ? escapeHtml(params.carTitle)
+    : "your booking";
   const subject = params.instantBook
     ? `${appName}: Booking confirmed`
     : `${appName}: Booking request sent`;
-  const statusLine = params.instantBook ? "confirmed" : "sent to the host for approval";
+  const statusLine = params.instantBook
+    ? "confirmed"
+    : "sent to the host for approval";
 
   const html = `
     <div style="font-family: Arial, sans-serif; line-height: 1.5;">
@@ -217,7 +232,9 @@ export function buildHostBookingNoticeEmail(params: {
   conversationUrl?: string | null;
 }) {
   const renterName = escapeHtml(params.renterName || "Guest");
-  const carTitle = params.carTitle ? escapeHtml(params.carTitle) : "your listing";
+  const carTitle = params.carTitle
+    ? escapeHtml(params.carTitle)
+    : "your listing";
   const subject = params.instantBook
     ? `${appName}: New booking confirmed`
     : `${appName}: New booking request`;
@@ -279,8 +296,14 @@ export function buildBookingInvoiceEmail(params: {
   conversationUrl?: string | null;
   tripUseLocation?: string | null;
 }) {
-  const recipient = escapeHtml(params.recipientName || (params.recipientRole === "host" ? "Host" : "Guest"));
-  const counterpart = escapeHtml(params.counterpartName || (params.recipientRole === "host" ? "Guest" : "Host"));
+  const recipient = escapeHtml(
+    params.recipientName ||
+      (params.recipientRole === "host" ? "Host" : "Guest"),
+  );
+  const counterpart = escapeHtml(
+    params.counterpartName ||
+      (params.recipientRole === "host" ? "Guest" : "Host"),
+  );
   const carTitle = escapeHtml(params.carTitle || "Listing");
   const invoiceRef = `INV-${params.bookingId.slice(0, 8).toUpperCase()}`;
   const subject = `${appName}: Booking invoice ${invoiceRef}`;
@@ -419,5 +442,49 @@ View your host application: ${siteUrl}/become-host
 
 ${appName}`;
 
+  return { subject, ...withOfficialFooter(html, text) };
+}
+
+export function buildSupportRequestEmail(params: {
+  name: string;
+  email: string;
+  phone?: string | null;
+  message: string;
+  submittedAt: string;
+}) {
+  const subject = `${appName}: Support request from ${params.name}`;
+  const html = `
+    <div style="font-family: Arial, sans-serif; line-height: 1.5;">
+      <h2>New support request</h2>
+      <p><strong>Name:</strong> ${escapeHtml(params.name)}</p>
+      <p><strong>Email:</strong> ${escapeHtml(params.email)}</p>
+      <p><strong>Phone:</strong> ${escapeHtml(params.phone || "Not provided")}</p>
+      <p><strong>Submitted at:</strong> ${escapeHtml(formatDateTime(params.submittedAt))}</p>
+      <p><strong>Message:</strong></p>
+      <blockquote style="border-left: 3px solid #e5e7eb; margin: 16px 0; padding-left: 12px; white-space: pre-wrap;">
+        ${escapeHtml(params.message)}
+      </blockquote>
+    </div>
+  `;
+  const text = `New support request\nName: ${params.name}\nEmail: ${params.email}\nPhone: ${
+    params.phone || "Not provided"
+  }\nSubmitted at: ${formatDateTime(params.submittedAt)}\n\n${params.message}`;
+  return { subject, ...withOfficialFooter(html, text) };
+}
+
+export function buildSupportAcknowledgementEmail(params: {
+  name: string;
+  supportEmail: string;
+}) {
+  const subject = `${appName}: We received your message`;
+  const html = `
+    <div style="font-family: Arial, sans-serif; line-height: 1.5;">
+      <h2>We received your message</h2>
+      <p>Hi ${escapeHtml(params.name)},</p>
+      <p>Thanks for contacting ${appName}. Our support team has your message and will reply within one business day.</p>
+      <p>If your issue is urgent, you can also reach us at <a href="mailto:${escapeHtml(params.supportEmail)}">${escapeHtml(params.supportEmail)}</a>.</p>
+    </div>
+  `;
+  const text = `Hi ${params.name},\n\nThanks for contacting ${appName}. Our support team has your message and will reply within one business day.\n\nIf your issue is urgent, you can also reach us at ${params.supportEmail}.`;
   return { subject, ...withOfficialFooter(html, text) };
 }

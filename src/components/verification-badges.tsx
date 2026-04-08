@@ -29,10 +29,16 @@ export function VerificationBadges({
           variant={verified ? "default" : "outline"}
           className={cn(
             "inline-flex items-center gap-1 text-[11px] font-semibold",
-            verified ? "bg-emerald-600 text-white hover:bg-emerald-600" : "text-gray-600",
+            verified
+              ? "bg-emerald-600 text-white hover:bg-emerald-600"
+              : "text-gray-600",
           )}
         >
-          {verified ? <BadgeCheck className="h-3 w-3" /> : <Icon className="h-3 w-3" />}
+          {verified ? (
+            <BadgeCheck className="h-3 w-3" />
+          ) : (
+            <Icon className="h-3 w-3" />
+          )}
           {verified ? `${label} Verified` : `${label} Not verified`}
         </Badge>
       ))}

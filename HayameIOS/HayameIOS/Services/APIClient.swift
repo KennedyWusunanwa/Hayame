@@ -191,6 +191,41 @@ struct PushRegisterResponseDTO: Decodable {
     let message: String?
 }
 
+struct NotificationPreferencesDTO: Decodable {
+    let booking_updates: Bool?
+    let messages: Bool?
+    let account_security: Bool?
+    let news_announcements: Bool?
+}
+
+struct NotificationPreferencesEnvelopeDTO: Decodable {
+    let data: NotificationPreferencesDTO
+}
+
+struct AppAnnouncementDTO: Decodable {
+    let id: String
+    let title: String?
+    let body: String?
+    let category: String?
+    let delivery: String?
+    let audience: String?
+    let show_once: Bool?
+    let cta_label: String?
+    let cta_url: String?
+    let starts_at: String?
+    let ends_at: String?
+    let published_at: String?
+    let seen: Bool?
+}
+
+struct AppAnnouncementsEnvelopeDTO: Decodable {
+    let data: [AppAnnouncementDTO]
+}
+
+struct AnnouncementSeenResponseDTO: Decodable {
+    let seen: Bool?
+}
+
 struct BookingDTO: Decodable {
     let id: String
     let car_id: String?
@@ -420,7 +455,7 @@ struct APIClient {
         self.decoder = JSONDecoder()
         self.encoder = JSONEncoder()
         let configuration = URLSessionConfiguration.default
-        configuration.waitsForConnectivity = true
+        configuration.waitsForConnectivity = false
         configuration.timeoutIntervalForRequest = 20
         configuration.timeoutIntervalForResource = 60
         configuration.httpMaximumConnectionsPerHost = 10
@@ -1152,6 +1187,66 @@ struct APIClient {
             path: "/api/mobile/push/register",
             method: .POST,
             body: Payload(deviceToken: deviceToken, platform: "ios"),
+            baseURL: baseURL,
+            token: token
+        )
+    }
+
+    func getNotificationPreferences(baseURL: String, token: String) async throws -> NotificationPreferencesEnvelopeDTO {
+        try await request(
+            path: "/api/mobile/notifications/preferences",
+            method: .GET,
+            body: nil as EmptyResponse?,
+            baseURL: baseURL,
+            token: token
+        )
+    }
+
+    func updateNotificationPreferences(
+        baseURL: String,
+        token: String,
+        preferences: NotificationPreferences
+    ) async throws -> NotificationPreferencesEnvelopeDTO {
+        struct Payload: Encodable {
+            let booking_updates: Bool
+            let messages: Bool
+            let account_security: Bool
+            let news_announcements: Bool
+        }
+
+        return try await request(
+            path: "/api/mobile/notifications/preferences",
+            method: .POST,
+            body: Payload(
+                booking_updates: preferences.bookingUpdates,
+                messages: preferences.messages,
+                account_security: preferences.accountSecurity,
+                news_announcements: preferences.newsAnnouncements
+            ),
+            baseURL: baseURL,
+            token: token
+        )
+    }
+
+    func getAnnouncements(baseURL: String, token: String?) async throws -> AppAnnouncementsEnvelopeDTO {
+        try await request(
+            path: "/api/mobile/announcements",
+            method: .GET,
+            body: nil as EmptyResponse?,
+            baseURL: baseURL,
+            token: token
+        )
+    }
+
+    func markAnnouncementSeen(
+        baseURL: String,
+        token: String,
+        announcementID: String
+    ) async throws -> AnnouncementSeenResponseDTO {
+        try await request(
+            path: "/api/mobile/announcements/\(announcementID)/seen",
+            method: .POST,
+            body: nil as EmptyResponse?,
             baseURL: baseURL,
             token: token
         )

@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.hayame.app.core.network.HayameApi
 import com.hayame.app.core.network.RefreshRequest
@@ -26,6 +27,7 @@ class SessionStore(private val context: Context) {
         val access = stringPreferencesKey("access_token")
         val refresh = stringPreferencesKey("refresh_token")
         val userId = stringPreferencesKey("user_id")
+        val seenAnnouncements = stringSetPreferencesKey("seen_announcement_ids")
     }
 
     val sessionFlow: Flow<SessionState> = context.dataStore.data
@@ -50,6 +52,22 @@ class SessionStore(private val context: Context) {
 
     suspend fun clear() {
         context.dataStore.edit { it.clear() }
+    }
+
+    suspend fun seenAnnouncementIds(): Set<String> {
+        return context.dataStore.data
+            .catch { emit(emptyPreferences()) }
+            .map { prefs -> prefs[Keys.seenAnnouncements] ?: emptySet() }
+            .first()
+    }
+
+    suspend fun markAnnouncementSeen(announcementId: String) {
+        val normalized = announcementId.trim()
+        if (normalized.isEmpty()) return
+        context.dataStore.edit { prefs ->
+            val current = prefs[Keys.seenAnnouncements] ?: emptySet()
+            prefs[Keys.seenAnnouncements] = current + normalized
+        }
     }
 
     suspend fun authHeader(): String? = current().accessToken?.let { "Bearer $it" }

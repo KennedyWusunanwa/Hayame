@@ -17,7 +17,11 @@ const TableHeader = React.forwardRef<
   HTMLTableSectionElement,
   React.HTMLAttributes<HTMLTableSectionElement>
 >(({ className, ...props }, ref) => (
-  <thead ref={ref} className={cn("text-left text-xs uppercase", className)} {...props} />
+  <thead
+    ref={ref}
+    className={cn("text-left text-xs uppercase", className)}
+    {...props}
+  />
 ));
 TableHeader.displayName = "TableHeader";
 
@@ -25,7 +29,11 @@ const TableBody = React.forwardRef<
   HTMLTableSectionElement,
   React.HTMLAttributes<HTMLTableSectionElement>
 >(({ className, ...props }, ref) => (
-  <tbody ref={ref} className={cn("divide-y divide-border", className)} {...props} />
+  <tbody
+    ref={ref}
+    className={cn("divide-y divide-border", className)}
+    {...props}
+  />
 ));
 TableBody.displayName = "TableBody";
 
@@ -57,7 +65,11 @@ const TableCell = React.forwardRef<
   HTMLTableCellElement,
   React.TdHTMLAttributes<HTMLTableCellElement>
 >(({ className, ...props }, ref) => (
-  <td ref={ref} className={cn("px-3 py-3 align-middle", className)} {...props} />
+  <td
+    ref={ref}
+    className={cn("px-3 py-3 align-middle", className)}
+    {...props}
+  />
 ));
 TableCell.displayName = "TableCell";
 

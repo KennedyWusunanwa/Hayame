@@ -22,23 +22,35 @@ function storageBucketCandidates() {
     process.env.SUPABASE_STORAGE_BUCKET?.trim(),
     "avatars",
     "car-photos",
-  ].filter((value, index, array): value is string => Boolean(value) && array.indexOf(value) === index);
+  ].filter(
+    (value, index, array): value is string =>
+      Boolean(value) && array.indexOf(value) === index,
+  );
 }
 
 function isAvatarObjectName(name: string | null | undefined) {
-  const normalized = String(name ?? "").trim().toLowerCase();
+  const normalized = String(name ?? "")
+    .trim()
+    .toLowerCase();
   return normalized.startsWith("avatar-");
 }
 
-async function resolveStoredAvatarUrl(admin: any, userId: string): Promise<string | null> {
+async function resolveStoredAvatarUrl(
+  admin: any,
+  userId: string,
+): Promise<string | null> {
   for (const bucket of storageBucketCandidates()) {
     const { data } = await admin.storage.from(bucket).list(userId, {
       limit: 30,
       sortBy: { column: "name", order: "desc" },
     });
-    const match = (data ?? []).find((item: { name?: string | null }) => isAvatarObjectName(item.name));
+    const match = (data ?? []).find((item: { name?: string | null }) =>
+      isAvatarObjectName(item.name),
+    );
     if (!match?.name) continue;
-    const { data: publicData } = admin.storage.from(bucket).getPublicUrl(`${userId}/${match.name}`);
+    const { data: publicData } = admin.storage
+      .from(bucket)
+      .getPublicUrl(`${userId}/${match.name}`);
     if (publicData?.publicUrl) return publicData.publicUrl;
   }
   return null;
@@ -52,7 +64,10 @@ export async function GET(req: Request) {
   try {
     const token = extractBearerToken(req);
     if (!token) {
-      return NextResponse.json({ message: "Missing bearer token" }, { status: 401 });
+      return NextResponse.json(
+        { message: "Missing bearer token" },
+        { status: 401 },
+      );
     }
 
     const supabase = await createClient();
@@ -62,7 +77,10 @@ export async function GET(req: Request) {
     } = await supabase.auth.getUser(token);
 
     if (userError || !user) {
-      return NextResponse.json({ message: userError?.message ?? "Unauthorized" }, { status: 401 });
+      return NextResponse.json(
+        { message: userError?.message ?? "Unauthorized" },
+        { status: 401 },
+      );
     }
 
     let admin: any = null;
@@ -72,14 +90,20 @@ export async function GET(req: Request) {
       admin = null;
     }
 
-    let profile = null as { avatar_url?: string | null; is_host?: boolean } | null;
+    let profile = null as {
+      avatar_url?: string | null;
+      is_host?: boolean;
+    } | null;
     if (admin) {
       const { data: adminProfile } = await admin
         .from("profiles")
         .select("*")
         .eq("id", user.id)
         .maybeSingle();
-      profile = (adminProfile ?? null) as { avatar_url?: string | null; is_host?: boolean } | null;
+      profile = (adminProfile ?? null) as {
+        avatar_url?: string | null;
+        is_host?: boolean;
+      } | null;
     }
     if (!profile) {
       const { data: profileRow, error: profileError } = await supabase
@@ -88,9 +112,15 @@ export async function GET(req: Request) {
         .eq("id", user.id)
         .maybeSingle();
       if (profileError && profileError.code !== "PGRST116") {
-        return NextResponse.json({ message: profileError.message ?? "Failed to load profile" }, { status: 400 });
+        return NextResponse.json(
+          { message: profileError.message ?? "Failed to load profile" },
+          { status: 400 },
+        );
       }
-      profile = (profileRow ?? null) as { avatar_url?: string | null; is_host?: boolean } | null;
+      profile = (profileRow ?? null) as {
+        avatar_url?: string | null;
+        is_host?: boolean;
+      } | null;
     }
 
     if (admin && !profile?.avatar_url) {
@@ -125,7 +155,9 @@ export async function GET(req: Request) {
       hostApplicationRow = userHostApplication ?? null;
     }
 
-    const hostApplication = (hostApplicationRow ?? null) as { status?: "pending" | "approved" | "rejected" | null } | null;
+    const hostApplication = (hostApplicationRow ?? null) as {
+      status?: "pending" | "approved" | "rejected" | null;
+    } | null;
     const hostStatus = hostApplication?.status ?? null;
     const isHost = Boolean(profile?.is_host) || hostStatus === "approved";
 
@@ -138,6 +170,9 @@ export async function GET(req: Request) {
       host_application: hostApplication ?? null,
     });
   } catch (error: any) {
-    return NextResponse.json({ message: error?.message ?? "Failed to load user" }, { status: 400 });
+    return NextResponse.json(
+      { message: error?.message ?? "Failed to load user" },
+      { status: 400 },
+    );
   }
 }

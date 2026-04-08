@@ -33,10 +33,18 @@ export function HostApplicationForm({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
-  const { regions, citiesByRegion, loading: locationsLoading, error: locationsError } = useLocations({
+  const {
+    regions,
+    citiesByRegion,
+    loading: locationsLoading,
+    error: locationsError,
+  } = useLocations({
     strict: true,
   });
-  const cities = useMemo(() => citiesByRegion[region] ?? [], [citiesByRegion, region]);
+  const cities = useMemo(
+    () => citiesByRegion[region] ?? [],
+    [citiesByRegion, region],
+  );
 
   useEffect(() => {
     const hydrate = async () => {
@@ -120,12 +128,15 @@ export function HostApplicationForm({
       ) : null}
       {initialStatus === "pending" ? (
         <p className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-sm text-blue-700">
-          Your application is under review. We will notify you once it is approved.
+          Your application is under review. We will notify you once it is
+          approved.
         </p>
       ) : null}
 
       <div>
-        <label className="text-sm font-semibold text-foreground">Full name</label>
+        <label className="text-sm font-semibold text-foreground">
+          Full name
+        </label>
         <input
           className="mt-2 w-full rounded-md border border-border bg-white px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
           value={fullName}
@@ -146,27 +157,31 @@ export function HostApplicationForm({
             required
           />
         </div>
-      <div>
-        <label className="text-sm font-semibold text-foreground">Region</label>
-        <select
+        <div>
+          <label className="text-sm font-semibold text-foreground">
+            Region
+          </label>
+          <select
             className="mt-2 w-full rounded-md border border-border bg-white px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
             value={region}
             onChange={(event) => {
               setRegion(event.target.value);
               setCity("");
             }}
-          disabled={isLocked || locationsLoading || Boolean(locationsError)}
-          required
-        >
-          <option value="">Select region</option>
-          {regions.map((r) => (
-            <option key={r} value={r}>
-              {r}
-            </option>
-          ))}
-        </select>
-        {locationsError ? <p className="mt-1 text-xs text-red-600">{locationsError}</p> : null}
-      </div>
+            disabled={isLocked || locationsLoading || Boolean(locationsError)}
+            required
+          >
+            <option value="">Select region</option>
+            {regions.map((r) => (
+              <option key={r} value={r}>
+                {r}
+              </option>
+            ))}
+          </select>
+          {locationsError ? (
+            <p className="mt-1 text-xs text-red-600">{locationsError}</p>
+          ) : null}
+        </div>
       </div>
 
       <div>
@@ -189,7 +204,9 @@ export function HostApplicationForm({
 
       <div className="grid gap-3 sm:grid-cols-2">
         <div>
-          <label className="text-sm font-semibold text-foreground">ID type</label>
+          <label className="text-sm font-semibold text-foreground">
+            ID type
+          </label>
           <select
             className="mt-2 w-full rounded-md border border-border bg-white px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
             value={idType}
@@ -205,7 +222,9 @@ export function HostApplicationForm({
           </select>
         </div>
         <div>
-          <label className="text-sm font-semibold text-foreground">ID number</label>
+          <label className="text-sm font-semibold text-foreground">
+            ID number
+          </label>
           <input
             className="mt-2 w-full rounded-md border border-border bg-white px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
             value={idNumber}
@@ -218,33 +237,59 @@ export function HostApplicationForm({
 
       <div className="grid gap-3 sm:grid-cols-2">
         <div>
-          <label className="text-sm font-semibold text-foreground">ID front image</label>
+          <label className="text-sm font-semibold text-foreground">
+            ID front image
+          </label>
           <input
             type="file"
             accept="image/*"
             className="mt-2 w-full rounded-md border border-border bg-white px-3 py-2 text-sm shadow-sm"
-            onChange={(event) => handleIdUpload(event.target.files?.[0] ?? null, "front", setIdFrontPath, setError, setUploading)}
+            onChange={(event) =>
+              handleIdUpload(
+                event.target.files?.[0] ?? null,
+                "front",
+                setIdFrontPath,
+                setError,
+                setUploading,
+              )
+            }
             disabled={isLocked}
             required
           />
-          {idFrontPath ? <p className="mt-1 text-xs text-gray-600">Uploaded</p> : null}
+          {idFrontPath ? (
+            <p className="mt-1 text-xs text-gray-600">Uploaded</p>
+          ) : null}
         </div>
         <div>
-          <label className="text-sm font-semibold text-foreground">ID back image</label>
+          <label className="text-sm font-semibold text-foreground">
+            ID back image
+          </label>
           <input
             type="file"
             accept="image/*"
             className="mt-2 w-full rounded-md border border-border bg-white px-3 py-2 text-sm shadow-sm"
-            onChange={(event) => handleIdUpload(event.target.files?.[0] ?? null, "back", setIdBackPath, setError, setUploading)}
+            onChange={(event) =>
+              handleIdUpload(
+                event.target.files?.[0] ?? null,
+                "back",
+                setIdBackPath,
+                setError,
+                setUploading,
+              )
+            }
             disabled={isLocked}
             required
           />
-          {idBackPath ? <p className="mt-1 text-xs text-gray-600">Uploaded</p> : null}
+          {idBackPath ? (
+            <p className="mt-1 text-xs text-gray-600">Uploaded</p>
+          ) : null}
         </div>
       </div>
 
       <div>
-        <label className="text-sm font-semibold text-foreground">Hosting experience</label>
+        <label className="text-sm font-semibold text-foreground">
+          Hosting experience
+        </label>
         <Textarea
           className="mt-2"
           rows={4}
@@ -258,7 +303,9 @@ export function HostApplicationForm({
 
       <div className="grid gap-3 sm:grid-cols-2">
         <div>
-          <label className="text-sm font-semibold text-foreground">Fleet size</label>
+          <label className="text-sm font-semibold text-foreground">
+            Fleet size
+          </label>
           <input
             className="mt-2 w-full rounded-md border border-border bg-white px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
             value={fleetSize}
@@ -281,10 +328,18 @@ export function HostApplicationForm({
       </div>
 
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
-      {success ? <p className="text-sm text-emerald-600">Application submitted successfully.</p> : null}
+      {success ? (
+        <p className="text-sm text-emerald-600">
+          Application submitted successfully.
+        </p>
+      ) : null}
 
       <Button type="submit" disabled={!canSubmit || isLocked}>
-        {loading ? "Submitting..." : uploading ? "Uploading..." : "Submit application"}
+        {loading
+          ? "Submitting..."
+          : uploading
+            ? "Uploading..."
+            : "Submit application"}
       </Button>
     </form>
   );
@@ -318,14 +373,17 @@ async function handleIdUpload(
     } = await supabase.auth.getUser();
     if (!user) throw new Error("Please sign in to upload files.");
 
-    const bucket = process.env.NEXT_PUBLIC_SUPABASE_HOST_ID_BUCKET || "host-ids";
+    const bucket =
+      process.env.NEXT_PUBLIC_SUPABASE_HOST_ID_BUCKET || "host-ids";
     const ext = file.name.split(".").pop() ?? "jpg";
     const path = `${user.id}/${Date.now()}-${side}.${ext}`;
-    const { error: uploadError } = await supabase.storage.from(bucket).upload(path, file, {
-      cacheControl: "3600",
-      upsert: false,
-      contentType: file.type,
-    });
+    const { error: uploadError } = await supabase.storage
+      .from(bucket)
+      .upload(path, file, {
+        cacheControl: "3600",
+        upsert: false,
+        contentType: file.type,
+      });
     if (uploadError) throw uploadError;
     setPath(path);
   } catch (err: any) {

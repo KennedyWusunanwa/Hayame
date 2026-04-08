@@ -3,7 +3,15 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Car, ChartBar, Heart, Home, Star, User, WalletCards } from "lucide-react";
+import {
+  Car,
+  ChartBar,
+  Heart,
+  Home,
+  Star,
+  User,
+  WalletCards,
+} from "lucide-react";
 import { cn, getInitials } from "@/lib/utils";
 
 type Host = {
@@ -21,20 +29,35 @@ const links = [
   { href: "/host/profile", label: "Host settings", icon: User },
 ];
 
-export function DashboardSidebar({ host, pendingBookingCount = 0 }: { host: Host; pendingBookingCount?: number }) {
+export function DashboardSidebar({
+  host,
+  pendingBookingCount = 0,
+}: {
+  host: Host;
+  pendingBookingCount?: number;
+}) {
   const pathname = usePathname();
   const initials = getInitials(host.name);
-  const bookingCountLabel = pendingBookingCount > 99 ? "99+" : String(pendingBookingCount);
+  const bookingCountLabel =
+    pendingBookingCount > 99 ? "99+" : String(pendingBookingCount);
   return (
     <aside className="hidden min-h-screen w-60 border-r border-border bg-white px-4 py-6 lg:block">
-      <div className="text-lg font-semibold text-foreground">Host Dashboard</div>
+      <div className="text-lg font-semibold text-foreground">
+        Host Dashboard
+      </div>
       <Link
         href="/host/profile"
         className="mt-4 flex items-center gap-3 rounded-lg border border-border bg-gray-50 px-3 py-2 transition hover:bg-brand/5"
       >
         {host.avatar ? (
           <div className="relative h-10 w-10 overflow-hidden rounded-full border border-border">
-            <Image src={host.avatar} alt={host.name} fill className="object-cover" sizes="40px" />
+            <Image
+              src={host.avatar}
+              alt={host.name}
+              fill
+              className="object-cover"
+              sizes="40px"
+            />
           </div>
         ) : (
           <div className="flex h-10 w-10 items-center justify-center rounded-full border border-border bg-primary/10 text-sm font-semibold text-primary">
@@ -50,7 +73,8 @@ export function DashboardSidebar({ host, pendingBookingCount = 0 }: { host: Host
         {links.map((link) => {
           const Icon = link.icon;
           const active = pathname?.startsWith(link.href);
-          const showBookingDot = link.href === "/host/bookings" && pendingBookingCount > 0;
+          const showBookingDot =
+            link.href === "/host/bookings" && pendingBookingCount > 0;
           return (
             <Link
               key={link.href}

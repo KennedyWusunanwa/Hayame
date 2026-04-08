@@ -108,20 +108,32 @@ type SupabaseCar = Database["public"]["Tables"]["cars"]["Row"] & {
 export default async function CarDetailPage({ params }: PageProps) {
   const resolvedParams = await params;
   console.log("[car-detail] start", resolvedParams);
-  const { car, availability, isFavorite, reviews, userId, reviewableBookings, platformFeePercent, existingBooking } =
-    await loadCar(resolvedParams.id);
+  const {
+    car,
+    availability,
+    isFavorite,
+    reviews,
+    userId,
+    reviewableBookings,
+    platformFeePercent,
+    existingBooking,
+  } = await loadCar(resolvedParams.id);
 
   if (!car) {
     return <NotFoundState />;
   }
 
   const galleryImages = Array.from(
-    new Set((car.photos?.map((photo) => photo.url) ?? []).filter(Boolean) as string[]),
+    new Set(
+      (car.photos?.map((photo) => photo.url) ?? []).filter(Boolean) as string[],
+    ),
   );
 
   const addedDate = car.created_at ? new Date(car.created_at) : null;
   const addedLabel =
-    addedDate && !isNaN(addedDate.getTime()) ? format(addedDate, "MMM d, yyyy") : null;
+    addedDate && !isNaN(addedDate.getTime())
+      ? format(addedDate, "MMM d, yyyy")
+      : null;
   const featureItems = (car.features ?? []).map((feature) => ({
     label: feature,
     Icon: getFeatureIcon(feature),
@@ -176,13 +188,25 @@ export default async function CarDetailPage({ params }: PageProps) {
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-3">
-            <p className="text-sm font-semibold text-brand">Car in {car.city ?? "—"}</p>
-            {car.car_type ? <Badge variant="muted">{car.car_type}</Badge> : null}
-            {addedLabel ? <Badge variant="outline">Added {addedLabel}</Badge> : null}
+            <p className="text-sm font-semibold text-brand">
+              Car in {car.city ?? "—"}
+            </p>
+            {car.car_type ? (
+              <Badge variant="muted">{car.car_type}</Badge>
+            ) : null}
+            {addedLabel ? (
+              <Badge variant="outline">Added {addedLabel}</Badge>
+            ) : null}
           </div>
           <div className="flex items-start gap-3">
-            <h1 className="text-3xl font-semibold text-foreground">{car.title}</h1>
-            <FavoriteButton carId={car.id} initialIsFavorited={isFavorite} className="mt-1" />
+            <h1 className="text-3xl font-semibold text-foreground">
+              {car.title}
+            </h1>
+            <FavoriteButton
+              carId={car.id}
+              initialIsFavorited={isFavorite}
+              className="mt-1"
+            />
           </div>
           <div className="flex flex-wrap items-center gap-3 text-sm text-gray-700">
             <span className="flex items-center gap-1">
@@ -192,14 +216,18 @@ export default async function CarDetailPage({ params }: PageProps) {
             {car.rating ? (
               <span className="flex items-center gap-1 text-amber-600">
                 <Star className="h-4 w-4" /> {car.rating}{" "}
-                {car.reviews ? <span className="text-gray-600">({car.reviews} reviews)</span> : null}
+                {car.reviews ? (
+                  <span className="text-gray-600">({car.reviews} reviews)</span>
+                ) : null}
               </span>
             ) : null}
           </div>
         </div>
         <div className="rounded-xl border border-border bg-white px-4 py-3 text-right shadow-sm">
           <p className="text-xs uppercase text-gray-500">Daily rate</p>
-          <p className="text-2xl font-semibold text-foreground">{formatCurrency(car.daily_price)}</p>
+          <p className="text-2xl font-semibold text-foreground">
+            {formatCurrency(car.daily_price)}
+          </p>
         </div>
       </div>
 
@@ -225,7 +253,12 @@ export default async function CarDetailPage({ params }: PageProps) {
             </CardHeader>
             <CardContent className="grid gap-4 sm:grid-cols-2">
               {details.map((detail) => (
-                <DetailRow key={detail.label} label={detail.label} value={detail.value} Icon={detail.icon} />
+                <DetailRow
+                  key={detail.label}
+                  label={detail.label}
+                  value={detail.value}
+                  Icon={detail.icon}
+                />
               ))}
             </CardContent>
           </Card>
@@ -270,7 +303,9 @@ export default async function CarDetailPage({ params }: PageProps) {
                   />
                 ))
               ) : (
-                <p className="text-sm text-gray-600">No reviews yet. Be the first to share your experience.</p>
+                <p className="text-sm text-gray-600">
+                  No reviews yet. Be the first to share your experience.
+                </p>
               )}
             </CardContent>
           </Card>
@@ -304,7 +339,10 @@ export default async function CarDetailPage({ params }: PageProps) {
 
         <div className="contents lg:sticky lg:top-6 lg:block lg:space-y-4">
           <div className="order-2 lg:order-none">
-            <AvailabilitySummary availability={availability} isAvailable={car.is_available} />
+            <AvailabilitySummary
+              availability={availability}
+              isAvailable={car.is_available}
+            />
           </div>
           <div className="order-3 lg:order-none">
             <AvailabilityPreview carId={car.id} />
@@ -332,10 +370,18 @@ export default async function CarDetailPage({ params }: PageProps) {
             </div>
           </div>
           <div className="order-9 lg:order-none">
-            <HostCard owner={car.owner} rating={car.rating} reviews={car.reviews} />
+            <HostCard
+              owner={car.owner}
+              rating={car.rating}
+              reviews={car.reviews}
+            />
           </div>
           <div className="order-10 lg:order-none">
-            <HostMessageCard hostId={car.owner?.id} hostName={car.owner?.full_name} carId={car.id} />
+            <HostMessageCard
+              hostId={car.owner?.id}
+              hostName={car.owner?.full_name}
+              carId={car.id}
+            />
           </div>
         </div>
       </div>
@@ -358,13 +404,18 @@ async function getCarFromInternalApi(id: string): Promise<SupabaseCar | null> {
     throw lastError;
   } catch (error) {
     lastError = error ?? lastError;
-    console.error("[car-detail] relative fetch failed", { id, error: lastError });
+    console.error("[car-detail] relative fetch failed", {
+      id,
+      error: lastError,
+    });
   }
 
   // Absolute fallback
   const origin =
     process.env.NEXT_PUBLIC_SITE_URL ??
-    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
+    (process.env.VERCEL_URL
+      ? `https://${process.env.VERCEL_URL}`
+      : "http://localhost:3000");
   if (process.env.NODE_ENV !== "production") {
     console.log("[car-detail] using origin", origin);
   }
@@ -375,7 +426,12 @@ async function getCarFromInternalApi(id: string): Promise<SupabaseCar | null> {
     const { data } = (await res.json()) as { data?: SupabaseCar };
     return data ?? null;
   } catch (error) {
-    console.error("[car-detail] fetch failed", { id, error, origin, lastError });
+    console.error("[car-detail] fetch failed", {
+      id,
+      error,
+      origin,
+      lastError,
+    });
     throw error;
   }
 }
@@ -451,7 +507,11 @@ async function loadCar(id: string): Promise<{
       }
     }
 
-    if (!car && process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+    if (
+      !car &&
+      process.env.NEXT_PUBLIC_SUPABASE_URL &&
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    ) {
       const params = new URLSearchParams({
         id: `eq.${id}`,
         select:
@@ -482,14 +542,19 @@ async function loadCar(id: string): Promise<{
 
     const { data: reviewData } = await (supabase as any)
       .from("reviews")
-      .select("id,rating,comment,created_at,user_id, profiles:profiles!reviews_user_id_fkey(full_name,avatar_url)")
+      .select(
+        "id,rating,comment,created_at,user_id, profiles:profiles!reviews_user_id_fkey(full_name,avatar_url)",
+      )
       .eq("car_id", id)
       .eq("is_hidden", false)
       .order("created_at", { ascending: false });
     reviews = (reviewData as ReviewRow[] | null) ?? [];
 
     if (reviews.length > 0 && car) {
-      const total = reviews.reduce((sum, review) => sum + Number(review.rating ?? 0), 0);
+      const total = reviews.reduce(
+        (sum, review) => sum + Number(review.rating ?? 0),
+        0,
+      );
       car.rating = Number((total / reviews.length).toFixed(1));
       car.reviews = reviews.length;
     }
@@ -500,7 +565,9 @@ async function loadCar(id: string): Promise<{
       .eq("id", 1)
       .maybeSingle();
     const envPlatformFee = Number(
-      process.env.NEXT_PUBLIC_PLATFORM_FEE_PERCENT ?? process.env.PLATFORM_FEE_PERCENT ?? "10",
+      process.env.NEXT_PUBLIC_PLATFORM_FEE_PERCENT ??
+        process.env.PLATFORM_FEE_PERCENT ??
+        "10",
     );
     const fallback = Number.isFinite(envPlatformFee) ? envPlatformFee : 10;
     platformFeePercent = Number(feeSettings?.platform_fee_percent ?? fallback);
@@ -531,7 +598,10 @@ async function loadCar(id: string): Promise<{
         .eq("car_id", id)
         .eq("renter_id", user.id)
         .eq("status", "completed");
-      const bookingRows = (completedBookings as { id: string; start_date: string; end_date: string }[] | null) ?? [];
+      const bookingRows =
+        (completedBookings as
+          | { id: string; start_date: string; end_date: string }[]
+          | null) ?? [];
       const bookingIds = bookingRows.map((booking) => booking.id);
 
       if (bookingIds.length > 0) {
@@ -541,16 +611,23 @@ async function loadCar(id: string): Promise<{
           .eq("user_id", user.id)
           .in("booking_id", bookingIds);
         const reviewedIds = new Set(
-          ((reviewedRows as { booking_id: string }[] | null) ?? []).map((row) => row.booking_id),
+          ((reviewedRows as { booking_id: string }[] | null) ?? []).map(
+            (row) => row.booking_id,
+          ),
         );
 
         reviewableBookings = bookingRows
           .filter((booking) => !reviewedIds.has(booking.id))
           .map((booking) => {
-            const start = booking.start_date ? new Date(booking.start_date) : null;
+            const start = booking.start_date
+              ? new Date(booking.start_date)
+              : null;
             const end = booking.end_date ? new Date(booking.end_date) : null;
             const label =
-              start && end && !Number.isNaN(start.getTime()) && !Number.isNaN(end.getTime())
+              start &&
+              end &&
+              !Number.isNaN(start.getTime()) &&
+              !Number.isNaN(end.getTime())
                 ? `${format(start, "MMM d, yyyy")} - ${format(end, "MMM d, yyyy")}`
                 : "Trip dates";
             return { id: booking.id, label };
@@ -566,11 +643,24 @@ async function loadCar(id: string): Promise<{
     notFound();
   }
 
-  if (car.approval_status && car.approval_status !== "approved" && car.owner?.id !== userId) {
+  if (
+    car.approval_status &&
+    car.approval_status !== "approved" &&
+    car.owner?.id !== userId
+  ) {
     notFound();
   }
 
-  return { car, availability, isFavorite, reviews, userId, reviewableBookings, platformFeePercent, existingBooking };
+  return {
+    car,
+    availability,
+    isFavorite,
+    reviews,
+    userId,
+    reviewableBookings,
+    platformFeePercent,
+    existingBooking,
+  };
 }
 
 async function getCarFromSupabaseRest(id: string): Promise<SupabaseCar | null> {
@@ -585,19 +675,25 @@ async function getCarFromSupabaseRest(id: string): Promise<SupabaseCar | null> {
   });
 
   try {
-    const res = await fetch(`${supabaseUrl}/rest/v1/cars?${params.toString()}`, {
-      headers: {
-        apikey: supabaseAnonKey,
-        Authorization: `Bearer ${supabaseAnonKey}`,
+    const res = await fetch(
+      `${supabaseUrl}/rest/v1/cars?${params.toString()}`,
+      {
+        headers: {
+          apikey: supabaseAnonKey,
+          Authorization: `Bearer ${supabaseAnonKey}`,
+        },
+        cache: "no-store",
       },
-      cache: "no-store",
-    });
+    );
     if (!res.ok) {
-      console.error("[car-detail] supabase REST failed", { id, status: res.status });
+      console.error("[car-detail] supabase REST failed", {
+        id,
+        status: res.status,
+      });
       return null;
     }
     const data = (await res.json()) as SupabaseCar[] | { message?: string };
-    return Array.isArray(data) ? data[0] ?? null : null;
+    return Array.isArray(data) ? (data[0] ?? null) : null;
   } catch (error) {
     console.error("[car-detail] supabase REST error", { id, error });
     return null;
@@ -605,9 +701,14 @@ async function getCarFromSupabaseRest(id: string): Promise<SupabaseCar | null> {
 }
 
 function mapCar(data: SupabaseCar): CarDetail {
-  const avgRating = typeof (data as any).avg_rating === "number" ? Number((data as any).avg_rating) : undefined;
+  const avgRating =
+    typeof (data as any).avg_rating === "number"
+      ? Number((data as any).avg_rating)
+      : undefined;
   const reviewCount =
-    typeof (data as any).reviews_count === "number" ? Number((data as any).reviews_count) : undefined;
+    typeof (data as any).reviews_count === "number"
+      ? Number((data as any).reviews_count)
+      : undefined;
   return {
     id: data.id,
     title: data.title,
@@ -625,11 +726,22 @@ function mapCar(data: SupabaseCar): CarDetail {
     features: data.features,
     is_available: data.is_available,
     instant_book: data.instant_book,
-    delivery_fee: typeof (data as any).delivery_fee === "number" ? Number((data as any).delivery_fee) : null,
-    insurance_fee: typeof (data as any).insurance_fee === "number" ? Number((data as any).insurance_fee) : null,
-    deposit_amount: typeof (data as any).deposit_amount === "number" ? Number((data as any).deposit_amount) : null,
+    delivery_fee:
+      typeof (data as any).delivery_fee === "number"
+        ? Number((data as any).delivery_fee)
+        : null,
+    insurance_fee:
+      typeof (data as any).insurance_fee === "number"
+        ? Number((data as any).insurance_fee)
+        : null,
+    deposit_amount:
+      typeof (data as any).deposit_amount === "number"
+        ? Number((data as any).deposit_amount)
+        : null,
     outside_accra_fee:
-      typeof (data as any).outside_accra_fee === "number" ? Number((data as any).outside_accra_fee) : null,
+      typeof (data as any).outside_accra_fee === "number"
+        ? Number((data as any).outside_accra_fee)
+        : null,
     cancellation_policy: (data as any).cancellation_policy ?? null,
     approval_status: (data as any).approval_status ?? "approved",
     photos: data.car_photos ?? [],
@@ -677,7 +789,9 @@ function mapMockCar(mock: MockCar): CarDetail {
 }
 
 function isUUID(value: string): boolean {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+    value,
+  );
 }
 
 function DetailRow({
@@ -742,35 +856,54 @@ function AvailabilitySummary({
                 className="flex items-center justify-between rounded-lg border border-border/70 px-3 py-2"
               >
                 {(() => {
-                  const start = slot.start_date ? new Date(slot.start_date) : null;
+                  const start = slot.start_date
+                    ? new Date(slot.start_date)
+                    : null;
                   const end = slot.end_date ? new Date(slot.end_date) : null;
                   const validRange =
-                    start && end && !Number.isNaN(start.getTime()) && !Number.isNaN(end.getTime());
+                    start &&
+                    end &&
+                    !Number.isNaN(start.getTime()) &&
+                    !Number.isNaN(end.getTime());
                   const label = validRange
                     ? `${format(start, "MMM d")} - ${format(end, "MMM d")}`
                     : "Dates TBD";
                   return (
                     <div>
                       <p className="text-xs uppercase text-gray-500">Window</p>
-                      <p className="text-sm font-semibold text-foreground">{label}</p>
+                      <p className="text-sm font-semibold text-foreground">
+                        {label}
+                      </p>
                     </div>
                   );
                 })()}
-                <Badge variant={slot.available === false ? "outline" : "secondary"}>
+                <Badge
+                  variant={slot.available === false ? "outline" : "secondary"}
+                >
                   {slot.available === false ? "Unavailable" : "Open"}
                 </Badge>
               </div>
             ))}
           </div>
         ) : (
-          <p className="text-sm text-gray-600">No availability windows posted yet.</p>
+          <p className="text-sm text-gray-600">
+            No availability windows posted yet.
+          </p>
         )}
       </CardContent>
     </Card>
   );
 }
 
-function HostCard({ owner, rating, reviews }: { owner?: Owner | null; rating?: number; reviews?: number }) {
+function HostCard({
+  owner,
+  rating,
+  reviews,
+}: {
+  owner?: Owner | null;
+  rating?: number;
+  reviews?: number;
+}) {
   const avatar = owner?.avatar_url;
   const initials = getInitials(owner?.full_name ?? "Host");
   const score = typeof rating === "number" ? rating : null;
@@ -797,7 +930,13 @@ function HostCard({ owner, rating, reviews }: { owner?: Owner | null; rating?: n
           <div className="flex items-center gap-3">
             {avatar ? (
               <div className="relative h-12 w-12 overflow-hidden rounded-full border border-border">
-                <Image src={avatar} alt={owner?.full_name ?? "Host"} fill className="object-cover" sizes="60px" />
+                <Image
+                  src={avatar}
+                  alt={owner?.full_name ?? "Host"}
+                  fill
+                  className="object-cover"
+                  sizes="60px"
+                />
               </div>
             ) : (
               <div className="flex h-12 w-12 items-center justify-center rounded-full border border-border bg-primary/10 text-sm font-semibold text-primary">
@@ -806,7 +945,9 @@ function HostCard({ owner, rating, reviews }: { owner?: Owner | null; rating?: n
             )}
             <div>
               <div className="flex flex-wrap items-center gap-2">
-                <p className="text-sm font-semibold text-foreground">{owner?.full_name ?? "Host"}</p>
+                <p className="text-sm font-semibold text-foreground">
+                  {owner?.full_name ?? "Host"}
+                </p>
                 <VerifiedHostIndicator show={hostBadgeType !== "new"} />
               </div>
               <p className="flex items-center gap-2 text-xs text-gray-600">
@@ -817,9 +958,12 @@ function HostCard({ owner, rating, reviews }: { owner?: Owner | null; rating?: n
                   </span>
                 ) : null}
                 <span className="flex items-center gap-1">
-                  <Shield className="h-3 w-3 text-primary" /> {owner?.city ?? "Location TBD"}
+                  <Shield className="h-3 w-3 text-primary" />{" "}
+                  {owner?.city ?? "Location TBD"}
                 </span>
-                {typeof reviews === "number" && reviews > 0 ? <span>({reviews} trips)</span> : null}
+                {typeof reviews === "number" && reviews > 0 ? (
+                  <span>({reviews} trips)</span>
+                ) : null}
               </p>
             </div>
           </div>
@@ -833,7 +977,9 @@ function HostCard({ owner, rating, reviews }: { owner?: Owner | null; rating?: n
           emailVerified={owner?.email_verified}
         />
         <div className="flex items-center justify-between gap-2">
-          <p className="text-xs text-gray-600">Host level updates as verification and trip performance grow.</p>
+          <p className="text-xs text-gray-600">
+            Host level updates as verification and trip performance grow.
+          </p>
           <Button variant="outline" size="sm" asChild className="shrink-0">
             <Link href={owner?.id ? `/hosts/${owner.id}` : "#"}>View host</Link>
           </Button>
@@ -860,7 +1006,13 @@ function ReviewCard({
         <div className="flex items-center gap-3">
           {avatarUrl ? (
             <div className="relative h-9 w-9 overflow-hidden rounded-full border border-border">
-              <Image src={avatarUrl} alt={name} fill className="object-cover" sizes="36px" />
+              <Image
+                src={avatarUrl}
+                alt={name}
+                fill
+                className="object-cover"
+                sizes="36px"
+              />
             </div>
           ) : (
             <div className="flex h-9 w-9 items-center justify-center rounded-full border border-border bg-primary/10 text-xs font-semibold text-primary">
@@ -891,7 +1043,11 @@ function formatHostLevel(level?: string | null) {
 function BookedNotice({ booking }: { booking: ExistingBooking }) {
   const start = booking.start_date ? new Date(booking.start_date) : null;
   const end = booking.end_date ? new Date(booking.end_date) : null;
-  const hasValidDates = start && end && !Number.isNaN(start.getTime()) && !Number.isNaN(end.getTime());
+  const hasValidDates =
+    start &&
+    end &&
+    !Number.isNaN(start.getTime()) &&
+    !Number.isNaN(end.getTime());
   const dateLabel = hasValidDates
     ? `${format(start, "MMM d, yyyy")} - ${format(end, "MMM d, yyyy")}`
     : `${booking.start_date} - ${booking.end_date}`;
@@ -909,13 +1065,22 @@ function BookedNotice({ booking }: { booking: ExistingBooking }) {
     <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 lg:col-span-2">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-sm font-semibold text-emerald-800">You already booked this car</p>
+          <p className="text-sm font-semibold text-emerald-800">
+            You already booked this car
+          </p>
           <p className="text-sm text-emerald-700">
             {dateLabel} • {statusLabel}
           </p>
         </div>
-        <Button asChild size="sm" variant="outline" className="border-emerald-600 text-emerald-700">
-          <Link href="/dashboard/bookings">Take me to my dashboard bookings</Link>
+        <Button
+          asChild
+          size="sm"
+          variant="outline"
+          className="border-emerald-600 text-emerald-700"
+        >
+          <Link href="/dashboard/bookings">
+            Take me to my dashboard bookings
+          </Link>
         </Button>
       </div>
     </div>
@@ -928,7 +1093,9 @@ function NotFoundState() {
       <Card className="border-dashed">
         <CardContent className="space-y-4 py-10 text-center">
           <p className="text-sm font-semibold text-primary">Car not found</p>
-          <p className="text-lg text-foreground">We could not find that car. Try exploring the catalog.</p>
+          <p className="text-lg text-foreground">
+            We could not find that car. Try exploring the catalog.
+          </p>
           <Button asChild>
             <Link href="/explore">Back to explore</Link>
           </Button>
@@ -937,5 +1104,3 @@ function NotFoundState() {
     </div>
   );
 }
-
-

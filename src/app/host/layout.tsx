@@ -8,7 +8,11 @@ import type { Database } from "@/lib/database.types";
 
 export const dynamic = "force-dynamic";
 
-export default async function HostLayout({ children }: { children: ReactNode }) {
+export default async function HostLayout({
+  children,
+}: {
+  children: ReactNode;
+}) {
   const supabase = await createSupabaseServerClient();
   const supa = supabase as any;
   const {
@@ -20,15 +24,25 @@ export default async function HostLayout({ children }: { children: ReactNode }) 
     .from("profiles")
     .select("full_name, avatar_url")
     .eq("id", user.id)
-    .maybeSingle<Pick<Database["public"]["Tables"]["profiles"]["Row"], "full_name" | "avatar_url">>();
+    .maybeSingle<
+      Pick<
+        Database["public"]["Tables"]["profiles"]["Row"],
+        "full_name" | "avatar_url"
+      >
+    >();
 
   const { isHost } = await getHostStatus(supabase as any, user.id);
   if (!isHost) {
     redirect("/become-host");
   }
 
-  const { data: ownedCars } = await supa.from("cars").select("id").eq("owner_id", user.id);
-  const ownerCarIds = ((ownedCars as Array<{ id: string }> | null) ?? []).map((car) => car.id);
+  const { data: ownedCars } = await supa
+    .from("cars")
+    .select("id")
+    .eq("owner_id", user.id);
+  const ownerCarIds = ((ownedCars as Array<{ id: string }> | null) ?? []).map(
+    (car) => car.id,
+  );
   let pendingBookingCount = 0;
   if (ownerCarIds.length > 0) {
     const { count } = await supa
@@ -41,7 +55,11 @@ export default async function HostLayout({ children }: { children: ReactNode }) 
   }
 
   const host = {
-    name: profile?.full_name ?? (user.user_metadata as any)?.full_name ?? user.email ?? "Host",
+    name:
+      profile?.full_name ??
+      (user.user_metadata as any)?.full_name ??
+      user.email ??
+      "Host",
     avatar: profile?.avatar_url?.trim() ?? "",
   };
 

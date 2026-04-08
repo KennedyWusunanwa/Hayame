@@ -15,11 +15,17 @@ export async function POST(req: Request) {
     const { isHost, status } = await getHostStatus(supabase as any, user.id);
 
     if (!status) {
-      return NextResponse.json({ message: "No host application found." }, { status: 404 });
+      return NextResponse.json(
+        { message: "No host application found." },
+        { status: 404 },
+      );
     }
 
     if (status !== "approved") {
-      return NextResponse.json({ message: "Host application is not approved." }, { status: 403 });
+      return NextResponse.json(
+        { message: "Host application is not approved." },
+        { status: 403 },
+      );
     }
     return NextResponse.json({ is_host: isHost, status: "approved" });
   } catch (error: any) {

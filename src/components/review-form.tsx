@@ -17,7 +17,12 @@ type ReviewFormProps = {
   disabledMessage?: string;
 };
 
-export function ReviewForm({ carId, bookings, disabled = false, disabledMessage }: ReviewFormProps) {
+export function ReviewForm({
+  carId,
+  bookings,
+  disabled = false,
+  disabledMessage,
+}: ReviewFormProps) {
   const router = useRouter();
   const defaultBookingId = useMemo(() => bookings[0]?.id ?? "", [bookings]);
   const [bookingId, setBookingId] = useState(defaultBookingId);
@@ -125,9 +130,13 @@ export function ReviewForm({ carId, bookings, disabled = false, disabledMessage 
         />
       </div>
 
-      {disabledMessage && disabled ? <p className="text-sm text-gray-600">{disabledMessage}</p> : null}
+      {disabledMessage && disabled ? (
+        <p className="text-sm text-gray-600">{disabledMessage}</p>
+      ) : null}
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
-      {success ? <p className="text-sm text-emerald-600">Thanks! Your review is live.</p> : null}
+      {success ? (
+        <p className="text-sm text-emerald-600">Thanks! Your review is live.</p>
+      ) : null}
 
       <Button type="submit" disabled={isLocked}>
         {loading ? "Submitting..." : "Submit review"}

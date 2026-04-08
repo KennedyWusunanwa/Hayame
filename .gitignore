@@ -23,7 +23,15 @@
 # misc
 .DS_Store
 *.pem
-HayameIOS.zip
+/HayameIOS.zip
+
+# native mobile local/build files
+/android-native/.gradle/
+/android-native/.idea/
+/android-native/.kotlin/
+/android-native/build/
+/android-native/app/build/
+/android-native/local.properties
 
 # debug
 npm-debug.log*

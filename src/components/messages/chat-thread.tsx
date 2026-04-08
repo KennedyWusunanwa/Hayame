@@ -21,10 +21,13 @@ export function ChatThread() {
   } = useMessaging();
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const activeConversation = useMemo(
-    () => conversations.find((conv) => conv.id === activeConversationId) ?? null,
+    () =>
+      conversations.find((conv) => conv.id === activeConversationId) ?? null,
     [activeConversationId, conversations],
   );
-  const messages = activeConversationId ? messagesByConversation[activeConversationId] ?? [] : [];
+  const messages = activeConversationId
+    ? (messagesByConversation[activeConversationId] ?? [])
+    : [];
   const endRef = useRef<HTMLDivElement | null>(null);
   const [bookingStatus, setBookingStatus] = useState<string | null>(null);
   const [checkingBooking, setCheckingBooking] = useState(false);
@@ -77,19 +80,29 @@ export function ChatThread() {
     return (
       <div className="flex h-full items-center justify-center rounded-2xl border border-border bg-background p-8 text-center">
         <div>
-          <p className="text-sm font-semibold text-foreground">Select a conversation</p>
-          <p className="mt-2 text-sm text-gray-600">Choose a thread to start chatting.</p>
+          <p className="text-sm font-semibold text-foreground">
+            Select a conversation
+          </p>
+          <p className="mt-2 text-sm text-gray-600">
+            Choose a thread to start chatting.
+          </p>
         </div>
       </div>
     );
   }
 
   const initials = getInitials(activeConversation.otherUser.name);
-  const isOfficeConversation = activeConversation.otherUser.id === ADMIN_OFFICE_PROFILE_ID;
+  const isOfficeConversation =
+    activeConversation.otherUser.id === ADMIN_OFFICE_PROFILE_ID;
   const canRevealHost =
-    userId === activeConversation.user_id && Boolean(bookingStatus) && Boolean(activeConversation.hostProfile);
+    userId === activeConversation.user_id &&
+    Boolean(bookingStatus) &&
+    Boolean(activeConversation.hostProfile);
   const hostProfile = activeConversation.hostProfile;
-  const hostLocation = hostProfile?.city ?? activeConversation.carLocation ?? "Location not provided";
+  const hostLocation =
+    hostProfile?.city ??
+    activeConversation.carLocation ??
+    "Location not provided";
   const hostPhone = hostProfile?.phone ?? "Phone not provided";
 
   return (
@@ -122,7 +135,9 @@ export function ChatThread() {
               ) : null}
             </p>
             <p className="text-xs text-gray-600">
-              {activeConversation.carTitle ? `Listing: ${activeConversation.carTitle}` : "Direct conversation"}
+              {activeConversation.carTitle
+                ? `Listing: ${activeConversation.carTitle}`
+                : "Direct conversation"}
             </p>
           </div>
         </div>
@@ -130,7 +145,9 @@ export function ChatThread() {
       </div>
       {canRevealHost ? (
         <div className="border-b border-border bg-muted/30 px-4 py-3">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-gray-500">Host info</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-gray-500">
+            Host info
+          </p>
           <div className="mt-2 grid gap-2 text-sm text-foreground sm:grid-cols-3">
             <div>
               <p className="text-[11px] uppercase text-gray-500">Full name</p>
@@ -147,7 +164,9 @@ export function ChatThread() {
           </div>
         </div>
       ) : checkingBooking ? (
-        <div className="border-b border-border px-4 py-3 text-xs text-gray-500">Checking booking status...</div>
+        <div className="border-b border-border px-4 py-3 text-xs text-gray-500">
+          Checking booking status...
+        </div>
       ) : null}
 
       <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
@@ -166,13 +185,19 @@ export function ChatThread() {
           </div>
         ) : (
           messages.map((message) => (
-            <MessageBubble key={message.id} message={message} isOwn={message.sender_id === userId} />
+            <MessageBubble
+              key={message.id}
+              message={message}
+              isOwn={message.sender_id === userId}
+            />
           ))
         )}
         <div ref={endRef} />
       </div>
 
-      <MessageComposer onSend={(body) => sendMessage(activeConversation.id, body)} />
+      <MessageComposer
+        onSend={(body) => sendMessage(activeConversation.id, body)}
+      />
     </div>
   );
 }

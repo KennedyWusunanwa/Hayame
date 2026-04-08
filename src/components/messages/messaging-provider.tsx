@@ -11,7 +11,11 @@ import {
 } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import type { ConversationSummary, Message } from "@/lib/messages/types";
-import { ADMIN_OFFICE_AVATAR, ADMIN_OFFICE_NAME, ADMIN_OFFICE_PROFILE_ID } from "@/lib/admin-office";
+import {
+  ADMIN_OFFICE_AVATAR,
+  ADMIN_OFFICE_NAME,
+  ADMIN_OFFICE_PROFILE_ID,
+} from "@/lib/admin-office";
 
 type MessagingContextValue = {
   loading: boolean;
@@ -31,7 +35,8 @@ const MessagingContext = createContext<MessagingContextValue | null>(null);
 
 export function useMessaging() {
   const ctx = useContext(MessagingContext);
-  if (!ctx) throw new Error("useMessaging must be used within MessagingProvider");
+  if (!ctx)
+    throw new Error("useMessaging must be used within MessagingProvider");
   return ctx;
 }
 
@@ -44,8 +49,12 @@ export function MessagingProvider({ children }: ProviderProps) {
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
-  const [messagesByConversation, setMessagesByConversation] = useState<Record<string, Message[]>>({});
-  const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+  const [messagesByConversation, setMessagesByConversation] = useState<
+    Record<string, Message[]>
+  >({});
+  const [activeConversationId, setActiveConversationId] = useState<
+    string | null
+  >(null);
   const [unreadCount, setUnreadCount] = useState(0);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const activeConversationIdRef = useRef<string | null>(null);
@@ -65,14 +74,23 @@ export function MessagingProvider({ children }: ProviderProps) {
         const host = row.host;
         const renter = row.user;
         const fallbackOtherName =
-          (isHost ? row.user_id : row.host_id) === ADMIN_OFFICE_PROFILE_ID ? ADMIN_OFFICE_NAME : "User";
+          (isHost ? row.user_id : row.host_id) === ADMIN_OFFICE_PROFILE_ID
+            ? ADMIN_OFFICE_NAME
+            : "User";
         const fallbackOtherAvatar =
-          (isHost ? row.user_id : row.host_id) === ADMIN_OFFICE_PROFILE_ID ? ADMIN_OFFICE_AVATAR : null;
-        const fallbackHostName = row.host_id === ADMIN_OFFICE_PROFILE_ID ? ADMIN_OFFICE_NAME : "Host";
-        const fallbackHostAvatar = row.host_id === ADMIN_OFFICE_PROFILE_ID ? ADMIN_OFFICE_AVATAR : null;
-        const fallbackUserName = row.user_id === ADMIN_OFFICE_PROFILE_ID ? ADMIN_OFFICE_NAME : "User";
-        const fallbackUserAvatar = row.user_id === ADMIN_OFFICE_PROFILE_ID ? ADMIN_OFFICE_AVATAR : null;
-        const carLocation = [row.car?.city, row.car?.region].filter(Boolean).join(", ") || null;
+          (isHost ? row.user_id : row.host_id) === ADMIN_OFFICE_PROFILE_ID
+            ? ADMIN_OFFICE_AVATAR
+            : null;
+        const fallbackHostName =
+          row.host_id === ADMIN_OFFICE_PROFILE_ID ? ADMIN_OFFICE_NAME : "Host";
+        const fallbackHostAvatar =
+          row.host_id === ADMIN_OFFICE_PROFILE_ID ? ADMIN_OFFICE_AVATAR : null;
+        const fallbackUserName =
+          row.user_id === ADMIN_OFFICE_PROFILE_ID ? ADMIN_OFFICE_NAME : "User";
+        const fallbackUserAvatar =
+          row.user_id === ADMIN_OFFICE_PROFILE_ID ? ADMIN_OFFICE_AVATAR : null;
+        const carLocation =
+          [row.car?.city, row.car?.region].filter(Boolean).join(", ") || null;
         return {
           id: row.id,
           host_id: row.host_id,
@@ -129,7 +147,9 @@ export function MessagingProvider({ children }: ProviderProps) {
           .is("read_at", null)
           .neq("sender_id", currentUserId);
 
-        unreadByConversation = (unreadRows ?? []).reduce<Record<string, number>>((acc, row: any) => {
+        unreadByConversation = (unreadRows ?? []).reduce<
+          Record<string, number>
+        >((acc, row: any) => {
           acc[row.conversation_id] = (acc[row.conversation_id] ?? 0) + 1;
           return acc;
         }, {});
@@ -139,7 +159,10 @@ export function MessagingProvider({ children }: ProviderProps) {
         ...c,
         unreadCount: unreadByConversation[c.id] ?? 0,
       }));
-      const totalUnread = nextSummaries.reduce((sum, c) => sum + c.unreadCount, 0);
+      const totalUnread = nextSummaries.reduce(
+        (sum, c) => sum + c.unreadCount,
+        0,
+      );
       setConversations(nextSummaries);
       setUnreadCount(totalUnread);
       return conversationIds;
@@ -181,7 +204,8 @@ export function MessagingProvider({ children }: ProviderProps) {
           });
 
           setMessagesByConversation((prev) => {
-            if (activeConversationIdRef.current !== message.conversation_id) return prev;
+            if (activeConversationIdRef.current !== message.conversation_id)
+              return prev;
             const current = prev[message.conversation_id] ?? [];
             if (current.some((item) => item.id === message.id)) return prev;
             return {
@@ -192,7 +216,10 @@ export function MessagingProvider({ children }: ProviderProps) {
 
           if (message.sender_id !== currentUserId) {
             if (activeConversationIdRef.current === message.conversation_id) {
-              await supabase.from("messages").update({ read_at: new Date().toISOString() }).eq("id", message.id);
+              await supabase
+                .from("messages")
+                .update({ read_at: new Date().toISOString() })
+                .eq("id", message.id);
               return;
             }
             setConversations((prev) =>
@@ -288,7 +315,10 @@ export function MessagingProvider({ children }: ProviderProps) {
       const unreadIds = (unreadRows ?? []).map((row: any) => row.id);
       if (unreadIds.length === 0) return 0;
 
-      await supabase.from("messages").update({ read_at: new Date().toISOString() }).in("id", unreadIds);
+      await supabase
+        .from("messages")
+        .update({ read_at: new Date().toISOString() })
+        .in("id", unreadIds);
       return unreadIds.length;
     },
     [supabase],
@@ -319,12 +349,21 @@ export function MessagingProvider({ children }: ProviderProps) {
       const cleared = await markConversationRead(conversationId, userId);
       if (cleared > 0) {
         setConversations((prev) =>
-          prev.map((conv) => (conv.id === conversationId ? { ...conv, unreadCount: 0 } : conv)),
+          prev.map((conv) =>
+            conv.id === conversationId ? { ...conv, unreadCount: 0 } : conv,
+          ),
         );
         setUnreadCount((prev) => Math.max(prev - cleared, 0));
       }
     },
-    [markConversationRead, supabase, userId, conversations, ensureSubscription, hydrateConversations],
+    [
+      markConversationRead,
+      supabase,
+      userId,
+      conversations,
+      ensureSubscription,
+      hydrateConversations,
+    ],
   );
 
   const closeConversation = useCallback(() => {
@@ -339,7 +378,10 @@ export function MessagingProvider({ children }: ProviderProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ conversationId, body }),
       });
-      const payload = (await res.json()) as { data?: Message; message?: string };
+      const payload = (await res.json()) as {
+        data?: Message;
+        message?: string;
+      };
       if (!res.ok || !payload.data) {
         throw new Error(payload.message || "Failed to send message");
       }
@@ -438,5 +480,9 @@ export function MessagingProvider({ children }: ProviderProps) {
     ],
   );
 
-  return <MessagingContext.Provider value={value}>{children}</MessagingContext.Provider>;
+  return (
+    <MessagingContext.Provider value={value}>
+      {children}
+    </MessagingContext.Provider>
+  );
 }

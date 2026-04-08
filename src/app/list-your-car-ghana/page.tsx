@@ -15,15 +15,18 @@ export default function ListYourCarGhanaPage() {
       faqs={[
         {
           question: "Who can list a car?",
-          answer: "Approved hosts can publish listings and manage bookings on Hayame.",
+          answer:
+            "Approved hosts can publish listings and manage bookings on Hayame.",
         },
         {
           question: "What do I need before publishing?",
-          answer: "A complete listing, availability setup, and at least 5 quality photos.",
+          answer:
+            "A complete listing, availability setup, and at least 5 quality photos.",
         },
         {
           question: "How can I estimate earnings?",
-          answer: "The host dashboard includes an earnings calculator for monthly estimates.",
+          answer:
+            "The host dashboard includes an earnings calculator for monthly estimates.",
         },
       ]}
     />

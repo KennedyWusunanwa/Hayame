@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { addDays, format, isAfter, parseISO } from "date-fns";
+import { requireAdminApi } from "@/lib/admin-auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getRequestUser } from "@/lib/supabase/request-auth";
@@ -8,22 +8,6 @@ import { availabilitySchema } from "@/lib/validators";
 import { getHostStatus } from "@/lib/host-status";
 
 const BLOCKING_STATUSES = ["pending", "awaiting_host", "confirmed"];
-const COOKIE_NAME = "admin_auth";
-
-function adminToken() {
-  const username = process.env.ADMIN_USERNAME ?? "";
-  const password = process.env.ADMIN_PASSWORD ?? "";
-  if (!username || !password) return null;
-  return Buffer.from(`${username}:${password}`).toString("base64");
-}
-
-async function isAdmin() {
-  const token = adminToken();
-  if (!token) return false;
-  const cookieStore = await cookies();
-  const cookie = cookieStore.get(COOKIE_NAME)?.value;
-  return cookie === token;
-}
 
 export async function GET(req: Request) {
   try {
@@ -32,13 +16,25 @@ export async function GET(req: Request) {
     const startDate = searchParams.get("startDate");
     const endDate = searchParams.get("endDate");
     if (!carId || !startDate || !endDate) {
-      return NextResponse.json({ message: "Missing carId or date range" }, { status: 400 });
+      return NextResponse.json(
+        { message: "Missing carId or date range" },
+        { status: 400 },
+      );
     }
 
     const start = parseISO(startDate);
     const end = parseISO(endDate);
-    if (!startDate || !endDate || Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || !isAfter(end, start)) {
-      return NextResponse.json({ message: "Invalid date range" }, { status: 400 });
+    if (
+      !startDate ||
+      !endDate ||
+      Number.isNaN(start.getTime()) ||
+      Number.isNaN(end.getTime()) ||
+      !isAfter(end, start)
+    ) {
+      return NextResponse.json(
+        { message: "Invalid date range" },
+        { status: 400 },
+      );
     }
 
     const supabase = await createSupabaseServerClient();
@@ -58,7 +54,11 @@ export async function GET(req: Request) {
       const nowIso = new Date().toISOString();
       await admin
         .from("bookings")
-        .update({ status: "cancelled", payment_status: "failed", hold_expires_at: null })
+        .update({
+          status: "cancelled",
+          payment_status: "failed",
+          hold_expires_at: null,
+        })
         .eq("status", "pending")
         .lt("hold_expires_at", nowIso);
     }
@@ -75,7 +75,11 @@ export async function GET(req: Request) {
       const blockedDates = new Set<string>();
       addDatesToSet(blockedDates, startDate, endDate);
       const blocked = Array.from(blockedDates).sort();
-      return NextResponse.json({ blockedDates: blocked, available: false, reason: "car_unavailable" });
+      return NextResponse.json({
+        blockedDates: blocked,
+        available: false,
+        reason: "car_unavailable",
+      });
     }
 
     const { data: availabilityRows } = await availabilityClient
@@ -103,7 +107,12 @@ export async function GET(req: Request) {
       });
 
     (bookingRows ?? [])
-      .filter((row: any) => row.status !== "pending" || !row.hold_expires_at || new Date(row.hold_expires_at) > now)
+      .filter(
+        (row: any) =>
+          row.status !== "pending" ||
+          !row.hold_expires_at ||
+          new Date(row.hold_expires_at) > now,
+      )
       .forEach((row: any) => {
         addDatesToSet(blockedDates, row.start_date, row.end_date);
       });
@@ -113,7 +122,10 @@ export async function GET(req: Request) {
 
     return NextResponse.json({ blockedDates: blocked, available: isAvailable });
   } catch (error: any) {
-    return NextResponse.json({ message: error.message ?? "Failed to load availability" }, { status: 400 });
+    return NextResponse.json(
+      { message: error.message ?? "Failed to load availability" },
+      { status: 400 },
+    );
   }
 }
 
@@ -123,30 +135,49 @@ export async function POST(req: Request) {
     const parsed = availabilitySchema.parse(body);
     const start = parseISO(parsed.startDate);
     const end = parseISO(parsed.endDate);
-    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || !isAfter(end, start)) {
-      return NextResponse.json({ message: "Invalid date range" }, { status: 400 });
+    if (
+      Number.isNaN(start.getTime()) ||
+      Number.isNaN(end.getTime()) ||
+      !isAfter(end, start)
+    ) {
+      return NextResponse.json(
+        { message: "Invalid date range" },
+        { status: 400 },
+      );
     }
-    const admin = await isAdmin();
+    const admin = await requireAdminApi();
     const supabase = await createSupabaseServerClient();
-    const supa = admin ? (createSupabaseAdminClient() as any) : (supabase as any);
+    const supa = admin
+      ? (createSupabaseAdminClient() as any)
+      : (supabase as any);
 
     if (!admin) {
       const user = await getRequestUser(supabase as any, req);
-      if (!user) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+      if (!user)
+        return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
 
       const { isHost } = await getHostStatus(supabase as any, user.id);
       if (!isHost) {
-        return NextResponse.json({ message: "Host approval required" }, { status: 403 });
+        return NextResponse.json(
+          { message: "Host approval required" },
+          { status: 403 },
+        );
       }
 
-      const { data: carData } = await supabase.from("cars").select("owner_id").eq("id", parsed.carId).single();
+      const { data: carData } = await supabase
+        .from("cars")
+        .select("owner_id")
+        .eq("id", parsed.carId)
+        .single();
       const car = carData as { owner_id: string } | null;
       if (!car || car.owner_id !== user.id) {
         return NextResponse.json({ message: "Forbidden" }, { status: 403 });
       }
     }
 
-    const repeatDays = new Set((parsed.repeatDays ?? []).map((d) => d.toLowerCase()));
+    const repeatDays = new Set(
+      (parsed.repeatDays ?? []).map((d) => d.toLowerCase()),
+    );
     const rows: any[] = [];
 
     if (repeatDays.size === 0) {
@@ -158,8 +189,12 @@ export async function POST(req: Request) {
       });
     } else {
       for (let dt = new Date(start); dt < end; dt = addDays(dt, 1)) {
-        const weekday = dt.toLocaleDateString("en-US", { weekday: "short" }).toLowerCase(); // e.g., mon, tue
-        const weekdayLong = dt.toLocaleDateString("en-US", { weekday: "long" }).toLowerCase();
+        const weekday = dt
+          .toLocaleDateString("en-US", { weekday: "short" })
+          .toLowerCase(); // e.g., mon, tue
+        const weekdayLong = dt
+          .toLocaleDateString("en-US", { weekday: "long" })
+          .toLowerCase();
         if (repeatDays.has(weekday) || repeatDays.has(weekdayLong)) {
           const iso = dt.toISOString().slice(0, 10);
           const nextIso = addDays(dt, 1).toISOString().slice(0, 10);
@@ -174,14 +209,23 @@ export async function POST(req: Request) {
     }
 
     if (rows.length === 0) {
-      return NextResponse.json({ message: "No matching dates to save." }, { status: 400 });
+      return NextResponse.json(
+        { message: "No matching dates to save." },
+        { status: 400 },
+      );
     }
 
-    const { data: availability, error } = await supa.from("car_availability").insert(rows).select();
+    const { data: availability, error } = await supa
+      .from("car_availability")
+      .insert(rows)
+      .select();
     if (error) throw error;
     return NextResponse.json({ data: availability });
   } catch (error: any) {
-    return NextResponse.json({ message: error.message ?? "Failed to save availability" }, { status: 400 });
+    return NextResponse.json(
+      { message: error.message ?? "Failed to save availability" },
+      { status: 400 },
+    );
   }
 }
 
@@ -194,7 +238,11 @@ function addDatesToSet(set: Set<string>, startDate: string, endDate: string) {
   }
 }
 
-function rangeHasBlockedDates(startDate: string, endDate: string, blocked: Set<string>) {
+function rangeHasBlockedDates(
+  startDate: string,
+  endDate: string,
+  blocked: Set<string>,
+) {
   let cursor = parseISO(startDate);
   const end = parseISO(endDate);
   while (cursor < end) {

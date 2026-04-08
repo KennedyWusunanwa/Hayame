@@ -17,7 +17,9 @@ export function Footer() {
             />
           </Link>
           <div>
-            <p className="text-sm text-gray-600">Premium car sharing across Ghana.</p>
+            <p className="text-sm text-gray-600">
+              Premium car sharing across Ghana.
+            </p>
           </div>
         </div>
         <div className="text-sm text-gray-600">

@@ -24,7 +24,8 @@ const schema = z.object({
 
 type FormValues = z.infer<typeof schema>;
 const EMAIL_CONFIRMATION_REDIRECT_URL =
-  process.env.NEXT_PUBLIC_AUTH_CONFIRMATION_REDIRECT_URL ?? "https://www.hayamegh.com";
+  process.env.NEXT_PUBLIC_AUTH_CONFIRMATION_REDIRECT_URL ??
+  "https://www.hayamegh.com";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -41,7 +42,14 @@ export default function SignupPage() {
     formState: { isSubmitting },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { email: "", password: "", firstName: "", lastName: "", region: "", city: "" },
+    defaultValues: {
+      email: "",
+      password: "",
+      firstName: "",
+      lastName: "",
+      region: "",
+      city: "",
+    },
   });
 
   const onSubmit = async (values: FormValues) => {
@@ -76,10 +84,12 @@ export default function SignupPage() {
       if (userId && session && avatarFile) {
         const ext = avatarFile.name.split(".").pop();
         const path = `${userId}/avatar-${Date.now()}.${ext}`;
-        const { error: uploadError } = await supabase.storage.from(bucket).upload(path, avatarFile, {
-          cacheControl: "3600",
-          upsert: true,
-        });
+        const { error: uploadError } = await supabase.storage
+          .from(bucket)
+          .upload(path, avatarFile, {
+            cacheControl: "3600",
+            upsert: true,
+          });
         if (uploadError) throw uploadError;
         const {
           data: { publicUrl },
@@ -106,7 +116,9 @@ export default function SignupPage() {
         }
       }
 
-      setInfo("Check your email to verify your account. Verification link sent.");
+      setInfo(
+        "Check your email to verify your account. Verification link sent.",
+      );
       router.push("/auth/login");
     } catch (err: any) {
       setError(err.message ?? "Unable to sign up");
@@ -117,25 +129,42 @@ export default function SignupPage() {
     <div className="mx-auto flex min-h-[70vh] max-w-5xl items-center justify-center px-6 py-12">
       <Card className="w-full max-w-md border border-border shadow-soft">
         <CardHeader>
-          <CardTitle className="text-2xl font-semibold text-foreground">Create account</CardTitle>
-          <p className="text-sm text-gray-600">Join Ghana's trusted car sharing network.</p>
+          <CardTitle className="text-2xl font-semibold text-foreground">
+            Create account
+          </CardTitle>
+          <p className="text-sm text-gray-600">
+            Join Ghana&apos;s trusted car sharing network.
+          </p>
         </CardHeader>
         <CardContent>
           <form className="space-y-4" onSubmit={handleSubmit(onSubmit)}>
             <div className="space-y-2">
-              <label className="text-sm font-semibold text-gray-700">First name</label>
+              <label className="text-sm font-semibold text-gray-700">
+                First name
+              </label>
               <Input placeholder="Ama" {...register("firstName")} required />
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-semibold text-gray-700">Last name</label>
+              <label className="text-sm font-semibold text-gray-700">
+                Last name
+              </label>
               <Input placeholder="Owusu" {...register("lastName")} required />
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-semibold text-gray-700">Email</label>
-              <Input type="email" placeholder="you@example.com" {...register("email")} required />
+              <label className="text-sm font-semibold text-gray-700">
+                Email
+              </label>
+              <Input
+                type="email"
+                placeholder="you@example.com"
+                {...register("email")}
+                required
+              />
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-semibold text-gray-700">Region</label>
+              <label className="text-sm font-semibold text-gray-700">
+                Region
+              </label>
               <Select
                 value={watch("region") ?? ""}
                 onChange={(e) => {
@@ -152,7 +181,9 @@ export default function SignupPage() {
               </Select>
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-semibold text-gray-700">City / Location</label>
+              <label className="text-sm font-semibold text-gray-700">
+                City / Location
+              </label>
               <Select
                 value={watch("city") ?? ""}
                 onChange={(e) => setValue("city", e.target.value)}
@@ -167,35 +198,41 @@ export default function SignupPage() {
               </Select>
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-semibold text-gray-700">Profile photo (optional)</label>
+              <label className="text-sm font-semibold text-gray-700">
+                Profile photo (optional)
+              </label>
               <Input
                 type="file"
                 accept="image/*"
                 onChange={(e) => setAvatarFile(e.target.files?.[0] ?? null)}
                 className="cursor-pointer"
               />
-              <p className="text-xs text-gray-500">Add a clear headshot; you can change this later.</p>
+              <p className="text-xs text-gray-500">
+                Add a clear headshot; you can change this later.
+              </p>
             </div>
-          <div className="space-y-2">
-            <label className="text-sm font-semibold text-gray-700">Password</label>
-            <div className="relative">
-              <Input
-                type={showPassword ? "text" : "password"}
-                placeholder="••••••••"
-                {...register("password")}
-                required
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword((p) => !p)}
-                className="absolute inset-y-0 right-3 text-xs font-semibold text-gray-600"
-              >
-                {showPassword ? "Hide" : "Show"}
-              </button>
+            <div className="space-y-2">
+              <label className="text-sm font-semibold text-gray-700">
+                Password
+              </label>
+              <div className="relative">
+                <Input
+                  type={showPassword ? "text" : "password"}
+                  placeholder="••••••••"
+                  {...register("password")}
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((p) => !p)}
+                  className="absolute inset-y-0 right-3 text-xs font-semibold text-gray-600"
+                >
+                  {showPassword ? "Hide" : "Show"}
+                </button>
+              </div>
             </div>
-          </div>
-          {error ? <p className="text-sm text-red-600">{error}</p> : null}
-          {info ? <p className="text-sm text-green-700">{info}</p> : null}
+            {error ? <p className="text-sm text-red-600">{error}</p> : null}
+            {info ? <p className="text-sm text-green-700">{info}</p> : null}
             <Button className="w-full" type="submit" disabled={isSubmitting}>
               {isSubmitting ? "Creating account..." : "Sign up"}
             </Button>

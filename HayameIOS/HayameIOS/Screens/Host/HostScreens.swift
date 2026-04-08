@@ -643,13 +643,15 @@ struct ListingEditorScreen: View {
                     label: "Insurance (per trip)",
                     value: $draft.insuranceFee,
                     range: 0...2_000,
-                    step: 10
+                    step: 10,
+                    zeroRendersAsEmpty: true
                 )
                 CurrencyInput(
                     label: "Security Deposit",
                     value: $draft.depositAmount,
                     range: 0...5_000,
-                    step: 50
+                    step: 50,
+                    zeroRendersAsEmpty: true
                 )
             }
 
@@ -709,7 +711,8 @@ struct ListingEditorScreen: View {
                         label: "Delivery Fee",
                         value: $draft.deliveryFee,
                         range: 0...2_000,
-                        step: 10
+                        step: 10,
+                        zeroRendersAsEmpty: true
                     )
                 } else {
                     Text("Delivery fee is disabled until delivery is enabled.")
@@ -720,7 +723,8 @@ struct ListingEditorScreen: View {
                     label: "Outside Listing Region Fee",
                     value: $draft.outsideAccraFee,
                     range: 0...3_000,
-                    step: 20
+                    step: 20,
+                    zeroRendersAsEmpty: true
                 )
             }
 
@@ -945,32 +949,17 @@ struct ListingEditorScreen: View {
             switch mode {
             case .create:
                 let created = try await appState.createListingNow(from: draft)
-                var uploadedCount = 0
-                var uploadFailures: [String] = []
-                for pending in pendingUploads.prefix(maxPhotos) {
-                    do {
-                        _ = try await appState.uploadListingPhoto(
-                            carID: created.id,
-                            fileData: pending.data,
-                            fileName: "car-photo-\(UUID().uuidString).jpg",
-                            mimeType: "image/jpeg",
-                            replacePhotoID: nil
-                        )
-                        uploadedCount += 1
-                    } catch {
-                        uploadFailures.append((error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
-                    }
-                }
+                let uploadsToProcess = Array(pendingUploads.prefix(maxPhotos))
                 clearCreateDraft()
                 pendingUploads = []
                 draft = ListingDraft()
-                if uploadedCount > 0 {
-                    editorNotice = "Listing created and \(uploadedCount) photo(s) uploaded."
-                } else {
-                    editorNotice = "Listing created."
-                }
-                if !uploadFailures.isEmpty {
-                    appState.syncErrorMessage = "Listing created, but some photos failed to upload. Open the listing and add the remaining photos."
+                if !uploadsToProcess.isEmpty {
+                    Task {
+                        await uploadPendingPhotosAfterCreation(
+                            carID: created.id,
+                            uploads: uploadsToProcess
+                        )
+                    }
                 }
                 appState.hostTab = .cars
                 dismiss()
@@ -981,6 +970,32 @@ struct ListingEditorScreen: View {
             }
         } catch {
             editorError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        }
+    }
+
+    @MainActor
+    private func uploadPendingPhotosAfterCreation(
+        carID: String,
+        uploads: [PendingListingUpload]
+    ) async {
+        var uploadFailures: [String] = []
+
+        for pending in uploads {
+            do {
+                _ = try await appState.uploadListingPhoto(
+                    carID: carID,
+                    fileData: pending.data,
+                    fileName: "car-photo-\(UUID().uuidString).jpg",
+                    mimeType: "image/jpeg",
+                    replacePhotoID: nil
+                )
+            } catch {
+                uploadFailures.append((error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
+            }
+        }
+
+        if !uploadFailures.isEmpty {
+            appState.syncErrorMessage = "Listing created, but some photos failed to upload. Open the listing and add the remaining photos."
         }
     }
 
@@ -1116,6 +1131,7 @@ private struct CurrencyInput: View {
     var placeholder: String = "Enter amount"
     var suffix: String? = nil
     var showsQuickAdjustButtons: Bool = true
+    var zeroRendersAsEmpty: Bool = false
 
     @State private var textValue: String = ""
 
@@ -1190,13 +1206,10 @@ private struct CurrencyInput: View {
         }
         .padding(.vertical, 4)
         .onAppear {
-            textValue = String(value)
+            syncTextValue(with: value)
         }
         .onChange(of: value) { _, newValue in
-            let normalized = String(newValue)
-            if textValue != normalized {
-                textValue = normalized
-            }
+            syncTextValue(with: newValue)
         }
     }
 
@@ -1209,18 +1222,30 @@ private struct CurrencyInput: View {
     private func adjust(by delta: Int) {
         let next = min(max(value + delta, range.lowerBound), range.upperBound)
         value = next
-        textValue = String(next)
+        syncTextValue(with: next)
     }
 
     private func updateFromInput(_ rawValue: String) {
         let digitsOnly = rawValue.filter(\.isNumber)
         textValue = digitsOnly
-        guard !digitsOnly.isEmpty else { return }
+        guard !digitsOnly.isEmpty else {
+            if zeroRendersAsEmpty && range.lowerBound == 0 {
+                value = 0
+            }
+            return
+        }
         guard let parsed = Int(digitsOnly) else { return }
         let clamped = min(max(parsed, range.lowerBound), range.upperBound)
         value = clamped
         if clamped != parsed {
             textValue = String(clamped)
+        }
+    }
+
+    private func syncTextValue(with newValue: Int) {
+        let normalized = zeroRendersAsEmpty && newValue == 0 ? "" : String(newValue)
+        if textValue != normalized {
+            textValue = normalized
         }
     }
 }
@@ -1629,6 +1654,44 @@ struct HostProfileScreen: View {
                 Label("Host level: Verified Host", systemImage: "checkmark.seal.fill")
             }
 
+            Section("Notifications") {
+                notificationPreferenceToggle(
+                    title: "Trips & bookings",
+                    subtitle: "Booking approvals, changes, and trip reminders.",
+                    isOn: Binding(
+                        get: { appState.notificationPreferences.bookingUpdates },
+                        set: { appState.updateNotificationPreference(bookingUpdates: $0) }
+                    )
+                )
+                notificationPreferenceToggle(
+                    title: "Messages",
+                    subtitle: "New chats and replies from renters or hosts.",
+                    isOn: Binding(
+                        get: { appState.notificationPreferences.messages },
+                        set: { appState.updateNotificationPreference(messages: $0) }
+                    )
+                )
+                notificationPreferenceToggle(
+                    title: "Account & security",
+                    subtitle: "Verification, login, and account notices.",
+                    isOn: Binding(
+                        get: { appState.notificationPreferences.accountSecurity },
+                        set: { appState.updateNotificationPreference(accountSecurity: $0) }
+                    )
+                )
+                notificationPreferenceToggle(
+                    title: "News & announcements",
+                    subtitle: "Optional product updates, releases, and notices.",
+                    isOn: Binding(
+                        get: { appState.notificationPreferences.newsAnnouncements },
+                        set: { appState.updateNotificationPreference(newsAnnouncements: $0) }
+                    )
+                )
+                Text("Operational alerts stay on by default. News & announcements are optional.")
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .foregroundStyle(HayameTheme.mutedText)
+            }
+
             Section("Host") {
                 NavigationLink("Guest feedback") {
                     HostReviewsScreen()
@@ -1687,6 +1750,25 @@ struct HostProfileScreen: View {
                     .font(.system(size: 16, weight: .bold, design: .rounded))
                     .foregroundStyle(HayameTheme.brandNavy)
             )
+    }
+
+    @ViewBuilder
+    private func notificationPreferenceToggle(
+        title: String,
+        subtitle: String,
+        isOn: Binding<Bool>
+    ) -> some View {
+        Toggle(isOn: isOn) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                Text(subtitle)
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .foregroundStyle(HayameTheme.mutedText)
+            }
+            .padding(.vertical, 2)
+        }
+        .toggleStyle(SwitchToggleStyle(tint: HayameTheme.brandBlue))
     }
 }
 

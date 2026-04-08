@@ -1,34 +1,169 @@
 import Image from "next/image";
 import Link from "next/link";
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { getAdminReviewerName, requireAdminPage } from "@/lib/admin-auth";
+import { sanitizeAnnouncementUrl } from "@/lib/notifications";
 import { resolveCarImage } from "@/lib/car-images";
+import { sendBroadcastPushNotifications } from "@/lib/push";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { refundPaystack } from "@/lib/paystack";
 import { getInitials } from "@/lib/utils";
 
-const COOKIE_NAME = "admin_auth";
-
-function adminToken() {
-  const username = process.env.ADMIN_USERNAME ?? "";
-  const password = process.env.ADMIN_PASSWORD ?? "";
-  if (!username || !password) return null;
-  return Buffer.from(`${username}:${password}`).toString("base64");
+function isChecked(formData: FormData, name: string, fallback = false) {
+  const value = String(formData.get(name) ?? "").trim().toLowerCase();
+  if (!value) return fallback;
+  return ["1", "true", "yes", "on"].includes(value);
 }
 
-async function requireAdmin() {
-  const token = adminToken();
-  if (!token) redirect("/admin?error=missing");
-  const cookieStore = await cookies();
-  const cookie = cookieStore.get(COOKIE_NAME)?.value;
-  if (cookie !== token) redirect("/admin");
+function normalizeAnnouncementCategory(raw: FormDataEntryValue | null) {
+  return String(raw ?? "")
+    .trim()
+    .toLowerCase() === "news"
+    ? "news"
+    : "system";
+}
+
+function normalizeAnnouncementDelivery(raw: FormDataEntryValue | null) {
+  const value = String(raw ?? "").trim().toLowerCase();
+  if (value === "push" || value === "both") return value;
+  return "in_app";
+}
+
+function normalizeAnnouncementAudience(raw: FormDataEntryValue | null) {
+  return String(raw ?? "")
+    .trim()
+    .toLowerCase() === "authenticated"
+    ? "authenticated"
+    : "all";
+}
+
+function announcementPreferenceKey(category: string) {
+  return category === "news" ? "news_announcements" : "account_security";
+}
+
+async function createAnnouncementAction(formData: FormData) {
+  "use server";
+  await requireAdminPage();
+  const admin = createSupabaseAdminClient() as any;
+
+  const title = String(formData.get("title") ?? "").trim();
+  const body = String(formData.get("body") ?? "").trim();
+  const category = normalizeAnnouncementCategory(formData.get("category"));
+  const delivery = normalizeAnnouncementDelivery(formData.get("delivery"));
+  const audience = normalizeAnnouncementAudience(formData.get("audience"));
+  const showOnce = isChecked(formData, "showOnce", true);
+  const ctaLabel = String(formData.get("ctaLabel") ?? "").trim() || null;
+  const ctaUrl = sanitizeAnnouncementUrl(formData.get("ctaUrl"));
+
+  if (!title || body.length < 8) {
+    redirect("/admin/platform");
+  }
+
+  const publishedAt = new Date().toISOString();
+  const reviewer = getAdminReviewerName();
+  const { data: announcement, error } = await admin
+    .from("app_announcements")
+    .insert({
+      title,
+      body,
+      category,
+      delivery,
+      audience,
+      show_once: showOnce,
+      cta_label: ctaLabel,
+      cta_url: ctaUrl,
+      published_at: publishedAt,
+      created_by: reviewer,
+      updated_at: publishedAt,
+    })
+    .select(
+      "id,title,body,category,delivery,audience,show_once,cta_label,cta_url,published_at",
+    )
+    .single();
+
+  if (error || !announcement?.id) {
+    redirect("/admin/platform");
+  }
+
+  let pushResult: Awaited<
+    ReturnType<typeof sendBroadcastPushNotifications>
+  > | null = null;
+  if (delivery === "push" || delivery === "both") {
+    pushResult = await sendBroadcastPushNotifications({
+      adminClient: admin,
+      title,
+      body,
+      collapseId: `announcement:${announcement.id}`,
+      preferenceKey: announcementPreferenceKey(category),
+      notificationCategory: announcementPreferenceKey(category),
+      data: {
+        type: "announcement",
+        announcementId: announcement.id,
+        category,
+        ctaUrl: ctaUrl ?? "",
+      },
+    });
+  }
+
+  await admin.from("admin_actions").insert({
+    action: "announcement_created",
+    target_id: announcement.id,
+    target_type: "announcement",
+    performed_by: reviewer,
+    metadata: {
+      category,
+      delivery,
+      audience,
+      showOnce,
+      pushed: Boolean(pushResult),
+      pushResult,
+    },
+  });
+
+  redirect("/admin/platform");
+}
+
+async function archiveAnnouncementAction(formData: FormData) {
+  "use server";
+  await requireAdminPage();
+  const admin = createSupabaseAdminClient() as any;
+  const announcementId = String(formData.get("announcementId") ?? "").trim();
+  if (!announcementId) {
+    redirect("/admin/platform");
+  }
+
+  const archivedAt = new Date().toISOString();
+  await admin
+    .from("app_announcements")
+    .update({
+      archived_at: archivedAt,
+      ends_at: archivedAt,
+      updated_at: archivedAt,
+    })
+    .eq("id", announcementId);
+
+  await admin.from("admin_actions").insert({
+    action: "announcement_archived",
+    target_id: announcementId,
+    target_type: "announcement",
+    performed_by: getAdminReviewerName(),
+  });
+
+  redirect("/admin/platform");
 }
 
 async function listingReviewAction(formData: FormData) {
   "use server";
-  await requireAdmin();
+  await requireAdminPage();
   const admin = createSupabaseAdminClient() as any;
   const carId = String(formData.get("carId") ?? "");
   const action = String(formData.get("action") ?? "");
@@ -42,8 +177,9 @@ async function listingReviewAction(formData: FormData) {
     .update({
       approval_status: action === "approve" ? "approved" : "rejected",
       reviewed_at: new Date().toISOString(),
-      reviewed_by: process.env.ADMIN_USERNAME ?? "admin",
-      rejection_reason: action === "reject" ? reason || "Rejected by admin" : null,
+      reviewed_by: getAdminReviewerName(),
+      rejection_reason:
+        action === "reject" ? reason || "Rejected by admin" : null,
     })
     .eq("id", carId);
 
@@ -51,7 +187,7 @@ async function listingReviewAction(formData: FormData) {
     action: action === "approve" ? "listing_approved" : "listing_rejected",
     target_id: carId,
     target_type: "car",
-    performed_by: process.env.ADMIN_USERNAME ?? "admin",
+    performed_by: getAdminReviewerName(),
     metadata: action === "reject" ? { reason } : null,
   });
 
@@ -60,7 +196,7 @@ async function listingReviewAction(formData: FormData) {
 
 async function deleteListingAction(formData: FormData) {
   "use server";
-  await requireAdmin();
+  await requireAdminPage();
   const admin = createSupabaseAdminClient() as any;
   const carId = String(formData.get("carId") ?? "");
   if (!carId) {
@@ -72,7 +208,7 @@ async function deleteListingAction(formData: FormData) {
     action: "listing_deleted",
     target_id: carId,
     target_type: "car",
-    performed_by: process.env.ADMIN_USERNAME ?? "admin",
+    performed_by: getAdminReviewerName(),
   });
 
   redirect("/admin/platform");
@@ -80,10 +216,11 @@ async function deleteListingAction(formData: FormData) {
 
 async function refundAction(formData: FormData) {
   "use server";
-  await requireAdmin();
+  await requireAdminPage();
   const admin = createSupabaseAdminClient() as any;
   const bookingId = String(formData.get("bookingId") ?? "");
-  const reason = String(formData.get("reason") ?? "").trim() || "Refunded by admin";
+  const reason =
+    String(formData.get("reason") ?? "").trim() || "Refunded by admin";
   if (!bookingId) redirect("/admin/platform");
 
   const { data: booking } = await admin
@@ -113,7 +250,7 @@ async function refundAction(formData: FormData) {
     action: "booking_refunded",
     target_id: bookingId,
     target_type: "booking",
-    performed_by: process.env.ADMIN_USERNAME ?? "admin",
+    performed_by: getAdminReviewerName(),
     metadata: { reason },
   });
 
@@ -122,7 +259,7 @@ async function refundAction(formData: FormData) {
 
 async function reviewModerationAction(formData: FormData) {
   "use server";
-  await requireAdmin();
+  await requireAdminPage();
   const admin = createSupabaseAdminClient() as any;
   const reviewId = String(formData.get("reviewId") ?? "");
   const action = String(formData.get("action") ?? "");
@@ -136,7 +273,7 @@ async function reviewModerationAction(formData: FormData) {
     .update({
       is_hidden: action === "hide",
       moderated_at: new Date().toISOString(),
-      moderated_by: process.env.ADMIN_USERNAME ?? "admin",
+      moderated_by: getAdminReviewerName(),
       moderation_reason: action === "hide" ? reason || "Hidden by admin" : null,
     })
     .eq("id", reviewId);
@@ -145,7 +282,7 @@ async function reviewModerationAction(formData: FormData) {
     action: action === "hide" ? "review_hidden" : "review_restored",
     target_id: reviewId,
     target_type: "review",
-    performed_by: process.env.ADMIN_USERNAME ?? "admin",
+    performed_by: getAdminReviewerName(),
     metadata: action === "hide" ? { reason } : null,
   });
 
@@ -154,12 +291,15 @@ async function reviewModerationAction(formData: FormData) {
 
 async function disputeAction(formData: FormData) {
   "use server";
-  await requireAdmin();
+  await requireAdminPage();
   const admin = createSupabaseAdminClient() as any;
   const disputeId = String(formData.get("disputeId") ?? "");
   const status = String(formData.get("status") ?? "");
   const note = String(formData.get("note") ?? "").trim();
-  if (!disputeId || !["open", "under_review", "resolved", "closed"].includes(status)) {
+  if (
+    !disputeId ||
+    !["open", "under_review", "resolved", "closed"].includes(status)
+  ) {
     redirect("/admin/platform");
   }
 
@@ -176,7 +316,7 @@ async function disputeAction(formData: FormData) {
     action: "dispute_status_updated",
     target_id: disputeId,
     target_type: "dispute",
-    performed_by: process.env.ADMIN_USERNAME ?? "admin",
+    performed_by: getAdminReviewerName(),
     metadata: { status, note },
   });
 
@@ -184,56 +324,100 @@ async function disputeAction(formData: FormData) {
 }
 
 export default async function AdminPlatformPage() {
-  await requireAdmin();
+  await requireAdminPage();
   const admin = createSupabaseAdminClient() as any;
 
-  const [pendingListings, refundableBookings, reviews, disputes] = await Promise.all([
-    admin
-      .from("cars")
-      .select(
-        "id,title,city,daily_price,approval_status,rejection_reason,owner:profiles!cars_owner_id_fkey(full_name,avatar_url,phone)",
-      )
-      .eq("approval_status", "pending")
-      .order("created_at", { ascending: false })
-      .limit(50),
-    admin
-      .from("bookings")
-      .select("id,start_date,end_date,total_price,payment_status,payment_reference,payment_provider,cars(title)")
-      .eq("payment_status", "paid")
-      .order("created_at", { ascending: false })
-      .limit(50),
-    admin
-      .from("reviews")
-      .select(
-        "id,rating,comment,is_hidden,moderation_reason,created_at,cars(title),profiles:profiles!reviews_user_id_fkey(full_name)",
-      )
-      .order("created_at", { ascending: false })
-      .limit(50),
-    admin
-      .from("disputes")
-      .select("id,booking_id,status,reason,resolution_note,created_at,cars(title)")
-      .order("created_at", { ascending: false })
-      .limit(50),
-  ]);
+  const [
+    pendingListings,
+    refundableBookings,
+    reviews,
+    disputes,
+    announcements,
+    pushTokenRows,
+    newsPreferenceRows,
+  ] =
+    await Promise.all([
+      admin
+        .from("cars")
+        .select(
+          "id,title,city,daily_price,approval_status,rejection_reason,owner:profiles!cars_owner_id_fkey(full_name,avatar_url,phone)",
+        )
+        .eq("approval_status", "pending")
+        .order("created_at", { ascending: false })
+        .limit(50),
+      admin
+        .from("bookings")
+        .select(
+          "id,start_date,end_date,total_price,payment_status,payment_reference,payment_provider,cars(title)",
+        )
+        .eq("payment_status", "paid")
+        .order("created_at", { ascending: false })
+        .limit(50),
+      admin
+        .from("reviews")
+        .select(
+          "id,rating,comment,is_hidden,moderation_reason,created_at,cars(title),profiles:profiles!reviews_user_id_fkey(full_name)",
+        )
+        .order("created_at", { ascending: false })
+        .limit(50),
+      admin
+        .from("disputes")
+        .select(
+          "id,booking_id,status,reason,resolution_note,created_at,cars(title)",
+        )
+        .order("created_at", { ascending: false })
+        .limit(50),
+      admin
+        .from("app_announcements")
+        .select(
+          "id,title,body,category,delivery,audience,show_once,published_at,archived_at,created_at",
+        )
+        .order("created_at", { ascending: false })
+        .limit(20),
+      admin.from("mobile_push_tokens").select("user_id"),
+      admin
+        .from("user_notification_preferences")
+        .select("user_id")
+        .eq("news_announcements", true),
+    ]);
 
   const pendingCarIds = (pendingListings.data ?? []).map((car: any) => car.id);
   const { data: pendingPhotoRows } =
     pendingCarIds.length > 0
-      ? await admin.from("car_photos").select("car_id,url").in("car_id", pendingCarIds)
+      ? await admin
+          .from("car_photos")
+          .select("car_id,url")
+          .in("car_id", pendingCarIds)
       : { data: [] };
   const listingPhotosByCar = new Map<string, string[]>();
   (pendingPhotoRows ?? []).forEach((row: any) => {
     if (!row?.car_id || !row?.url) return;
-    if (!listingPhotosByCar.has(row.car_id)) listingPhotosByCar.set(row.car_id, []);
+    if (!listingPhotosByCar.has(row.car_id))
+      listingPhotosByCar.set(row.car_id, []);
     listingPhotosByCar.get(row.car_id)!.push(row.url);
   });
+
+  const registeredPushUsers = new Set(
+    (pushTokenRows.data ?? [])
+      .map((row: any) => String(row?.user_id ?? "").trim())
+      .filter(Boolean),
+  ).size;
+  const newsOptInUsers = new Set(
+    (newsPreferenceRows.data ?? [])
+      .map((row: any) => String(row?.user_id ?? "").trim())
+      .filter(Boolean),
+  ).size;
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 px-4 py-6 sm:px-6 sm:py-8">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <p className="text-sm font-semibold text-primary">Admin platform controls</p>
-          <h1 className="text-2xl font-semibold text-foreground">Moderation & controls</h1>
+          <p className="text-sm font-semibold text-primary">
+            Admin platform controls
+          </p>
+          <h1 className="text-2xl font-semibold text-foreground">
+            Moderation & controls
+          </h1>
         </div>
         <Link href="/admin" className="text-sm font-semibold text-brand">
           Back to admin
@@ -247,126 +431,148 @@ export default async function AdminPlatformPage() {
         <CardContent>
           <div className="overflow-x-auto">
             <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Listing</TableHead>
-                <TableHead>Owner</TableHead>
-                <TableHead>Price</TableHead>
-                <TableHead>Preview</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {(pendingListings.data ?? []).map((car: any) => {
-                const listingPhotos = listingPhotosByCar.get(car.id) ?? [];
-                const previewImage = resolveCarImage(listingPhotos[0], {
-                  id: car.id,
-                  title: car.title,
-                  city: car.city,
-                  region: car.region,
-                  carType: car.car_type,
-                });
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Listing</TableHead>
+                  <TableHead>Owner</TableHead>
+                  <TableHead>Price</TableHead>
+                  <TableHead>Preview</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {(pendingListings.data ?? []).map((car: any) => {
+                  const listingPhotos = listingPhotosByCar.get(car.id) ?? [];
+                  const previewImage = resolveCarImage(listingPhotos[0], {
+                    id: car.id,
+                    title: car.title,
+                    city: car.city,
+                    region: car.region,
+                    carType: car.car_type,
+                  });
 
-                return (
-                  <TableRow key={car.id}>
-                    <TableCell>
-                      <div className="flex min-w-0 items-start gap-3">
-                        <div className="relative h-14 w-20 shrink-0 overflow-hidden rounded-md border border-border">
-                          <Image
-                            src={previewImage}
-                            alt={car.title ?? "Listing"}
-                            fill
-                            className="object-cover"
-                            sizes="80px"
-                          />
-                        </div>
-                        <div className="min-w-0">
-                          <p className="truncate font-semibold">{car.title}</p>
-                          <p className="text-xs text-gray-600">{car.city ?? "Ghana"}</p>
-                          <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
-                            {listingPhotos.length > 0 ? (
-                              listingPhotos.map((url: string, idx: number) => (
-                                <div
-                                  key={`${car.id}-thumb-${idx}`}
-                                  className="relative h-10 w-12 shrink-0 overflow-hidden rounded border border-border"
-                                >
-                                  <Image
-                                    src={url}
-                                    alt={`${car.title ?? "Listing"} image ${idx + 1}`}
-                                    fill
-                                    className="object-cover"
-                                    sizes="48px"
-                                  />
-                                </div>
-                              ))
-                            ) : (
-                              <span className="text-[11px] text-gray-500">No photos uploaded.</span>
-                            )}
+                  return (
+                    <TableRow key={car.id}>
+                      <TableCell>
+                        <div className="flex min-w-0 items-start gap-3">
+                          <div className="relative h-14 w-20 shrink-0 overflow-hidden rounded-md border border-border">
+                            <Image
+                              src={previewImage}
+                              alt={car.title ?? "Listing"}
+                              fill
+                              className="object-cover"
+                              sizes="80px"
+                            />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="truncate font-semibold">
+                              {car.title}
+                            </p>
+                            <p className="text-xs text-gray-600">
+                              {car.city ?? "Ghana"}
+                            </p>
+                            <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
+                              {listingPhotos.length > 0 ? (
+                                listingPhotos.map(
+                                  (url: string, idx: number) => (
+                                    <div
+                                      key={`${car.id}-thumb-${idx}`}
+                                      className="relative h-10 w-12 shrink-0 overflow-hidden rounded border border-border"
+                                    >
+                                      <Image
+                                        src={url}
+                                        alt={`${car.title ?? "Listing"} image ${idx + 1}`}
+                                        fill
+                                        className="object-cover"
+                                        sizes="48px"
+                                      />
+                                    </div>
+                                  ),
+                                )
+                              ) : (
+                                <span className="text-[11px] text-gray-500">
+                                  No photos uploaded.
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <ProfileAvatar
-                          src={car.owner?.avatar_url}
-                          name={car.owner?.full_name ?? "Host"}
-                          className="h-8 w-8"
-                        />
-                        <div className="text-sm">{car.owner?.full_name ?? "Host"}</div>
-                      </div>
-                    </TableCell>
-                    <TableCell>GHS {Number(car.daily_price ?? 0).toFixed(0)}</TableCell>
-                    <TableCell>
-                      <Link
-                        href={`/admin/cars/${car.id}/preview`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex rounded-md border border-border px-3 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50"
-                      >
-                        Demo preview
-                      </Link>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-2">
-                        <form action={listingReviewAction}>
-                          <input type="hidden" name="carId" value={car.id} />
-                          <input type="hidden" name="action" value="approve" />
-                          <button className="rounded-md bg-emerald-600 px-3 py-1 text-xs font-semibold text-white">
-                            Approve
-                          </button>
-                        </form>
-                        <form action={listingReviewAction} className="flex items-center gap-2">
-                          <input type="hidden" name="carId" value={car.id} />
-                          <input type="hidden" name="action" value="reject" />
-                          <input
-                            name="reason"
-                            placeholder="Reason"
-                            className="hidden rounded-md border border-border px-2 py-1 text-xs sm:block"
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <ProfileAvatar
+                            src={car.owner?.avatar_url}
+                            name={car.owner?.full_name ?? "Host"}
+                            className="h-8 w-8"
                           />
-                          <button className="rounded-md bg-red-600 px-3 py-1 text-xs font-semibold text-white">
-                            Reject
-                          </button>
-                        </form>
-                        <form action={deleteListingAction}>
-                          <input type="hidden" name="carId" value={car.id} />
-                          <button className="rounded-md border border-red-200 px-3 py-1 text-xs font-semibold text-red-700 hover:bg-red-50">
-                            Delete
-                          </button>
-                        </form>
-                      </div>
+                          <div className="text-sm">
+                            {car.owner?.full_name ?? "Host"}
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        GHS {Number(car.daily_price ?? 0).toFixed(0)}
+                      </TableCell>
+                      <TableCell>
+                        <Link
+                          href={`/admin/cars/${car.id}/preview`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex rounded-md border border-border px-3 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+                        >
+                          Demo preview
+                        </Link>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-2">
+                          <form action={listingReviewAction}>
+                            <input type="hidden" name="carId" value={car.id} />
+                            <input
+                              type="hidden"
+                              name="action"
+                              value="approve"
+                            />
+                            <button className="rounded-md bg-emerald-600 px-3 py-1 text-xs font-semibold text-white">
+                              Approve
+                            </button>
+                          </form>
+                          <form
+                            action={listingReviewAction}
+                            className="flex items-center gap-2"
+                          >
+                            <input type="hidden" name="carId" value={car.id} />
+                            <input type="hidden" name="action" value="reject" />
+                            <input
+                              name="reason"
+                              placeholder="Reason"
+                              className="hidden rounded-md border border-border px-2 py-1 text-xs sm:block"
+                            />
+                            <button className="rounded-md bg-red-600 px-3 py-1 text-xs font-semibold text-white">
+                              Reject
+                            </button>
+                          </form>
+                          <form action={deleteListingAction}>
+                            <input type="hidden" name="carId" value={car.id} />
+                            <button className="rounded-md border border-red-200 px-3 py-1 text-xs font-semibold text-red-700 hover:bg-red-50">
+                              Delete
+                            </button>
+                          </form>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+                {(pendingListings.data ?? []).length === 0 ? (
+                  <TableRow>
+                    <TableCell
+                      colSpan={5}
+                      className="text-center text-sm text-gray-600"
+                    >
+                      No pending listings.
                     </TableCell>
                   </TableRow>
-                );
-              })}
-              {(pendingListings.data ?? []).length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="text-center text-sm text-gray-600">
-                    No pending listings.
-                  </TableCell>
-                </TableRow>
-              ) : null}
-            </TableBody>
+                ) : null}
+              </TableBody>
             </Table>
           </div>
         </CardContent>
@@ -379,48 +585,62 @@ export default async function AdminPlatformPage() {
         <CardContent>
           <div className="overflow-x-auto">
             <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Booking</TableHead>
-                <TableHead>Car</TableHead>
-                <TableHead>Total</TableHead>
-                <TableHead className="text-right">Refund</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {(refundableBookings.data ?? []).map((booking: any) => (
-                <TableRow key={booking.id}>
-                  <TableCell>
-                    <p className="font-mono text-xs">{booking.id.slice(0, 8)}</p>
-                    <p className="text-xs text-gray-600">
-                      {booking.start_date} - {booking.end_date}
-                    </p>
-                  </TableCell>
-                  <TableCell>{booking.cars?.title ?? "Car"}</TableCell>
-                  <TableCell>GHS {Number(booking.total_price ?? 0).toFixed(0)}</TableCell>
-                  <TableCell className="text-right">
-                    <form action={refundAction} className="flex items-center justify-end gap-2">
-                      <input type="hidden" name="bookingId" value={booking.id} />
-                      <input
-                        name="reason"
-                        placeholder="Reason"
-                        className="hidden rounded-md border border-border px-2 py-1 text-xs sm:block"
-                      />
-                      <button className="rounded-md bg-amber-600 px-3 py-1 text-xs font-semibold text-white">
-                        Refund
-                      </button>
-                    </form>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {(refundableBookings.data ?? []).length === 0 ? (
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center text-sm text-gray-600">
-                    No paid bookings available for refund.
-                  </TableCell>
+                  <TableHead>Booking</TableHead>
+                  <TableHead>Car</TableHead>
+                  <TableHead>Total</TableHead>
+                  <TableHead className="text-right">Refund</TableHead>
                 </TableRow>
-              ) : null}
-            </TableBody>
+              </TableHeader>
+              <TableBody>
+                {(refundableBookings.data ?? []).map((booking: any) => (
+                  <TableRow key={booking.id}>
+                    <TableCell>
+                      <p className="font-mono text-xs">
+                        {booking.id.slice(0, 8)}
+                      </p>
+                      <p className="text-xs text-gray-600">
+                        {booking.start_date} - {booking.end_date}
+                      </p>
+                    </TableCell>
+                    <TableCell>{booking.cars?.title ?? "Car"}</TableCell>
+                    <TableCell>
+                      GHS {Number(booking.total_price ?? 0).toFixed(0)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <form
+                        action={refundAction}
+                        className="flex items-center justify-end gap-2"
+                      >
+                        <input
+                          type="hidden"
+                          name="bookingId"
+                          value={booking.id}
+                        />
+                        <input
+                          name="reason"
+                          placeholder="Reason"
+                          className="hidden rounded-md border border-border px-2 py-1 text-xs sm:block"
+                        />
+                        <button className="rounded-md bg-amber-600 px-3 py-1 text-xs font-semibold text-white">
+                          Refund
+                        </button>
+                      </form>
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {(refundableBookings.data ?? []).length === 0 ? (
+                  <TableRow>
+                    <TableCell
+                      colSpan={4}
+                      className="text-center text-sm text-gray-600"
+                    >
+                      No paid bookings available for refund.
+                    </TableCell>
+                  </TableRow>
+                ) : null}
+              </TableBody>
             </Table>
           </div>
         </CardContent>
@@ -433,53 +653,70 @@ export default async function AdminPlatformPage() {
         <CardContent>
           <div className="overflow-x-auto">
             <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Review</TableHead>
-                <TableHead>Car</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Action</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {(reviews.data ?? []).map((review: any) => (
-                <TableRow key={review.id}>
-                  <TableCell>
-                    <p className="font-semibold">{review.profiles?.full_name ?? "Guest"} - {review.rating}/5</p>
-                    <p className="text-xs text-gray-600">{review.comment ?? "No comment"}</p>
-                  </TableCell>
-                  <TableCell>{review.cars?.title ?? "Car"}</TableCell>
-                  <TableCell>{review.is_hidden ? "Hidden" : "Visible"}</TableCell>
-                  <TableCell className="text-right">
-                    <form action={reviewModerationAction} className="flex items-center justify-end gap-2">
-                      <input type="hidden" name="reviewId" value={review.id} />
-                      <input
-                        type="hidden"
-                        name="action"
-                        value={review.is_hidden ? "show" : "hide"}
-                      />
-                      {!review.is_hidden ? (
-                        <input
-                          name="reason"
-                          placeholder="Reason"
-                          className="hidden rounded-md border border-border px-2 py-1 text-xs sm:block"
-                        />
-                      ) : null}
-                      <button className="rounded-md border border-border px-3 py-1 text-xs font-semibold">
-                        {review.is_hidden ? "Unhide" : "Hide"}
-                      </button>
-                    </form>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {(reviews.data ?? []).length === 0 ? (
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center text-sm text-gray-600">
-                    No reviews yet.
-                  </TableCell>
+                  <TableHead>Review</TableHead>
+                  <TableHead>Car</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Action</TableHead>
                 </TableRow>
-              ) : null}
-            </TableBody>
+              </TableHeader>
+              <TableBody>
+                {(reviews.data ?? []).map((review: any) => (
+                  <TableRow key={review.id}>
+                    <TableCell>
+                      <p className="font-semibold">
+                        {review.profiles?.full_name ?? "Guest"} -{" "}
+                        {review.rating}/5
+                      </p>
+                      <p className="text-xs text-gray-600">
+                        {review.comment ?? "No comment"}
+                      </p>
+                    </TableCell>
+                    <TableCell>{review.cars?.title ?? "Car"}</TableCell>
+                    <TableCell>
+                      {review.is_hidden ? "Hidden" : "Visible"}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <form
+                        action={reviewModerationAction}
+                        className="flex items-center justify-end gap-2"
+                      >
+                        <input
+                          type="hidden"
+                          name="reviewId"
+                          value={review.id}
+                        />
+                        <input
+                          type="hidden"
+                          name="action"
+                          value={review.is_hidden ? "show" : "hide"}
+                        />
+                        {!review.is_hidden ? (
+                          <input
+                            name="reason"
+                            placeholder="Reason"
+                            className="hidden rounded-md border border-border px-2 py-1 text-xs sm:block"
+                          />
+                        ) : null}
+                        <button className="rounded-md border border-border px-3 py-1 text-xs font-semibold">
+                          {review.is_hidden ? "Unhide" : "Hide"}
+                        </button>
+                      </form>
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {(reviews.data ?? []).length === 0 ? (
+                  <TableRow>
+                    <TableCell
+                      colSpan={4}
+                      className="text-center text-sm text-gray-600"
+                    >
+                      No reviews yet.
+                    </TableCell>
+                  </TableRow>
+                ) : null}
+              </TableBody>
             </Table>
           </div>
         </CardContent>
@@ -492,56 +729,298 @@ export default async function AdminPlatformPage() {
         <CardContent>
           <div className="overflow-x-auto">
             <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Booking</TableHead>
-                <TableHead>Car</TableHead>
-                <TableHead>Reason</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Update</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {(disputes.data ?? []).map((dispute: any) => (
-                <TableRow key={dispute.id}>
-                  <TableCell className="font-mono text-xs">{dispute.booking_id.slice(0, 8)}</TableCell>
-                  <TableCell>{dispute.cars?.title ?? "Car"}</TableCell>
-                  <TableCell className="text-xs">{dispute.reason}</TableCell>
-                  <TableCell>{dispute.status}</TableCell>
-                  <TableCell className="text-right">
-                    <form action={disputeAction} className="flex items-center justify-end gap-2">
-                      <input type="hidden" name="disputeId" value={dispute.id} />
-                      <select
-                        name="status"
-                        defaultValue={dispute.status}
-                        className="rounded-md border border-border px-2 py-1 text-xs"
-                      >
-                        <option value="open">open</option>
-                        <option value="under_review">under_review</option>
-                        <option value="resolved">resolved</option>
-                        <option value="closed">closed</option>
-                      </select>
-                      <input
-                        name="note"
-                        defaultValue={dispute.resolution_note ?? ""}
-                        placeholder="Resolution note"
-                        className="hidden rounded-md border border-border px-2 py-1 text-xs sm:block"
-                      />
-                      <button className="rounded-md border border-border px-3 py-1 text-xs font-semibold">
-                        Save
-                      </button>
-                    </form>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {(disputes.data ?? []).length === 0 ? (
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-sm text-gray-600">
-                    No disputes opened yet.
-                  </TableCell>
+                  <TableHead>Booking</TableHead>
+                  <TableHead>Car</TableHead>
+                  <TableHead>Reason</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Update</TableHead>
                 </TableRow>
-              ) : null}
-            </TableBody>
+              </TableHeader>
+              <TableBody>
+                {(disputes.data ?? []).map((dispute: any) => (
+                  <TableRow key={dispute.id}>
+                    <TableCell className="font-mono text-xs">
+                      {dispute.booking_id.slice(0, 8)}
+                    </TableCell>
+                    <TableCell>{dispute.cars?.title ?? "Car"}</TableCell>
+                    <TableCell className="text-xs">{dispute.reason}</TableCell>
+                    <TableCell>{dispute.status}</TableCell>
+                    <TableCell className="text-right">
+                      <form
+                        action={disputeAction}
+                        className="flex items-center justify-end gap-2"
+                      >
+                        <input
+                          type="hidden"
+                          name="disputeId"
+                          value={dispute.id}
+                        />
+                        <select
+                          name="status"
+                          defaultValue={dispute.status}
+                          className="rounded-md border border-border px-2 py-1 text-xs"
+                        >
+                          <option value="open">open</option>
+                          <option value="under_review">under_review</option>
+                          <option value="resolved">resolved</option>
+                          <option value="closed">closed</option>
+                        </select>
+                        <input
+                          name="note"
+                          defaultValue={dispute.resolution_note ?? ""}
+                          placeholder="Resolution note"
+                          className="hidden rounded-md border border-border px-2 py-1 text-xs sm:block"
+                        />
+                        <button className="rounded-md border border-border px-3 py-1 text-xs font-semibold">
+                          Save
+                        </button>
+                      </form>
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {(disputes.data ?? []).length === 0 ? (
+                  <TableRow>
+                    <TableCell
+                      colSpan={5}
+                      className="text-center text-sm text-gray-600"
+                    >
+                      No disputes opened yet.
+                    </TableCell>
+                  </TableRow>
+                ) : null}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Mobile announcements</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="grid gap-3 md:grid-cols-3">
+            <div className="rounded-xl border border-border bg-gray-50 p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.15em] text-gray-500">
+                Registered devices
+              </p>
+              <p className="mt-2 text-2xl font-semibold text-foreground">
+                {registeredPushUsers}
+              </p>
+              <p className="mt-1 text-xs text-gray-600">
+                Users with at least one mobile push token.
+              </p>
+            </div>
+            <div className="rounded-xl border border-border bg-gray-50 p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.15em] text-gray-500">
+                News opt-ins
+              </p>
+              <p className="mt-2 text-2xl font-semibold text-foreground">
+                {newsOptInUsers}
+              </p>
+              <p className="mt-1 text-xs text-gray-600">
+                Users who allow press releases and announcement pushes.
+              </p>
+            </div>
+            <div className="rounded-xl border border-border bg-gray-50 p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.15em] text-gray-500">
+                Safe delivery
+              </p>
+              <p className="mt-2 text-sm font-semibold text-foreground">
+                `news` respects opt-in
+              </p>
+              <p className="mt-1 text-xs text-gray-600">
+                Use `system` for operational notices and `in_app` for one-time launch messages.
+              </p>
+            </div>
+          </div>
+
+          <form action={createAnnouncementAction} className="space-y-4 rounded-2xl border border-border p-4">
+            <div className="grid gap-4 md:grid-cols-2">
+              <label className="space-y-2">
+                <span className="text-sm font-semibold text-foreground">
+                  Title
+                </span>
+                <input
+                  name="title"
+                  required
+                  maxLength={120}
+                  placeholder="Platform update"
+                  className="w-full rounded-md border border-border px-3 py-2 text-sm"
+                />
+              </label>
+              <label className="space-y-2">
+                <span className="text-sm font-semibold text-foreground">
+                  Category
+                </span>
+                <select
+                  name="category"
+                  defaultValue="system"
+                  className="w-full rounded-md border border-border px-3 py-2 text-sm"
+                >
+                  <option value="system">System notice</option>
+                  <option value="news">News / press release</option>
+                </select>
+              </label>
+            </div>
+
+            <label className="space-y-2">
+              <span className="text-sm font-semibold text-foreground">
+                Message
+              </span>
+              <textarea
+                name="body"
+                required
+                minLength={8}
+                rows={4}
+                placeholder="Write the push or in-app message users should see."
+                className="w-full rounded-md border border-border px-3 py-2 text-sm"
+              />
+            </label>
+
+            <div className="grid gap-4 md:grid-cols-3">
+              <label className="space-y-2">
+                <span className="text-sm font-semibold text-foreground">
+                  Delivery
+                </span>
+                <select
+                  name="delivery"
+                  defaultValue="in_app"
+                  className="w-full rounded-md border border-border px-3 py-2 text-sm"
+                >
+                  <option value="in_app">In-app only</option>
+                  <option value="push">Push only</option>
+                  <option value="both">Push and in-app</option>
+                </select>
+              </label>
+              <label className="space-y-2">
+                <span className="text-sm font-semibold text-foreground">
+                  Audience
+                </span>
+                <select
+                  name="audience"
+                  defaultValue="all"
+                  className="w-full rounded-md border border-border px-3 py-2 text-sm"
+                >
+                  <option value="all">All app users</option>
+                  <option value="authenticated">Signed-in users only</option>
+                </select>
+              </label>
+              <label className="space-y-2">
+                <span className="text-sm font-semibold text-foreground">
+                  CTA label
+                </span>
+                <input
+                  name="ctaLabel"
+                  maxLength={40}
+                  placeholder="Read more"
+                  className="w-full rounded-md border border-border px-3 py-2 text-sm"
+                />
+              </label>
+            </div>
+
+            <label className="space-y-2">
+              <span className="text-sm font-semibold text-foreground">
+                CTA URL
+              </span>
+              <input
+                name="ctaUrl"
+                placeholder="https://www.hayamegh.com/blog or hayame://messages"
+                className="w-full rounded-md border border-border px-3 py-2 text-sm"
+              />
+            </label>
+
+            <label className="flex items-center gap-2 text-sm text-foreground">
+              <input
+                type="checkbox"
+                name="showOnce"
+                value="true"
+                defaultChecked
+                className="h-4 w-4 rounded border-border"
+              />
+              Show only once when opened in-app
+            </label>
+
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-xs text-gray-600">
+                `Push` and `both` send immediately. `news` pushes only go to users who opted into announcements.
+              </p>
+              <button className="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white">
+                Publish announcement
+              </button>
+            </div>
+          </form>
+
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Announcement</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Audience</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Action</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {(announcements.data ?? []).map((announcement: any) => {
+                  const isArchived = Boolean(announcement.archived_at);
+                  return (
+                    <TableRow key={announcement.id}>
+                      <TableCell>
+                        <p className="font-semibold">{announcement.title}</p>
+                        <p className="text-xs text-gray-600">
+                          {announcement.body}
+                        </p>
+                      </TableCell>
+                      <TableCell className="text-xs">
+                        <div>{announcement.category}</div>
+                        <div className="text-gray-500">{announcement.delivery}</div>
+                      </TableCell>
+                      <TableCell className="text-xs">
+                        {announcement.audience}
+                        {announcement.show_once ? " / once" : " / repeat"}
+                      </TableCell>
+                      <TableCell className="text-xs">
+                        {isArchived ? "Archived" : "Active"}
+                        <div className="text-gray-500">
+                          {announcement.published_at
+                            ? new Date(announcement.published_at).toLocaleString()
+                            : "Draft"}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {!isArchived ? (
+                          <form action={archiveAnnouncementAction}>
+                            <input
+                              type="hidden"
+                              name="announcementId"
+                              value={announcement.id}
+                            />
+                            <button className="rounded-md border border-border px-3 py-1 text-xs font-semibold">
+                              Archive
+                            </button>
+                          </form>
+                        ) : (
+                          <span className="text-xs text-gray-500">Archived</span>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+                {(announcements.data ?? []).length === 0 ? (
+                  <TableRow>
+                    <TableCell
+                      colSpan={5}
+                      className="text-center text-sm text-gray-600"
+                    >
+                      No mobile announcements published yet.
+                    </TableCell>
+                  </TableRow>
+                ) : null}
+              </TableBody>
             </Table>
           </div>
         </CardContent>
@@ -563,8 +1042,16 @@ function ProfileAvatar({
 
   if (src) {
     return (
-      <div className={`relative shrink-0 overflow-hidden rounded-full border border-border ${className}`}>
-        <Image src={src} alt={name ?? "User"} fill className="object-cover" sizes="40px" />
+      <div
+        className={`relative shrink-0 overflow-hidden rounded-full border border-border ${className}`}
+      >
+        <Image
+          src={src}
+          alt={name ?? "User"}
+          fill
+          className="object-cover"
+          sizes="40px"
+        />
       </div>
     );
   }
@@ -577,4 +1064,3 @@ function ProfileAvatar({
     </div>
   );
 }
-

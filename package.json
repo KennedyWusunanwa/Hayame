@@ -6,10 +6,12 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
-    "format": "prettier --check .",
+    "lint": "node ./node_modules/eslint/bin/eslint.js .",
+    "format": "node ./node_modules/prettier/bin/prettier.cjs --check .",
+    "test": "node tests/launch-readiness.cjs",
     "typecheck": "tsc --noEmit",
-    "db:seed": "ts-node --esm db/seed.ts"
+    "db:seed": "ts-node --esm db/seed.ts",
+    "admin:hash": "node scripts/generate-admin-password-hash.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.3.4",

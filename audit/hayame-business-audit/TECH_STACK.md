@@ -1,6 +1,7 @@
 # TECH_STACK
 
 ## Frontend (web)
+
 - Framework: Next.js 16.1.1 (App Router, React Server Components + client components)
 - Language: TypeScript
 - UI system:
@@ -12,6 +13,7 @@
 - Key UX modules: explore filters, booking widget, messaging UI, host/admin dashboards
 
 ## Backend/API architecture
+
 - Runtime model: Next.js Route Handlers in `src/app/api/**/route.ts`
 - Pattern:
   - Route handlers for all domain operations (cars, bookings, reviews, disputes, messaging, admin)
@@ -24,6 +26,7 @@
   - Supabase admin client (service role) for privileged/admin operations
 
 ## Database (Supabase/Postgres)
+
 - Primary store: Supabase Postgres
 - Schema source in repo:
   - `db/migration.sql`
@@ -37,6 +40,7 @@
   - RLS enabled across core tables with ownership/participant-based policies
 
 ## Authentication and session model
+
 - Provider: Supabase Auth (email/password)
 - Web sessions:
   - `@supabase/ssr` server/browser clients
@@ -48,6 +52,7 @@
   - `/api/mobile/me` for bearer-token user bootstrap
 
 ## Payments
+
 - Active provider: Paystack only
 - Implemented capabilities:
   - Initialize transaction
@@ -59,6 +64,7 @@
 - Not found: Stripe/Flutterwave/PayPal integrations
 
 ## Infrastructure and deployment
+
 - Web hosting target: Vercel (per docs and env model)
 - Backend/data/auth/storage: Supabase
 - Storage buckets:
@@ -70,6 +76,7 @@
   - Resend (`RESEND_API_KEY`, `RESEND_FROM`)
 
 ## Mobile stack
+
 - iOS app repo found: `HayameIOS`
 - Stack:
   - Native SwiftUI app (iOS 17+)
@@ -84,6 +91,7 @@
   - Not used for current iOS implementation
 
 ## Observability/analytics tooling (technical)
+
 - Product metrics stored in-app tables (`listing_views`, bookings/reviews aggregates)
 - No dedicated third-party analytics SDK detected (e.g., PostHog, Mixpanel, Segment)
 - No Sentry/Datadog class instrumentation found in scanned repos

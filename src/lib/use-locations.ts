@@ -20,7 +20,9 @@ export function useLocations(options: UseLocationsOptions = {}) {
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch(`/api/locations${strict ? "?strict=true" : ""}`);
+        const res = await fetch(
+          `/api/locations${strict ? "?strict=true" : ""}`,
+        );
         if (!res.ok) throw new Error("Failed to load locations");
         const payload = (await res.json()) as { data?: Locations };
         if (payload.data) {

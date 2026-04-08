@@ -18,7 +18,8 @@ export async function GET(req: Request) {
     })();
     const db = admin ?? (supabase as any);
     const user = await getRequestUser(supabase as any, req);
-    if (!user) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+    if (!user)
+      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
 
     const { data } = await db
       .from("host_applications")
@@ -30,7 +31,10 @@ export async function GET(req: Request) {
 
     return NextResponse.json({ data: data ?? null });
   } catch (error: any) {
-    return NextResponse.json({ message: error.message ?? "Failed to load application" }, { status: 400 });
+    return NextResponse.json(
+      { message: error.message ?? "Failed to load application" },
+      { status: 400 },
+    );
   }
 }
 
@@ -48,7 +52,8 @@ export async function POST(req: Request) {
     })();
     const db = admin ?? (supabase as any);
     const user = await getRequestUser(supabase as any, req);
-    if (!user) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+    if (!user)
+      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
 
     const { data: latest } = await db
       .from("host_applications")
@@ -58,23 +63,27 @@ export async function POST(req: Request) {
       .limit(1)
       .maybeSingle();
     if (latest?.status === "approved") {
-      return NextResponse.json({ message: "You are already an approved host." }, { status: 400 });
+      return NextResponse.json(
+        { message: "You are already an approved host." },
+        { status: 400 },
+      );
     }
     if (latest?.status === "pending") {
-      return NextResponse.json({ message: "Application already pending." }, { status: 409 });
+      return NextResponse.json(
+        { message: "Application already pending." },
+        { status: 409 },
+      );
     }
 
-    await db
-      .from("profiles")
-      .upsert(
-        {
-          id: user.id,
-          full_name: parsed.full_name,
-          phone: parsed.phone ?? null,
-          city: parsed.city ?? null,
-        },
-        { onConflict: "id" },
-      );
+    await db.from("profiles").upsert(
+      {
+        id: user.id,
+        full_name: parsed.full_name,
+        phone: parsed.phone ?? null,
+        city: parsed.city ?? null,
+      },
+      { onConflict: "id" },
+    );
 
     const { data, error } = await db
       .from("host_applications")
@@ -99,7 +108,9 @@ export async function POST(req: Request) {
     if (error) throw error;
 
     if (user.email) {
-      const template = buildHostApplicationSubmittedEmail({ hostName: parsed.full_name });
+      const template = buildHostApplicationSubmittedEmail({
+        hostName: parsed.full_name,
+      });
       await sendEmailSafe({
         to: user.email,
         ...template,
@@ -111,10 +122,16 @@ export async function POST(req: Request) {
   } catch (error: any) {
     if (error instanceof ZodError) {
       return NextResponse.json(
-        { message: error.issues[0]?.message ?? "Invalid application data", issues: error.issues },
+        {
+          message: error.issues[0]?.message ?? "Invalid application data",
+          issues: error.issues,
+        },
         { status: 400 },
       );
     }
-    return NextResponse.json({ message: error.message ?? "Failed to submit application" }, { status: 400 });
+    return NextResponse.json(
+      { message: error.message ?? "Failed to submit application" },
+      { status: 400 },
+    );
   }
 }

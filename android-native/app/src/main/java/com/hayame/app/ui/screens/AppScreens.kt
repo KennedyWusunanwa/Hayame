@@ -142,6 +142,7 @@ import com.hayame.app.BuildConfig
 import com.hayame.app.core.network.BookingDto
 import com.hayame.app.core.network.CarDto
 import com.hayame.app.core.network.HostApplicationRequest
+import com.hayame.app.core.network.NotificationPreferencesDto
 import com.hayame.app.core.network.PaystackFinalizeRequest
 import com.hayame.app.core.network.ReviewDto
 import com.hayame.app.core.network.preferredAvatarRaw
@@ -1849,6 +1850,7 @@ private fun MoreTab(
 ) {
     val isAuthenticated by viewModel.isAuthenticated.collectAsState()
     val me by viewModel.me.collectAsState()
+    val notificationPreferences by viewModel.notificationPreferences.collectAsState()
     var hostModeEnabled by remember { mutableStateOf(false) }
 
     val displayName = me.preferredFullName() ?: "Guest User"
@@ -2000,6 +2002,31 @@ private fun MoreTab(
                     )
                 }
             }
+        }
+
+        item {
+            SectionHeader("Notifications")
+        }
+
+        item {
+            NotificationPreferencesCard(
+                preferences = notificationPreferences,
+                isAuthenticated = isAuthenticated,
+                onPreferenceChange = { key, enabled ->
+                    when (key) {
+                        "booking_updates" -> viewModel.updateNotificationPreference(bookingUpdates = enabled)
+                        "messages" -> viewModel.updateNotificationPreference(messages = enabled)
+                        "account_security" -> viewModel.updateNotificationPreference(accountSecurity = enabled)
+                        "news_announcements" -> viewModel.updateNotificationPreference(newsAnnouncements = enabled)
+                    }
+                },
+                onRequireSignIn = {
+                    viewModel.requireAuthentication(
+                        message = "Sign in or sign up to manage notification preferences.",
+                        destination = NavRoutes.Profile,
+                    )
+                },
+            )
         }
 
         item {
@@ -2183,6 +2210,104 @@ private fun ActionRow(title: String, icon: androidx.compose.ui.graphics.vector.I
         Text(title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium, color = color)
         Spacer(modifier = Modifier.weight(1f))
         Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = Color.LightGray, modifier = Modifier.size(20.dp))
+    }
+}
+
+@Composable
+private fun NotificationPreferencesCard(
+    preferences: NotificationPreferencesDto,
+    isAuthenticated: Boolean,
+    onPreferenceChange: (key: String, enabled: Boolean) -> Unit,
+    onRequireSignIn: (() -> Unit)? = null,
+) {
+    Card(
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Text(
+                "Control which updates can reach your device. News and press releases stay optional.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MutedText,
+            )
+
+            if (!isAuthenticated) {
+                Text(
+                    "Sign in to save notification preferences across your devices.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = BrandNavy,
+                )
+                if (onRequireSignIn != null) {
+                    SecondaryPillButton(
+                        text = "Sign in to manage",
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = onRequireSignIn,
+                    )
+                }
+                return@Column
+            }
+
+            NotificationPreferenceRow(
+                title = "Trips & bookings",
+                subtitle = "Approvals, confirmations, refunds, and schedule changes.",
+                checked = preferences.booking_updates ?: true,
+                onCheckedChange = { onPreferenceChange("booking_updates", it) },
+            )
+            NotificationPreferenceRow(
+                title = "Messages",
+                subtitle = "New chats and replies from guests or hosts.",
+                checked = preferences.messages ?: true,
+                onCheckedChange = { onPreferenceChange("messages", it) },
+            )
+            NotificationPreferenceRow(
+                title = "Account & security",
+                subtitle = "Identity checks, host application updates, and critical notices.",
+                checked = preferences.account_security ?: true,
+                onCheckedChange = { onPreferenceChange("account_security", it) },
+            )
+            NotificationPreferenceRow(
+                title = "News & announcements",
+                subtitle = "Press releases, launches, and optional product updates.",
+                checked = preferences.news_announcements ?: false,
+                onCheckedChange = { onPreferenceChange("news_announcements", it) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun NotificationPreferenceRow(
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(
+                title,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = BrandNavy,
+            )
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MutedText,
+            )
+        }
+        Switch(checked = checked, onCheckedChange = onCheckedChange)
     }
 }
 
@@ -4405,10 +4530,10 @@ fun HostCarEditorScreen(
     var instantBook by rememberSaveable(carId) { mutableStateOf(false) }
     var deliveryAvailable by rememberSaveable(carId) { mutableStateOf(false) }
     var airConditioning by rememberSaveable(carId) { mutableStateOf(true) }
-    var deliveryFee by rememberSaveable(carId) { mutableStateOf("0") }
-    var insuranceFee by rememberSaveable(carId) { mutableStateOf("0") }
-    var depositAmount by rememberSaveable(carId) { mutableStateOf("0") }
-    var outsideAccraFee by rememberSaveable(carId) { mutableStateOf("0") }
+    var deliveryFee by rememberSaveable(carId) { mutableStateOf("") }
+    var insuranceFee by rememberSaveable(carId) { mutableStateOf("") }
+    var depositAmount by rememberSaveable(carId) { mutableStateOf("") }
+    var outsideAccraFee by rememberSaveable(carId) { mutableStateOf("") }
     var cancellationPolicy by rememberSaveable(carId) { mutableStateOf("Moderate") }
     var pendingUploads by remember { mutableStateOf(emptyList<PendingListingUpload>()) }
 
@@ -4476,10 +4601,10 @@ fun HostCarEditorScreen(
         instantBook = draft.instantBook
         deliveryAvailable = draft.deliveryAvailable
         airConditioning = draft.airConditioning
-        deliveryFee = draft.deliveryFee.toString()
-        insuranceFee = draft.insuranceFee.toString()
-        depositAmount = draft.depositAmount.toString()
-        outsideAccraFee = draft.outsideAccraFee.toString()
+        deliveryFee = draft.deliveryFee.asOptionalFeeText()
+        insuranceFee = draft.insuranceFee.asOptionalFeeText()
+        depositAmount = draft.depositAmount.asOptionalFeeText()
+        outsideAccraFee = draft.outsideAccraFee.asOptionalFeeText()
         cancellationPolicy = draft.cancellationPolicy.ifBlank { "Moderate" }
     }
 
@@ -4586,10 +4711,10 @@ fun HostCarEditorScreen(
             instantBook = existingCar.instant_book == true
             deliveryAvailable = existingCar.delivery_available == true
             airConditioning = existingCar.air_conditioning != false
-            deliveryFee = ((existingCar.delivery_fee ?: 0.0).roundToInt()).toString()
-            insuranceFee = ((existingCar.insurance_fee ?: 0.0).roundToInt()).toString()
-            depositAmount = ((existingCar.deposit_amount ?: 0.0).roundToInt()).toString()
-            outsideAccraFee = ((existingCar.outside_accra_fee ?: 0.0).roundToInt()).toString()
+            deliveryFee = ((existingCar.delivery_fee ?: 0.0).roundToInt()).asOptionalFeeText()
+            insuranceFee = ((existingCar.insurance_fee ?: 0.0).roundToInt()).asOptionalFeeText()
+            depositAmount = ((existingCar.deposit_amount ?: 0.0).roundToInt()).asOptionalFeeText()
+            outsideAccraFee = ((existingCar.outside_accra_fee ?: 0.0).roundToInt()).asOptionalFeeText()
             cancellationPolicy = normalizeSelectionLabel(existingCar.cancellation_policy, "Moderate")
         }
     }
@@ -4608,7 +4733,7 @@ fun HostCarEditorScreen(
 
     LaunchedEffect(deliveryAvailable) {
         if (!deliveryAvailable) {
-            deliveryFee = "0"
+            deliveryFee = ""
         }
     }
 
@@ -5449,6 +5574,7 @@ fun HostProfileScreen(
     onTurnOffHostMode: () -> Unit = onBack,
 ) {
     val me by viewModel.me.collectAsState()
+    val notificationPreferences by viewModel.notificationPreferences.collectAsState()
     val profile = me?.profile
     val avatarUrl = resolveAppImage(me.preferredAvatarRaw())
     val fullName = me.preferredFullName()?.takeIf { it.isNotBlank() } ?: me?.user?.email ?: "Host"
@@ -5495,6 +5621,23 @@ fun HostProfileScreen(
                         }
                     }
                 }
+            }
+            item {
+                Text("Notifications", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = BrandNavy)
+            }
+            item {
+                NotificationPreferencesCard(
+                    preferences = notificationPreferences,
+                    isAuthenticated = true,
+                    onPreferenceChange = { key, enabled ->
+                        when (key) {
+                            "booking_updates" -> viewModel.updateNotificationPreference(bookingUpdates = enabled)
+                            "messages" -> viewModel.updateNotificationPreference(messages = enabled)
+                            "account_security" -> viewModel.updateNotificationPreference(accountSecurity = enabled)
+                            "news_announcements" -> viewModel.updateNotificationPreference(newsAnnouncements = enabled)
+                        }
+                    },
+                )
             }
             item {
                 Text("Host", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = BrandNavy)
@@ -5658,6 +5801,10 @@ private data class PendingListingUpload(
 
 private fun emptyListingEditorDraft(currentYear: Int): ListingEditorDraftState {
     return ListingEditorDraftState(year = currentYear)
+}
+
+private fun Int.asOptionalFeeText(): String {
+    return if (this == 0) "" else this.toString()
 }
 
 private fun resolveAppImage(raw: String?): String? = RemoteImageUrlResolver.resolve(raw)

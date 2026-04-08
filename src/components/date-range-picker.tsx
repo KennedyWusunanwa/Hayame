@@ -43,7 +43,9 @@ export function DateRangePicker({
     <div className="space-y-3">
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="text-xs font-semibold text-gray-700">Start date</label>
+          <label className="text-xs font-semibold text-gray-700">
+            Start date
+          </label>
           <Input
             type="date"
             value={startDate ?? ""}
@@ -68,7 +70,9 @@ export function DateRangePicker({
           />
         </div>
         <div>
-          <label className="text-xs font-semibold text-gray-700">End date</label>
+          <label className="text-xs font-semibold text-gray-700">
+            End date
+          </label>
           <Input
             type="date"
             value={endDate ?? ""}
@@ -115,11 +119,16 @@ export function DateRangePicker({
   );
 }
 
-function rangeHasBlockedDates(startDate: string, endDate: string, blocked: Set<string>) {
+function rangeHasBlockedDates(
+  startDate: string,
+  endDate: string,
+  blocked: Set<string>,
+) {
   if (!startDate || !endDate || blocked.size === 0) return false;
   const start = new Date(startDate);
   const end = new Date(endDate);
-  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return false;
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()))
+    return false;
   for (let dt = new Date(start); dt < end; dt = addDays(dt, 1)) {
     const key = format(dt, "yyyy-MM-dd");
     if (blocked.has(key)) return true;

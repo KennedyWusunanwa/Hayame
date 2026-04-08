@@ -86,7 +86,8 @@ export function ImageGallery({ images, fallbackContext }: Props) {
 
   const handleTouchMove = (event: React.TouchEvent<HTMLDivElement>) => {
     if (!canNavigate || touchStartX.current === null) return;
-    touchDeltaX.current = (event.touches[0]?.clientX ?? 0) - touchStartX.current;
+    touchDeltaX.current =
+      (event.touches[0]?.clientX ?? 0) - touchStartX.current;
   };
 
   const handleTouchEnd = () => {

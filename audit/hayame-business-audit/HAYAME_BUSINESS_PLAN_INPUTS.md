@@ -1,11 +1,14 @@
 # HAYAME_BUSINESS_PLAN_INPUTS
 
 ## Scope note
+
 This business-plan input pack is derived from repositories present in this workspace:
+
 - `/Users/profdouglas/Desktop/Hayame 2.0 `
 - `/Users/profdouglas/Desktop/Hayame 2.0 /HayameIOS`
 
 ## Product summary
+
 - Category: Ghana-focused peer-to-peer car rental marketplace.
 - Core flows implemented:
   - renter discovery -> booking hold -> Paystack payment -> messaging -> review/dispute
@@ -20,6 +23,7 @@ This business-plan input pack is derived from repositories present in this works
   - payout and support automation incomplete
 
 ## Market summary
+
 - Positioning: local alternative to global Turo-style models with Ghana-specific operations.
 - Target demand:
   - urban renters seeking flexible access
@@ -28,6 +32,7 @@ This business-plan input pack is derived from repositories present in this works
   - localization + manual trust controls + local payment integration (Paystack)
 
 ## Revenue model summary
+
 - Primary model: transaction marketplace fees.
 - In-code monetization components:
   - platform booking commission (`platform_fee_percent`)
@@ -37,6 +42,7 @@ This business-plan input pack is derived from repositories present in this works
   - full host payout settlement workflow still a gap
 
 ## Growth model summary
+
 - Acquisition/product loops currently available:
   - SEO landing pages + exploration/search UX
   - favorites and listing views as intent signals
@@ -50,6 +56,7 @@ This business-plan input pack is derived from repositories present in this works
   - analytics stack for cohort/LTV attribution
 
 ## Risk summary
+
 - Critical:
   - secret hygiene issue in env template
   - schema drift between code usage and checked-in migrations
@@ -62,6 +69,7 @@ This business-plan input pack is derived from repositories present in this works
   - feature completeness variance across modules
 
 ## Infrastructure summary
+
 - Web stack: Next.js + TypeScript + Tailwind + Radix-style UI.
 - Backend/API: Next.js route handlers with Supabase clients.
 - Data/auth/storage: Supabase Postgres/Auth/Storage + RLS.
@@ -70,5 +78,6 @@ This business-plan input pack is derived from repositories present in this works
 - Mobile: native SwiftUI iOS app with API and Supabase fallback integration.
 
 ## Readiness interpretation for investor-grade plan
+
 - Strong foundation: core marketplace engine is functional (discovery, booking, payment, messaging, moderation).
 - Scaling requirement: move from manual trust/ops-heavy model to automated, auditable, compliance-ready systems (KYC, insurance, payouts, fraud detection, analytics).

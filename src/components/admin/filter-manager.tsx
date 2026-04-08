@@ -29,7 +29,9 @@ export function FilterManager() {
       setModels([]);
       return;
     }
-    const res = await fetch(`/api/admin/car-models?makeId=${makeId}`, { cache: "no-store" });
+    const res = await fetch(`/api/admin/car-models?makeId=${makeId}`, {
+      cache: "no-store",
+    });
     const payload = (await res.json()) as { data?: Model[]; message?: string };
     if (!res.ok) throw new Error(payload.message || "Failed to load models");
     setModels(payload.data ?? []);
@@ -109,18 +111,27 @@ export function FilterManager() {
     await loadModels(selectedMake);
   };
 
-  const makesById = useMemo(() => new Map(makes.map((m) => [m.id, m])), [makes]);
+  const makesById = useMemo(
+    () => new Map(makes.map((m) => [m.id, m])),
+    [makes],
+  );
 
   return (
     <div className="space-y-6">
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
-      {loading ? <p className="text-sm text-gray-600">Loading filters...</p> : null}
+      {loading ? (
+        <p className="text-sm text-gray-600">Loading filters...</p>
+      ) : null}
 
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="space-y-3 rounded-2xl border border-border bg-white p-4 shadow-soft">
           <p className="text-sm font-semibold text-foreground">Car makes</p>
           <div className="flex gap-2">
-            <Input value={makeName} onChange={(e) => setMakeName(e.target.value)} placeholder="e.g. Toyota" />
+            <Input
+              value={makeName}
+              onChange={(e) => setMakeName(e.target.value)}
+              placeholder="e.g. Toyota"
+            />
             <Button onClick={addMake}>Add</Button>
           </div>
           <div className="space-y-2">
@@ -128,7 +139,10 @@ export function FilterManager() {
               <p className="text-xs text-gray-600">No makes yet.</p>
             ) : (
               makes.map((make) => (
-                <div key={make.id} className="flex items-center justify-between rounded-lg border border-border px-3 py-2 text-sm">
+                <div
+                  key={make.id}
+                  className="flex items-center justify-between rounded-lg border border-border px-3 py-2 text-sm"
+                >
                   <span>{make.name}</span>
                   <button
                     type="button"
@@ -145,7 +159,10 @@ export function FilterManager() {
 
         <div className="space-y-3 rounded-2xl border border-border bg-white p-4 shadow-soft">
           <p className="text-sm font-semibold text-foreground">Car models</p>
-          <Select value={selectedMake} onChange={(e) => setSelectedMake(e.target.value)}>
+          <Select
+            value={selectedMake}
+            onChange={(e) => setSelectedMake(e.target.value)}
+          >
             <option value="">Select make</option>
             {makes.map((make) => (
               <option key={make.id} value={make.id}>
@@ -170,9 +187,13 @@ export function FilterManager() {
                 <p className="text-xs text-gray-600">No models yet.</p>
               ) : (
                 models.map((model) => (
-                  <div key={model.id} className="flex items-center justify-between rounded-lg border border-border px-3 py-2 text-sm">
+                  <div
+                    key={model.id}
+                    className="flex items-center justify-between rounded-lg border border-border px-3 py-2 text-sm"
+                  >
                     <span>
-                      {makesById.get(model.make_id)?.name ?? "Make"} {model.name}
+                      {makesById.get(model.make_id)?.name ?? "Make"}{" "}
+                      {model.name}
                     </span>
                     <button
                       type="button"
@@ -185,7 +206,9 @@ export function FilterManager() {
                 ))
               )
             ) : (
-              <p className="text-xs text-gray-600">Select a make to manage models.</p>
+              <p className="text-xs text-gray-600">
+                Select a make to manage models.
+              </p>
             )}
           </div>
         </div>

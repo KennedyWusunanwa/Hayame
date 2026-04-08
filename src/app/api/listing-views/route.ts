@@ -32,6 +32,9 @@ export async function POST(req: Request) {
     }
     return NextResponse.json({ ok: true });
   } catch (error: any) {
-    return NextResponse.json({ message: error.message ?? "Failed to save listing view" }, { status: 400 });
+    return NextResponse.json(
+      { message: error.message ?? "Failed to save listing view" },
+      { status: 400 },
+    );
   }
 }

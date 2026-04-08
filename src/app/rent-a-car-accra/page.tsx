@@ -15,15 +15,18 @@ export default function RentACarAccraPage() {
       faqs={[
         {
           question: "Can I search by area in Accra?",
-          answer: "Yes. Use the Explore filters for city and region to narrow listings.",
+          answer:
+            "Yes. Use the Explore filters for city and region to narrow listings.",
         },
         {
           question: "How do I know if dates are open?",
-          answer: "Open a listing and use the availability preview to check your trip dates.",
+          answer:
+            "Open a listing and use the availability preview to check your trip dates.",
         },
         {
           question: "Do all cars support instant booking?",
-          answer: "No. Some listings use Instant Book, while others require host approval.",
+          answer:
+            "No. Some listings use Instant Book, while others require host approval.",
         },
       ]}
     />

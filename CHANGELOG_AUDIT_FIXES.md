@@ -1,6 +1,7 @@
 # Platform Audit Fixes Changelog
 
 ## Search & Discovery
+
 - Implemented:
   - URL query params are the single source of truth for Explore filters and sort.
   - Smart filters wired end-to-end: price range, instant book, delivery, transmission, fuel, seats, year, air conditioning, rating, host type, features.
@@ -12,6 +13,7 @@
   - None after running `db/platform_audit_activation.sql`.
 
 ## Trust & Safety
+
 - Implemented:
   - Verification badges now use real flags (`id_verified`, `phone_verified`, `email_verified`).
   - Badges applied in host snippet, booking box, host profile, and host dashboard.
@@ -22,6 +24,7 @@
   - Protection coverage copy is informational by design (no fake insurance/support claims).
 
 ## Host Improvements
+
 - Implemented:
   - Interactive earnings calculator on `/host` using configurable platform fee.
   - Host performance dashboard now includes real views, conversion rate, earnings, booking rate, reviews, and trip history.
@@ -31,6 +34,7 @@
   - None after running `db/platform_audit_activation.sql`.
 
 ## Listing Quality
+
 - Implemented:
   - Listing submission enforces minimum 5 photos in client validation.
   - Listing form now supports adding photos incrementally and enforces a hard maximum of 7 photos.
@@ -49,6 +53,7 @@
   - Plate blur automation is still labeled "Coming soon" (feature not implemented in current codebase).
 
 ## Mobile Responsiveness
+
 - Implemented:
   - Improved host inventory layout with mobile-friendly stacked cards and thumbnails.
   - Added photo thumbnails in host "My cars" list (desktop table + mobile cards).
@@ -56,6 +61,7 @@
   - Added horizontal overflow guards on admin platform moderation tables for smaller screens.
 
 ## Booking Experience
+
 - Implemented:
   - Booking breakdown now charges and displays:
     - daily rate
@@ -76,6 +82,7 @@
   - None after running `db/platform_audit_activation.sql`.
 
 ## SEO Pages
+
 - Implemented:
   - Added content pages with metadata, FAQ, and internal links:
     - `/rent-a-car-accra`
@@ -89,6 +96,7 @@
   - None.
 
 ## Admin Placeholders
+
 - Implemented:
   - Added fully functional admin controls route: `/admin/platform`.
   - Listing approvals:
@@ -107,6 +115,7 @@
   - None after running `db/platform_audit_activation.sql`.
 
 ## Activation SQL
+
 - Supabase migration file added:
   - `db/platform_audit_activation.sql`
 - This migration provisions all required schema objects for the new functionality:

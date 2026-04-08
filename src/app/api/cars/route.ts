@@ -21,7 +21,9 @@ function parseBoolean(value: string | null) {
 
 async function getPlatformFeePercent(supa: any) {
   const envValue = Number(
-    process.env.NEXT_PUBLIC_PLATFORM_FEE_PERCENT ?? process.env.PLATFORM_FEE_PERCENT ?? "10",
+    process.env.NEXT_PUBLIC_PLATFORM_FEE_PERCENT ??
+      process.env.PLATFORM_FEE_PERCENT ??
+      "10",
   );
   const fallback = Number.isFinite(envValue) ? envValue : 10;
   const { data } = await supa
@@ -46,11 +48,15 @@ export async function GET(req: Request) {
     let ownerId: string | null = null;
     if (mineOnly) {
       const user = await getRequestUser(supabase as any, req);
-      if (!user) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+      if (!user)
+        return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
       ownerId = user.id;
     }
 
-    let query = supa.from("car_search_view").select("*").limit(Number.isFinite(limit) ? limit : 48);
+    let query = supa
+      .from("car_search_view")
+      .select("*")
+      .limit(Number.isFinite(limit) ? limit : 48);
     if (mineOnly) {
       query = query.eq("owner_id", ownerId);
     } else {
@@ -72,7 +78,9 @@ export async function GET(req: Request) {
     const maxYear = parseNumber(searchParams.get("maxYear"));
     const minRating = parseNumber(searchParams.get("minRating"));
     const instantBook = parseBoolean(searchParams.get("instantBook"));
-    const deliveryAvailable = parseBoolean(searchParams.get("deliveryAvailable"));
+    const deliveryAvailable = parseBoolean(
+      searchParams.get("deliveryAvailable"),
+    );
     const airConditioning = parseBoolean(searchParams.get("airConditioning"));
 
     if (region) query = query.eq("region", region);
@@ -81,7 +89,8 @@ export async function GET(req: Request) {
     if (brand) query = query.eq("brand", brand);
     if (model) query = query.eq("model", model);
     if (fuelType) query = query.eq("fuel_type", fuelType.toLowerCase());
-    if (transmission) query = query.eq("transmission", transmission.toLowerCase());
+    if (transmission)
+      query = query.eq("transmission", transmission.toLowerCase());
     if (hostType) {
       if (hostType === "verified") {
         query = query.or("host_type.eq.verified,host_level.eq.verified_host");
@@ -89,13 +98,17 @@ export async function GET(req: Request) {
         query = query.eq("host_type", hostType);
       }
     }
-    if (typeof minPrice === "number") query = query.gte("daily_price", minPrice);
-    if (typeof maxPrice === "number") query = query.lte("daily_price", maxPrice);
+    if (typeof minPrice === "number")
+      query = query.gte("daily_price", minPrice);
+    if (typeof maxPrice === "number")
+      query = query.lte("daily_price", maxPrice);
     if (typeof minYear === "number") query = query.gte("year", minYear);
     if (typeof maxYear === "number") query = query.lte("year", maxYear);
-    if (typeof minRating === "number") query = query.gte("avg_rating", minRating);
+    if (typeof minRating === "number")
+      query = query.gte("avg_rating", minRating);
     if (instantBook === true) query = query.eq("instant_book", true);
-    if (deliveryAvailable === true) query = query.eq("delivery_available", true);
+    if (deliveryAvailable === true)
+      query = query.eq("delivery_available", true);
     if (airConditioning === true) query = query.eq("air_conditioning", true);
 
     if (seats) {
@@ -145,17 +158,21 @@ export async function GET(req: Request) {
     let { data, error } = await query;
     if (error) {
       // Backward-compatible fallback if migration view is not yet applied.
-      const fallbackQuery = supa.from("cars").select("*, car_photos(url)").limit(24);
-      const fallback = mineOnly && ownerId
-        ? await fallbackQuery.eq("owner_id", ownerId)
-        : await fallbackQuery.eq("approval_status", "approved");
+      const fallbackQuery = supa
+        .from("cars")
+        .select("*, car_photos(url)")
+        .limit(24);
+      const fallback =
+        mineOnly && ownerId
+          ? await fallbackQuery.eq("owner_id", ownerId)
+          : await fallbackQuery.eq("approval_status", "approved");
       if (fallback.error) throw fallback.error;
       data = fallback.data;
       error = null;
     }
 
     const rows = Array.isArray(data) ? data : [];
-    let favoriteCounts: Record<string, number> = {};
+    const favoriteCounts: Record<string, number> = {};
     if (mineOnly && rows.length > 0) {
       const admin = (() => {
         try {
@@ -167,7 +184,10 @@ export async function GET(req: Request) {
       if (admin) {
         const carIds = rows.map((row: any) => row.id).filter(Boolean);
         if (carIds.length > 0) {
-          const { data: favoriteRows } = await admin.from("favorites").select("car_id").in("car_id", carIds);
+          const { data: favoriteRows } = await admin
+            .from("favorites")
+            .select("car_id")
+            .in("car_id", carIds);
           for (const row of favoriteRows ?? []) {
             const carId = String((row as any)?.car_id ?? "");
             if (!carId) continue;
@@ -179,11 +199,17 @@ export async function GET(req: Request) {
 
     const normalizedRows = rows.map((row: any) => ({
       ...row,
-      favorites_count: mineOnly ? favoriteCounts[row?.id] ?? 0 : row?.favorites_count ?? 0,
+      favorites_count: mineOnly
+        ? (favoriteCounts[row?.id] ?? 0)
+        : (row?.favorites_count ?? 0),
     }));
 
-    const platformFeePercent = await getPlatformFeePercent(supa).catch(() => 10);
-    const hasInstantBookListings = normalizedRows.some((row: any) => row?.instant_book === true);
+    const platformFeePercent = await getPlatformFeePercent(supa).catch(
+      () => 10,
+    );
+    const hasInstantBookListings = normalizedRows.some(
+      (row: any) => row?.instant_book === true,
+    );
 
     return NextResponse.json({
       data: normalizedRows,
@@ -218,10 +244,17 @@ export async function POST(req: Request) {
   try {
     const body = await req.json();
     const parsed = carFormSchema.parse(body);
-    const listingTitle = buildListingTitle(parsed.brand, parsed.model, parsed.car_year);
+    const listingTitle = buildListingTitle(
+      parsed.brand,
+      parsed.model,
+      parsed.car_year,
+    );
     if (!listingTitle) {
       return NextResponse.json(
-        { message: "Brand, model and year are required to generate the listing title." },
+        {
+          message:
+            "Brand, model and year are required to generate the listing title.",
+        },
         { status: 400 },
       );
     }
@@ -234,7 +267,10 @@ export async function POST(req: Request) {
 
     const { isHost } = await getHostStatus(supa, user.id);
     if (!isHost) {
-      return NextResponse.json({ message: "Host approval required" }, { status: 403 });
+      return NextResponse.json(
+        { message: "Host approval required" },
+        { status: 403 },
+      );
     }
 
     await supa.from("profiles").upsert(
@@ -248,7 +284,11 @@ export async function POST(req: Request) {
 
     const hasAirConditioning =
       Boolean(parsed.air_conditioning) ||
-      Boolean(parsed.features?.some((feature) => feature.toLowerCase() === "air conditioning"));
+      Boolean(
+        parsed.features?.some(
+          (feature) => feature.toLowerCase() === "air conditioning",
+        ),
+      );
 
     const payload = {
       ...parsed,
@@ -259,13 +299,22 @@ export async function POST(req: Request) {
       reviewed_by: null,
       rejection_reason: null,
       air_conditioning: hasAirConditioning,
-      delivery_fee: parsed.delivery_available ? (parsed.delivery_fee ?? 0) : null,
+      delivery_fee: parsed.delivery_available
+        ? (parsed.delivery_fee ?? 0)
+        : null,
     };
 
-    const { data, error } = await supa.from("cars").insert(payload).select().single();
+    const { data, error } = await supa
+      .from("cars")
+      .insert(payload)
+      .select()
+      .single();
     if (error) throw error;
     return NextResponse.json({ data });
   } catch (error: any) {
-    return NextResponse.json({ message: error.message ?? "Failed to create car" }, { status: 400 });
+    return NextResponse.json(
+      { message: error.message ?? "Failed to create car" },
+      { status: 400 },
+    );
   }
 }

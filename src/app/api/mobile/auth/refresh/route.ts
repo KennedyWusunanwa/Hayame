@@ -19,14 +19,22 @@ export async function POST(req: Request) {
     const refreshToken = String(body.refresh_token ?? "").trim();
 
     if (!refreshToken) {
-      return NextResponse.json({ message: "refresh_token is required" }, { status: 400 });
+      return NextResponse.json(
+        { message: "refresh_token is required" },
+        { status: 400 },
+      );
     }
 
     const supabase = await createClient();
-    const { data, error } = await supabase.auth.refreshSession({ refresh_token: refreshToken });
+    const { data, error } = await supabase.auth.refreshSession({
+      refresh_token: refreshToken,
+    });
 
     if (error || !data.session) {
-      return NextResponse.json({ message: error?.message ?? "Unable to refresh session" }, { status: 401 });
+      return NextResponse.json(
+        { message: error?.message ?? "Unable to refresh session" },
+        { status: 401 },
+      );
     }
 
     return NextResponse.json({
@@ -34,6 +42,9 @@ export async function POST(req: Request) {
       refresh_token: data.session.refresh_token,
     });
   } catch (error: any) {
-    return NextResponse.json({ message: error?.message ?? "Unable to refresh session" }, { status: 400 });
+    return NextResponse.json(
+      { message: error?.message ?? "Unable to refresh session" },
+      { status: 400 },
+    );
   }
 }

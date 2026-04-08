@@ -14,9 +14,12 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-feature-settings: "rlig" 1, "calt" 1;
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", Inter, Roboto,
-    Helvetica, Arial, sans-serif;
+  font-feature-settings:
+    "rlig" 1,
+    "calt" 1;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text",
+    "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -34,7 +37,9 @@ p {
 
 a {
   color: #0e86d4;
-  transition: color 150ms ease, opacity 150ms ease;
+  transition:
+    color 150ms ease,
+    opacity 150ms ease;
 }
 
 a:hover {
@@ -42,12 +47,24 @@ a:hover {
 }
 
 .gradient-hero {
-  background: radial-gradient(circle at 20% 20%, rgba(14, 134, 212, 0.08), transparent 28%),
-    radial-gradient(circle at 80% 10%, rgba(14, 118, 110, 0.08), transparent 24%),
-    radial-gradient(circle at 10% 80%, rgba(252, 211, 77, 0.1), transparent 24%),
+  background:
+    radial-gradient(
+      circle at 20% 20%,
+      rgba(14, 134, 212, 0.08),
+      transparent 28%
+    ),
+    radial-gradient(
+      circle at 80% 10%,
+      rgba(14, 118, 110, 0.08),
+      transparent 24%
+    ),
+    radial-gradient(
+      circle at 10% 80%,
+      rgba(252, 211, 77, 0.1),
+      transparent 24%
+    ),
     linear-gradient(180deg, #f8fbff 0%, #ffffff 50%, #f6f7fb 100%);
 }
-
 
 .card-hover {
   transition: all 180ms ease;

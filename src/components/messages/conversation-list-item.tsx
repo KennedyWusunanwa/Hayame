@@ -58,7 +58,9 @@ export function ConversationListItem({ conversation, active, onClick }: Props) {
           {conversation.last_message_preview ?? "No messages yet."}
         </p>
         {conversation.carTitle ? (
-          <p className="mt-1 text-[11px] text-gray-500">Listing: {conversation.carTitle}</p>
+          <p className="mt-1 text-[11px] text-gray-500">
+            Listing: {conversation.carTitle}
+          </p>
         ) : null}
       </div>
       {conversation.unreadCount > 0 ? (

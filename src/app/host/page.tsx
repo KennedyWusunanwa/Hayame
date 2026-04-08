@@ -4,7 +4,14 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatCard } from "@/components/dashboard/stat-card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { EarningsCalculator } from "@/components/host/earnings-calculator";
 import { VerifiedHostIndicator } from "@/components/verified-host-indicator";
 import { VerificationBadges } from "@/components/verification-badges";
@@ -23,7 +30,9 @@ export default async function DashboardHome() {
   const hostId = user?.id ?? "";
   const { data: profile } = await supabase
     .from("profiles")
-    .select("full_name, city, id_verified, phone_verified, email_verified, host_level")
+    .select(
+      "full_name, city, id_verified, phone_verified, email_verified, host_level",
+    )
     .eq("id", hostId)
     .maybeSingle();
   const hostName = (profile as any)?.full_name ?? "Host";
@@ -43,7 +52,9 @@ export default async function DashboardHome() {
     carIds.length > 0
       ? await (supabase as any)
           .from("bookings")
-          .select("id,car_id,start_date,end_date,status,payment_status,total_price,created_at,cars(title)")
+          .select(
+            "id,car_id,start_date,end_date,status,payment_status,total_price,created_at,cars(title)",
+          )
           .in("car_id", carIds)
           .order("created_at", { ascending: false })
           .order("start_date", { ascending: false })
@@ -68,17 +79,21 @@ export default async function DashboardHome() {
 
   const bookingRows = (bookings ?? []) as any[];
   const urgentBookings = bookingRows.filter(
-    (booking) => booking.status === "awaiting_host" && booking.payment_status === "paid",
+    (booking) =>
+      booking.status === "awaiting_host" && booking.payment_status === "paid",
   );
   const urgentBookingCount = urgentBookings.length;
   const activeBookingsCount = bookingRows.filter(
-    (booking) => booking.status === "awaiting_host" || booking.status === "confirmed",
+    (booking) =>
+      booking.status === "awaiting_host" || booking.status === "confirmed",
   ).length;
   const unattendedBookingValue = urgentBookings.reduce(
     (sum, booking) => sum + Number(booking.total_price ?? 0),
     0,
   );
-  const paidBookings = bookingRows.filter((booking) => EARNING_STATUSES.has(booking.status));
+  const paidBookings = bookingRows.filter((booking) =>
+    EARNING_STATUSES.has(booking.status),
+  );
   const now = new Date();
   const currentMonth = now.getMonth();
   const currentYear = now.getFullYear();
@@ -90,33 +105,51 @@ export default async function DashboardHome() {
   const monthlyEarnings = paidBookings.reduce((sum, booking) => {
     const start = booking.start_date ? new Date(booking.start_date) : null;
     if (!start || Number.isNaN(start.getTime())) return sum;
-    if (start.getMonth() !== currentMonth || start.getFullYear() !== currentYear) return sum;
+    if (
+      start.getMonth() !== currentMonth ||
+      start.getFullYear() !== currentYear
+    )
+      return sum;
     return sum + Number(booking.total_price ?? 0);
   }, 0);
 
-  const bookingRate = carIds.length > 0 ? Math.round((paidBookings.length / carIds.length) * 100) : 0;
+  const bookingRate =
+    carIds.length > 0
+      ? Math.round((paidBookings.length / carIds.length) * 100)
+      : 0;
   const totalReviews = (reviews ?? []).length;
   const averageRating =
     totalReviews > 0
       ? Number(
           (
-            (reviews ?? []).reduce((sum: number, row: any) => sum + Number(row.rating ?? 0), 0) /
-            totalReviews
+            (reviews ?? []).reduce(
+              (sum: number, row: any) => sum + Number(row.rating ?? 0),
+              0,
+            ) / totalReviews
           ).toFixed(1),
         )
       : 0;
   const totalViews = (views ?? []).length;
-  const conversionRate = totalViews > 0 ? Number(((paidBookings.length / totalViews) * 100).toFixed(1)) : 0;
+  const conversionRate =
+    totalViews > 0
+      ? Number(((paidBookings.length / totalViews) * 100).toFixed(1))
+      : 0;
 
   const { data: platformSettings } = await (supabase as any)
     .from("platform_settings")
     .select("platform_fee_percent")
     .eq("id", 1)
     .maybeSingle();
-  const envFee = Number(process.env.NEXT_PUBLIC_PLATFORM_FEE_PERCENT ?? process.env.PLATFORM_FEE_PERCENT);
+  const envFee = Number(
+    process.env.NEXT_PUBLIC_PLATFORM_FEE_PERCENT ??
+      process.env.PLATFORM_FEE_PERCENT,
+  );
   const fallbackFee = Number.isFinite(envFee) ? envFee : 10;
-  const platformFeePercent = Number(platformSettings?.platform_fee_percent ?? fallbackFee);
-  const isPlaceholderFee = !platformSettings?.platform_fee_percent && !Number.isFinite(envFee);
+  const platformFeePercent = Number(
+    platformSettings?.platform_fee_percent ?? fallbackFee,
+  );
+  const isPlaceholderFee =
+    !platformSettings?.platform_fee_percent && !Number.isFinite(envFee);
   const hostLevel = computeHostLevel({
     explicitLevel: explicitHostLevel,
     idVerified,
@@ -138,8 +171,12 @@ export default async function DashboardHome() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-sm font-semibold text-primary">Dashboard</p>
-          <h1 className="text-2xl font-semibold text-foreground">Welcome back</h1>
-          <p className="text-sm text-gray-600">Track bookings, performance, and projected payouts in one place.</p>
+          <h1 className="text-2xl font-semibold text-foreground">
+            Welcome back
+          </h1>
+          <p className="text-sm text-gray-600">
+            Track bookings, performance, and projected payouts in one place.
+          </p>
         </div>
         <Button asChild>
           <Link href="/host/cars/new">Start Earning Today</Link>
@@ -149,17 +186,24 @@ export default async function DashboardHome() {
       {urgentBookingCount > 0 ? (
         <Card className="border-red-200 bg-red-50">
           <CardHeader className="pb-2">
-            <CardTitle className="text-base text-red-800">Urgent: booking not attended to.</CardTitle>
+            <CardTitle className="text-base text-red-800">
+              Urgent: booking not attended to.
+            </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 pt-0">
             <p className="text-sm text-red-700">
-              You have {urgentBookingCount} booking request{urgentBookingCount > 1 ? "s" : ""} waiting for approval.
+              You have {urgentBookingCount} booking request
+              {urgentBookingCount > 1 ? "s" : ""} waiting for approval.
             </p>
             <div className="flex flex-wrap items-center gap-2">
               <span className="rounded-full bg-white px-2 py-1 text-xs font-semibold text-red-700">
                 Pending value: {formatCurrency(unattendedBookingValue)}
               </span>
-              <Button asChild size="sm" className="bg-red-600 text-white hover:bg-red-700">
+              <Button
+                asChild
+                size="sm"
+                className="bg-red-600 text-white hover:bg-red-700"
+              >
                 <Link href="/host/bookings">Review now</Link>
               </Button>
             </div>
@@ -176,10 +220,16 @@ export default async function DashboardHome() {
         </CardHeader>
         <CardContent className="space-y-2">
           <div className="flex flex-wrap items-center gap-2">
-            <p className="text-sm text-gray-700">{hostName} - {hostCity}</p>
+            <p className="text-sm text-gray-700">
+              {hostName} - {hostCity}
+            </p>
             <VerifiedHostIndicator show={hostBadgeType !== "new"} />
           </div>
-          <VerificationBadges idVerified={idVerified} phoneVerified={phoneVerified} emailVerified={emailVerified} />
+          <VerificationBadges
+            idVerified={idVerified}
+            phoneVerified={phoneVerified}
+            emailVerified={emailVerified}
+          />
         </CardContent>
       </Card>
 
@@ -188,20 +238,44 @@ export default async function DashboardHome() {
           <CardTitle className="text-base">Overview snapshot</CardTitle>
         </CardHeader>
         <CardContent className="grid grid-cols-2 gap-2 pt-0">
-          <MobileMetric label="Active bookings" value={String(activeBookingsCount)} />
-          <MobileMetric label="Needs approval" value={String(urgentBookingCount)} />
-          <MobileMetric label="Total earnings" value={formatCurrency(totalEarnings)} />
-          <MobileMetric label="This month" value={formatCurrency(monthlyEarnings)} />
-          <MobileMetric label="Reviews" value={`${totalReviews} (${averageRating || 0}/5)`} />
+          <MobileMetric
+            label="Active bookings"
+            value={String(activeBookingsCount)}
+          />
+          <MobileMetric
+            label="Needs approval"
+            value={String(urgentBookingCount)}
+          />
+          <MobileMetric
+            label="Total earnings"
+            value={formatCurrency(totalEarnings)}
+          />
+          <MobileMetric
+            label="This month"
+            value={formatCurrency(monthlyEarnings)}
+          />
+          <MobileMetric
+            label="Reviews"
+            value={`${totalReviews} (${averageRating || 0}/5)`}
+          />
           <MobileMetric label="Conversion" value={`${conversionRate}%`} />
         </CardContent>
       </Card>
 
       <div className="hidden grid-cols-2 gap-3 lg:grid lg:grid-cols-4">
-        <StatCard title="Total earnings" value={formatCurrency(totalEarnings)} />
-        <StatCard title="Monthly earnings" value={formatCurrency(monthlyEarnings)} />
+        <StatCard
+          title="Total earnings"
+          value={formatCurrency(totalEarnings)}
+        />
+        <StatCard
+          title="Monthly earnings"
+          value={formatCurrency(monthlyEarnings)}
+        />
         <StatCard title="Booking rate" value={`${bookingRate}%`} />
-        <StatCard title="Reviews" value={`${totalReviews} (${averageRating || 0}/5)`} />
+        <StatCard
+          title="Reviews"
+          value={`${totalReviews} (${averageRating || 0}/5)`}
+        />
       </div>
 
       <Card>
@@ -209,12 +283,21 @@ export default async function DashboardHome() {
           <CardTitle>Host performance</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <PerformanceItem label="Total earnings" value={formatCurrency(totalEarnings)} />
-          <PerformanceItem label="Monthly earnings" value={formatCurrency(monthlyEarnings)} />
+          <PerformanceItem
+            label="Total earnings"
+            value={formatCurrency(totalEarnings)}
+          />
+          <PerformanceItem
+            label="Monthly earnings"
+            value={formatCurrency(monthlyEarnings)}
+          />
           <PerformanceItem label="Booking rate" value={`${bookingRate}%`} />
           <PerformanceItem label="Reviews" value={String(totalReviews)} />
           <PerformanceItem label="Views" value={String(totalViews)} />
-          <PerformanceItem label="Conversion rate" value={`${conversionRate}%`} />
+          <PerformanceItem
+            label="Conversion rate"
+            value={`${conversionRate}%`}
+          />
         </CardContent>
       </Card>
 
@@ -244,7 +327,8 @@ export default async function DashboardHome() {
                   <TableRow key={booking.id}>
                     <TableCell>{booking.cars?.title ?? "Car"}</TableCell>
                     <TableCell>
-                      {formatDateLabel(booking.start_date)} - {formatDateLabel(booking.end_date)}
+                      {formatDateLabel(booking.start_date)} -{" "}
+                      {formatDateLabel(booking.end_date)}
                     </TableCell>
                     <TableCell>{formatDateLabel(booking.created_at)}</TableCell>
                     <TableCell>
@@ -259,8 +343,12 @@ export default async function DashboardHome() {
                 ))}
                 {bookingRows.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center text-sm text-gray-600">
-                      No trip history yet. Create your first listing to start earning.
+                    <TableCell
+                      colSpan={5}
+                      className="text-center text-sm text-gray-600"
+                    >
+                      No trip history yet. Create your first listing to start
+                      earning.
                     </TableCell>
                   </TableRow>
                 ) : null}
@@ -269,9 +357,14 @@ export default async function DashboardHome() {
           </div>
           <div className="space-y-2 lg:hidden">
             {bookingRows.slice(0, 8).map((booking) => (
-              <div key={booking.id} className="rounded-lg border border-border bg-white p-3">
+              <div
+                key={booking.id}
+                className="rounded-lg border border-border bg-white p-3"
+              >
                 <div className="flex items-start justify-between gap-2">
-                  <p className="text-sm font-semibold text-foreground">{booking.cars?.title ?? "Car"}</p>
+                  <p className="text-sm font-semibold text-foreground">
+                    {booking.cars?.title ?? "Car"}
+                  </p>
                   {booking.status === "awaiting_host" ? (
                     <span className="rounded-full bg-red-100 px-2 py-1 text-[10px] font-semibold text-red-700">
                       Needs approval
@@ -279,9 +372,12 @@ export default async function DashboardHome() {
                   ) : null}
                 </div>
                 <p className="text-xs text-gray-600">
-                  {formatDateLabel(booking.start_date)} - {formatDateLabel(booking.end_date)}
+                  {formatDateLabel(booking.start_date)} -{" "}
+                  {formatDateLabel(booking.end_date)}
                 </p>
-                <p className="text-xs text-gray-600">Booked: {formatDateLabel(booking.created_at)}</p>
+                <p className="text-xs text-gray-600">
+                  Booked: {formatDateLabel(booking.created_at)}
+                </p>
                 <div className="mt-2 flex items-center justify-between">
                   <span className="rounded-full bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-700">
                     {booking.status}
@@ -331,7 +427,9 @@ function PerformanceItem({
 }) {
   return (
     <div className="rounded-xl border border-border bg-gray-50 p-3">
-      <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">{label}</p>
+      <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+        {label}
+      </p>
       <p className="text-lg font-semibold text-foreground">{value}</p>
       {note ? <p className="text-xs text-amber-700">{note}</p> : null}
     </div>
@@ -341,7 +439,9 @@ function PerformanceItem({
 function MobileMetric({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg border border-border bg-gray-50 px-3 py-2">
-      <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">{label}</p>
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+        {label}
+      </p>
       <p className="text-sm font-semibold text-foreground">{value}</p>
     </div>
   );

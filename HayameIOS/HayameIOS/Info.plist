@@ -46,11 +46,6 @@
 	<string>car-photos</string>
 	<key>HAYAMESupabaseURL</key>
 	<string>https://osvjxsbsuixfsgadzxzo.supabase.co</string>
-	<key>NSAppTransportSecurity</key>
-	<dict>
-		<key>NSAllowsArbitraryLoads</key>
-		<true/>
-	</dict>
 	<key>NSCameraUsageDescription</key>
 	<string>Hayame needs camera access to capture profile and listing photos.</string>
 	<key>NSPhotoLibraryUsageDescription</key>

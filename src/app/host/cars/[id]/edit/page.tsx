@@ -21,14 +21,15 @@ export default async function EditCarPage({ params }: PageProps) {
     redirect("/auth/login");
   }
 
-  const { data: car, error } = await supabase
+  const { data: car } = await supabase
     .from("cars")
     .select("*")
     .eq("id", resolvedParams.id)
     .eq("owner_id", user!.id)
     .maybeSingle<Database["public"]["Tables"]["cars"]["Row"]>();
 
-  const hydratedCar = car ?? (await fetchCarFallback(resolvedParams.id, user.id));
+  const hydratedCar =
+    car ?? (await fetchCarFallback(resolvedParams.id, user.id));
   if (!hydratedCar) return notFound();
 
   const { data: existingPhotoRows } = await (supabase as any)
@@ -45,8 +46,12 @@ export default async function EditCarPage({ params }: PageProps) {
     <div className="space-y-6">
       <div>
         <p className="text-sm font-semibold text-primary">Edit car</p>
-        <h1 className="text-2xl font-semibold text-foreground">{hydratedCar.title}</h1>
-        <p className="text-sm text-gray-600">Update details and save to publish changes.</p>
+        <h1 className="text-2xl font-semibold text-foreground">
+          {hydratedCar.title}
+        </h1>
+        <p className="text-sm text-gray-600">
+          Update details and save to publish changes.
+        </p>
       </div>
       <Card>
         <CardHeader>
@@ -72,13 +77,17 @@ export default async function EditCarPage({ params }: PageProps) {
               features: hydratedCar.features ?? [],
               is_available: hydratedCar.is_available ?? true,
               instant_book: (hydratedCar as any).instant_book ?? false,
-              delivery_available: (hydratedCar as any).delivery_available ?? false,
+              delivery_available:
+                (hydratedCar as any).delivery_available ?? false,
               air_conditioning: (hydratedCar as any).air_conditioning ?? false,
               delivery_fee: Number((hydratedCar as any).delivery_fee ?? 0),
               insurance_fee: Number((hydratedCar as any).insurance_fee ?? 0),
               deposit_amount: Number((hydratedCar as any).deposit_amount ?? 0),
-              outside_accra_fee: Number((hydratedCar as any).outside_accra_fee ?? 0),
-              cancellation_policy: (hydratedCar as any).cancellation_policy ?? "moderate",
+              outside_accra_fee: Number(
+                (hydratedCar as any).outside_accra_fee ?? 0,
+              ),
+              cancellation_policy:
+                (hydratedCar as any).cancellation_policy ?? "moderate",
             }}
           />
         </CardContent>
@@ -105,14 +114,18 @@ async function fetchCarFallback(id: string, userId: string) {
       select: "*",
       id: `eq.${id}`,
     });
-    const res = await fetch(`${supabaseUrl}/rest/v1/cars?${params.toString()}`, {
-      headers: {
-        apikey: supabaseAnonKey,
-        Authorization: `Bearer ${supabaseAnonKey}`,
+    const res = await fetch(
+      `${supabaseUrl}/rest/v1/cars?${params.toString()}`,
+      {
+        headers: {
+          apikey: supabaseAnonKey,
+          Authorization: `Bearer ${supabaseAnonKey}`,
+        },
+        cache: "no-store",
       },
-      cache: "no-store",
-    });
-    const data = (await res.json()) as Database["public"]["Tables"]["cars"]["Row"][];
+    );
+    const data =
+      (await res.json()) as Database["public"]["Tables"]["cars"]["Row"][];
     const car = data?.[0];
     if (car && car.owner_id === userId) {
       return car;

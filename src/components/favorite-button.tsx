@@ -74,8 +74,15 @@ export function FavoriteButton({
         className,
       )}
     >
-      <Heart className={cn("h-5 w-5 transition", favorite && "fill-brand text-brand")} />
-      <span className="sr-only">{favorite ? "Remove from favorites" : "Save to favorites"}</span>
+      <Heart
+        className={cn(
+          "h-5 w-5 transition",
+          favorite && "fill-brand text-brand",
+        )}
+      />
+      <span className="sr-only">
+        {favorite ? "Remove from favorites" : "Save to favorites"}
+      </span>
     </button>
   );
 }

@@ -3,9 +3,14 @@ export function buildListingTitle(
   model: string | null | undefined,
   carYear: number | null | undefined,
 ): string | null {
-  const normalizedBrand = typeof brand === "string" ? brand.trim().replace(/\s+/g, " ") : "";
-  const normalizedModel = typeof model === "string" ? model.trim().replace(/\s+/g, " ") : "";
-  const normalizedYear = typeof carYear === "number" && Number.isFinite(carYear) ? String(carYear) : "";
+  const normalizedBrand =
+    typeof brand === "string" ? brand.trim().replace(/\s+/g, " ") : "";
+  const normalizedModel =
+    typeof model === "string" ? model.trim().replace(/\s+/g, " ") : "";
+  const normalizedYear =
+    typeof carYear === "number" && Number.isFinite(carYear)
+      ? String(carYear)
+      : "";
 
   if (!normalizedBrand || !normalizedModel || !normalizedYear) {
     return null;
@@ -19,5 +24,7 @@ export function buildListingTitlePreview(
   model: string | null | undefined,
   carYear: number | null | undefined,
 ): string {
-  return buildListingTitle(brand, model, carYear) ?? "Select brand, model and year";
+  return (
+    buildListingTitle(brand, model, carYear) ?? "Select brand, model and year"
+  );
 }

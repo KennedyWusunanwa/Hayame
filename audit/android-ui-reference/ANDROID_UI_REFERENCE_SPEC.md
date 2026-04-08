@@ -1,7 +1,9 @@
 # Hayame Android UI Reference (iOS Parity Baseline)
 
 ## UI Parity Summary
+
 This reference mirrors the provided iOS visual baseline for Hayame and standardizes it into a consistent Android-native Compose presentation without changing product scope. It preserves:
+
 - The same page hierarchy, card-first layout, and marketplace structure
 - Hayame blue/white brand language with soft-light surfaces
 - Rounded cards, pill controls, and dense but readable info rows
@@ -12,6 +14,7 @@ It intentionally does not add new features, alter flows, or redesign interaction
 ## Design Tokens
 
 ### Color
+
 - `BrandBlue`: `#1484D9`
 - `BrandNavy`: `#0A2B54`
 - `BrandLight`: `#EDF7FF`
@@ -22,9 +25,11 @@ It intentionally does not add new features, alter flows, or redesign interaction
 - Status: `Success #1CA15F`, `Warning #ED8F30`, `Danger #E04141`
 
 ### Spacing (dp)
+
 `4, 6, 8, 10, 12, 14, 16, 18, 20, 24, 28`
 
 ### Corner Radius (dp)
+
 - `Chip`: 10
 - `Input`: 12
 - `Row`: 14
@@ -33,6 +38,7 @@ It intentionally does not add new features, alter flows, or redesign interaction
 - `Pill`: 999
 
 ### Type Hierarchy
+
 - Display: 32 / Bold
 - Headline: 26, 22 / Bold
 - Title: 18, 16 / Bold; 14 / Semibold
@@ -40,16 +46,19 @@ It intentionally does not add new features, alter flows, or redesign interaction
 - Label: 12, 11, 10 / Semibold
 
 ### Buttons
+
 - Primary: blue-to-navy horizontal gradient, pill radius, white text
 - Secondary: light-blue surface, blue border tint, navy text
 - Tap targets maintain Android-friendly touch area with padded pill surfaces
 
 ### Cards
+
 - White surface, 1dp light border, soft elevation
 - Internal vertical rhythm: 8-14dp
 - Outer page gutters: 16dp
 
 ### Bottom Navigation Behavior
+
 - Fixed 5 tabs: `Home`, `Explore`, `Trips`, `Saved`, `More`
 - Active tab uses blue icon/label + light indicator
 - Inactive tabs use muted text/icon
@@ -59,6 +68,7 @@ It intentionally does not add new features, alter flows, or redesign interaction
 ## Screen-by-Screen Reference
 
 ### 1) Splash
+
 - Layout top-to-bottom:
   1. Gradient background with two soft circular accents
   2. Centered logo block
@@ -73,6 +83,7 @@ It intentionally does not add new features, alter flows, or redesign interaction
 - Bottom nav: hidden
 
 ### 2) Home
+
 - Layout top-to-bottom:
   1. Profile mini-header + message icon
   2. Hero marketing card with CTA
@@ -90,6 +101,7 @@ It intentionally does not add new features, alter flows, or redesign interaction
 - Bottom nav: visible; `Home` selected
 
 ### 3) Explore
+
 - Layout top-to-bottom:
   1. Search/sort/filter top row
   2. 2-column car grid
@@ -102,6 +114,7 @@ It intentionally does not add new features, alter flows, or redesign interaction
 - Bottom nav: visible; `Explore` selected
 
 ### 4) Trips
+
 - Layout top-to-bottom:
   1. Payment notice card
   2. Upcoming section + booking cards
@@ -115,6 +128,7 @@ It intentionally does not add new features, alter flows, or redesign interaction
 - Bottom nav: visible; `Trips` selected
 
 ### 5) Saved / Favorites
+
 - Layout top-to-bottom:
   1. Section header
   2. Favorite car rows
@@ -128,6 +142,7 @@ It intentionally does not add new features, alter flows, or redesign interaction
 - Bottom nav: visible; `Saved` selected
 
 ### 6) More / Profile
+
 - Layout top-to-bottom:
   1. Profile identity card
   2. Profile settings action card
@@ -143,6 +158,7 @@ It intentionally does not add new features, alter flows, or redesign interaction
 - Bottom nav: visible; `More` selected with optional unread badge
 
 ### 7) Car Detail Overview
+
 - Layout top-to-bottom:
   1. Title/status summary card
   2. Main gallery area + thumbs
@@ -160,6 +176,7 @@ It intentionally does not add new features, alter flows, or redesign interaction
 - Bottom nav: visible when rooted in main scaffold; hidden if opened as modal route
 
 ### 8) Car Detail Booking Section
+
 - Layout top-to-bottom:
   1. Trip price/policy block
   2. Verification and cancellation
@@ -178,6 +195,7 @@ It intentionally does not add new features, alter flows, or redesign interaction
 - Bottom nav: visible if part of tab stack; hidden for full-screen detail route
 
 ## Compose Source Mapping
+
 - Design tokens: `compose/HayameDesignSystem.kt`
 - Shared components: `compose/HayameSharedComponents.kt`
 - Screens: `compose/HayameReferenceScreens.kt`

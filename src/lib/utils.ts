@@ -28,20 +28,21 @@ export function calculateNights(start?: string | null, end?: string | null) {
 }
 
 function normalizeLocationToken(value?: string | null) {
-  return (value ?? "")
-    .toString()
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, " ");
+  return (value ?? "").toString().trim().toLowerCase().replace(/\s+/g, " ");
 }
 
 export function isGreaterAccraRegion(value?: string | null) {
   const normalized = normalizeLocationToken(value);
   if (!normalized) return false;
-  return normalized === "greater accra" || normalized === "greater accra region";
+  return (
+    normalized === "greater accra" || normalized === "greater accra region"
+  );
 }
 
-export function isLocationOutsideAccra(params: { region?: string | null; city?: string | null }) {
+export function isLocationOutsideAccra(params: {
+  region?: string | null;
+  city?: string | null;
+}) {
   const region = normalizeLocationToken(params.region);
   if (region) {
     return !isGreaterAccraRegion(region);

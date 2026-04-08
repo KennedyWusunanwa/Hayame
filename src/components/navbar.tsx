@@ -28,15 +28,20 @@ const navLinks = [
 
 export function Navbar() {
   const pathname = usePathname();
-  const isActive = (href: string) => (pathname || "/").replace(/\/$/, "") === href.replace(/\/$/, "");
+  const isActive = (href: string) =>
+    (pathname || "/").replace(/\/$/, "") === href.replace(/\/$/, "");
   const [userName, setUserName] = useState<string | null>(null);
   const [isHost, setIsHost] = useState(false);
-  const [hostStatus, setHostStatus] = useState<"pending" | "approved" | "rejected" | null>(null);
+  const [hostStatus, setHostStatus] = useState<
+    "pending" | "approved" | "rejected" | null
+  >(null);
   const [hostBookingAlertCount, setHostBookingAlertCount] = useState(0);
   const [mobileOpen, setMobileOpen] = useState(false);
   const { unreadCount } = useMessaging();
 
-  const supabaseRef = useRef<ReturnType<typeof createSupabaseBrowserClient> | null>(null);
+  const supabaseRef = useRef<ReturnType<
+    typeof createSupabaseBrowserClient
+  > | null>(null);
 
   const loadUser = useCallback(async () => {
     try {
@@ -58,30 +63,53 @@ export function Navbar() {
         .select("full_name")
         .eq("id", user.id)
         .maybeSingle();
-      const profileName = String((profile as { full_name?: string | null } | null)?.full_name ?? "").trim();
-      const metadataName = String((user.user_metadata as any)?.full_name ?? "").trim();
-      const username = String((user.user_metadata as any)?.username ?? "").trim();
+      const profileName = String(
+        (profile as { full_name?: string | null } | null)?.full_name ?? "",
+      ).trim();
+      const metadataName = String(
+        (user.user_metadata as any)?.full_name ?? "",
+      ).trim();
+      const username = String(
+        (user.user_metadata as any)?.username ?? "",
+      ).trim();
       const fallbackName = user.email || "Account";
       setUserName(username || profileName || metadataName || fallbackName);
       const res = await fetch("/api/host-status", { cache: "no-store" });
       if (res.ok) {
-        const payload = (await res.json()) as { is_host?: boolean; status?: string | null };
+        const payload = (await res.json()) as {
+          is_host?: boolean;
+          status?: string | null;
+        };
         const approvedHost = Boolean(payload.is_host);
         setIsHost(approvedHost);
-        setHostStatus(approvedHost ? "approved" : (payload.status as any) ?? null);
+        setHostStatus(
+          approvedHost ? "approved" : ((payload.status as any) ?? null),
+        );
         if (approvedHost) {
-          const bookingsRes = await fetch("/api/bookings", { cache: "no-store" });
+          const bookingsRes = await fetch("/api/bookings", {
+            cache: "no-store",
+          });
           if (bookingsRes.ok) {
             const bookingsPayload = (await bookingsRes.json()) as {
-              data?: Array<{ role?: string; status?: string | null; payment_status?: string | null }>;
+              data?: Array<{
+                role?: string;
+                status?: string | null;
+                payment_status?: string | null;
+              }>;
             };
-            const ownerAlerts = (bookingsPayload.data ?? []).filter((booking) => {
-              const role = String(booking.role ?? "");
-              const status = String(booking.status ?? "");
-              const paymentStatus = String(booking.payment_status ?? "");
-              const isOwnerBooking = role.includes("owner");
-              return isOwnerBooking && status === "awaiting_host" && paymentStatus === "paid";
-            }).length;
+            const ownerAlerts = (bookingsPayload.data ?? []).filter(
+              (booking) => {
+                const role = String(booking.role ?? "");
+                const status = String(booking.status ?? "");
+                const paymentStatus = String(booking.payment_status ?? "");
+                const isOwnerBooking = role.includes("owner");
+                return (
+                  isOwnerBooking &&
+                  status === "awaiting_host" &&
+                  paymentStatus === "paid"
+                );
+              },
+            ).length;
             setHostBookingAlertCount(ownerAlerts);
           } else {
             setHostBookingAlertCount(0);
@@ -174,12 +202,21 @@ export function Navbar() {
               </Link>
               {isHost ? (
                 <>
-                  <Button asChild variant="outline" className="border-brand text-brand">
-                    <Link href="/host" className="inline-flex items-center gap-2">
+                  <Button
+                    asChild
+                    variant="outline"
+                    className="border-brand text-brand"
+                  >
+                    <Link
+                      href="/host"
+                      className="inline-flex items-center gap-2"
+                    >
                       <span>Host dashboard</span>
                       {hostBookingAlertCount > 0 ? (
                         <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-brand px-1 text-[11px] font-semibold text-white">
-                          {hostBookingAlertCount > 99 ? "99+" : hostBookingAlertCount}
+                          {hostBookingAlertCount > 99
+                            ? "99+"
+                            : hostBookingAlertCount}
                         </span>
                       ) : null}
                     </Link>
@@ -193,12 +230,21 @@ export function Navbar() {
                 </>
               ) : (
                 <>
-                  <Button asChild variant="outline" className="border-brand text-brand">
+                  <Button
+                    asChild
+                    variant="outline"
+                    className="border-brand text-brand"
+                  >
                     <Link href="/dashboard">Dashboard</Link>
                   </Button>
-                  <Button asChild className="bg-brand text-white hover:bg-white hover:text-brand hover:border-brand">
+                  <Button
+                    asChild
+                    className="bg-brand text-white hover:bg-white hover:text-brand hover:border-brand"
+                  >
                     <Link href="/become-host">
-                      {hostStatus === "pending" ? "Application pending" : "Become a Host"}
+                      {hostStatus === "pending"
+                        ? "Application pending"
+                        : "Become a Host"}
                     </Link>
                   </Button>
                 </>
@@ -217,10 +263,18 @@ export function Navbar() {
             </>
           ) : (
             <>
-              <Button variant="ghost" asChild className="text-gray-800 hover:text-brand">
+              <Button
+                variant="ghost"
+                asChild
+                className="text-gray-800 hover:text-brand"
+              >
                 <Link href="/auth/login">Log in</Link>
               </Button>
-              <Button variant="outline" asChild className="hidden sm:inline-flex border-brand text-brand">
+              <Button
+                variant="outline"
+                asChild
+                className="hidden sm:inline-flex border-brand text-brand"
+              >
                 <Link href="/auth/signup">Sign up</Link>
               </Button>
             </>
@@ -297,11 +351,16 @@ export function Navbar() {
                           variant="outline"
                           className="w-full border-brand text-brand hover:bg-brand hover:text-white"
                         >
-                          <Link href="/host" className="inline-flex items-center gap-2">
+                          <Link
+                            href="/host"
+                            className="inline-flex items-center gap-2"
+                          >
                             <span>Host dashboard</span>
                             {hostBookingAlertCount > 0 ? (
                               <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-brand px-1 text-[11px] font-semibold text-white">
-                                {hostBookingAlertCount > 99 ? "99+" : hostBookingAlertCount}
+                                {hostBookingAlertCount > 99
+                                  ? "99+"
+                                  : hostBookingAlertCount}
                               </span>
                             ) : null}
                           </Link>
@@ -322,7 +381,9 @@ export function Navbar() {
                           asChild
                           className="w-full bg-brand text-white hover:bg-white hover:text-brand hover:border-brand"
                         >
-                          <Link href="/host/cars/new">List Your Car &amp; Earn</Link>
+                          <Link href="/host/cars/new">
+                            List Your Car &amp; Earn
+                          </Link>
                         </Button>
                       ) : (
                         <Button
@@ -330,7 +391,9 @@ export function Navbar() {
                           className="w-full bg-brand text-white hover:bg-white hover:text-brand hover:border-brand"
                         >
                           <Link href="/become-host">
-                            {hostStatus === "pending" ? "Application pending" : "Become a Host"}
+                            {hostStatus === "pending"
+                              ? "Application pending"
+                              : "Become a Host"}
                           </Link>
                         </Button>
                       )}

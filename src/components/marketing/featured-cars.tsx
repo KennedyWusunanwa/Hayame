@@ -61,8 +61,13 @@ export async function FeaturedCars() {
     } = await supabase.auth.getUser();
     const favoriteIds = new Set<string>();
     if (user) {
-      const { data: favorites } = await supabase.from("favorites").select("car_id").eq("user_id", user.id);
-      favorites?.forEach((fav: { car_id: string }) => favoriteIds.add(fav.car_id));
+      const { data: favorites } = await supabase
+        .from("favorites")
+        .select("car_id")
+        .eq("user_id", user.id);
+      favorites?.forEach((fav: { car_id: string }) =>
+        favoriteIds.add(fav.car_id),
+      );
     }
 
     const { data } = await (supabase as any)
@@ -78,7 +83,10 @@ export async function FeaturedCars() {
         city: car.city ?? "",
         region: car.region ?? "",
         daily_price: Number(car.daily_price ?? 0),
-        rating: typeof car.avg_rating === "number" ? Number(car.avg_rating) : undefined,
+        rating:
+          typeof car.avg_rating === "number"
+            ? Number(car.avg_rating)
+            : undefined,
         reviews: Number(car.reviews_count ?? 0),
         car_type: car.car_type ?? "",
         description: car.description ?? "",

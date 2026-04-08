@@ -27,7 +27,14 @@ export type Booking = {
   renter_id: string;
   start_date: string;
   end_date: string;
-  status: "pending" | "awaiting_host" | "confirmed" | "rejected" | "cancelled" | "completed" | "refunded";
+  status:
+    | "pending"
+    | "awaiting_host"
+    | "confirmed"
+    | "rejected"
+    | "cancelled"
+    | "completed"
+    | "refunded";
   payment_status?: "pending" | "paid" | "refunded" | "failed";
   payment_reference?: string | null;
   total_price: number;

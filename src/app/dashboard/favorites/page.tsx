@@ -15,7 +15,9 @@ export default async function FavoritesPage() {
       <div>
         <p className="text-sm font-semibold text-primary">Favorites</p>
         <h1 className="text-2xl font-semibold text-foreground">Saved cars</h1>
-        <p className="text-sm text-gray-600">Keep track of cars you want to book later.</p>
+        <p className="text-sm text-gray-600">
+          Keep track of cars you want to book later.
+        </p>
       </div>
 
       <Card>
@@ -24,17 +26,30 @@ export default async function FavoritesPage() {
         </CardHeader>
         <CardContent>
           {favorites.length === 0 ? (
-            <p className="text-sm text-gray-600">No favorites yet. Tap the heart on a car to save it.</p>
+            <p className="text-sm text-gray-600">
+              No favorites yet. Tap the heart on a car to save it.
+            </p>
           ) : (
             <div className="grid gap-4 sm:grid-cols-2">
               {favorites.map((fav) => (
-                <div key={fav.id} className="flex gap-3 rounded-xl border border-border bg-white p-3">
+                <div
+                  key={fav.id}
+                  className="flex gap-3 rounded-xl border border-border bg-white p-3"
+                >
                   <div className="relative h-20 w-28 overflow-hidden rounded-lg">
-                    <Image src={fav.image} alt={fav.title} fill className="object-cover" sizes="180px" />
+                    <Image
+                      src={fav.image}
+                      alt={fav.title}
+                      fill
+                      className="object-cover"
+                      sizes="180px"
+                    />
                   </div>
                   <div className="flex flex-1 flex-col gap-1">
                     <div className="flex items-center justify-between">
-                      <p className="text-sm font-semibold text-foreground">{fav.title}</p>
+                      <p className="text-sm font-semibold text-foreground">
+                        {fav.title}
+                      </p>
                       <span className="rounded-full bg-brand/10 px-2 py-1 text-xs font-semibold text-brand">
                         {fav.type || "Car"}
                       </span>
@@ -43,7 +58,9 @@ export default async function FavoritesPage() {
                       <MapPin className="h-3 w-3 text-brand" />
                       {fav.city}, {fav.region}
                     </p>
-                    <p className="text-sm font-semibold text-foreground">{formatCurrency(fav.price)}</p>
+                    <p className="text-sm font-semibold text-foreground">
+                      {formatCurrency(fav.price)}
+                    </p>
                   </div>
                 </div>
               ))}
@@ -59,7 +76,9 @@ export default async function FavoritesPage() {
           </div>
           <div>
             <p className="text-sm text-gray-600">Total favorites</p>
-            <p className="text-2xl font-semibold text-foreground">{favorites.length}</p>
+            <p className="text-2xl font-semibold text-foreground">
+              {favorites.length}
+            </p>
           </div>
         </CardContent>
       </Card>
@@ -89,27 +108,31 @@ async function loadUserFavorites() {
 
     const { data } = await supabase
       .from("favorites")
-      .select("car:cars(id,title,city,region,daily_price,car_type,car_photos(url))")
+      .select(
+        "car:cars(id,title,city,region,daily_price,car_type,car_photos(url))",
+      )
       .eq("user_id", user.id);
 
-    return (data as FavoriteRow[] | null)
-      ?.map((row) => row.car)
-      .filter(Boolean)
-      .map((car) => ({
-        id: car!.id,
-        title: car!.title,
-        city: car!.city ?? "-",
-        region: car!.region ?? "-",
-        price: Number(car!.daily_price ?? 0),
-        type: car!.car_type ?? "",
-        image: resolveCarImage(car!.car_photos?.[0]?.url, {
+    return (
+      (data as FavoriteRow[] | null)
+        ?.map((row) => row.car)
+        .filter(Boolean)
+        .map((car) => ({
           id: car!.id,
           title: car!.title,
-          city: car!.city,
-          region: car!.region,
-          carType: car!.car_type,
-        }),
-      })) ?? [];
+          city: car!.city ?? "-",
+          region: car!.region ?? "-",
+          price: Number(car!.daily_price ?? 0),
+          type: car!.car_type ?? "",
+          image: resolveCarImage(car!.car_photos?.[0]?.url, {
+            id: car!.id,
+            title: car!.title,
+            city: car!.city,
+            region: car!.region,
+            carType: car!.car_type,
+          }),
+        })) ?? []
+    );
   } catch {
     return [];
   }

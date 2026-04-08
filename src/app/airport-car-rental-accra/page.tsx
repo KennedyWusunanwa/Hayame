@@ -15,7 +15,8 @@ export default function AirportCarRentalAccraPage() {
       faqs={[
         {
           question: "Can I message the host before pickup?",
-          answer: "Yes. You can start or continue chat directly from listing pages and Messages.",
+          answer:
+            "Yes. You can start or continue chat directly from listing pages and Messages.",
         },
         {
           question: "Is delivery to airport guaranteed?",
@@ -23,7 +24,8 @@ export default function AirportCarRentalAccraPage() {
         },
         {
           question: "How do I pay for the trip?",
-          answer: "Booking checkout uses Paystack for supported payment methods.",
+          answer:
+            "Booking checkout uses Paystack for supported payment methods.",
         },
       ]}
     />

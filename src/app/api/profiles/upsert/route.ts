@@ -7,7 +7,8 @@ export async function POST(req: Request) {
   try {
     const supabase = await createSupabaseServerClient();
     const user = await getRequestUser(supabase as any, req);
-    if (!user) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+    if (!user)
+      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
 
     const body = (await req.json()) as {
       id?: string;
@@ -41,6 +42,9 @@ export async function POST(req: Request) {
     if (error) throw error;
     return NextResponse.json({ ok: true });
   } catch (error: any) {
-    return NextResponse.json({ message: error.message ?? "Failed to save profile" }, { status: 400 });
+    return NextResponse.json(
+      { message: error.message ?? "Failed to save profile" },
+      { status: 400 },
+    );
   }
 }

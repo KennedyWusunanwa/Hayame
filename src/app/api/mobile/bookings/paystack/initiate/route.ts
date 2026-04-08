@@ -14,7 +14,9 @@ type Body = {
 const SITE_URL =
   process.env.NEXT_PUBLIC_SITE_URL ??
   process.env.EMAIL_BASE_URL ??
-  (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
+  (process.env.VERCEL_URL
+    ? `https://${process.env.VERCEL_URL}`
+    : "http://localhost:3000");
 
 function sanitizeCallbackUrl(raw?: string) {
   const fallback = `${SITE_URL}/messages?paystack=1`;
@@ -42,7 +44,10 @@ export async function POST(req: Request) {
   try {
     const body = (await req.json()) as Body;
     if (!body.bookingId) {
-      return NextResponse.json({ message: "bookingId is required" }, { status: 400 });
+      return NextResponse.json(
+        { message: "bookingId is required" },
+        { status: 400 },
+      );
     }
 
     const supabase = await createSupabaseServerClient();
@@ -55,7 +60,8 @@ export async function POST(req: Request) {
     })();
     const db = admin ?? (supabase as any);
     const user = await getRequestUser(supabase as any, req);
-    if (!user) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+    if (!user)
+      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
 
     const { data: booking, error: bookingError } = await db
       .from("bookings")
@@ -66,20 +72,36 @@ export async function POST(req: Request) {
       .single();
 
     if (bookingError || !booking) {
-      return NextResponse.json({ message: "Booking hold not found" }, { status: 404 });
+      return NextResponse.json(
+        { message: "Booking hold not found" },
+        { status: 404 },
+      );
     }
     if (booking.renter_id !== user.id) {
       return NextResponse.json({ message: "Forbidden" }, { status: 403 });
     }
     if (booking.status !== "pending") {
-      return NextResponse.json({ message: "Booking hold is no longer valid" }, { status: 400 });
+      return NextResponse.json(
+        { message: "Booking hold is no longer valid" },
+        { status: 400 },
+      );
     }
-    if (booking.hold_expires_at && new Date(booking.hold_expires_at) <= new Date()) {
+    if (
+      booking.hold_expires_at &&
+      new Date(booking.hold_expires_at) <= new Date()
+    ) {
       await db
         .from("bookings")
-        .update({ status: "cancelled", payment_status: "failed", hold_expires_at: null })
+        .update({
+          status: "cancelled",
+          payment_status: "failed",
+          hold_expires_at: null,
+        })
         .eq("id", booking.id);
-      return NextResponse.json({ message: "Booking hold expired" }, { status: 409 });
+      return NextResponse.json(
+        { message: "Booking hold expired" },
+        { status: 409 },
+      );
     }
 
     const { data: car, error: carError } = await db
@@ -94,7 +116,10 @@ export async function POST(req: Request) {
       return NextResponse.json({ message: "Car not found" }, { status: 404 });
     }
     if (car.is_available === false) {
-      return NextResponse.json({ message: "Car is unavailable" }, { status: 409 });
+      return NextResponse.json(
+        { message: "Car is unavailable" },
+        { status: 409 },
+      );
     }
 
     const tripUseRegion = (booking.trip_use_region ?? "").trim();
@@ -102,7 +127,10 @@ export async function POST(req: Request) {
     const tripUseAddress = (booking.trip_use_address ?? "").trim();
     if (!tripUseRegion || !tripUseCity || tripUseAddress.length < 3) {
       return NextResponse.json(
-        { message: "Trip use location is required (region, city and exact area)." },
+        {
+          message:
+            "Trip use location is required (region, city and exact area).",
+        },
         { status: 400 },
       );
     }
@@ -120,7 +148,10 @@ export async function POST(req: Request) {
           });
 
     const nights = Math.max(
-      differenceInCalendarDays(new Date(booking.end_date), new Date(booking.start_date)),
+      differenceInCalendarDays(
+        new Date(booking.end_date),
+        new Date(booking.start_date),
+      ),
       1,
     );
     const subtotal = Number(car.daily_price ?? 0) * nights;
@@ -131,10 +162,13 @@ export async function POST(req: Request) {
       .eq("id", 1)
       .maybeSingle();
     const envPlatformFee = Number(
-      process.env.NEXT_PUBLIC_PLATFORM_FEE_PERCENT ?? process.env.PLATFORM_FEE_PERCENT ?? "10",
+      process.env.NEXT_PUBLIC_PLATFORM_FEE_PERCENT ??
+        process.env.PLATFORM_FEE_PERCENT ??
+        "10",
     );
     const platformFeePercent = Number(
-      settings?.platform_fee_percent ?? (Number.isFinite(envPlatformFee) ? envPlatformFee : 10),
+      settings?.platform_fee_percent ??
+        (Number.isFinite(envPlatformFee) ? envPlatformFee : 10),
     );
     const platformFee = subtotal * (Math.max(platformFeePercent, 0) / 100);
     const insuranceFee = Math.max(Number(car.insurance_fee ?? 0), 0);
@@ -147,7 +181,13 @@ export async function POST(req: Request) {
         ? Math.max(Number(car.outside_accra_fee ?? 0), 0)
         : 0;
 
-    const total = subtotal + platformFee + insuranceFee + deliveryFee + outsideAccraSurcharge + depositAmount;
+    const total =
+      subtotal +
+      platformFee +
+      insuranceFee +
+      deliveryFee +
+      outsideAccraSurcharge +
+      depositAmount;
     const amountMinor = Math.round(total * 100);
     const reference = `hym-${booking.id.slice(0, 8)}-${Date.now()}`;
     const email = user.email ?? `${user.id}@guest.local`;
@@ -180,6 +220,9 @@ export async function POST(req: Request) {
       },
     });
   } catch (error: any) {
-    return NextResponse.json({ message: error.message ?? "Failed to initialize payment" }, { status: 400 });
+    return NextResponse.json(
+      { message: error.message ?? "Failed to initialize payment" },
+      { status: 400 },
+    );
   }
 }

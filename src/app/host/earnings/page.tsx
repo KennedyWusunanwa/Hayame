@@ -1,7 +1,14 @@
 import { EarningsChart } from "@/components/dashboard/earnings-chart";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { formatCurrency } from "@/lib/utils";
 
 const payouts = [
@@ -11,14 +18,19 @@ const payouts = [
   { month: "Nov", amount: 7600, status: "pending" },
 ];
 
-const earningsSeries = payouts.map((p) => ({ month: p.month, earnings: p.amount }));
+const earningsSeries = payouts.map((p) => ({
+  month: p.month,
+  earnings: p.amount,
+}));
 
 export default function EarningsPage() {
   return (
     <div className="space-y-6">
       <div>
         <p className="text-sm font-semibold text-primary">Earnings</p>
-        <h1 className="text-2xl font-semibold text-foreground">Payouts overview</h1>
+        <h1 className="text-2xl font-semibold text-foreground">
+          Payouts overview
+        </h1>
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">

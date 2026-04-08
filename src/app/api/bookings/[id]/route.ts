@@ -7,7 +7,9 @@ import { buildHostDecisionEmail, sendEmailSafe } from "@/lib/email";
 import { sendPushNotificationsToUsers } from "@/lib/push";
 
 function extractAuthEmail(result: any): string | null {
-  return result?.data?.user?.email ?? result?.user?.email ?? result?.email ?? null;
+  return (
+    result?.data?.user?.email ?? result?.user?.email ?? result?.email ?? null
+  );
 }
 
 function extractRefundReference(payload: any): string | null {
@@ -41,10 +43,14 @@ export async function PATCH(req: Request, { params }: Params) {
     })();
     const db = admin ?? (supabase as any);
     const user = await getRequestUser(supabase as any, req);
-    if (!user) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+    if (!user)
+      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
 
     const { id } = resolvedParams;
-    const payload = (await req.json().catch(() => ({}))) as { action?: string; reason?: string };
+    const payload = (await req.json().catch(() => ({}))) as {
+      action?: string;
+      reason?: string;
+    };
     const action = payload?.action;
     if (!action || !["approve", "reject"].includes(action)) {
       return NextResponse.json({ message: "Invalid action" }, { status: 400 });
@@ -55,7 +61,8 @@ export async function PATCH(req: Request, { params }: Params) {
       .select("*, cars:cars!inner(owner_id,title)")
       .eq("id", id)
       .single();
-    if (bookingError || !booking) throw bookingError ?? new Error("Booking not found");
+    if (bookingError || !booking)
+      throw bookingError ?? new Error("Booking not found");
 
     const ownerId = (booking as any)?.cars?.owner_id;
     if (ownerId !== user.id) {
@@ -63,7 +70,10 @@ export async function PATCH(req: Request, { params }: Params) {
     }
 
     if (booking.status !== "awaiting_host") {
-      return NextResponse.json({ message: "Only pending approvals can be modified" }, { status: 400 });
+      return NextResponse.json(
+        { message: "Only pending approvals can be modified" },
+        { status: 400 },
+      );
     }
 
     if (action === "approve") {
@@ -79,14 +89,23 @@ export async function PATCH(req: Request, { params }: Params) {
         const renterId = booking.renter_id;
         const [renterAuthResult, hostProfileResult] = await Promise.all([
           admin.auth.admin.getUserById(renterId).catch(() => null),
-          admin.from("profiles").select("full_name").eq("id", ownerId).maybeSingle(),
+          admin
+            .from("profiles")
+            .select("full_name")
+            .eq("id", ownerId)
+            .maybeSingle(),
         ]);
         const renterEmail = extractAuthEmail(renterAuthResult);
         if (renterEmail) {
           const email = buildHostDecisionEmail({
             approved: true,
-            hostName: ((hostProfileResult as any)?.data as { full_name?: string | null } | null)?.full_name ?? null,
-            carTitle: booking?.car_id ? booking?.cars?.title ?? null : null,
+            hostName:
+              (
+                (hostProfileResult as any)?.data as {
+                  full_name?: string | null;
+                } | null
+              )?.full_name ?? null,
+            carTitle: booking?.car_id ? (booking?.cars?.title ?? null) : null,
             startDate: booking.start_date,
             endDate: booking.end_date,
           });
@@ -105,6 +124,8 @@ export async function PATCH(req: Request, { params }: Params) {
           title: "Booking confirmed",
           body: `Your trip for ${booking?.cars?.title ?? "your booking"} is confirmed.`,
           collapseId: `booking:${booking.id}:status`,
+          preferenceKey: "booking_updates",
+          notificationCategory: "booking_updates",
           data: {
             type: "booking_status",
             bookingId: String(booking.id ?? ""),
@@ -113,7 +134,10 @@ export async function PATCH(req: Request, { params }: Params) {
           },
         });
         if (pushResult.skipped || pushResult.delivered === 0) {
-          console.warn("[bookings/:id] approval push skipped or undelivered", pushResult);
+          console.warn(
+            "[bookings/:id] approval push skipped or undelivered",
+            pushResult,
+          );
         }
       } catch (pushError) {
         console.error("[bookings/:id] approval push failed", pushError);
@@ -126,7 +150,8 @@ export async function PATCH(req: Request, { params }: Params) {
     let refundReference: string | null = null;
     if (booking.payment_provider === "paystack" && booking.payment_reference) {
       const refundData = await refundPaystack(booking.payment_reference);
-      refundReference = extractRefundReference(refundData) ?? booking.payment_reference;
+      refundReference =
+        extractRefundReference(refundData) ?? booking.payment_reference;
     }
 
     const { data, error } = await db
@@ -147,14 +172,23 @@ export async function PATCH(req: Request, { params }: Params) {
       const renterId = booking.renter_id;
       const [renterAuthResult, hostProfileResult] = await Promise.all([
         admin.auth.admin.getUserById(renterId).catch(() => null),
-        admin.from("profiles").select("full_name").eq("id", ownerId).maybeSingle(),
+        admin
+          .from("profiles")
+          .select("full_name")
+          .eq("id", ownerId)
+          .maybeSingle(),
       ]);
       const renterEmail = extractAuthEmail(renterAuthResult);
       if (renterEmail) {
         const email = buildHostDecisionEmail({
           approved: false,
-          hostName: ((hostProfileResult as any)?.data as { full_name?: string | null } | null)?.full_name ?? null,
-          carTitle: booking?.car_id ? booking?.cars?.title ?? null : null,
+          hostName:
+            (
+              (hostProfileResult as any)?.data as {
+                full_name?: string | null;
+              } | null
+            )?.full_name ?? null,
+          carTitle: booking?.car_id ? (booking?.cars?.title ?? null) : null,
           startDate: booking.start_date,
           endDate: booking.end_date,
           reason: payload?.reason ?? booking?.rejection_reason ?? null,
@@ -168,13 +202,19 @@ export async function PATCH(req: Request, { params }: Params) {
     }
 
     try {
-      const reasonText = String(payload?.reason ?? booking?.rejection_reason ?? "Rejected by host").trim();
+      const reasonText = String(
+        payload?.reason ?? booking?.rejection_reason ?? "Rejected by host",
+      ).trim();
       const pushResult = await sendPushNotificationsToUsers({
         adminClient: admin,
         userIds: [String(booking.renter_id ?? "")],
         title: "Booking request declined",
-        body: reasonText ? `${booking?.cars?.title ?? "Your booking"} was declined: ${reasonText}` : "Your booking was declined and refunded.",
+        body: reasonText
+          ? `${booking?.cars?.title ?? "Your booking"} was declined: ${reasonText}`
+          : "Your booking was declined and refunded.",
         collapseId: `booking:${booking.id}:status`,
+        preferenceKey: "booking_updates",
+        notificationCategory: "booking_updates",
         data: {
           type: "booking_status",
           bookingId: String(booking.id ?? ""),
@@ -184,7 +224,10 @@ export async function PATCH(req: Request, { params }: Params) {
         },
       });
       if (pushResult.skipped || pushResult.delivered === 0) {
-        console.warn("[bookings/:id] rejection push skipped or undelivered", pushResult);
+        console.warn(
+          "[bookings/:id] rejection push skipped or undelivered",
+          pushResult,
+        );
       }
     } catch (pushError) {
       console.error("[bookings/:id] rejection push failed", pushError);
@@ -192,6 +235,9 @@ export async function PATCH(req: Request, { params }: Params) {
 
     return NextResponse.json({ data });
   } catch (error: any) {
-    return NextResponse.json({ message: error.message ?? "Failed to update booking" }, { status: 400 });
+    return NextResponse.json(
+      { message: error.message ?? "Failed to update booking" },
+      { status: 400 },
+    );
   }
 }

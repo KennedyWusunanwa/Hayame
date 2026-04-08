@@ -17,7 +17,9 @@ type AvailabilityResult = {
 export function AvailabilityPreview({ carId }: Props) {
   const today = format(new Date(), "yyyy-MM-dd");
   const [startDate, setStartDate] = useState(today);
-  const [endDate, setEndDate] = useState(format(addDays(new Date(), 1), "yyyy-MM-dd"));
+  const [endDate, setEndDate] = useState(
+    format(addDays(new Date(), 1), "yyyy-MM-dd"),
+  );
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<AvailabilityResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -46,11 +48,17 @@ export function AvailabilityPreview({ carId }: Props) {
 
   return (
     <div className="space-y-3 rounded-xl border border-border bg-gray-50 p-3">
-      <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Availability preview</p>
+      <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+        Availability preview
+      </p>
       <div className="grid grid-cols-2 gap-2">
         <div>
           <label className="text-xs font-semibold text-gray-700">Start</label>
-          <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+          <Input
+            type="date"
+            value={startDate}
+            onChange={(e) => setStartDate(e.target.value)}
+          />
         </div>
         <div>
           <label className="text-xs font-semibold text-gray-700">End</label>
@@ -62,7 +70,13 @@ export function AvailabilityPreview({ carId }: Props) {
           />
         </div>
       </div>
-      <Button type="button" variant="outline" className="w-full" onClick={check} disabled={loading}>
+      <Button
+        type="button"
+        variant="outline"
+        className="w-full"
+        onClick={check}
+        disabled={loading}
+      >
         {loading ? "Checking..." : "Check availability"}
       </Button>
       {result ? (
@@ -73,7 +87,9 @@ export function AvailabilityPreview({ carId }: Props) {
               : "text-xs font-semibold text-amber-700"
           }
         >
-          {result.available ? "Available for those dates." : "Unavailable for those dates."}
+          {result.available
+            ? "Available for those dates."
+            : "Unavailable for those dates."}
         </p>
       ) : null}
       {error ? <p className="text-xs text-amber-700">{error}</p> : null}

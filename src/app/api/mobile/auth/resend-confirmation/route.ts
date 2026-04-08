@@ -28,10 +28,15 @@ export function GET() {
 export async function POST(req: Request) {
   try {
     const body = (await req.json().catch(() => ({}))) as Body;
-    const email = String(body.email ?? "").trim().toLowerCase();
+    const email = String(body.email ?? "")
+      .trim()
+      .toLowerCase();
 
     if (!email) {
-      return NextResponse.json({ message: "email is required" }, { status: 400 });
+      return NextResponse.json(
+        { message: "email is required" },
+        { status: 400 },
+      );
     }
 
     const supabase = await createClient();
@@ -44,13 +49,19 @@ export async function POST(req: Request) {
     });
 
     if (error) {
-      return NextResponse.json({ message: error.message ?? "Unable to resend confirmation email" }, { status: 400 });
+      return NextResponse.json(
+        { message: error.message ?? "Unable to resend confirmation email" },
+        { status: 400 },
+      );
     }
 
     return NextResponse.json({
       message: "If this account exists, a confirmation email has been sent.",
     });
   } catch (error: any) {
-    return NextResponse.json({ message: error?.message ?? "Unable to resend confirmation email" }, { status: 400 });
+    return NextResponse.json(
+      { message: error?.message ?? "Unable to resend confirmation email" },
+      { status: 400 },
+    );
   }
 }

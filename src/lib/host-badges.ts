@@ -1,13 +1,17 @@
 export type HostBadgeType = "new" | "verified" | "top_host";
 
 function normalize(value?: string | null) {
-  return String(value ?? "").trim().toLowerCase();
+  return String(value ?? "")
+    .trim()
+    .toLowerCase();
 }
 
 export function normalizeHostBadgeType(value?: string | null): HostBadgeType {
   const normalized = normalize(value);
-  if (normalized === "top_host" || normalized === "super_host") return "top_host";
-  if (normalized === "verified" || normalized === "verified_host") return "verified";
+  if (normalized === "top_host" || normalized === "super_host")
+    return "top_host";
+  if (normalized === "verified" || normalized === "verified_host")
+    return "verified";
   return "new";
 }
 

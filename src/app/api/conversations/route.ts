@@ -7,10 +7,14 @@ import { buildConversationStartedEmail, sendEmailSafe } from "@/lib/email";
 const SITE_URL =
   process.env.NEXT_PUBLIC_SITE_URL ??
   process.env.EMAIL_BASE_URL ??
-  (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
+  (process.env.VERCEL_URL
+    ? `https://${process.env.VERCEL_URL}`
+    : "http://localhost:3000");
 
 function extractAuthEmail(result: any): string | null {
-  return result?.data?.user?.email ?? result?.user?.email ?? result?.email ?? null;
+  return (
+    result?.data?.user?.email ?? result?.user?.email ?? result?.email ?? null
+  );
 }
 
 export async function GET(req: Request) {
@@ -25,7 +29,8 @@ export async function GET(req: Request) {
     })();
     const db = adminClient ?? (supabase as any);
     const user = await getRequestUser(supabase as any, req);
-    if (!user) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+    if (!user)
+      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
 
     const { searchParams } = new URL(req.url);
     const carId = searchParams.get("carId");
@@ -59,7 +64,8 @@ export async function GET(req: Request) {
       for (const row of unreadRows ?? []) {
         const key = String((row as any)?.conversation_id ?? "");
         if (!key) continue;
-        unreadCountByConversation[key] = (unreadCountByConversation[key] ?? 0) + 1;
+        unreadCountByConversation[key] =
+          (unreadCountByConversation[key] ?? 0) + 1;
       }
     }
 
@@ -68,7 +74,8 @@ export async function GET(req: Request) {
         const isHost = row.host_id === user.id;
         const other = isHost ? row.user : row.host;
         const otherId = isHost ? row.user_id : row.host_id;
-        const carLocation = [row?.car?.city, row?.car?.region].filter(Boolean).join(", ") || null;
+        const carLocation =
+          [row?.car?.city, row?.car?.region].filter(Boolean).join(", ") || null;
         return {
           id: row.id,
           host_id: row.host_id,
@@ -114,7 +121,10 @@ export async function GET(req: Request) {
 
     return NextResponse.json({ data: normalized });
   } catch (error: any) {
-    return NextResponse.json({ message: error.message ?? "Failed to load conversations" }, { status: 400 });
+    return NextResponse.json(
+      { message: error.message ?? "Failed to load conversations" },
+      { status: 400 },
+    );
   }
 }
 
@@ -130,9 +140,14 @@ export async function POST(req: Request) {
     })();
     const db = adminClient ?? (supabase as any);
     const user = await getRequestUser(supabase as any, req);
-    if (!user) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+    if (!user)
+      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
 
-    const body = (await req.json()) as { hostId?: string; participantId?: string | null; carId?: string | null };
+    const body = (await req.json()) as {
+      hostId?: string;
+      participantId?: string | null;
+      carId?: string | null;
+    };
     const hostId = body.hostId;
     const participantId = body.participantId ?? null;
     const carId = body.carId ?? null;
@@ -141,33 +156,56 @@ export async function POST(req: Request) {
 
     if (hostId && !participantId) {
       if (hostId === user.id) {
-        return NextResponse.json({ message: "Cannot message yourself" }, { status: 400 });
+        return NextResponse.json(
+          { message: "Cannot message yourself" },
+          { status: 400 },
+        );
       }
       resolvedHostId = hostId;
       resolvedUserId = user.id;
     } else if (hostId && participantId) {
       if (!carId) {
-        return NextResponse.json({ message: "Missing carId for participant chat" }, { status: 400 });
+        return NextResponse.json(
+          { message: "Missing carId for participant chat" },
+          { status: 400 },
+        );
       }
       if (hostId !== user.id) {
-        return NextResponse.json({ message: "Only host can start this chat path" }, { status: 403 });
+        return NextResponse.json(
+          { message: "Only host can start this chat path" },
+          { status: 403 },
+        );
       }
       resolvedHostId = hostId;
       resolvedUserId = participantId;
     } else if (!hostId && participantId && carId) {
-      const { data: car } = await db.from("cars").select("owner_id").eq("id", carId).maybeSingle();
-      if (!car?.owner_id) return NextResponse.json({ message: "Car not found" }, { status: 404 });
+      const { data: car } = await db
+        .from("cars")
+        .select("owner_id")
+        .eq("id", carId)
+        .maybeSingle();
+      if (!car?.owner_id)
+        return NextResponse.json({ message: "Car not found" }, { status: 404 });
       resolvedHostId = car.owner_id;
       resolvedUserId = user.id === car.owner_id ? participantId : user.id;
     } else {
-      return NextResponse.json({ message: "Missing hostId or participantId" }, { status: 400 });
+      return NextResponse.json(
+        { message: "Missing hostId or participantId" },
+        { status: 400 },
+      );
     }
 
     if (!resolvedHostId || !resolvedUserId) {
-      return NextResponse.json({ message: "Unable to resolve conversation participants" }, { status: 400 });
+      return NextResponse.json(
+        { message: "Unable to resolve conversation participants" },
+        { status: 400 },
+      );
     }
     if (resolvedHostId === resolvedUserId) {
-      return NextResponse.json({ message: "Cannot message yourself" }, { status: 400 });
+      return NextResponse.json(
+        { message: "Cannot message yourself" },
+        { status: 400 },
+      );
     }
 
     if (carId && participantId) {
@@ -179,7 +217,10 @@ export async function POST(req: Request) {
         .limit(1)
         .maybeSingle();
       if (!bookingExists) {
-        return NextResponse.json({ message: "No booking found for this chat." }, { status: 403 });
+        return NextResponse.json(
+          { message: "No booking found for this chat." },
+          { status: 403 },
+        );
       }
     }
 
@@ -213,12 +254,20 @@ export async function POST(req: Request) {
 
     // Notify the recipient that a new conversation started (best effort)
     if (adminClient) {
-      const recipientId = user.id === resolvedHostId ? resolvedUserId : resolvedHostId;
-      const [recipientAuthResult, senderProfileResult, carResult] = await Promise.all([
-        adminClient.auth.admin.getUserById(recipientId).catch(() => null),
-        adminClient.from("profiles").select("full_name").eq("id", user.id).maybeSingle(),
-        carId ? db.from("cars").select("title").eq("id", carId).maybeSingle() : Promise.resolve({ data: null }),
-      ]);
+      const recipientId =
+        user.id === resolvedHostId ? resolvedUserId : resolvedHostId;
+      const [recipientAuthResult, senderProfileResult, carResult] =
+        await Promise.all([
+          adminClient.auth.admin.getUserById(recipientId).catch(() => null),
+          adminClient
+            .from("profiles")
+            .select("full_name")
+            .eq("id", user.id)
+            .maybeSingle(),
+          carId
+            ? db.from("cars").select("title").eq("id", carId).maybeSingle()
+            : Promise.resolve({ data: null }),
+        ]);
 
       const recipientEmail = extractAuthEmail(recipientAuthResult);
       const senderName =
@@ -245,6 +294,9 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ id: data.id });
   } catch (error: any) {
-    return NextResponse.json({ message: error.message ?? "Failed to create conversation" }, { status: 400 });
+    return NextResponse.json(
+      { message: error.message ?? "Failed to create conversation" },
+      { status: 400 },
+    );
   }
 }

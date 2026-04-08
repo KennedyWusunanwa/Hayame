@@ -16,13 +16,20 @@ export async function GET(req: Request) {
     })();
     const db = admin ?? (supabase as any);
     const user = await getRequestUser(supabase as any, req);
-    if (!user) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+    if (!user)
+      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
 
-    const { data, error } = await db.from("favorites").select("car_id").eq("user_id", user.id);
+    const { data, error } = await db
+      .from("favorites")
+      .select("car_id")
+      .eq("user_id", user.id);
     if (error) throw error;
     return NextResponse.json({ data });
   } catch (error: any) {
-    return NextResponse.json({ message: error.message ?? "Failed to load favorites" }, { status: 400 });
+    return NextResponse.json(
+      { message: error.message ?? "Failed to load favorites" },
+      { status: 400 },
+    );
   }
 }
 
@@ -40,7 +47,8 @@ export async function POST(req: Request) {
     })();
     const db = admin ?? (supabase as any);
     const user = await getRequestUser(supabase as any, req);
-    if (!user) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+    if (!user)
+      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
 
     if (isFavorite) {
       const { error } = await db.from("favorites").upsert({
@@ -49,12 +57,19 @@ export async function POST(req: Request) {
       });
       if (error) throw error;
     } else {
-      const { error } = await db.from("favorites").delete().eq("car_id", carId).eq("user_id", user.id);
+      const { error } = await db
+        .from("favorites")
+        .delete()
+        .eq("car_id", carId)
+        .eq("user_id", user.id);
       if (error) throw error;
     }
 
     return NextResponse.json({ ok: true });
   } catch (error: any) {
-    return NextResponse.json({ message: error.message ?? "Failed to update favorite" }, { status: 400 });
+    return NextResponse.json(
+      { message: error.message ?? "Failed to update favorite" },
+      { status: 400 },
+    );
   }
 }

@@ -29,19 +29,25 @@ export async function GET(req: Request) {
     }
 
     const user = await getRequestUser(supabase as any, req);
-    if (!user) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+    if (!user)
+      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
 
     if (scope === "mine") {
       const { data, error } = await supa
         .from("reviews")
-        .select("id,car_id,booking_id,user_id,rating,comment,created_at,cars(title)")
+        .select(
+          "id,car_id,booking_id,user_id,rating,comment,created_at,cars(title)",
+        )
         .eq("user_id", user.id)
         .order("created_at", { ascending: false });
       if (error) throw error;
       return NextResponse.json({ data: data ?? [] });
     }
 
-    const { data: ownedCars } = await supa.from("cars").select("id").eq("owner_id", user.id);
+    const { data: ownedCars } = await supa
+      .from("cars")
+      .select("id")
+      .eq("owner_id", user.id);
     const carIds = (ownedCars ?? []).map((row: any) => row.id).filter(Boolean);
     if (carIds.length === 0) {
       return NextResponse.json({ data: [] });
@@ -58,7 +64,10 @@ export async function GET(req: Request) {
 
     return NextResponse.json({ data: data ?? [] });
   } catch (error: any) {
-    return NextResponse.json({ message: error.message ?? "Failed to load reviews" }, { status: 400 });
+    return NextResponse.json(
+      { message: error.message ?? "Failed to load reviews" },
+      { status: 400 },
+    );
   }
 }
 
@@ -70,17 +79,22 @@ export async function POST(req: Request) {
     const parsed = reviewSchema.parse(body);
 
     const user = await getRequestUser(supabase as any, req);
-    if (!user) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+    if (!user)
+      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
 
     const { data: booking, error: bookingError } = await supa
       .from("bookings")
       .select("renter_id,status,car_id")
       .eq("id", parsed.bookingId)
       .single();
-    if (bookingError || !booking) throw bookingError ?? new Error("Booking not found");
+    if (bookingError || !booking)
+      throw bookingError ?? new Error("Booking not found");
 
     if (booking.renter_id !== user.id || booking.status !== "completed") {
-      return NextResponse.json({ message: "You can only review completed trips" }, { status: 403 });
+      return NextResponse.json(
+        { message: "You can only review completed trips" },
+        { status: 403 },
+      );
     }
 
     const { data: existingReview } = await supa
@@ -90,7 +104,10 @@ export async function POST(req: Request) {
       .eq("user_id", user.id)
       .maybeSingle();
     if (existingReview) {
-      return NextResponse.json({ message: "Review already submitted for this trip" }, { status: 409 });
+      return NextResponse.json(
+        { message: "Review already submitted for this trip" },
+        { status: 409 },
+      );
     }
 
     const { data, error } = await supa
@@ -108,6 +125,9 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ data });
   } catch (error: any) {
-    return NextResponse.json({ message: error.message ?? "Failed to submit review" }, { status: 400 });
+    return NextResponse.json(
+      { message: error.message ?? "Failed to submit review" },
+      { status: 400 },
+    );
   }
 }

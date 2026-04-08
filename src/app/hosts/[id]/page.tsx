@@ -24,7 +24,9 @@ export default async function HostProfilePage({ params }: PageProps) {
   const supa = supabase as any;
   const { data: profile } = await supa
     .from("profiles")
-    .select("id, full_name, avatar_url, city, is_host, id_verified, phone_verified, email_verified, host_level")
+    .select(
+      "id, full_name, avatar_url, city, is_host, id_verified, phone_verified, email_verified, host_level",
+    )
     .eq("id", resolved.id)
     .maybeSingle();
 
@@ -34,7 +36,9 @@ export default async function HostProfilePage({ params }: PageProps) {
 
   const { data: cars } = await supa
     .from("cars")
-    .select("id, title, city, region, daily_price, description, car_type, car_photos(url)")
+    .select(
+      "id, title, city, region, daily_price, description, car_type, car_photos(url)",
+    )
     .eq("owner_id", resolved.id)
     .order("created_at", { ascending: false });
 
@@ -66,7 +70,13 @@ export default async function HostProfilePage({ params }: PageProps) {
         <div className="flex items-center gap-4">
           {profile.avatar_url ? (
             <div className="relative h-16 w-16 overflow-hidden rounded-full border border-border">
-              <Image src={profile.avatar_url} alt={profile.full_name ?? "Host"} fill className="object-cover" sizes="64px" />
+              <Image
+                src={profile.avatar_url}
+                alt={profile.full_name ?? "Host"}
+                fill
+                className="object-cover"
+                sizes="64px"
+              />
             </div>
           ) : (
             <div className="flex h-16 w-16 items-center justify-center rounded-full border border-border bg-primary/10 text-lg font-semibold text-primary">
@@ -76,11 +86,18 @@ export default async function HostProfilePage({ params }: PageProps) {
           <div>
             <p className="text-sm font-semibold text-brand">Host profile</p>
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-2xl font-semibold text-foreground">{profile.full_name ?? "Host"}</h1>
-              <VerifiedHostIndicator show={hostBadgeType !== "new"} className="text-sm" />
+              <h1 className="text-2xl font-semibold text-foreground">
+                {profile.full_name ?? "Host"}
+              </h1>
+              <VerifiedHostIndicator
+                show={hostBadgeType !== "new"}
+                className="text-sm"
+              />
               <Badge variant="outline">{computeHostLevel(profile)}</Badge>
             </div>
-            <p className="text-sm text-gray-600">{profile.city ?? "Location TBD"}</p>
+            <p className="text-sm text-gray-600">
+              {profile.city ?? "Location TBD"}
+            </p>
             <VerificationBadges
               className="mt-2"
               idVerified={(profile as any).id_verified}

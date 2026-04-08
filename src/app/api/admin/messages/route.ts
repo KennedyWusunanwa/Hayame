@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
+import { requireAdminApi } from "@/lib/admin-auth";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import {
   ADMIN_OFFICE_AVATAR,
@@ -8,21 +8,9 @@ import {
   ADMIN_OFFICE_PROFILE_ID,
 } from "@/lib/admin-office";
 
-const COOKIE_NAME = "admin_auth";
-
-function adminToken() {
-  const username = process.env.ADMIN_USERNAME ?? "";
-  const password = process.env.ADMIN_PASSWORD ?? "";
-  if (!username || !password) return null;
-  return Buffer.from(`${username}:${password}`).toString("base64");
-}
-
 async function requireAdminClient() {
-  const token = adminToken();
-  if (!token) return null;
-  const cookieStore = await cookies();
-  const cookie = cookieStore.get(COOKIE_NAME)?.value;
-  if (cookie !== token) return null;
+  const authed = await requireAdminApi();
+  if (!authed) return null;
   return createSupabaseAdminClient() as any;
 }
 
@@ -43,11 +31,16 @@ async function findAuthUserByEmail(admin: any, email: string) {
 
   let page = 1;
   while (page <= 10) {
-    const { data, error } = await admin.auth.admin.listUsers({ page, perPage: 200 });
+    const { data, error } = await admin.auth.admin.listUsers({
+      page,
+      perPage: 200,
+    });
     if (error) throw error;
 
     const users: any[] = data?.users ?? [];
-    const match = users.find((user) => String(user?.email ?? "").toLowerCase() === normalizedEmail);
+    const match = users.find(
+      (user) => String(user?.email ?? "").toLowerCase() === normalizedEmail,
+    );
     if (match) return match;
     if (users.length < 200) break;
     page += 1;
@@ -171,12 +164,17 @@ export async function GET(req: Request) {
         .limit(200);
 
       if (q) {
-        query = query.or(`full_name.ilike.%${q}%,phone.ilike.%${q}%,city.ilike.%${q}%`);
+        query = query.or(
+          `full_name.ilike.%${q}%,phone.ilike.%${q}%,city.ilike.%${q}%`,
+        );
       }
 
       const { data, error } = await query;
       if (error) throw error;
-      return NextResponse.json({ data: data ?? [], office_profile_id: officeId });
+      return NextResponse.json({
+        data: data ?? [],
+        office_profile_id: officeId,
+      });
     }
 
     if (conversationId) {
@@ -190,7 +188,10 @@ export async function GET(req: Request) {
         .maybeSingle();
       if (conversationError) throw conversationError;
       if (!conversation) {
-        return NextResponse.json({ message: "Conversation not found" }, { status: 404 });
+        return NextResponse.json(
+          { message: "Conversation not found" },
+          { status: 404 },
+        );
       }
 
       await admin
@@ -209,7 +210,9 @@ export async function GET(req: Request) {
       if (messagesError) throw messagesError;
 
       const participant =
-        conversation.host_id === officeId ? conversation.user : conversation.host;
+        conversation.host_id === officeId
+          ? conversation.user
+          : conversation.host;
 
       return NextResponse.json({
         office_profile_id: officeId,
@@ -240,22 +243,24 @@ export async function GET(req: Request) {
       .or(`host_id.eq.${officeId},user_id.eq.${officeId}`);
     if (conversationsError) throw conversationsError;
 
-    const mapped: ConversationSummary[] = (conversations ?? []).map((row: any) => {
-      const participant = row.host_id === officeId ? row.user : row.host;
-      return {
-        id: row.id,
-        created_at: row.created_at,
-        last_message_at: row.last_message_at,
-        last_message_preview: row.last_message_preview,
-        participant: {
-          id: participant?.id ?? "",
-          full_name: participant?.full_name ?? "User",
-          avatar_url: participant?.avatar_url ?? null,
-          phone: participant?.phone ?? null,
-          city: participant?.city ?? null,
-        },
-      };
-    });
+    const mapped: ConversationSummary[] = (conversations ?? []).map(
+      (row: any) => {
+        const participant = row.host_id === officeId ? row.user : row.host;
+        return {
+          id: row.id,
+          created_at: row.created_at,
+          last_message_at: row.last_message_at,
+          last_message_preview: row.last_message_preview,
+          participant: {
+            id: participant?.id ?? "",
+            full_name: participant?.full_name ?? "User",
+            avatar_url: participant?.avatar_url ?? null,
+            phone: participant?.phone ?? null,
+            city: participant?.city ?? null,
+          },
+        };
+      },
+    );
 
     const conversationIds = mapped.map((item) => item.id);
     let unreadByConversation: Record<string, number> = {};
@@ -266,12 +271,15 @@ export async function GET(req: Request) {
         .in("conversation_id", conversationIds)
         .is("read_at", null)
         .neq("sender_id", officeId);
-      unreadByConversation = (unreadRows ?? []).reduce((acc: Record<string, number>, row: any) => {
-        const key = String(row.conversation_id ?? "");
-        if (!key) return acc;
-        acc[key] = (acc[key] ?? 0) + 1;
-        return acc;
-      }, {});
+      unreadByConversation = (unreadRows ?? []).reduce(
+        (acc: Record<string, number>, row: any) => {
+          const key = String(row.conversation_id ?? "");
+          if (!key) return acc;
+          acc[key] = (acc[key] ?? 0) + 1;
+          return acc;
+        },
+        {},
+      );
     }
 
     mapped.sort((a: ConversationSummary, b: ConversationSummary) => {
@@ -288,7 +296,10 @@ export async function GET(req: Request) {
       })),
     });
   } catch (error: any) {
-    return NextResponse.json({ message: error.message ?? "Failed to fetch admin messages" }, { status: 400 });
+    return NextResponse.json(
+      { message: error.message ?? "Failed to fetch admin messages" },
+      { status: 400 },
+    );
   }
 }
 
@@ -307,15 +318,28 @@ export async function POST(req: Request) {
     if (action === "start") {
       const userId = String(payload.userId ?? "").trim();
       if (!userId) {
-        return NextResponse.json({ message: "Missing user id" }, { status: 400 });
+        return NextResponse.json(
+          { message: "Missing user id" },
+          { status: 400 },
+        );
       }
       if (userId === officeId) {
-        return NextResponse.json({ message: "Invalid user id" }, { status: 400 });
+        return NextResponse.json(
+          { message: "Invalid user id" },
+          { status: 400 },
+        );
       }
 
-      const { data: target } = await admin.from("profiles").select("id").eq("id", userId).maybeSingle();
+      const { data: target } = await admin
+        .from("profiles")
+        .select("id")
+        .eq("id", userId)
+        .maybeSingle();
       if (!target) {
-        return NextResponse.json({ message: "User not found" }, { status: 404 });
+        return NextResponse.json(
+          { message: "User not found" },
+          { status: 404 },
+        );
       }
 
       const { data: existing } = await admin
@@ -326,7 +350,10 @@ export async function POST(req: Request) {
         .is("car_id", null)
         .maybeSingle();
       if (existing?.id) {
-        return NextResponse.json({ data: { id: existing.id }, office_profile_id: officeId });
+        return NextResponse.json({
+          data: { id: existing.id },
+          office_profile_id: officeId,
+        });
       }
 
       const { data, error } = await admin
@@ -347,7 +374,10 @@ export async function POST(req: Request) {
       const conversationId = String(payload.conversationId ?? "").trim();
       const body = String(payload.body ?? "").trim();
       if (!conversationId || !body) {
-        return NextResponse.json({ message: "Missing conversation or message body" }, { status: 400 });
+        return NextResponse.json(
+          { message: "Missing conversation or message body" },
+          { status: 400 },
+        );
       }
 
       const { data: conversation } = await admin
@@ -357,7 +387,10 @@ export async function POST(req: Request) {
         .or(`host_id.eq.${officeId},user_id.eq.${officeId}`)
         .maybeSingle();
       if (!conversation) {
-        return NextResponse.json({ message: "Conversation not found" }, { status: 404 });
+        return NextResponse.json(
+          { message: "Conversation not found" },
+          { status: 404 },
+        );
       }
 
       const { data: message, error } = await admin
@@ -384,6 +417,9 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ message: "Invalid action" }, { status: 400 });
   } catch (error: any) {
-    return NextResponse.json({ message: error.message ?? "Failed to process admin message" }, { status: 400 });
+    return NextResponse.json(
+      { message: error.message ?? "Failed to process admin message" },
+      { status: 400 },
+    );
   }
 }

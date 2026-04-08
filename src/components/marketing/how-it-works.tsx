@@ -26,7 +26,9 @@ export function HowItWorks() {
     <section className="bg-gray-50">
       <div className="mx-auto max-w-6xl px-6 py-14">
         <div className="text-center">
-          <h3 className="text-2xl font-semibold text-foreground">How Hayame Works</h3>
+          <h3 className="text-2xl font-semibold text-foreground">
+            How Hayame Works
+          </h3>
         </div>
         <div className="mt-8 grid gap-6 md:grid-cols-3">
           {steps.map((step) => {
@@ -39,7 +41,9 @@ export function HowItWorks() {
                 <div className="flex h-14 w-14 items-center justify-center text-brand">
                   <Icon className="h-10 w-10" />
                 </div>
-                <h4 className="text-lg font-semibold text-foreground">{step.title}</h4>
+                <h4 className="text-lg font-semibold text-foreground">
+                  {step.title}
+                </h4>
                 <p className="text-sm text-gray-700">{step.description}</p>
               </div>
             );

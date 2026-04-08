@@ -8,7 +8,14 @@ import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { TripStatusTracker } from "@/components/trip-status-tracker";
 import { formatCurrency, getInitials } from "@/lib/utils";
 
@@ -90,7 +97,10 @@ export function BookingsTable({ mode = "host" }: { mode?: "host" | "renter" }) {
     load();
   }, []);
 
-  const handleAction = async (bookingId: string, action: "approve" | "reject") => {
+  const handleAction = async (
+    bookingId: string,
+    action: "approve" | "reject",
+  ) => {
     try {
       setUpdatingId(bookingId);
       const res = await fetch(`/api/bookings/${bookingId}`, {
@@ -103,7 +113,11 @@ export function BookingsTable({ mode = "host" }: { mode?: "host" | "renter" }) {
         throw new Error(payload.message ?? "Unable to update booking");
       }
       const payload = (await res.json()) as { data: BookingRow };
-      setRows((prev) => prev.map((row) => (row.id === bookingId ? { ...row, ...payload.data } : row)));
+      setRows((prev) =>
+        prev.map((row) =>
+          row.id === bookingId ? { ...row, ...payload.data } : row,
+        ),
+      );
       if (typeof window !== "undefined") {
         window.dispatchEvent(new Event("bookings:updated"));
       }
@@ -116,7 +130,9 @@ export function BookingsTable({ mode = "host" }: { mode?: "host" | "renter" }) {
   };
 
   const openDispute = async (bookingId: string) => {
-    const reason = window.prompt("Describe the dispute (minimum 5 characters):");
+    const reason = window.prompt(
+      "Describe the dispute (minimum 5 characters):",
+    );
     if (!reason || reason.trim().length < 5) return;
     try {
       setDisputingId(bookingId);
@@ -137,14 +153,20 @@ export function BookingsTable({ mode = "host" }: { mode?: "host" | "renter" }) {
     }
   };
 
-  const startConversation = async (booking: BookingRow, isOwnerView: boolean) => {
+  const startConversation = async (
+    booking: BookingRow,
+    isOwnerView: boolean,
+  ) => {
     try {
       setMessagingId(booking.id);
       let conversationId = booking.conversation_id ?? null;
       if (!conversationId) {
-        const hostId = booking.cars?.owner?.id ?? booking.cars?.owner_id ?? null;
+        const hostId =
+          booking.cars?.owner?.id ?? booking.cars?.owner_id ?? null;
         if (!hostId) throw new Error("Host details not available for chat.");
-        const participantId = isOwnerView ? booking.renter?.id ?? booking.renter_id : undefined;
+        const participantId = isOwnerView
+          ? (booking.renter?.id ?? booking.renter_id)
+          : undefined;
 
         const res = await fetch("/api/conversations", {
           method: "POST",
@@ -155,13 +177,20 @@ export function BookingsTable({ mode = "host" }: { mode?: "host" | "renter" }) {
             carId: booking.car_id,
           }),
         });
-        const payload = (await res.json().catch(() => ({}))) as { id?: string; message?: string };
+        const payload = (await res.json().catch(() => ({}))) as {
+          id?: string;
+          message?: string;
+        };
         if (!res.ok || !payload.id) {
           throw new Error(payload.message ?? "Unable to open chat.");
         }
         conversationId = payload.id;
         setRows((prev) =>
-          prev.map((row) => (row.id === booking.id ? { ...row, conversation_id: conversationId } : row)),
+          prev.map((row) =>
+            row.id === booking.id
+              ? { ...row, conversation_id: conversationId }
+              : row,
+          ),
         );
       }
       router.push(`/messages?conversation=${conversationId}`);
@@ -173,7 +202,10 @@ export function BookingsTable({ mode = "host" }: { mode?: "host" | "renter" }) {
   };
 
   const rowsSorted = useMemo(
-    () => [...rows].sort((a, b) => bookingSortTimestamp(b) - bookingSortTimestamp(a)),
+    () =>
+      [...rows].sort(
+        (a, b) => bookingSortTimestamp(b) - bookingSortTimestamp(a),
+      ),
     [rows],
   );
   const renterRows = useMemo(
@@ -216,7 +248,9 @@ export function BookingsTable({ mode = "host" }: { mode?: "host" | "renter" }) {
       <Card>
         <CardHeader>
           <CardTitle>Bookings on your cars</CardTitle>
-          <p className="text-sm text-gray-600">Approve or reject requests quickly, then message guests if needed.</p>
+          <p className="text-sm text-gray-600">
+            Approve or reject requests quickly, then message guests if needed.
+          </p>
           {error ? <p className="text-sm text-red-600">{error}</p> : null}
         </CardHeader>
         <CardContent>
@@ -290,24 +324,40 @@ function BookingsList({
       <div className="space-y-3 md:hidden">
         {rows.map((booking) => {
           const awaiting = booking.status === "awaiting_host";
-          const canAct = isOwnerView && awaiting && booking.payment_status === "paid";
+          const canAct =
+            isOwnerView && awaiting && booking.payment_status === "paid";
           const personName = isOwnerView
-            ? booking.renter?.full_name ?? "Guest"
-            : booking.cars?.owner?.full_name ?? "Host";
+            ? (booking.renter?.full_name ?? "Guest")
+            : (booking.cars?.owner?.full_name ?? "Host");
           const personLabel = isOwnerView ? "Booked by" : "Host";
-          const location = [booking.cars?.city, booking.cars?.region].filter(Boolean).join(", ");
-          const image = booking.cars?.car_photos?.[0]?.url ?? booking.cars?.owner?.avatar_url ?? null;
+          const location = [booking.cars?.city, booking.cars?.region]
+            .filter(Boolean)
+            .join(", ");
+          const image =
+            booking.cars?.car_photos?.[0]?.url ??
+            booking.cars?.owner?.avatar_url ??
+            null;
           const durationNights = getDurationNights(booking);
-          const tripMode = Number(booking.delivery_fee ?? 0) > 0 ? "Delivery" : "Pickup";
+          const tripMode =
+            Number(booking.delivery_fee ?? 0) > 0 ? "Delivery" : "Pickup";
           const tripUseLocation = formatTripUseLocation(booking);
 
           return (
-            <details key={booking.id} className="overflow-hidden rounded-xl border border-border bg-white">
+            <details
+              key={booking.id}
+              className="overflow-hidden rounded-xl border border-border bg-white"
+            >
               <summary className="list-none cursor-pointer p-3">
                 <div className="flex items-start gap-3">
                   <div className="relative h-16 w-20 shrink-0 overflow-hidden rounded-lg border border-border bg-gray-100">
                     {image ? (
-                      <Image src={image} alt={booking.cars?.title ?? "Listing"} fill className="object-cover" sizes="80px" />
+                      <Image
+                        src={image}
+                        alt={booking.cars?.title ?? "Listing"}
+                        fill
+                        className="object-cover"
+                        sizes="80px"
+                      />
                     ) : (
                       <div className="flex h-full w-full items-center justify-center text-xs font-semibold text-gray-500">
                         {getInitials(booking.cars?.title ?? "Car")}
@@ -315,17 +365,28 @@ function BookingsList({
                     )}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold text-foreground">{booking.cars?.title ?? booking.car_id}</p>
-                    <p className="mt-0.5 truncate text-xs text-gray-600">{location || "Location not set"}</p>
+                    <p className="truncate text-sm font-semibold text-foreground">
+                      {booking.cars?.title ?? booking.car_id}
+                    </p>
+                    <p className="mt-0.5 truncate text-xs text-gray-600">
+                      {location || "Location not set"}
+                    </p>
                     <p className="mt-1 text-xs text-gray-700">
-                      {personLabel}: <span className="font-semibold">{personName}</span>
+                      {personLabel}:{" "}
+                      <span className="font-semibold">{personName}</span>
                     </p>
                     <div className="mt-2 flex flex-wrap items-center gap-2">
-                      <Badge variant={statusVariant(booking.status)}>{statusLabel(booking.status)}</Badge>
-                      <Badge variant={paymentVariant(booking.payment_status)}>{paymentLabel(booking.payment_status)}</Badge>
+                      <Badge variant={statusVariant(booking.status)}>
+                        {statusLabel(booking.status)}
+                      </Badge>
+                      <Badge variant={paymentVariant(booking.payment_status)}>
+                        {paymentLabel(booking.payment_status)}
+                      </Badge>
                     </div>
                     <p className="mt-2 text-xs text-gray-700">
-                      {formatDateLabel(booking.start_date)} to {formatDateLabel(booking.end_date)} | {durationNights} night(s)
+                      {formatDateLabel(booking.start_date)} to{" "}
+                      {formatDateLabel(booking.end_date)} | {durationNights}{" "}
+                      night(s)
                     </p>
                     <p className="text-xs text-gray-600">
                       Use: {tripUseLocation}
@@ -335,8 +396,12 @@ function BookingsList({
                           ? " (Outside Accra)"
                           : ""}
                     </p>
-                    <p className="text-xs text-gray-600">Booked: {formatDateLabel(booking.created_at)}</p>
-                    <p className="text-sm font-semibold text-foreground">{formatCurrency(booking.total_price)}</p>
+                    <p className="text-xs text-gray-600">
+                      Booked: {formatDateLabel(booking.created_at)}
+                    </p>
+                    <p className="text-sm font-semibold text-foreground">
+                      {formatCurrency(booking.total_price)}
+                    </p>
                   </div>
                 </div>
               </summary>
@@ -360,7 +425,9 @@ function BookingsList({
                       disabled={disputingId === booking.id}
                       onClick={() => onDispute(booking.id)}
                     >
-                      {disputingId === booking.id ? "Opening..." : "Open dispute"}
+                      {disputingId === booking.id
+                        ? "Opening..."
+                        : "Open dispute"}
                     </Button>
                   ) : null}
                 </div>
@@ -387,26 +454,65 @@ function BookingsList({
                   </div>
                 ) : null}
 
-                <TripStatusTracker status={booking.status} startDate={booking.start_date} endDate={booking.end_date} />
+                <TripStatusTracker
+                  status={booking.status}
+                  startDate={booking.start_date}
+                  endDate={booking.end_date}
+                />
 
                 <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
                   <Detail label="Trip mode" value={tripMode} />
-                  <Detail label="Duration" value={`${durationNights} night(s)`} />
-                  <Detail label="Start" value={formatDateLabel(booking.start_date)} />
-                  <Detail label="End" value={formatDateLabel(booking.end_date)} />
+                  <Detail
+                    label="Duration"
+                    value={`${durationNights} night(s)`}
+                  />
+                  <Detail
+                    label="Start"
+                    value={formatDateLabel(booking.start_date)}
+                  />
+                  <Detail
+                    label="End"
+                    value={formatDateLabel(booking.end_date)}
+                  />
                   <Detail label="Use location" value={tripUseLocation} />
-                  <Detail label="Daily rate" value={formatCurrency(Number(booking.daily_rate ?? 0))} />
-                  <Detail label="Subtotal" value={formatCurrency(Number(booking.subtotal ?? 0))} />
-                  <Detail label="Platform fee" value={formatCurrency(Number(booking.platform_fee ?? 0))} />
-                  <Detail label="Insurance fee" value={formatCurrency(Number(booking.insurance_fee ?? 0))} />
-                  <Detail label="Delivery fee" value={formatCurrency(Number(booking.delivery_fee ?? 0))} />
+                  <Detail
+                    label="Daily rate"
+                    value={formatCurrency(Number(booking.daily_rate ?? 0))}
+                  />
+                  <Detail
+                    label="Subtotal"
+                    value={formatCurrency(Number(booking.subtotal ?? 0))}
+                  />
+                  <Detail
+                    label="Platform fee"
+                    value={formatCurrency(Number(booking.platform_fee ?? 0))}
+                  />
+                  <Detail
+                    label="Insurance fee"
+                    value={formatCurrency(Number(booking.insurance_fee ?? 0))}
+                  />
+                  <Detail
+                    label="Delivery fee"
+                    value={formatCurrency(Number(booking.delivery_fee ?? 0))}
+                  />
                   <Detail
                     label="Outside listing region fee"
-                    value={formatCurrency(Number(booking.outside_accra_surcharge ?? 0))}
+                    value={formatCurrency(
+                      Number(booking.outside_accra_surcharge ?? 0),
+                    )}
                   />
-                  <Detail label="Deposit" value={formatCurrency(Number(booking.deposit_amount ?? 0))} />
-                  <Detail label="Total" value={formatCurrency(Number(booking.total_price ?? 0))} />
-                  <Detail label="Payment ref" value={booking.payment_reference ?? "N/A"} />
+                  <Detail
+                    label="Deposit"
+                    value={formatCurrency(Number(booking.deposit_amount ?? 0))}
+                  />
+                  <Detail
+                    label="Total"
+                    value={formatCurrency(Number(booking.total_price ?? 0))}
+                  />
+                  <Detail
+                    label="Payment ref"
+                    value={booking.payment_reference ?? "N/A"}
+                  />
                 </div>
 
                 {booking.rejection_reason ? (
@@ -421,7 +527,10 @@ function BookingsList({
                       {booking.cars.cancellation_policy} cancellation
                     </span>
                   ) : (
-                    <Link href="/cancellation" className="font-semibold text-brand">
+                    <Link
+                      href="/cancellation"
+                      className="font-semibold text-brand"
+                    >
                       View cancellation policy
                     </Link>
                   )}
@@ -438,23 +547,35 @@ function BookingsList({
             <TableHeader className="bg-gray-50/80">
               <TableRow>
                 <TableHead className="w-[23%]">Listing</TableHead>
-                <TableHead className="w-[12%]">{isOwnerView ? "Booked by" : "Host"}</TableHead>
+                <TableHead className="w-[12%]">
+                  {isOwnerView ? "Booked by" : "Host"}
+                </TableHead>
                 <TableHead className="w-[13%]">Dates</TableHead>
                 <TableHead className="w-[17%]">Status</TableHead>
                 <TableHead className="w-[10%]">Payment</TableHead>
-                <TableHead className="w-[12%] min-w-[116px] text-right">Total</TableHead>
-                <TableHead className="w-[13%] min-w-[124px] text-right">Actions</TableHead>
+                <TableHead className="w-[12%] min-w-[116px] text-right">
+                  Total
+                </TableHead>
+                <TableHead className="w-[13%] min-w-[124px] text-right">
+                  Actions
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {rows.map((booking) => {
                 const awaiting = booking.status === "awaiting_host";
-                const canAct = isOwnerView && awaiting && booking.payment_status === "paid";
+                const canAct =
+                  isOwnerView && awaiting && booking.payment_status === "paid";
                 const personName = isOwnerView
-                  ? booking.renter?.full_name ?? "Guest"
-                  : booking.cars?.owner?.full_name ?? "Host";
-                const image = booking.cars?.car_photos?.[0]?.url ?? booking.cars?.owner?.avatar_url ?? null;
-                const location = [booking.cars?.city, booking.cars?.region].filter(Boolean).join(", ");
+                  ? (booking.renter?.full_name ?? "Guest")
+                  : (booking.cars?.owner?.full_name ?? "Host");
+                const image =
+                  booking.cars?.car_photos?.[0]?.url ??
+                  booking.cars?.owner?.avatar_url ??
+                  null;
+                const location = [booking.cars?.city, booking.cars?.region]
+                  .filter(Boolean)
+                  .join(", ");
                 const durationNights = getDurationNights(booking);
                 const tripUseLocation = formatTripUseLocation(booking);
 
@@ -464,7 +585,13 @@ function BookingsList({
                       <div className="flex min-w-0 items-start gap-3">
                         <div className="relative h-14 w-20 shrink-0 overflow-hidden rounded-md border border-border bg-gray-100">
                           {image ? (
-                            <Image src={image} alt={booking.cars?.title ?? "Listing"} fill className="object-cover" sizes="80px" />
+                            <Image
+                              src={image}
+                              alt={booking.cars?.title ?? "Listing"}
+                              fill
+                              className="object-cover"
+                              sizes="80px"
+                            />
                           ) : (
                             <div className="flex h-full w-full items-center justify-center text-xs font-semibold text-gray-500">
                               {getInitials(booking.cars?.title ?? "Car")}
@@ -475,21 +602,30 @@ function BookingsList({
                           <div className="break-words text-base font-semibold leading-tight">
                             {booking.cars?.title ?? booking.car_id}
                           </div>
-                          <div className="mt-1 break-words text-sm text-gray-600">{location || "Location not set"}</div>
+                          <div className="mt-1 break-words text-sm text-gray-600">
+                            {location || "Location not set"}
+                          </div>
                         </div>
                       </div>
                     </TableCell>
                     <TableCell className="align-top">
-                      <div className="break-words text-base font-semibold leading-tight">{personName}</div>
+                      <div className="break-words text-base font-semibold leading-tight">
+                        {personName}
+                      </div>
                       <div className="mt-1 break-words text-sm text-gray-600">
-                        {booking.renter?.phone ?? booking.cars?.owner?.phone ?? "No phone"}
+                        {booking.renter?.phone ??
+                          booking.cars?.owner?.phone ??
+                          "No phone"}
                       </div>
                     </TableCell>
                     <TableCell className="align-top">
                       <div className="text-base leading-tight">
-                        {formatDateLabel(booking.start_date)} - {formatDateLabel(booking.end_date)}
+                        {formatDateLabel(booking.start_date)} -{" "}
+                        {formatDateLabel(booking.end_date)}
                       </div>
-                      <div className="mt-1 text-sm text-gray-600">{durationNights} night(s)</div>
+                      <div className="mt-1 text-sm text-gray-600">
+                        {durationNights} night(s)
+                      </div>
                       <div className="mt-1 text-xs text-gray-600">
                         Use: {tripUseLocation}
                         {booking.trip_outside_listing_region
@@ -498,12 +634,18 @@ function BookingsList({
                             ? " (Outside Accra)"
                             : ""}
                       </div>
-                      <div className="mt-1 text-sm text-gray-600">Booked: {formatDateLabel(booking.created_at)}</div>
+                      <div className="mt-1 text-sm text-gray-600">
+                        Booked: {formatDateLabel(booking.created_at)}
+                      </div>
                     </TableCell>
                     <TableCell className="align-top">
                       <div className="max-w-[230px] space-y-2 overflow-hidden">
-                        <Badge variant={statusVariant(booking.status)}>{statusLabel(booking.status)}</Badge>
-                        <p className="text-xs text-gray-600">{statusSummaryLabel(booking.status)}</p>
+                        <Badge variant={statusVariant(booking.status)}>
+                          {statusLabel(booking.status)}
+                        </Badge>
+                        <p className="text-xs text-gray-600">
+                          {statusSummaryLabel(booking.status)}
+                        </p>
                         {booking.cars?.cancellation_policy ? (
                           <div className="text-xs text-gray-600">
                             <span className="inline-flex rounded-full bg-gray-100 px-2 py-1 font-semibold capitalize text-gray-700">
@@ -514,7 +656,9 @@ function BookingsList({
                       </div>
                     </TableCell>
                     <TableCell className="align-top">
-                      <Badge variant={paymentVariant(booking.payment_status)}>{paymentLabel(booking.payment_status)}</Badge>
+                      <Badge variant={paymentVariant(booking.payment_status)}>
+                        {paymentLabel(booking.payment_status)}
+                      </Badge>
                     </TableCell>
                     <TableCell className="align-top pr-2 text-right text-base font-semibold tabular-nums whitespace-nowrap">
                       {formatCurrency(booking.total_price)}
@@ -528,7 +672,9 @@ function BookingsList({
                           onClick={() => onMessage(booking, isOwnerView)}
                           disabled={messagingId === booking.id}
                         >
-                          {messagingId === booking.id ? "Opening..." : "Message"}
+                          {messagingId === booking.id
+                            ? "Opening..."
+                            : "Message"}
                         </Button>
                         {canAct ? (
                           <div className="grid grid-cols-2 gap-2">
@@ -559,7 +705,9 @@ function BookingsList({
                             disabled={disputingId === booking.id}
                             onClick={() => onDispute(booking.id)}
                           >
-                            {disputingId === booking.id ? "Opening..." : "Open dispute"}
+                            {disputingId === booking.id
+                              ? "Opening..."
+                              : "Open dispute"}
                           </Button>
                         ) : null}
                       </div>
@@ -578,16 +726,25 @@ function BookingsList({
 function Detail({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-md border border-border bg-gray-50 px-2 py-1">
-      <p className="text-[10px] uppercase tracking-wide text-gray-500">{label}</p>
+      <p className="text-[10px] uppercase tracking-wide text-gray-500">
+        {label}
+      </p>
       <p className="truncate font-semibold text-foreground">{value}</p>
     </div>
   );
 }
 
 function getDurationNights(booking: BookingRow) {
-  if (typeof booking.nights === "number" && booking.nights > 0) return booking.nights;
+  if (typeof booking.nights === "number" && booking.nights > 0)
+    return booking.nights;
   try {
-    return Math.max(differenceInCalendarDays(parseISO(booking.end_date), parseISO(booking.start_date)), 1);
+    return Math.max(
+      differenceInCalendarDays(
+        parseISO(booking.end_date),
+        parseISO(booking.start_date),
+      ),
+      1,
+    );
   } catch {
     return 1;
   }
@@ -631,7 +788,9 @@ function statusLabel(status?: string) {
   }
 }
 
-function statusVariant(status?: string): "default" | "secondary" | "outline" | "muted" {
+function statusVariant(
+  status?: string,
+): "default" | "secondary" | "outline" | "muted" {
   switch (status) {
     case "pending":
       return "muted";
@@ -664,7 +823,9 @@ function paymentLabel(status?: string | null) {
   }
 }
 
-function paymentVariant(status?: string | null): "default" | "secondary" | "outline" | "muted" {
+function paymentVariant(
+  status?: string | null,
+): "default" | "secondary" | "outline" | "muted" {
   switch (status) {
     case "paid":
       return "default";
@@ -678,9 +839,16 @@ function paymentVariant(status?: string | null): "default" | "secondary" | "outl
 }
 
 function formatTripUseLocation(
-  booking: Pick<BookingRow, "trip_use_address" | "trip_use_city" | "trip_use_region">,
+  booking: Pick<
+    BookingRow,
+    "trip_use_address" | "trip_use_city" | "trip_use_region"
+  >,
 ) {
-  return [booking.trip_use_address, booking.trip_use_city, booking.trip_use_region].filter(Boolean).join(", ") || "N/A";
+  return (
+    [booking.trip_use_address, booking.trip_use_city, booking.trip_use_region]
+      .filter(Boolean)
+      .join(", ") || "N/A"
+  );
 }
 
 function statusSummaryLabel(status?: string) {

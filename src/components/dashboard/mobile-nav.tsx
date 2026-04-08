@@ -14,11 +14,16 @@ const links = [
   { href: "/host/profile", label: "Settings", icon: User },
 ];
 
-export function DashboardMobileNav({ pendingBookingCount = 0 }: { pendingBookingCount?: number }) {
+export function DashboardMobileNav({
+  pendingBookingCount = 0,
+}: {
+  pendingBookingCount?: number;
+}) {
   const pathname = usePathname();
   const { unreadCount } = useMessaging();
   const unreadLabel = unreadCount > 99 ? "99+" : String(unreadCount);
-  const bookingCountLabel = pendingBookingCount > 99 ? "99+" : String(pendingBookingCount);
+  const bookingCountLabel =
+    pendingBookingCount > 99 ? "99+" : String(pendingBookingCount);
   return (
     <nav className="sticky top-0 z-20 -mx-4 bg-white/95 px-4 py-2 shadow-sm backdrop-blur lg:hidden">
       <div className="flex items-center justify-between">
@@ -29,7 +34,8 @@ export function DashboardMobileNav({ pendingBookingCount = 0 }: { pendingBooking
         {links.map((link) => {
           const Icon = link.icon;
           const active = pathname?.startsWith(link.href);
-          const showBookingDot = link.href === "/host/bookings" && pendingBookingCount > 0;
+          const showBookingDot =
+            link.href === "/host/bookings" && pendingBookingCount > 0;
           const showChatDot = link.href === "/messages" && unreadCount > 0;
           return (
             <Link

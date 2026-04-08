@@ -2,6 +2,7 @@ package com.hayame.app.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.hayame.app.core.network.AppAnnouncementDto
 import com.hayame.app.core.network.BookingDto
 import com.hayame.app.core.network.CarDto
 import com.hayame.app.core.network.CarPhotoItemDto
@@ -9,6 +10,7 @@ import com.hayame.app.core.network.ConversationDto
 import com.hayame.app.core.network.HostApplicationRequest
 import com.hayame.app.core.network.MessageDto
 import com.hayame.app.core.network.MobileMeDto
+import com.hayame.app.core.network.NotificationPreferencesDto
 import com.hayame.app.core.network.PaystackFinalizeRequest
 import com.hayame.app.core.network.PaystackInitDto
 import com.hayame.app.core.network.ProfileUpsertRequest
@@ -62,6 +64,12 @@ class AppViewModel(
     private val storageRepository: StorageRepository,
     private val sessionStore: SessionStore,
 ) : ViewModel() {
+    private val defaultNotificationPreferences = NotificationPreferencesDto(
+        booking_updates = true,
+        messages = true,
+        account_security = true,
+        news_announcements = false,
+    )
 
     private val _bootstrapping = MutableStateFlow(true)
     val bootstrapping: StateFlow<Boolean> = _bootstrapping.asStateFlow()
@@ -129,11 +137,19 @@ class AppViewModel(
     private val _authPrompt = MutableStateFlow<AuthPromptRequest?>(null)
     val authPrompt: StateFlow<AuthPromptRequest?> = _authPrompt.asStateFlow()
 
+    private val _notificationPreferences = MutableStateFlow(defaultNotificationPreferences)
+    val notificationPreferences: StateFlow<NotificationPreferencesDto> = _notificationPreferences.asStateFlow()
+
+    private val _activeAnnouncement = MutableStateFlow<AppAnnouncementDto?>(null)
+    val activeAnnouncement: StateFlow<AppAnnouncementDto?> = _activeAnnouncement.asStateFlow()
+
     private val _pendingCheckout = MutableStateFlow<PaystackInitDto?>(null)
     val pendingCheckout: StateFlow<PaystackInitDto?> = _pendingCheckout.asStateFlow()
 
     private val _bookingDraft = MutableStateFlow<BookingDraft?>(null)
     val bookingDraft: StateFlow<BookingDraft?> = _bookingDraft.asStateFlow()
+
+    private var pendingAnnouncements: List<AppAnnouncementDto> = emptyList()
 
     init {
         bootstrap()
@@ -164,6 +180,7 @@ class AppViewModel(
                     }
             }
             loadReferenceData()
+            refreshActiveAnnouncements()
             if (!loggedIn) {
                 _carsState.value = UiState.Loading
                 runCatching { carsRepository.getCars() }
@@ -183,6 +200,8 @@ class AppViewModel(
         loadConversations()
         loadHostStatus()
         loadHostReviews()
+        loadNotificationPreferences()
+        refreshActiveAnnouncements()
     }
 
     fun login(email: String, password: String, onSuccess: () -> Unit = {}) {
@@ -267,7 +286,11 @@ class AppViewModel(
             _carPhotosLimit.value = 7
             _bookingDraft.value = null
             _pendingCheckout.value = null
+            _notificationPreferences.value = defaultNotificationPreferences
+            pendingAnnouncements = emptyList()
+            _activeAnnouncement.value = null
             loadCars()
+            refreshActiveAnnouncements()
         }
     }
 
@@ -282,6 +305,7 @@ class AppViewModel(
         _messagesState.value = UiState.Empty
         _selectedConversationId.value = null
         loadCars()
+        refreshActiveAnnouncements()
         _snackbar.value = "Guest mode enabled."
     }
 
@@ -545,6 +569,82 @@ class AppViewModel(
 
     fun showMessage(message: String) {
         _snackbar.value = message
+    }
+
+    fun loadNotificationPreferences() {
+        viewModelScope.launch {
+            if (!_isAuthenticated.value) {
+                _notificationPreferences.value = defaultNotificationPreferences
+                return@launch
+            }
+            runCatching { hostRepository.notificationPreferences().data }
+                .onSuccess { prefs ->
+                    _notificationPreferences.value = prefs.normalize(defaultNotificationPreferences)
+                }
+                .onFailure {
+                    _snackbar.value = it.readableMessage("Unable to load notification settings")
+                }
+        }
+    }
+
+    fun updateNotificationPreference(
+        bookingUpdates: Boolean? = null,
+        messages: Boolean? = null,
+        accountSecurity: Boolean? = null,
+        newsAnnouncements: Boolean? = null,
+    ) {
+        val current = _notificationPreferences.value.normalize(defaultNotificationPreferences)
+        val next = NotificationPreferencesDto(
+            booking_updates = bookingUpdates ?: current.booking_updates,
+            messages = messages ?: current.messages,
+            account_security = accountSecurity ?: current.account_security,
+            news_announcements = newsAnnouncements ?: current.news_announcements,
+        )
+        _notificationPreferences.value = next
+        if (!_isAuthenticated.value) return
+
+        viewModelScope.launch {
+            runCatching { hostRepository.updateNotificationPreferences(next).data }
+                .onSuccess { saved ->
+                    _notificationPreferences.value = saved.normalize(defaultNotificationPreferences)
+                }
+                .onFailure {
+                    _notificationPreferences.value = current
+                    _snackbar.value = it.readableMessage("Unable to save notification settings")
+                }
+        }
+    }
+
+    fun refreshActiveAnnouncements() {
+        viewModelScope.launch {
+            val locallySeen = sessionStore.seenAnnouncementIds()
+            runCatching { hostRepository.announcements().data }
+                .onSuccess { announcements ->
+                    pendingAnnouncements = announcements.filter { announcement ->
+                        announcement.shouldDisplay(locallySeen)
+                    }
+                    _activeAnnouncement.value = pendingAnnouncements.firstOrNull()
+                }
+                .onFailure {
+                    if (_activeAnnouncement.value == null) {
+                        pendingAnnouncements = emptyList()
+                    }
+                }
+        }
+    }
+
+    fun dismissActiveAnnouncement() {
+        val current = _activeAnnouncement.value ?: return
+        viewModelScope.launch {
+            if (current.show_once != false) {
+                sessionStore.markAnnouncementSeen(current.id)
+                if (_isAuthenticated.value) {
+                    runCatching { hostRepository.markAnnouncementSeen(current.id) }
+                }
+            }
+            pendingAnnouncements = pendingAnnouncements.filterNot { it.id == current.id }
+            _activeAnnouncement.value = pendingAnnouncements.firstOrNull()
+        }
     }
 
     fun requireAuthentication(message: String, destination: String? = null) {
@@ -917,6 +1017,25 @@ class AppViewModel(
             PushTokenHolder.token = token
         }
     }
+}
+
+private fun NotificationPreferencesDto?.normalize(
+    fallback: NotificationPreferencesDto,
+): NotificationPreferencesDto {
+    return NotificationPreferencesDto(
+        booking_updates = this?.booking_updates ?: fallback.booking_updates,
+        messages = this?.messages ?: fallback.messages,
+        account_security = this?.account_security ?: fallback.account_security,
+        news_announcements = this?.news_announcements ?: fallback.news_announcements,
+    )
+}
+
+private fun AppAnnouncementDto.shouldDisplay(locallySeen: Set<String>): Boolean {
+    if (id.isBlank()) return false
+    if (title.isNullOrBlank() || body.isNullOrBlank()) return false
+    if (show_once == false) return true
+    if (seen == true) return false
+    return id !in locallySeen
 }
 
 private fun Throwable.readableMessage(fallback: String): String {

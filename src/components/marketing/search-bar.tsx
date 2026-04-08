@@ -2,7 +2,13 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Calendar, CarFront, MapPin, Search, SlidersHorizontal } from "lucide-react";
+import {
+  Calendar,
+  CarFront,
+  MapPin,
+  Search,
+  SlidersHorizontal,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -118,7 +124,9 @@ export function HeroSearchBar() {
 
                 <div className="mt-4 flex flex-1 flex-col gap-3 overflow-y-auto pb-4 pr-1">
                   <div className="space-y-1.5">
-                    <label className="text-sm font-semibold text-gray-800">Region</label>
+                    <label className="text-sm font-semibold text-gray-800">
+                      Region
+                    </label>
                     <Select
                       value={region}
                       onChange={(event) => {
@@ -136,7 +144,9 @@ export function HeroSearchBar() {
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="text-sm font-semibold text-gray-800">City</label>
+                    <label className="text-sm font-semibold text-gray-800">
+                      City
+                    </label>
                     <Select
                       value={city}
                       onChange={(event) => setCity(event.target.value)}
@@ -152,8 +162,13 @@ export function HeroSearchBar() {
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="text-sm font-semibold text-gray-800">Car type</label>
-                    <Select value={carType} onChange={(event) => setCarType(event.target.value)}>
+                    <label className="text-sm font-semibold text-gray-800">
+                      Car type
+                    </label>
+                    <Select
+                      value={carType}
+                      onChange={(event) => setCarType(event.target.value)}
+                    >
                       <option value="">Car Type</option>
                       {carTypes.map((type) => (
                         <option key={type}>{type}</option>
@@ -162,7 +177,9 @@ export function HeroSearchBar() {
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="text-sm font-semibold text-gray-800">Brand</label>
+                    <label className="text-sm font-semibold text-gray-800">
+                      Brand
+                    </label>
                     <Select
                       value={brand}
                       onChange={(event) => {
@@ -180,7 +197,9 @@ export function HeroSearchBar() {
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="text-sm font-semibold text-gray-800">Model</label>
+                    <label className="text-sm font-semibold text-gray-800">
+                      Model
+                    </label>
                     <Select
                       value={model}
                       onChange={(event) => setModel(event.target.value)}
@@ -197,7 +216,9 @@ export function HeroSearchBar() {
 
                   <div className="grid grid-cols-1 gap-3 min-[480px]:grid-cols-2">
                     <div className="min-w-0 space-y-1.5">
-                      <label className="text-sm font-semibold text-gray-800">Start date</label>
+                      <label className="text-sm font-semibold text-gray-800">
+                        Start date
+                      </label>
                       <p className="-mt-1 text-xs text-gray-500">dd/mm/yy</p>
                       <Input
                         type="date"
@@ -207,7 +228,9 @@ export function HeroSearchBar() {
                       />
                     </div>
                     <div className="min-w-0 space-y-1.5">
-                      <label className="text-sm font-semibold text-gray-800">End date</label>
+                      <label className="text-sm font-semibold text-gray-800">
+                        End date
+                      </label>
                       <p className="-mt-1 text-xs text-gray-500">dd/mm/yy</p>
                       <Input
                         type="date"
@@ -351,7 +374,8 @@ export function HeroSearchBar() {
                   inputMode="numeric"
                   onFocus={(event) => (event.currentTarget.type = "date")}
                   onBlur={(event) => {
-                    if (!event.currentTarget.value) event.currentTarget.type = "text";
+                    if (!event.currentTarget.value)
+                      event.currentTarget.type = "text";
                   }}
                   onChange={(event) => setStartDate(event.target.value)}
                   className={`${fieldBase} min-w-0 flex-1`}
@@ -365,7 +389,8 @@ export function HeroSearchBar() {
                   inputMode="numeric"
                   onFocus={(event) => (event.currentTarget.type = "date")}
                   onBlur={(event) => {
-                    if (!event.currentTarget.value) event.currentTarget.type = "text";
+                    if (!event.currentTarget.value)
+                      event.currentTarget.type = "text";
                   }}
                   onChange={(event) => setEndDate(event.target.value)}
                   className={`${fieldBase} min-w-0 flex-1`}

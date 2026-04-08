@@ -57,14 +57,21 @@ export function BookingWidget({
   const [loading, setLoading] = useState(false);
   const [blockedDates, setBlockedDates] = useState<string[]>([]);
   const [message, setMessage] = useState<string | null>(null);
-  const [hold, setHold] = useState<{ id: string; expiresAt: string } | null>(null);
+  const [hold, setHold] = useState<{ id: string; expiresAt: string } | null>(
+    null,
+  );
   const [holdRemaining, setHoldRemaining] = useState<string | null>(null);
-  const [tripUseRegion, setTripUseRegion] = useState<string>(listingRegion ?? "");
+  const [tripUseRegion, setTripUseRegion] = useState<string>(
+    listingRegion ?? "",
+  );
   const [tripUseCity, setTripUseCity] = useState<string>(listingCity ?? "");
   const [tripUseAddress, setTripUseAddress] = useState<string>("");
   const router = useRouter();
   const { regions, citiesByRegion } = useLocations();
-  const publicKey = useMemo(() => process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY, []);
+  const publicKey = useMemo(
+    () => process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY,
+    [],
+  );
 
   const nights = calculateNights(startDate, endDate);
   const billableNights = Math.max(nights, 1);
@@ -74,12 +81,17 @@ export function BookingWidget({
   const deliveryFeeAmount = Math.max(Number(deliveryFee ?? 0), 0);
   const depositAmountValue = Math.max(Number(depositAmount ?? 0), 0);
   const outsideAccraFeeValue = Math.max(Number(outsideAccraFee ?? 0), 0);
-  const tripOutsideAccra = isLocationOutsideAccra({ region: tripUseRegion, city: tripUseCity });
+  const tripOutsideAccra = isLocationOutsideAccra({
+    region: tripUseRegion,
+    city: tripUseCity,
+  });
   const tripOutsideListingRegion = isOutsideListingRegion({
     tripRegion: tripUseRegion,
     listingRegion,
   });
-  const outsideAccraSurchargeAmount = tripOutsideListingRegion ? outsideAccraFeeValue : 0;
+  const outsideAccraSurchargeAmount = tripOutsideListingRegion
+    ? outsideAccraFeeValue
+    : 0;
   const total =
     baseTotal +
     platformFeeAmount +
@@ -149,7 +161,9 @@ export function BookingWidget({
       return;
     }
     if (!tripUseRegion || !tripUseCity || tripUseAddress.trim().length < 3) {
-      setMessage("Please enter the exact trip-use location (region, city and area).");
+      setMessage(
+        "Please enter the exact trip-use location (region, city and area).",
+      );
       return;
     }
     try {
@@ -190,7 +204,10 @@ export function BookingWidget({
           const error = await holdRes.json().catch(() => ({}));
           throw new Error(error.message ?? "Unable to reserve dates");
         }
-        const payload = (await holdRes.json()) as { bookingId?: string; hold_expires_at?: string };
+        const payload = (await holdRes.json()) as {
+          bookingId?: string;
+          hold_expires_at?: string;
+        };
         if (!payload.bookingId || !payload.hold_expires_at) {
           throw new Error("Unable to reserve dates");
         }
@@ -232,7 +249,9 @@ export function BookingWidget({
             message?: string;
           };
           if (!res.ok) {
-            throw new Error(payload.message ?? "Payment verified but booking failed");
+            throw new Error(
+              payload.message ?? "Payment verified but booking failed",
+            );
           }
           setHold(null);
           if (payload.conversationId) {
@@ -241,7 +260,10 @@ export function BookingWidget({
             router.push("/messages");
           }
         } catch (err: any) {
-          alert(err.message ?? "Booking failed after payment. Please contact support.");
+          alert(
+            err.message ??
+              "Booking failed after payment. Please contact support.",
+          );
         } finally {
           setLoading(false);
         }
@@ -275,7 +297,8 @@ export function BookingWidget({
       <div className="flex items-end justify-between">
         <div>
           <div className="text-2xl font-semibold text-brand">
-            {formatCurrency(dailyPrice)} <span className="text-base text-gray-500">/ day</span>
+            {formatCurrency(dailyPrice)}{" "}
+            <span className="text-base text-gray-500">/ day</span>
           </div>
           <div className="text-sm text-gray-600">
             {instantBook
@@ -294,7 +317,9 @@ export function BookingWidget({
         )}
       </div>
       <div className="space-y-2 rounded-xl border border-border bg-gray-50 p-3">
-        <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Host verification</p>
+        <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+          Host verification
+        </p>
         <VerificationBadges
           idVerified={hostVerification?.idVerified}
           phoneVerified={hostVerification?.phoneVerified}
@@ -326,14 +351,20 @@ export function BookingWidget({
       />
       <div className="space-y-3 rounded-xl border border-border bg-gray-50 p-3">
         <div className="flex items-center justify-between">
-          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Trip use location</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+            Trip use location
+          </p>
           {listingRegion ? (
-            <span className="text-[11px] font-medium text-gray-600">Listing region: {listingRegion}</span>
+            <span className="text-[11px] font-medium text-gray-600">
+              Listing region: {listingRegion}
+            </span>
           ) : null}
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1">
-            <label className="text-xs font-semibold text-gray-700">Region</label>
+            <label className="text-xs font-semibold text-gray-700">
+              Region
+            </label>
             <Select
               value={tripUseRegion}
               onChange={(e) => {
@@ -351,7 +382,9 @@ export function BookingWidget({
             </Select>
           </div>
           <div className="space-y-1">
-            <label className="text-xs font-semibold text-gray-700">City / district</label>
+            <label className="text-xs font-semibold text-gray-700">
+              City / district
+            </label>
             <Select
               value={tripUseCity}
               onChange={(e) => {
@@ -370,7 +403,9 @@ export function BookingWidget({
           </div>
         </div>
         <div className="space-y-1">
-          <label className="text-xs font-semibold text-gray-700">Exact area / destination</label>
+          <label className="text-xs font-semibold text-gray-700">
+            Exact area / destination
+          </label>
           <Input
             value={tripUseAddress}
             onChange={(e) => {
@@ -381,26 +416,42 @@ export function BookingWidget({
           />
         </div>
         <div className="space-y-1 text-xs">
-          <p className={tripOutsideListingRegion ? "text-amber-700" : "text-emerald-700"}>
+          <p
+            className={
+              tripOutsideListingRegion ? "text-amber-700" : "text-emerald-700"
+            }
+          >
             {tripOutsideListingRegion
               ? `Outside listing region trip${outsideAccraFeeValue > 0 ? ` (+${formatCurrency(outsideAccraFeeValue)})` : ""}`
               : "Within listing region (no outside-region surcharge)"}
           </p>
           {tripOutsideListingRegion && listingRegion ? (
-            <p className="text-gray-600">Trip use region differs from the listing region ({listingRegion}).</p>
+            <p className="text-gray-600">
+              Trip use region differs from the listing region ({listingRegion}).
+            </p>
           ) : null}
           {tripOutsideAccra ? (
-            <p className="text-gray-600">Trip use location is also outside Accra.</p>
+            <p className="text-gray-600">
+              Trip use location is also outside Accra.
+            </p>
           ) : null}
         </div>
       </div>
       {holdRemaining ? (
-        <p className="text-xs text-emerald-700">Reserved for {holdRemaining}. Complete payment to confirm.</p>
+        <p className="text-xs text-emerald-700">
+          Reserved for {holdRemaining}. Complete payment to confirm.
+        </p>
       ) : null}
       {message ? <p className="text-xs text-amber-700">{message}</p> : null}
       <div className="space-y-2 rounded-xl border border-border bg-white p-3 text-sm">
-        <PriceRow label={`Daily rate x ${billableNights} day(s)`} value={formatCurrency(baseTotal)} />
-        <PriceRow label={`Platform fee (${platformFeePercent}%)`} value={formatCurrency(platformFeeAmount)} />
+        <PriceRow
+          label={`Daily rate x ${billableNights} day(s)`}
+          value={formatCurrency(baseTotal)}
+        />
+        <PriceRow
+          label={`Platform fee (${platformFeePercent}%)`}
+          value={formatCurrency(platformFeeAmount)}
+        />
         <PriceRow
           label="Insurance fee"
           value={formatCurrency(insuranceFeeAmount)}
@@ -411,24 +462,32 @@ export function BookingWidget({
         />
         {outsideAccraFeeValue > 0 || tripOutsideListingRegion ? (
           <PriceRow
-            label={tripOutsideListingRegion ? "Outside listing region surcharge" : "Outside listing region surcharge (not applied)"}
+            label={
+              tripOutsideListingRegion
+                ? "Outside listing region surcharge"
+                : "Outside listing region surcharge (not applied)"
+            }
             value={formatCurrency(outsideAccraSurchargeAmount)}
             muted={!tripOutsideListingRegion}
           />
         ) : null}
-        <PriceRow
-          label="Deposit"
-          value={formatCurrency(depositAmountValue)}
-        />
+        <PriceRow label="Deposit" value={formatCurrency(depositAmountValue)} />
         <div className="flex items-center justify-between border-t border-border pt-2 text-sm font-semibold text-foreground">
           <span>Total charged now</span>
           <span className="text-base">{formatCurrency(total)}</span>
         </div>
       </div>
-      <Link href="/protection" className="block text-xs font-semibold text-brand">
+      <Link
+        href="/protection"
+        className="block text-xs font-semibold text-brand"
+      >
         View protection details
       </Link>
-      <Button className="w-full shadow-soft" onClick={submit} disabled={loading || !startDate || !endDate}>
+      <Button
+        className="w-full shadow-soft"
+        onClick={submit}
+        disabled={loading || !startDate || !endDate}
+      >
         {loading ? "Processing..." : instantBook ? "Instant Book" : "Book Now"}
       </Button>
     </div>
@@ -447,7 +506,13 @@ function PriceRow({
   return (
     <div className="flex items-center justify-between gap-4 text-sm">
       <span className="text-gray-700">{label}</span>
-      <span className={muted ? "text-xs font-medium text-gray-500" : "font-semibold text-foreground"}>
+      <span
+        className={
+          muted
+            ? "text-xs font-medium text-gray-500"
+            : "font-semibold text-foreground"
+        }
+      >
         {value}
       </span>
     </div>

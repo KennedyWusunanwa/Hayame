@@ -1,27 +1,10 @@
 import Link from "next/link";
-import { cookies } from "next/headers";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CarForm } from "@/components/car-form";
 import { AvailabilityForm } from "@/components/availability-form";
+import { requireAdminPage } from "@/lib/admin-auth";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-
-const COOKIE_NAME = "admin_auth";
-
-function adminToken() {
-  const username = process.env.ADMIN_USERNAME ?? "";
-  const password = process.env.ADMIN_PASSWORD ?? "";
-  if (!username || !password) return null;
-  return Buffer.from(`${username}:${password}`).toString("base64");
-}
-
-async function requireAdmin() {
-  const token = adminToken();
-  if (!token) redirect("/admin?error=missing");
-  const cookieStore = await cookies();
-  const cookie = cookieStore.get(COOKIE_NAME)?.value;
-  if (cookie !== token) redirect("/admin");
-}
 
 type PageProps = {
   params: { id: string } | Promise<{ id: string }>;
@@ -30,7 +13,7 @@ type PageProps = {
 export const dynamic = "force-dynamic";
 
 export default async function AdminEditCarPage({ params }: PageProps) {
-  await requireAdmin();
+  await requireAdminPage();
   const resolvedParams = await params;
   const admin = createSupabaseAdminClient() as any;
   const { data: car } = await admin
@@ -55,8 +38,12 @@ export default async function AdminEditCarPage({ params }: PageProps) {
       <div className="flex items-center justify-between">
         <div>
           <p className="text-sm font-semibold text-primary">Admin edit</p>
-          <h1 className="text-2xl font-semibold text-foreground">{car.title}</h1>
-          <p className="text-sm text-gray-600">Update details and save to publish changes.</p>
+          <h1 className="text-2xl font-semibold text-foreground">
+            {car.title}
+          </h1>
+          <p className="text-sm text-gray-600">
+            Update details and save to publish changes.
+          </p>
         </div>
         <Link href="/admin" className="text-sm font-semibold text-brand">
           Back to admin
@@ -93,7 +80,8 @@ export default async function AdminEditCarPage({ params }: PageProps) {
               insurance_fee: Number((car as any).insurance_fee ?? 0),
               deposit_amount: Number((car as any).deposit_amount ?? 0),
               outside_accra_fee: Number((car as any).outside_accra_fee ?? 0),
-              cancellation_policy: (car as any).cancellation_policy ?? "moderate",
+              cancellation_policy:
+                (car as any).cancellation_policy ?? "moderate",
             }}
           />
         </CardContent>

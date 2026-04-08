@@ -13,8 +13,14 @@ export const carFormSchema = z.object({
   fuel_type: z.enum(fuelTypes as [string, ...string[]]).optional(),
   brand: z.string().trim().min(1, "Brand is required"),
   model: z.string().trim().min(1, "Model is required"),
-  car_year: z.coerce.number().int().min(2000).max(new Date().getFullYear() + 1),
-  features: z.array(z.string().refine((f) => featureOptions.includes(f))).optional(),
+  car_year: z.coerce
+    .number()
+    .int()
+    .min(2000)
+    .max(new Date().getFullYear() + 1),
+  features: z
+    .array(z.string().refine((f) => featureOptions.includes(f)))
+    .optional(),
   is_available: z.boolean().optional(),
   instant_book: z.boolean().optional(),
   delivery_available: z.boolean().optional(),

@@ -7,7 +7,11 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
-export default async function UserDashboardLayout({ children }: { children: ReactNode }) {
+export default async function UserDashboardLayout({
+  children,
+}: {
+  children: ReactNode;
+}) {
   const supabase = await createSupabaseServerClient();
   const {
     data: { user },
@@ -21,7 +25,11 @@ export default async function UserDashboardLayout({ children }: { children: Reac
     .maybeSingle<Database["public"]["Tables"]["profiles"]["Row"]>();
 
   const userProfile = {
-    name: profile?.full_name ?? (user.user_metadata as any)?.full_name ?? user.email ?? "User",
+    name:
+      profile?.full_name ??
+      (user.user_metadata as any)?.full_name ??
+      user.email ??
+      "User",
     avatar: profile?.avatar_url?.trim() ?? "",
   };
 

@@ -6,7 +6,8 @@ import { ConversationListItem } from "@/components/messages/conversation-list-it
 import { useMessaging } from "@/components/messages/messaging-provider";
 
 export function ConversationList() {
-  const { conversations, activeConversationId, openConversation } = useMessaging();
+  const { conversations, activeConversationId, openConversation } =
+    useMessaging();
   const [query, setQuery] = useState("");
   const [tab, setTab] = useState<"all" | "unread">("all");
 
@@ -27,7 +28,9 @@ export function ConversationList() {
       <div className="space-y-3 border-b border-border bg-background px-4 py-4">
         <div className="flex items-center justify-between">
           <p className="text-lg font-semibold text-foreground">Inbox</p>
-          <span className="text-xs text-gray-600">{conversations.length} chats</span>
+          <span className="text-xs text-gray-600">
+            {conversations.length} chats
+          </span>
         </div>
         <Input
           value={query}
@@ -40,7 +43,9 @@ export function ConversationList() {
             type="button"
             onClick={() => setTab("all")}
             className={`rounded-full border px-3 py-1 ${
-              tab === "all" ? "border-brand bg-brand text-white" : "border-border text-gray-700"
+              tab === "all"
+                ? "border-brand bg-brand text-white"
+                : "border-border text-gray-700"
             }`}
           >
             All
@@ -49,7 +54,9 @@ export function ConversationList() {
             type="button"
             onClick={() => setTab("unread")}
             className={`rounded-full border px-3 py-1 ${
-              tab === "unread" ? "border-brand bg-brand text-white" : "border-border text-gray-700"
+              tab === "unread"
+                ? "border-brand bg-brand text-white"
+                : "border-border text-gray-700"
             }`}
           >
             Unread

@@ -7,6 +7,7 @@ Android target: `android-native/app/src/main/**`
 ## 1) iOS screen inventory vs Android
 
 ### iOS screen-by-screen status
+
 - `AuthFlowScreen`: Partial (Android has login/signup + guest mode, but not identical segmented auth container UX).
 - `RenterTabShell`: Partial (Android renter tabs exist, but role-routing behavior differs).
 - `RenterHomeScreen`: Partial.
@@ -41,6 +42,7 @@ Android target: `android-native/app/src/main/**`
 - `AdminShellScreen` + `Admin*` screens: Missing.
 
 ### Implemented on Android in this pass
+
 - Auth and app shell:
   - Splash, Login, Signup
   - Guest mode entry from Login
@@ -74,6 +76,7 @@ Android target: `android-native/app/src/main/**`
   - Marketing pages list + external open (new)
 
 ### Still missing (iOS has it, Android missing or materially different)
+
 - Admin area:
   - `AdminShellScreen`
   - `AdminHomeScreen`
@@ -91,6 +94,7 @@ Android target: `android-native/app/src/main/**`
 ## 2) Feature parity gaps (non-screen)
 
 ### Discovery / Explore
+
 - Missing advanced iOS filter controls in Android:
   - region/city dropdowns
   - make/model dropdown linkage
@@ -100,6 +104,7 @@ Android target: `android-native/app/src/main/**`
 - iOS has richer sort/filter UX and summary chips.
 
 ### Car detail
+
 - iOS has features Android still lacks:
   - full image gallery experience with fullscreen pager
   - explicit availability checker action/state
@@ -108,29 +113,35 @@ Android target: `android-native/app/src/main/**`
   - direct review submit flow surfaced from detail/trips context
 
 ### Trips / bookings UX
+
 - Android Trips exists but is less complete than iOS:
   - no upcoming/past split layout parity
   - no iOS-style progress tracker and detail chips parity
   - reduced payment status and rejection/dispute presentation richness
 
 ### Profile / More
+
 - Android More now routes to dashboard/support/profile paths, but still differs from iOS:
   - no iOS-style profile edit sheet behavior
   - no route-bridging behavior equivalent to iOS `MoreRoute` legacy mapping
 
 ### Host listing editor
+
 - Android editor is functional but not field-complete vs iOS editor:
   - missing several iOS pricing/fee controls and policy depth in one form
   - no local draft persistence/restore
   - reduced make/model/location picker parity and validation behavior
 
 ### Host application
+
 - Android supports host application + ID front/back upload, but iOS currently includes additional face-photo upload flow and more granular status messaging.
 
 ### Messaging behavior
+
 - Android has list/thread, but iOS has more realtime/pending-draft handling and unread update behaviors.
 
 ### Notification/UI parity
+
 - Visual system is close in color palette, but not all page structures and micro-interactions match iOS yet.
 
 ## 3) What I changed now (code)

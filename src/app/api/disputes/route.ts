@@ -16,7 +16,8 @@ export async function GET(req: Request) {
     })();
     const db = admin ?? (supabase as any);
     const user = await getRequestUser(supabase as any, req);
-    if (!user) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+    if (!user)
+      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
 
     const { data: renterBookings, error: renterError } = await db
       .from("bookings")
@@ -38,20 +39,28 @@ export async function GET(req: Request) {
     if (ownerError) throw ownerError;
 
     const bookingIds = Array.from(
-      new Set([...(renterBookings ?? []).map((row: any) => row.id), ...(ownerBookings ?? []).map((row: any) => row.id)]),
+      new Set([
+        ...(renterBookings ?? []).map((row: any) => row.id),
+        ...(ownerBookings ?? []).map((row: any) => row.id),
+      ]),
     );
     if (bookingIds.length === 0) return NextResponse.json({ data: [] });
 
     const { data, error } = await db
       .from("disputes")
-      .select("id,booking_id,car_id,reason,status,resolution_note,created_at,updated_at,cars(title)")
+      .select(
+        "id,booking_id,car_id,reason,status,resolution_note,created_at,updated_at,cars(title)",
+      )
       .in("booking_id", bookingIds)
       .order("created_at", { ascending: false });
     if (error) throw error;
 
     return NextResponse.json({ data: data ?? [] });
   } catch (error: any) {
-    return NextResponse.json({ message: error.message ?? "Failed to load disputes" }, { status: 400 });
+    return NextResponse.json(
+      { message: error.message ?? "Failed to load disputes" },
+      { status: 400 },
+    );
   }
 }
 
@@ -67,7 +76,8 @@ export async function POST(req: Request) {
     })();
     const db = admin ?? (supabase as any);
     const user = await getRequestUser(supabase as any, req);
-    if (!user) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+    if (!user)
+      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
 
     const body = await req.json();
     const parsed = disputeSchema.parse(body);
@@ -78,7 +88,10 @@ export async function POST(req: Request) {
       .eq("id", parsed.bookingId)
       .single();
     if (bookingError || !booking) {
-      return NextResponse.json({ message: "Booking not found" }, { status: 404 });
+      return NextResponse.json(
+        { message: "Booking not found" },
+        { status: 404 },
+      );
     }
 
     const isRenter = booking.renter_id === user.id;
@@ -89,7 +102,9 @@ export async function POST(req: Request) {
 
     const { data: existingDispute } = await db
       .from("disputes")
-      .select("id,booking_id,car_id,reason,status,resolution_note,created_at,updated_at")
+      .select(
+        "id,booking_id,car_id,reason,status,resolution_note,created_at,updated_at",
+      )
       .eq("booking_id", booking.id)
       .eq("opened_by", user.id)
       .in("status", ["open", "under_review"])
@@ -116,6 +131,9 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ data: created });
   } catch (error: any) {
-    return NextResponse.json({ message: error.message ?? "Failed to open dispute" }, { status: 400 });
+    return NextResponse.json(
+      { message: error.message ?? "Failed to open dispute" },
+      { status: 400 },
+    );
   }
 }

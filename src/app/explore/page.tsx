@@ -88,8 +88,10 @@ function parseFilters(searchParams: URLSearchParams): Filters {
     features: searchParams.getAll("feature"),
     instantBook: parseBoolean(searchParams.get("instantBook")),
     deliveryAvailable: parseBoolean(searchParams.get("deliveryAvailable")),
-    transmission: (searchParams.get("transmission") as Filters["transmission"]) ?? "",
-    seatsCapacity: (searchParams.get("seats") as Filters["seatsCapacity"]) ?? "",
+    transmission:
+      (searchParams.get("transmission") as Filters["transmission"]) ?? "",
+    seatsCapacity:
+      (searchParams.get("seats") as Filters["seatsCapacity"]) ?? "",
     minYear: parseNumber(searchParams.get("minYear")),
     maxYear: parseNumber(searchParams.get("maxYear")),
     airConditioning: parseBoolean(searchParams.get("airConditioning")),
@@ -106,7 +108,8 @@ function writeFiltersToParams(existing: URLSearchParams, filters: Filters) {
     else params.delete(key);
   };
   const setNumber = (key: string, value?: number) => {
-    if (typeof value === "number" && Number.isFinite(value)) params.set(key, String(value));
+    if (typeof value === "number" && Number.isFinite(value))
+      params.set(key, String(value));
     else params.delete(key);
   };
   const setBoolean = (key: string, value?: boolean) => {
@@ -146,7 +149,10 @@ function normalize(value?: string | null) {
   return (value ?? "").trim().toLowerCase();
 }
 
-function matchesSeats(seats: number | undefined, capacity: Filters["seatsCapacity"]) {
+function matchesSeats(
+  seats: number | undefined,
+  capacity: Filters["seatsCapacity"],
+) {
   if (!capacity) return true;
   if (typeof seats !== "number") return false;
   if (capacity === "8+") return seats >= 8;
@@ -154,14 +160,17 @@ function matchesSeats(seats: number | undefined, capacity: Filters["seatsCapacit
 }
 
 function getComparableRating(car: ExploreCar) {
-  const rating = typeof car.avg_rating === "number" ? car.avg_rating : car.rating;
+  const rating =
+    typeof car.avg_rating === "number" ? car.avg_rating : car.rating;
   return typeof rating === "number" ? rating : null;
 }
 
 function mapApiCars(rows: any[]): ExploreCar[] {
   return rows.map((car: any) => {
     const airConditioningFromFeatures = Array.isArray(car.features)
-      ? car.features.some((feature: string) => normalize(feature) === "air conditioning")
+      ? car.features.some(
+          (feature: string) => normalize(feature) === "air conditioning",
+        )
       : false;
     const yearCandidate = Number(car.year ?? car.car_year);
     return {
@@ -170,14 +179,16 @@ function mapApiCars(rows: any[]): ExploreCar[] {
       city: car.city ?? "Accra",
       region: car.region ?? "Greater Accra",
       daily_price: Number(car.daily_price ?? 0),
-      rating: typeof car.avg_rating === "number" ? Number(car.avg_rating) : undefined,
+      rating:
+        typeof car.avg_rating === "number" ? Number(car.avg_rating) : undefined,
       reviews: Number(car.reviews_count ?? 0),
       car_type: car.car_type ?? "SUV",
       brand: car.brand ?? "",
       model: car.model ?? "",
       fuel_type: normalize(car.fuel_type ?? car.fuel),
       seats: car.seats ?? 5,
-      transmission: normalize(car.transmission) === "manual" ? "manual" : "automatic",
+      transmission:
+        normalize(car.transmission) === "manual" ? "manual" : "automatic",
       fuel: car.fuel ?? "Petrol",
       features: Array.isArray(car.features) ? car.features : [],
       description: car.description ?? "",
@@ -188,16 +199,27 @@ function mapApiCars(rows: any[]): ExploreCar[] {
           "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=300&q=80",
       },
       image: car.image_url ?? car.car_photos?.[0]?.url ?? "",
-      instant_book: typeof car.instant_book === "boolean" ? car.instant_book : undefined,
+      instant_book:
+        typeof car.instant_book === "boolean" ? car.instant_book : undefined,
       delivery_available:
-        typeof car.delivery_available === "boolean" ? car.delivery_available : undefined,
+        typeof car.delivery_available === "boolean"
+          ? car.delivery_available
+          : undefined,
       air_conditioning:
-        typeof car.air_conditioning === "boolean" ? car.air_conditioning : airConditioningFromFeatures,
+        typeof car.air_conditioning === "boolean"
+          ? car.air_conditioning
+          : airConditioningFromFeatures,
       year: Number.isFinite(yearCandidate) ? yearCandidate : undefined,
       bookings_count:
-        typeof car.bookings_count === "number" ? Number(car.bookings_count) : undefined,
-      trips_count: typeof car.trips_count === "number" ? Number(car.trips_count) : undefined,
-      avg_rating: typeof car.avg_rating === "number" ? Number(car.avg_rating) : undefined,
+        typeof car.bookings_count === "number"
+          ? Number(car.bookings_count)
+          : undefined,
+      trips_count:
+        typeof car.trips_count === "number"
+          ? Number(car.trips_count)
+          : undefined,
+      avg_rating:
+        typeof car.avg_rating === "number" ? Number(car.avg_rating) : undefined,
       host_type: deriveHostBadgeType({
         hostType: car.host_type,
         hostLevel: car.host_level,
@@ -221,7 +243,9 @@ function fallbackCars() {
     ...car,
     instant_book: false,
     delivery_available: undefined,
-    air_conditioning: car.features.some((feature) => normalize(feature) === "air conditioning"),
+    air_conditioning: car.features.some(
+      (feature) => normalize(feature) === "air conditioning",
+    ),
     bookings_count: undefined,
     trips_count: undefined,
     avg_rating: car.rating,
@@ -235,7 +259,10 @@ function ExploreContent() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const searchKey = searchParams.toString();
-  const filters = useMemo(() => parseFilters(new URLSearchParams(searchKey)), [searchKey]);
+  const filters = useMemo(
+    () => parseFilters(new URLSearchParams(searchKey)),
+    [searchKey],
+  );
 
   const [cars, setCars] = useState<ExploreCar[]>([]);
   const [meta, setMeta] = useState<CarsResponseMeta>({});
@@ -278,10 +305,16 @@ function ExploreContent() {
   }, [searchKey]);
 
   const capabilities = useMemo<FilterCapabilities>(() => {
-    const hasAirConditioningFlag = cars.some((car) => typeof car.air_conditioning === "boolean");
+    const hasAirConditioningFlag = cars.some(
+      (car) => typeof car.air_conditioning === "boolean",
+    );
     const inferred: FilterCapabilities = {
-      instantBook: filters.instantBook === true || cars.some((car) => car.instant_book === true),
-      deliveryAvailable: cars.some((car) => typeof car.delivery_available === "boolean"),
+      instantBook:
+        filters.instantBook === true ||
+        cars.some((car) => car.instant_book === true),
+      deliveryAvailable: cars.some(
+        (car) => typeof car.delivery_available === "boolean",
+      ),
       transmission: cars.some((car) => Boolean(car.transmission)),
       fuelType: cars.some((car) => Boolean(car.fuel_type)),
       seats: cars.some((car) => typeof car.seats === "number"),
@@ -289,7 +322,9 @@ function ExploreContent() {
       airConditioning:
         hasAirConditioningFlag ||
         cars.some((car) =>
-          car.features.some((feature) => normalize(feature) === "air conditioning"),
+          car.features.some(
+            (feature) => normalize(feature) === "air conditioning",
+          ),
         ),
       rating: cars.some((car) => typeof getComparableRating(car) === "number"),
       hostType: cars.some((car) => Boolean(car.host_type)),
@@ -297,7 +332,8 @@ function ExploreContent() {
     const merged = { ...inferred, ...(meta.capabilities ?? {}) };
     return {
       ...merged,
-      instantBook: inferred.instantBook || Boolean(meta.capabilities?.instantBook),
+      instantBook:
+        inferred.instantBook || Boolean(meta.capabilities?.instantBook),
     };
   }, [cars, filters.instantBook, meta.capabilities]);
 
@@ -306,24 +342,34 @@ function ExploreContent() {
       mostBooked:
         meta.capabilities?.sorts?.most_booked ??
         cars.some(
-        (car) => typeof car.bookings_count === "number" || typeof car.trips_count === "number",
-      ),
+          (car) =>
+            typeof car.bookings_count === "number" ||
+            typeof car.trips_count === "number",
+        ),
       topRated: meta.capabilities?.sorts?.top_rated ?? capabilities.rating,
       newListings:
-        meta.capabilities?.sorts?.new_listings ?? cars.some((car) => Boolean(car.created_at)),
+        meta.capabilities?.sorts?.new_listings ??
+        cars.some((car) => Boolean(car.created_at)),
     }),
     [cars, capabilities.rating, meta.capabilities?.sorts],
   );
 
   const updateFilters = (nextFilters: Filters) => {
-    const nextParams = writeFiltersToParams(new URLSearchParams(searchKey), nextFilters);
+    const nextParams = writeFiltersToParams(
+      new URLSearchParams(searchKey),
+      nextFilters,
+    );
     const queryString = nextParams.toString();
-    router.replace(queryString ? `${pathname}?${queryString}` : pathname, { scroll: false });
+    router.replace(queryString ? `${pathname}?${queryString}` : pathname, {
+      scroll: false,
+    });
   };
 
   const toggleFavorite = (carId: string, nextValue: boolean) => {
     setFavoriteIds((prev) =>
-      nextValue ? Array.from(new Set([...prev, carId])) : prev.filter((id) => id !== carId),
+      nextValue
+        ? Array.from(new Set([...prev, carId]))
+        : prev.filter((id) => id !== carId),
     );
   };
 
@@ -358,20 +404,34 @@ function ExploreContent() {
       const matchesType = !filters.carType || car.car_type === filters.carType;
       const matchesBrand = !filters.brand || car.brand === filters.brand;
       const matchesModel = !filters.model || car.model === filters.model;
-      const matchesFuel = !filters.fuelType || fuel === normalize(filters.fuelType);
-      const matchesTransmission = !filters.transmission || transmission === filters.transmission;
-      const matchesMin = !filters.minPrice || car.daily_price >= filters.minPrice;
-      const matchesMax = !filters.maxPrice || car.daily_price <= filters.maxPrice;
-      const matchesInstantBook = !filters.instantBook || car.instant_book === true;
-      const matchesDelivery = !filters.deliveryAvailable || car.delivery_available === true;
-      const matchesSeatsCapacity = matchesSeats(car.seats, filters.seatsCapacity);
+      const matchesFuel =
+        !filters.fuelType || fuel === normalize(filters.fuelType);
+      const matchesTransmission =
+        !filters.transmission || transmission === filters.transmission;
+      const matchesMin =
+        !filters.minPrice || car.daily_price >= filters.minPrice;
+      const matchesMax =
+        !filters.maxPrice || car.daily_price <= filters.maxPrice;
+      const matchesInstantBook =
+        !filters.instantBook || car.instant_book === true;
+      const matchesDelivery =
+        !filters.deliveryAvailable || car.delivery_available === true;
+      const matchesSeatsCapacity = matchesSeats(
+        car.seats,
+        filters.seatsCapacity,
+      );
       const matchesMinYear =
-        !filters.minYear || (typeof car.year === "number" && car.year >= filters.minYear);
+        !filters.minYear ||
+        (typeof car.year === "number" && car.year >= filters.minYear);
       const matchesMaxYear =
-        !filters.maxYear || (typeof car.year === "number" && car.year <= filters.maxYear);
-      const matchesAirConditioning = !filters.airConditioning || hasAirConditioning;
-      const matchesRating = !filters.minRating || (rating !== null && rating >= filters.minRating);
-      const matchesHostType = !filters.hostType || hostType === normalize(filters.hostType);
+        !filters.maxYear ||
+        (typeof car.year === "number" && car.year <= filters.maxYear);
+      const matchesAirConditioning =
+        !filters.airConditioning || hasAirConditioning;
+      const matchesRating =
+        !filters.minRating || (rating !== null && rating >= filters.minRating);
+      const matchesHostType =
+        !filters.hostType || hostType === normalize(filters.hostType);
       const matchesFeatures =
         !filters.features || filters.features.length === 0
           ? true
@@ -389,11 +449,13 @@ function ExploreContent() {
       if (!matchesTransmission) return false;
       if (!matchesMin || !matchesMax) return false;
       if (!matchesInstantBook || !matchesDelivery) return false;
-      if (!matchesSeatsCapacity || !matchesMinYear || !matchesMaxYear) return false;
+      if (!matchesSeatsCapacity || !matchesMinYear || !matchesMaxYear)
+        return false;
       if (!matchesAirConditioning || !matchesRating) return false;
       if (!matchesHostType || !matchesFeatures) return false;
 
-      if (filters.sort === "most_booked" && typeof bookings !== "number") return false;
+      if (filters.sort === "most_booked" && typeof bookings !== "number")
+        return false;
       if (filters.sort === "top_rated" && rating === null) return false;
       if (filters.sort === "new_listings" && !car.created_at) return false;
 
@@ -403,19 +465,32 @@ function ExploreContent() {
 
   const sorted = useMemo(() => {
     const list = [...filtered];
-    const compareNumbers = (a: number, b: number) => (a < b ? -1 : a > b ? 1 : 0);
+    const compareNumbers = (a: number, b: number) =>
+      a < b ? -1 : a > b ? 1 : 0;
 
     switch (filters.sort) {
       case "price_low":
-        return list.sort((a, b) => compareNumbers(a.daily_price, b.daily_price));
+        return list.sort((a, b) =>
+          compareNumbers(a.daily_price, b.daily_price),
+        );
       case "price_high":
-        return list.sort((a, b) => compareNumbers(b.daily_price, a.daily_price));
+        return list.sort((a, b) =>
+          compareNumbers(b.daily_price, a.daily_price),
+        );
       case "most_booked":
         return list.sort((a, b) =>
-          compareNumbers(b.bookings_count ?? b.trips_count ?? 0, a.bookings_count ?? a.trips_count ?? 0),
+          compareNumbers(
+            b.bookings_count ?? b.trips_count ?? 0,
+            a.bookings_count ?? a.trips_count ?? 0,
+          ),
         );
       case "top_rated":
-        return list.sort((a, b) => compareNumbers(getComparableRating(b) ?? 0, getComparableRating(a) ?? 0));
+        return list.sort((a, b) =>
+          compareNumbers(
+            getComparableRating(b) ?? 0,
+            getComparableRating(a) ?? 0,
+          ),
+        );
       case "new_listings":
         return list.sort((a, b) =>
           compareNumbers(
@@ -435,24 +510,24 @@ function ExploreContent() {
   }));
   const hasActiveFilters = Boolean(
     filters.query ||
-      filters.region ||
-      filters.city ||
-      filters.carType ||
-      filters.brand ||
-      filters.model ||
-      filters.fuelType ||
-      filters.minPrice ||
-      filters.maxPrice ||
-      filters.instantBook ||
-      filters.deliveryAvailable ||
-      filters.transmission ||
-      filters.seatsCapacity ||
-      filters.minYear ||
-      filters.maxYear ||
-      filters.airConditioning ||
-      filters.minRating ||
-      filters.hostType ||
-      (filters.features && filters.features.length > 0),
+    filters.region ||
+    filters.city ||
+    filters.carType ||
+    filters.brand ||
+    filters.model ||
+    filters.fuelType ||
+    filters.minPrice ||
+    filters.maxPrice ||
+    filters.instantBook ||
+    filters.deliveryAvailable ||
+    filters.transmission ||
+    filters.seatsCapacity ||
+    filters.minYear ||
+    filters.maxYear ||
+    filters.airConditioning ||
+    filters.minRating ||
+    filters.hostType ||
+    (filters.features && filters.features.length > 0),
   );
 
   return (
@@ -460,8 +535,12 @@ function ExploreContent() {
       <div className="mb-8 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <p className="text-sm font-semibold text-brand">Explore</p>
-          <h1 className="text-3xl font-semibold text-foreground">Find your next ride</h1>
-          <p className="text-gray-700">Search by city, car type, budget, and booking style.</p>
+          <h1 className="text-3xl font-semibold text-foreground">
+            Find your next ride
+          </h1>
+          <p className="text-gray-700">
+            Search by city, car type, budget, and booking style.
+          </p>
         </div>
         <div className="w-full md:hidden">
           <form
@@ -486,21 +565,31 @@ function ExploreContent() {
             <ArrowDownAZ className="h-4 w-4 text-gray-500" />
             <Select
               value={filters.sort ?? ""}
-              onChange={(e) => updateFilters({ ...filters, sort: e.target.value as SortBy })}
+              onChange={(e) =>
+                updateFilters({ ...filters, sort: e.target.value as SortBy })
+              }
               className="h-8 border-0 bg-transparent text-sm shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
               aria-label="Sort listings"
             >
               <option value="">Sort by</option>
               {SORT_OPTIONS.map((option) => {
-                const isDisabled = option.requires ? !sortCapabilities[option.requires] : false;
+                const isDisabled = option.requires
+                  ? !sortCapabilities[option.requires]
+                  : false;
                 return (
                   <option
                     key={option.value}
                     value={option.value}
                     disabled={isDisabled}
-                    title={isDisabled ? "Coming soon" : undefined}
+                    title={
+                      isDisabled
+                        ? "Unavailable for the current results"
+                        : undefined
+                    }
                   >
-                    {isDisabled ? `${option.label} (Coming soon)` : option.label}
+                    {isDisabled
+                      ? `${option.label} (Unavailable)`
+                      : option.label}
                   </option>
                 );
               })}
@@ -509,7 +598,11 @@ function ExploreContent() {
         </div>
       </div>
       <div className="grid items-start gap-6 lg:grid-cols-[320px,1fr]">
-        <FiltersSidebar filters={filters} onChange={updateFilters} capabilities={capabilities} />
+        <FiltersSidebar
+          filters={filters}
+          onChange={updateFilters}
+          capabilities={capabilities}
+        />
         <div className="grid content-start gap-5">
           <form
             className="hidden h-14 items-center gap-3 rounded-2xl border border-border bg-white px-4 shadow-soft md:flex"
@@ -529,21 +622,31 @@ function ExploreContent() {
               <ArrowDownAZ className="h-4 w-4 text-gray-500" />
               <Select
                 value={filters.sort ?? ""}
-                onChange={(e) => updateFilters({ ...filters, sort: e.target.value as SortBy })}
+                onChange={(e) =>
+                  updateFilters({ ...filters, sort: e.target.value as SortBy })
+                }
                 className="h-8 border-0 bg-transparent pr-6 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
                 aria-label="Sort listings"
               >
                 <option value="">Sort by</option>
                 {SORT_OPTIONS.map((option) => {
-                  const isDisabled = option.requires ? !sortCapabilities[option.requires] : false;
+                  const isDisabled = option.requires
+                    ? !sortCapabilities[option.requires]
+                    : false;
                   return (
                     <option
                       key={option.value}
                       value={option.value}
                       disabled={isDisabled}
-                      title={isDisabled ? "Coming soon" : undefined}
+                      title={
+                        isDisabled
+                          ? "Unavailable for the current results"
+                          : undefined
+                      }
                     >
-                      {isDisabled ? `${option.label} (Coming soon)` : option.label}
+                      {isDisabled
+                        ? `${option.label} (Unavailable)`
+                        : option.label}
                     </option>
                   );
                 })}
@@ -597,7 +700,9 @@ function ExploreContent() {
 
 export default function ExplorePage() {
   return (
-    <Suspense fallback={<div className="px-4 py-10 sm:px-6 lg:px-8">Loading...</div>}>
+    <Suspense
+      fallback={<div className="px-4 py-10 sm:px-6 lg:px-8">Loading...</div>}
+    >
       <ExploreContent />
     </Suspense>
   );

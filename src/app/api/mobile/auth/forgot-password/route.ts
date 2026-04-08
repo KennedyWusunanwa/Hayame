@@ -28,9 +28,14 @@ export function GET() {
 export async function POST(req: Request) {
   try {
     const body = (await req.json().catch(() => ({}))) as Body;
-    const email = String(body.email ?? "").trim().toLowerCase();
+    const email = String(body.email ?? "")
+      .trim()
+      .toLowerCase();
     if (!email) {
-      return NextResponse.json({ message: "email is required" }, { status: 400 });
+      return NextResponse.json(
+        { message: "email is required" },
+        { status: 400 },
+      );
     }
 
     const supabase = await createClient();
@@ -38,13 +43,19 @@ export async function POST(req: Request) {
       redirectTo: resolveResetRedirectURL(req),
     });
     if (error) {
-      return NextResponse.json({ message: error.message ?? "Unable to send reset email" }, { status: 400 });
+      return NextResponse.json(
+        { message: error.message ?? "Unable to send reset email" },
+        { status: 400 },
+      );
     }
 
     return NextResponse.json({
       message: "If this account exists, a password reset email has been sent.",
     });
   } catch (error: any) {
-    return NextResponse.json({ message: error?.message ?? "Unable to send reset email" }, { status: 400 });
+    return NextResponse.json(
+      { message: error?.message ?? "Unable to send reset email" },
+      { status: 400 },
+    );
   }
 }

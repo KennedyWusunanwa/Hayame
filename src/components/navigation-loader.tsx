@@ -6,7 +6,13 @@ import { usePathname, useSearchParams } from "next/navigation";
 const HIDE_TIMEOUT_MS = 8000;
 
 function isModifiedEvent(event: MouseEvent) {
-  return event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey;
+  return (
+    event.button !== 0 ||
+    event.metaKey ||
+    event.ctrlKey ||
+    event.shiftKey ||
+    event.altKey
+  );
 }
 
 function shouldTrackAnchor(anchor: HTMLAnchorElement) {
@@ -16,7 +22,12 @@ function shouldTrackAnchor(anchor: HTMLAnchorElement) {
   if (anchor.getAttribute("aria-disabled") === "true") return false;
 
   const href = anchor.getAttribute("href") ?? "";
-  if (!href || href.startsWith("#") || href.startsWith("mailto:") || href.startsWith("tel:")) {
+  if (
+    !href ||
+    href.startsWith("#") ||
+    href.startsWith("mailto:") ||
+    href.startsWith("tel:")
+  ) {
     return false;
   }
 
@@ -25,7 +36,10 @@ function shouldTrackAnchor(anchor: HTMLAnchorElement) {
     const targetUrl = new URL(anchor.href, currentUrl);
     if (targetUrl.origin !== currentUrl.origin) return false;
 
-    return !(targetUrl.pathname === currentUrl.pathname && targetUrl.search === currentUrl.search);
+    return !(
+      targetUrl.pathname === currentUrl.pathname &&
+      targetUrl.search === currentUrl.search
+    );
   } catch {
     return false;
   }
@@ -40,7 +54,10 @@ export function NavigationLoader() {
   useEffect(() => {
     if (!loading) return;
     if (timerRef.current) window.clearTimeout(timerRef.current);
-    timerRef.current = window.setTimeout(() => setLoading(false), HIDE_TIMEOUT_MS);
+    timerRef.current = window.setTimeout(
+      () => setLoading(false),
+      HIDE_TIMEOUT_MS,
+    );
     return () => {
       if (timerRef.current) window.clearTimeout(timerRef.current);
     };

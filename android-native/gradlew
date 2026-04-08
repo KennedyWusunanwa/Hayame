@@ -116,6 +116,17 @@ esac
 
 CLASSPATH=$APP_HOME/gradle/wrapper/gradle-wrapper.jar
 
+if [ -z "$JAVA_HOME" ] ; then
+    if [ -n "$JAVA17_HOME" ] && [ -x "$JAVA17_HOME/bin/java" ] ; then
+        JAVA_HOME=$JAVA17_HOME
+    elif "$darwin" && [ -x /usr/libexec/java_home ] ; then
+        JAVA_17_HOME=$( /usr/libexec/java_home -v 17 2> /dev/null ) || JAVA_17_HOME=
+        if [ -n "$JAVA_17_HOME" ] && [ -x "$JAVA_17_HOME/bin/java" ] ; then
+            JAVA_HOME=$JAVA_17_HOME
+        fi
+    fi
+fi
+
 
 # Determine the Java command to use to start the JVM.
 if [ -n "$JAVA_HOME" ] ; then

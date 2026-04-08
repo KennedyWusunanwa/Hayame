@@ -15,7 +15,8 @@ export default function SuvRentalGhanaPage() {
       faqs={[
         {
           question: "Can I filter by seat count?",
-          answer: "Yes. Explore includes seat filters, including 7-seater and 8+ options.",
+          answer:
+            "Yes. Explore includes seat filters, including 7-seater and 8+ options.",
         },
         {
           question: "Can I check transmission type?",
@@ -23,7 +24,8 @@ export default function SuvRentalGhanaPage() {
         },
         {
           question: "Are all SUVs available for all dates?",
-          answer: "Availability varies per listing. Use each listing's date checker before booking.",
+          answer:
+            "Availability varies per listing. Use each listing's date checker before booking.",
         },
       ]}
     />

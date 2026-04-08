@@ -13,7 +13,10 @@ import type { Car } from "@/lib/types";
 type Props = {
   car: Car;
   isFavorite?: boolean;
-  onToggleFavorite?: (carId: string, nextValue: boolean) => void | Promise<void>;
+  onToggleFavorite?: (
+    carId: string,
+    nextValue: boolean,
+  ) => void | Promise<void>;
 };
 
 export function CarCard({ car, isFavorite = false, onToggleFavorite }: Props) {
@@ -25,7 +28,9 @@ export function CarCard({ car, isFavorite = false, onToggleFavorite }: Props) {
   const hostLabel = hostBadgeLabel(hostType);
   const yearMatch = car.title.match(/\b(?:19|20)\d{2}\b/);
   const year = yearMatch?.[0];
-  const displayTitle = year ? car.title.replace(year, "").replace(/\s+/g, " ").trim() : car.title;
+  const displayTitle = year
+    ? car.title.replace(year, "").replace(/\s+/g, " ").trim()
+    : car.title;
   const location = [car.city, car.region].filter(Boolean).join(", ");
   const priceText = formatCurrency(car.daily_price);
   const imageSrc = resolveCarImage(car.image_url, {
@@ -87,7 +92,9 @@ export function CarCard({ car, isFavorite = false, onToggleFavorite }: Props) {
         </div>
 
         <div className="flex items-end justify-between gap-3 pt-1">
-          <p className="min-w-0 flex-1 text-sm text-gray-600 line-clamp-2">{car.description}</p>
+          <p className="min-w-0 flex-1 text-sm text-gray-600 line-clamp-2">
+            {car.description}
+          </p>
           <div className="shrink-0 text-right text-base font-semibold text-foreground">
             {priceText} <span className="text-sm text-[#0e86d4]">/ day</span>
           </div>

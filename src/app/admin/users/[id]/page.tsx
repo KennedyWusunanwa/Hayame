@@ -1,34 +1,20 @@
 import Image from "next/image";
 import Link from "next/link";
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { getAdminReviewerName, requireAdminPage } from "@/lib/admin-auth";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { formatCurrency } from "@/lib/utils";
 
-const COOKIE_NAME = "admin_auth";
-
 export const dynamic = "force-dynamic";
-
-function adminToken() {
-  const username = process.env.ADMIN_USERNAME ?? "";
-  const password = process.env.ADMIN_PASSWORD ?? "";
-  if (!username || !password) return null;
-  return Buffer.from(`${username}:${password}`).toString("base64");
-}
-
-async function isAuthed() {
-  const token = adminToken();
-  if (!token) return false;
-  const cookieStore = await cookies();
-  const cookie = cookieStore.get(COOKIE_NAME)?.value;
-  return cookie === token;
-}
-
-async function requireAdmin() {
-  if (!(await isAuthed())) redirect("/admin");
-}
 
 function parseNullableString(value: FormDataEntryValue | null) {
   const text = String(value ?? "").trim();
@@ -66,10 +52,10 @@ function formatDate(value?: string | null) {
 
 async function updateUserAction(formData: FormData) {
   "use server";
-  await requireAdmin();
+  await requireAdminPage();
 
   const admin = createSupabaseAdminClient() as any;
-  const reviewer = process.env.ADMIN_USERNAME ?? "admin";
+  const reviewer = getAdminReviewerName();
   const userId = String(formData.get("user_id") ?? "").trim();
   if (!userId) redirect("/admin");
 
@@ -86,17 +72,25 @@ async function updateUserAction(formData: FormData) {
     const emailVerified = formData.get("email_verified") === "on";
 
     const hostLevelRaw = String(formData.get("host_level") ?? "").trim();
-    const allowedHostLevels = new Set(["new_host", "verified_host", "top_host", "super_host"]);
+    const allowedHostLevels = new Set([
+      "new_host",
+      "verified_host",
+      "top_host",
+      "super_host",
+    ]);
     const hostLevel = allowedHostLevels.has(hostLevelRaw)
       ? hostLevelRaw
       : isHost
         ? "verified_host"
         : "new_host";
 
-    const hostApprovedInput = parseNullableString(formData.get("host_approved_at"));
+    const hostApprovedInput = parseNullableString(
+      formData.get("host_approved_at"),
+    );
     let hostApprovedAt = parseDateTimeInput(hostApprovedInput);
     if (isHost && !hostApprovedAt) {
-      hostApprovedAt = existingProfile?.host_approved_at ?? new Date().toISOString();
+      hostApprovedAt =
+        existingProfile?.host_approved_at ?? new Date().toISOString();
     }
 
     const profilePayload = {
@@ -116,21 +110,31 @@ async function updateUserAction(formData: FormData) {
       updated_at: new Date().toISOString(),
     };
 
-    const { error: profileError } = await admin.from("profiles").update(profilePayload).eq("id", userId);
+    const { error: profileError } = await admin
+      .from("profiles")
+      .update(profilePayload)
+      .eq("id", userId);
     if (profileError) throw profileError;
 
     const email = parseNullableString(formData.get("email"));
     if (email) {
-      const { error: authError } = await admin.auth.admin.updateUserById(userId, { email });
+      const { error: authError } = await admin.auth.admin.updateUserById(
+        userId,
+        { email },
+      );
       if (authError) throw authError;
     }
 
     const applicationId = String(formData.get("application_id") ?? "").trim();
     if (applicationId) {
-      const appStatusRaw = String(formData.get("application_status") ?? "").trim();
+      const appStatusRaw = String(
+        formData.get("application_status") ?? "",
+      ).trim();
       const allowedStatuses = new Set(["pending", "approved", "rejected"]);
       const appStatus = allowedStatuses.has(appStatusRaw) ? appStatusRaw : null;
-      const rejectionReason = parseNullableString(formData.get("application_rejection_reason"));
+      const rejectionReason = parseNullableString(
+        formData.get("application_rejection_reason"),
+      );
 
       const applicationPayload: Record<string, unknown> = {
         id_type: parseNullableString(formData.get("application_id_type")),
@@ -141,7 +145,9 @@ async function updateUserAction(formData: FormData) {
         experience: parseNullableString(formData.get("application_experience")),
         note: parseNullableString(formData.get("application_note")),
         fleet_size: (() => {
-          const raw = parseNullableString(formData.get("application_fleet_size"));
+          const raw = parseNullableString(
+            formData.get("application_fleet_size"),
+          );
           if (!raw) return null;
           const parsed = Number(raw);
           return Number.isFinite(parsed) ? parsed : null;
@@ -158,7 +164,10 @@ async function updateUserAction(formData: FormData) {
         } else {
           applicationPayload.reviewed_at = new Date().toISOString();
           applicationPayload.reviewed_by = reviewer;
-          applicationPayload.rejection_reason = appStatus === "rejected" ? rejectionReason ?? "Rejected by admin" : null;
+          applicationPayload.rejection_reason =
+            appStatus === "rejected"
+              ? (rejectionReason ?? "Rejected by admin")
+              : null;
         }
       } else if (rejectionReason) {
         applicationPayload.rejection_reason = rejectionReason;
@@ -194,44 +203,56 @@ export default async function AdminUserDetailsPage({
   searchParams,
 }: {
   params: { id: string } | Promise<{ id: string }>;
-  searchParams?: { saved?: string; error?: string } | Promise<{ saved?: string; error?: string }>;
+  searchParams?:
+    | { saved?: string; error?: string }
+    | Promise<{ saved?: string; error?: string }>;
 }) {
-  await requireAdmin();
+  await requireAdminPage();
   const resolvedParams = await params;
   const resolvedSearch = searchParams ? await searchParams : {};
   const userId = resolvedParams.id;
 
   const admin = createSupabaseAdminClient() as any;
 
-  const [profileResult, authUserResult, hostApplicationsResult, carsResult, renterBookingsResult, conversationsResult] =
-    await Promise.all([
-      admin.from("profiles").select("*").eq("id", userId).maybeSingle(),
-      admin.auth.admin.getUserById(userId),
-      admin
-        .from("host_applications")
-        .select("*")
-        .eq("user_id", userId)
-        .order("created_at", { ascending: false })
-        .limit(5),
-      admin
-        .from("cars")
-        .select("id,title,city,region,daily_price,approval_status,created_at")
-        .eq("owner_id", userId)
-        .order("created_at", { ascending: false })
-        .limit(20),
-      admin
-        .from("bookings")
-        .select("id,car_id,start_date,end_date,status,total_price,created_at,cars(title)")
-        .eq("renter_id", userId)
-        .order("created_at", { ascending: false })
-        .limit(20),
-      admin
-        .from("conversations")
-        .select("id,host_id,user_id,car_id,last_message_at,last_message_preview,created_at")
-        .or(`host_id.eq.${userId},user_id.eq.${userId}`)
-        .order("created_at", { ascending: false })
-        .limit(20),
-    ]);
+  const [
+    profileResult,
+    authUserResult,
+    hostApplicationsResult,
+    carsResult,
+    renterBookingsResult,
+    conversationsResult,
+  ] = await Promise.all([
+    admin.from("profiles").select("*").eq("id", userId).maybeSingle(),
+    admin.auth.admin.getUserById(userId),
+    admin
+      .from("host_applications")
+      .select("*")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(5),
+    admin
+      .from("cars")
+      .select("id,title,city,region,daily_price,approval_status,created_at")
+      .eq("owner_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(20),
+    admin
+      .from("bookings")
+      .select(
+        "id,car_id,start_date,end_date,status,total_price,created_at,cars(title)",
+      )
+      .eq("renter_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(20),
+    admin
+      .from("conversations")
+      .select(
+        "id,host_id,user_id,car_id,last_message_at,last_message_preview,created_at",
+      )
+      .or(`host_id.eq.${userId},user_id.eq.${userId}`)
+      .order("created_at", { ascending: false })
+      .limit(20),
+  ]);
 
   const profile = profileResult.data;
   const authUser = authUserResult?.data?.user ?? null;
@@ -249,7 +270,10 @@ export default async function AdminUserDetailsPage({
           </CardHeader>
           <CardContent className="space-y-3 text-sm text-gray-700">
             <p>No profile exists for this user id: {userId}</p>
-            <Link href="/admin" className="inline-flex rounded-md border border-border px-3 py-2 font-semibold text-brand">
+            <Link
+              href="/admin"
+              className="inline-flex rounded-md border border-border px-3 py-2 font-semibold text-brand"
+            >
               Back to admin
             </Link>
           </CardContent>
@@ -264,7 +288,9 @@ export default async function AdminUserDetailsPage({
     carIds.length > 0
       ? await admin
           .from("bookings")
-          .select("id,car_id,start_date,end_date,status,total_price,created_at,cars(title)")
+          .select(
+            "id,car_id,start_date,end_date,status,total_price,created_at,cars(title)",
+          )
           .in("car_id", carIds)
           .order("created_at", { ascending: false })
           .limit(20)
@@ -283,9 +309,14 @@ export default async function AdminUserDetailsPage({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-sm font-semibold text-primary">Admin</p>
-          <h1 className="text-2xl font-semibold text-foreground">User details</h1>
+          <h1 className="text-2xl font-semibold text-foreground">
+            User details
+          </h1>
         </div>
-        <Link href="/admin" className="rounded-md border border-border px-3 py-2 text-sm font-semibold text-gray-700">
+        <Link
+          href="/admin"
+          className="rounded-md border border-border px-3 py-2 text-sm font-semibold text-gray-700"
+        >
           Back to admin
         </Link>
       </div>
@@ -308,35 +339,67 @@ export default async function AdminUserDetailsPage({
         <CardContent className="grid gap-4 md:grid-cols-[auto,1fr]">
           <div className="relative h-24 w-24 overflow-hidden rounded-full border border-border bg-gray-100">
             {profile.avatar_url ? (
-              <Image src={profile.avatar_url} alt={profile.full_name ?? "User"} fill className="object-cover" sizes="96px" />
+              <Image
+                src={profile.avatar_url}
+                alt={profile.full_name ?? "User"}
+                fill
+                className="object-cover"
+                sizes="96px"
+              />
             ) : (
-              <div className="flex h-full w-full items-center justify-center text-sm font-semibold text-gray-600">No photo</div>
+              <div className="flex h-full w-full items-center justify-center text-sm font-semibold text-gray-600">
+                No photo
+              </div>
             )}
           </div>
           <div className="grid gap-2 sm:grid-cols-2">
             <div>
-              <p className="text-xs uppercase tracking-wide text-gray-500">Name</p>
-              <p className="font-semibold text-foreground">{profile.full_name ?? "N/A"}</p>
+              <p className="text-xs uppercase tracking-wide text-gray-500">
+                Name
+              </p>
+              <p className="font-semibold text-foreground">
+                {profile.full_name ?? "N/A"}
+              </p>
             </div>
             <div>
-              <p className="text-xs uppercase tracking-wide text-gray-500">Email</p>
-              <p className="font-semibold text-foreground">{authUser?.email ?? "N/A"}</p>
+              <p className="text-xs uppercase tracking-wide text-gray-500">
+                Email
+              </p>
+              <p className="font-semibold text-foreground">
+                {authUser?.email ?? "N/A"}
+              </p>
             </div>
             <div>
-              <p className="text-xs uppercase tracking-wide text-gray-500">Phone</p>
-              <p className="font-semibold text-foreground">{profile.phone ?? "N/A"}</p>
+              <p className="text-xs uppercase tracking-wide text-gray-500">
+                Phone
+              </p>
+              <p className="font-semibold text-foreground">
+                {profile.phone ?? "N/A"}
+              </p>
             </div>
             <div>
-              <p className="text-xs uppercase tracking-wide text-gray-500">Role</p>
-              <p className="font-semibold text-foreground">{profile.is_host ? "Host" : "Guest"}</p>
+              <p className="text-xs uppercase tracking-wide text-gray-500">
+                Role
+              </p>
+              <p className="font-semibold text-foreground">
+                {profile.is_host ? "Host" : "Guest"}
+              </p>
             </div>
             <div>
-              <p className="text-xs uppercase tracking-wide text-gray-500">Host level</p>
-              <p className="font-semibold text-foreground">{profile.host_level ?? "N/A"}</p>
+              <p className="text-xs uppercase tracking-wide text-gray-500">
+                Host level
+              </p>
+              <p className="font-semibold text-foreground">
+                {profile.host_level ?? "N/A"}
+              </p>
             </div>
             <div>
-              <p className="text-xs uppercase tracking-wide text-gray-500">Host approved at</p>
-              <p className="font-semibold text-foreground">{formatDateTime(profile.host_approved_at)}</p>
+              <p className="text-xs uppercase tracking-wide text-gray-500">
+                Host approved at
+              </p>
+              <p className="font-semibold text-foreground">
+                {formatDateTime(profile.host_approved_at)}
+              </p>
             </div>
           </div>
         </CardContent>
@@ -348,16 +411,24 @@ export default async function AdminUserDetailsPage({
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="flex flex-wrap items-center gap-2 text-xs">
-            <span className={`rounded-full px-2 py-1 font-semibold ${profile.id_verified ? "bg-emerald-100 text-emerald-700" : "bg-gray-100 text-gray-700"}`}>
+            <span
+              className={`rounded-full px-2 py-1 font-semibold ${profile.id_verified ? "bg-emerald-100 text-emerald-700" : "bg-gray-100 text-gray-700"}`}
+            >
               ID verified: {profile.id_verified ? "Yes" : "No"}
             </span>
-            <span className={`rounded-full px-2 py-1 font-semibold ${profile.phone_verified ? "bg-emerald-100 text-emerald-700" : "bg-gray-100 text-gray-700"}`}>
+            <span
+              className={`rounded-full px-2 py-1 font-semibold ${profile.phone_verified ? "bg-emerald-100 text-emerald-700" : "bg-gray-100 text-gray-700"}`}
+            >
               Phone verified: {profile.phone_verified ? "Yes" : "No"}
             </span>
-            <span className={`rounded-full px-2 py-1 font-semibold ${profile.email_verified ? "bg-emerald-100 text-emerald-700" : "bg-gray-100 text-gray-700"}`}>
+            <span
+              className={`rounded-full px-2 py-1 font-semibold ${profile.email_verified ? "bg-emerald-100 text-emerald-700" : "bg-gray-100 text-gray-700"}`}
+            >
               Email verified: {profile.email_verified ? "Yes" : "No"}
             </span>
-            <span className={`rounded-full px-2 py-1 font-semibold ${profile.is_host ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-700"}`}>
+            <span
+              className={`rounded-full px-2 py-1 font-semibold ${profile.is_host ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-700"}`}
+            >
               Host active: {profile.is_host ? "Yes" : "No"}
             </span>
           </div>
@@ -365,52 +436,87 @@ export default async function AdminUserDetailsPage({
             <div className="rounded-lg border border-border p-3">
               <p className="text-xs font-semibold text-gray-500">Face photo</p>
               {faceUrl ? (
-                <img src={faceUrl} alt="Face evidence" className="mt-2 h-40 w-full rounded-md object-cover" />
+                <img
+                  src={faceUrl}
+                  alt="Face evidence"
+                  className="mt-2 h-40 w-full rounded-md object-cover"
+                />
               ) : (
-                <p className="mt-2 text-sm text-gray-600">No face photo uploaded.</p>
+                <p className="mt-2 text-sm text-gray-600">
+                  No face photo uploaded.
+                </p>
               )}
             </div>
             <div className="rounded-lg border border-border p-3">
               <p className="text-xs font-semibold text-gray-500">ID front</p>
               {idFrontUrl ? (
                 <>
-                  <img src={idFrontUrl} alt="ID front" className="mt-2 h-40 w-full rounded-md object-cover" />
-                  <a href={idFrontUrl} target="_blank" rel="noreferrer" className="mt-2 inline-flex text-xs font-semibold text-brand">
+                  <img
+                    src={idFrontUrl}
+                    alt="ID front"
+                    className="mt-2 h-40 w-full rounded-md object-cover"
+                  />
+                  <a
+                    href={idFrontUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-2 inline-flex text-xs font-semibold text-brand"
+                  >
                     Open original
                   </a>
                 </>
               ) : (
-                <p className="mt-2 text-sm text-gray-600">No ID front uploaded.</p>
+                <p className="mt-2 text-sm text-gray-600">
+                  No ID front uploaded.
+                </p>
               )}
             </div>
             <div className="rounded-lg border border-border p-3">
               <p className="text-xs font-semibold text-gray-500">ID back</p>
               {idBackUrl ? (
                 <>
-                  <img src={idBackUrl} alt="ID back" className="mt-2 h-40 w-full rounded-md object-cover" />
-                  <a href={idBackUrl} target="_blank" rel="noreferrer" className="mt-2 inline-flex text-xs font-semibold text-brand">
+                  <img
+                    src={idBackUrl}
+                    alt="ID back"
+                    className="mt-2 h-40 w-full rounded-md object-cover"
+                  />
+                  <a
+                    href={idBackUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-2 inline-flex text-xs font-semibold text-brand"
+                  >
                     Open original
                   </a>
                 </>
               ) : (
-                <p className="mt-2 text-sm text-gray-600">No ID back uploaded.</p>
+                <p className="mt-2 text-sm text-gray-600">
+                  No ID back uploaded.
+                </p>
               )}
             </div>
           </div>
           {latestApplication ? (
             <p className="text-xs text-gray-600">
-              Latest host application: <span className="font-semibold">{latestApplication.status}</span> (
-              {formatDate(latestApplication.created_at)})
+              Latest host application:{" "}
+              <span className="font-semibold">{latestApplication.status}</span>{" "}
+              ({formatDate(latestApplication.created_at)})
             </p>
           ) : (
-            <p className="text-xs text-gray-600">No host application record found for this user.</p>
+            <p className="text-xs text-gray-600">
+              No host application record found for this user.
+            </p>
           )}
         </CardContent>
       </Card>
 
       <form action={updateUserAction} className="space-y-6">
         <input type="hidden" name="user_id" value={userId} />
-        <input type="hidden" name="application_id" value={latestApplication?.id ?? ""} />
+        <input
+          type="hidden"
+          name="application_id"
+          value={latestApplication?.id ?? ""}
+        />
 
         <Card>
           <CardHeader>
@@ -418,28 +524,60 @@ export default async function AdminUserDetailsPage({
           </CardHeader>
           <CardContent className="grid gap-4 md:grid-cols-2">
             <Field label="Email (Auth)">
-              <input name="email" defaultValue={authUser?.email ?? ""} className={inputClassName} />
+              <input
+                name="email"
+                defaultValue={authUser?.email ?? ""}
+                className={inputClassName}
+              />
             </Field>
             <Field label="Full name">
-              <input name="full_name" defaultValue={profile.full_name ?? ""} className={inputClassName} />
+              <input
+                name="full_name"
+                defaultValue={profile.full_name ?? ""}
+                className={inputClassName}
+              />
             </Field>
             <Field label="First name">
-              <input name="first_name" defaultValue={profile.first_name ?? ""} className={inputClassName} />
+              <input
+                name="first_name"
+                defaultValue={profile.first_name ?? ""}
+                className={inputClassName}
+              />
             </Field>
             <Field label="Last name">
-              <input name="last_name" defaultValue={profile.last_name ?? ""} className={inputClassName} />
+              <input
+                name="last_name"
+                defaultValue={profile.last_name ?? ""}
+                className={inputClassName}
+              />
             </Field>
             <Field label="Phone">
-              <input name="phone" defaultValue={profile.phone ?? ""} className={inputClassName} />
+              <input
+                name="phone"
+                defaultValue={profile.phone ?? ""}
+                className={inputClassName}
+              />
             </Field>
             <Field label="City">
-              <input name="city" defaultValue={profile.city ?? ""} className={inputClassName} />
+              <input
+                name="city"
+                defaultValue={profile.city ?? ""}
+                className={inputClassName}
+              />
             </Field>
             <Field label="Region">
-              <input name="region" defaultValue={profile.region ?? ""} className={inputClassName} />
+              <input
+                name="region"
+                defaultValue={profile.region ?? ""}
+                className={inputClassName}
+              />
             </Field>
             <Field label="Avatar URL">
-              <input name="avatar_url" defaultValue={profile.avatar_url ?? ""} className={inputClassName} />
+              <input
+                name="avatar_url"
+                defaultValue={profile.avatar_url ?? ""}
+                className={inputClassName}
+              />
             </Field>
           </CardContent>
         </Card>
@@ -450,7 +588,11 @@ export default async function AdminUserDetailsPage({
           </CardHeader>
           <CardContent className="grid gap-4 md:grid-cols-2">
             <Field label="Host level">
-              <select name="host_level" defaultValue={profile.host_level ?? "new_host"} className={inputClassName}>
+              <select
+                name="host_level"
+                defaultValue={profile.host_level ?? "new_host"}
+                className={inputClassName}
+              >
                 <option value="new_host">new_host</option>
                 <option value="verified_host">verified_host</option>
                 <option value="top_host">top_host</option>
@@ -466,19 +608,35 @@ export default async function AdminUserDetailsPage({
               />
             </Field>
             <label className="flex items-center gap-2 rounded-lg border border-border bg-gray-50 px-3 py-2 text-sm font-medium text-foreground">
-              <input type="checkbox" name="is_host" defaultChecked={Boolean(profile.is_host)} />
+              <input
+                type="checkbox"
+                name="is_host"
+                defaultChecked={Boolean(profile.is_host)}
+              />
               Host account active
             </label>
             <label className="flex items-center gap-2 rounded-lg border border-border bg-gray-50 px-3 py-2 text-sm font-medium text-foreground">
-              <input type="checkbox" name="id_verified" defaultChecked={Boolean(profile.id_verified)} />
+              <input
+                type="checkbox"
+                name="id_verified"
+                defaultChecked={Boolean(profile.id_verified)}
+              />
               ID verified
             </label>
             <label className="flex items-center gap-2 rounded-lg border border-border bg-gray-50 px-3 py-2 text-sm font-medium text-foreground">
-              <input type="checkbox" name="phone_verified" defaultChecked={Boolean(profile.phone_verified)} />
+              <input
+                type="checkbox"
+                name="phone_verified"
+                defaultChecked={Boolean(profile.phone_verified)}
+              />
               Phone verified
             </label>
             <label className="flex items-center gap-2 rounded-lg border border-border bg-gray-50 px-3 py-2 text-sm font-medium text-foreground">
-              <input type="checkbox" name="email_verified" defaultChecked={Boolean(profile.email_verified)} />
+              <input
+                type="checkbox"
+                name="email_verified"
+                defaultChecked={Boolean(profile.email_verified)}
+              />
               Email verified
             </label>
           </CardContent>
@@ -578,7 +736,9 @@ export default async function AdminUserDetailsPage({
         </Card>
 
         <div className="flex justify-end">
-          <button className="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white">Save user changes</button>
+          <button className="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white">
+            Save user changes
+          </button>
         </div>
       </form>
 
@@ -602,7 +762,9 @@ export default async function AdminUserDetailsPage({
                   <TableRow key={car.id}>
                     <TableCell>{car.title ?? car.id}</TableCell>
                     <TableCell>{car.approval_status ?? "N/A"}</TableCell>
-                    <TableCell>{formatCurrency(Number(car.daily_price ?? 0))}</TableCell>
+                    <TableCell>
+                      {formatCurrency(Number(car.daily_price ?? 0))}
+                    </TableCell>
                     <TableCell>{formatDate(car.created_at)}</TableCell>
                   </TableRow>
                 ))}
@@ -635,12 +797,17 @@ export default async function AdminUserDetailsPage({
               <TableBody>
                 {(ownerBookings ?? []).map((booking: any) => (
                   <TableRow key={booking.id}>
-                    <TableCell>{booking.cars?.title ?? booking.car_id}</TableCell>
+                    <TableCell>
+                      {booking.cars?.title ?? booking.car_id}
+                    </TableCell>
                     <TableCell>{booking.status}</TableCell>
                     <TableCell>
-                      {formatDate(booking.start_date)} - {formatDate(booking.end_date)}
+                      {formatDate(booking.start_date)} -{" "}
+                      {formatDate(booking.end_date)}
                     </TableCell>
-                    <TableCell>{formatCurrency(Number(booking.total_price ?? 0))}</TableCell>
+                    <TableCell>
+                      {formatCurrency(Number(booking.total_price ?? 0))}
+                    </TableCell>
                   </TableRow>
                 ))}
                 {(ownerBookings ?? []).length === 0 ? (
@@ -672,12 +839,17 @@ export default async function AdminUserDetailsPage({
               <TableBody>
                 {renterBookings.map((booking: any) => (
                   <TableRow key={booking.id}>
-                    <TableCell>{booking.cars?.title ?? booking.car_id}</TableCell>
+                    <TableCell>
+                      {booking.cars?.title ?? booking.car_id}
+                    </TableCell>
                     <TableCell>{booking.status}</TableCell>
                     <TableCell>
-                      {formatDate(booking.start_date)} - {formatDate(booking.end_date)}
+                      {formatDate(booking.start_date)} -{" "}
+                      {formatDate(booking.end_date)}
                     </TableCell>
-                    <TableCell>{formatCurrency(Number(booking.total_price ?? 0))}</TableCell>
+                    <TableCell>
+                      {formatCurrency(Number(booking.total_price ?? 0))}
+                    </TableCell>
                   </TableRow>
                 ))}
                 {renterBookings.length === 0 ? (
@@ -711,10 +883,16 @@ export default async function AdminUserDetailsPage({
                     <TableCell className="text-xs">
                       {conversation.id}
                       <div className="text-[11px] text-gray-500">
-                        {conversation.host_id === userId ? "As host" : "As renter"}
+                        {conversation.host_id === userId
+                          ? "As host"
+                          : "As renter"}
                       </div>
                     </TableCell>
-                    <TableCell>{formatDateTime(conversation.last_message_at ?? conversation.created_at)}</TableCell>
+                    <TableCell>
+                      {formatDateTime(
+                        conversation.last_message_at ?? conversation.created_at,
+                      )}
+                    </TableCell>
                     <TableCell className="max-w-[250px] truncate text-xs text-gray-600">
                       {conversation.last_message_preview ?? "No preview"}
                     </TableCell>
@@ -739,7 +917,13 @@ export default async function AdminUserDetailsPage({
 const inputClassName =
   "w-full rounded-md border border-border bg-white px-3 py-2 text-sm text-gray-800 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2";
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
   return (
     <label className="space-y-1 text-sm">
       <span className="font-semibold text-foreground">{label}</span>

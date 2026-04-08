@@ -7,7 +7,11 @@ type Props = {
   className?: string;
 };
 
-export function VerifiedHostIndicator({ show, label = "Verified Host", className }: Props) {
+export function VerifiedHostIndicator({
+  show,
+  label = "Verified Host",
+  className,
+}: Props) {
   if (!show) return null;
 
   return (

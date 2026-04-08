@@ -225,4 +225,26 @@ interface HayameApi {
 
     @GET("api/mobile/push/status")
     suspend fun pushStatus(@Header("Authorization") auth: String): PushStatusEnvelope
+
+    @GET("api/mobile/notifications/preferences")
+    suspend fun notificationPreferences(
+        @Header("Authorization") auth: String,
+    ): NotificationPreferencesEnvelope
+
+    @POST("api/mobile/notifications/preferences")
+    suspend fun updateNotificationPreferences(
+        @Header("Authorization") auth: String,
+        @Body body: NotificationPreferencesUpdateRequest,
+    ): NotificationPreferencesEnvelope
+
+    @GET("api/mobile/announcements")
+    suspend fun announcements(
+        @Header("Authorization") auth: String? = null,
+    ): AppAnnouncementsEnvelope
+
+    @POST("api/mobile/announcements/{announcementId}/seen")
+    suspend fun markAnnouncementSeen(
+        @Header("Authorization") auth: String,
+        @Path("announcementId") announcementId: String,
+    ): AnnouncementSeenResponse
 }

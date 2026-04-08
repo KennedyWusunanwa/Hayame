@@ -5,8 +5,14 @@ export async function GET() {
   try {
     const supabase = await createSupabaseServerClient();
     const supa = supabase as any;
-    const { data: makes } = await supa.from("car_makes").select("id,name").order("name");
-    const { data: models } = await supa.from("car_models").select("id,name,make_id").order("name");
+    const { data: makes } = await supa
+      .from("car_makes")
+      .select("id,name")
+      .order("name");
+    const { data: models } = await supa
+      .from("car_models")
+      .select("id,name,make_id")
+      .order("name");
 
     const modelsByMake = new Map<string, { id: string; name: string }[]>();
     (models ?? []).forEach((model: any) => {
@@ -22,6 +28,9 @@ export async function GET() {
 
     return NextResponse.json({ makes: out });
   } catch (error: any) {
-    return NextResponse.json({ message: error.message ?? "Failed to load catalog" }, { status: 400 });
+    return NextResponse.json(
+      { message: error.message ?? "Failed to load catalog" },
+      { status: 400 },
+    );
   }
 }

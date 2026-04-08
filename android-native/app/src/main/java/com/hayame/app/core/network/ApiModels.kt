@@ -450,6 +450,49 @@ data class PushStatusDto(
 )
 
 @Serializable
+data class NotificationPreferencesDto(
+    val booking_updates: Boolean? = null,
+    val messages: Boolean? = null,
+    val account_security: Boolean? = null,
+    val news_announcements: Boolean? = null,
+)
+
+@Serializable
+data class NotificationPreferencesEnvelope(
+    val data: NotificationPreferencesDto? = null,
+    val message: String? = null,
+)
+
+@Serializable
+data class AppAnnouncementDto(
+    val id: String,
+    val title: String? = null,
+    val body: String? = null,
+    val category: String? = null,
+    val delivery: String? = null,
+    val audience: String? = null,
+    val show_once: Boolean? = null,
+    val cta_label: String? = null,
+    val cta_url: String? = null,
+    val starts_at: String? = null,
+    val ends_at: String? = null,
+    val published_at: String? = null,
+    val seen: Boolean? = null,
+)
+
+@Serializable
+data class AppAnnouncementsEnvelope(
+    val data: List<AppAnnouncementDto> = emptyList(),
+    val message: String? = null,
+)
+
+@Serializable
+data class AnnouncementSeenResponse(
+    val seen: Boolean? = null,
+    val message: String? = null,
+)
+
+@Serializable
 data class CarPhotoItemDto(
     val id: String,
     val url: String,
@@ -614,6 +657,14 @@ data class MessageSendRequest(
 data class PushRegisterRequest(
     val deviceToken: String,
     val platform: String,
+)
+
+@Serializable
+data class NotificationPreferencesUpdateRequest(
+    val booking_updates: Boolean,
+    val messages: Boolean,
+    val account_security: Boolean,
+    val news_announcements: Boolean,
 )
 
 @Serializable

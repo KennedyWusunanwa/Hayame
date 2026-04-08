@@ -39,9 +39,12 @@ export async function GET(req: Request) {
     });
 
     return NextResponse.json({ data: grouped });
-  } catch (error) {
+  } catch {
     if (strict) {
-      return NextResponse.json({ message: "Failed to load locations" }, { status: 500 });
+      return NextResponse.json(
+        { message: "Failed to load locations" },
+        { status: 500 },
+      );
     }
     // Fallback to static list so UI still works
     const grouped: Record<string, string[]> = {};
@@ -49,6 +52,9 @@ export async function GET(req: Request) {
       if (!grouped[c.region]) grouped[c.region] = [];
       grouped[c.region].push(c.city);
     });
-    return NextResponse.json({ data: grouped, message: "Using fallback locations" });
+    return NextResponse.json({
+      data: grouped,
+      message: "Using fallback locations",
+    });
   }
 }

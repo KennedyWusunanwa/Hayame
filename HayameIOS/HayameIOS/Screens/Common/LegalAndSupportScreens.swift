@@ -46,27 +46,46 @@ struct PrivacyScreen: View {
 }
 
 struct ProtectionScreen: View {
-    private let sections = [
-        "Damage protection",
-        "Host protection",
-        "Trip coverage",
-        "Deposit protection",
-        "Disputes and emergency support"
+    private let sections: [(title: String, body: String)] = [
+        (
+            title: "Damage and incident reporting",
+            body: "Hayame does not advertise bundled insurance on the platform today. Hosts should only list cars they are authorized to rent out and insure, and guests should report any new damage or trip issue promptly in Messages or Support."
+        ),
+        (
+            title: "Trip records and support review",
+            body: "Trip dates, pricing, messages, uploaded photos, and booking status are retained in the trip record so support can review cancellations, disputes, and post-trip issues consistently."
+        ),
+        (
+            title: "Host and guest accountability",
+            body: "Identity, phone, and email verification states are shown where available. When a policy breach or misuse report is raised, Hayame may review listing details, trip history, and conversation records before taking action."
+        ),
+        (
+            title: "Deposits and extra fees",
+            body: "If a listing includes a security deposit or trip fee, the amount is shown before checkout and recorded on the booking. Any deduction should be backed by trip evidence or an open dispute."
+        ),
+        (
+            title: "Disputes and emergency support",
+            body: "For accidents or immediate safety issues, contact local emergency services first. Then notify the other party and reach Hayame via Messages, the dispute flow, or support@hayame.com."
+        )
     ]
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 SectionHeader(title: "Protection")
-                Text("Coverage details are informational and may vary by policy rollout.")
+                Text("This page describes the support, evidence, and dispute process currently available on Hayame.")
                     .hayameCaptionStyle()
 
-                ForEach(sections, id: \.self) { section in
+                Text("Hayame does not publish bundled insurance coverage on this page. Any third-party cover must be confirmed directly with the vehicle owner.")
+                    .hayameCaptionStyle()
+                    .hayameCard()
+
+                ForEach(sections, id: \.title) { section in
                     VStack(alignment: .leading, spacing: 6) {
-                        Text(section)
+                        Text(section.title)
                             .font(.system(size: 15, weight: .bold, design: .rounded))
                             .foregroundStyle(HayameTheme.brandNavy)
-                        Text("Coming soon. Final terms and claim workflow will appear here.")
+                        Text(section.body)
                             .font(.system(size: 13, weight: .medium, design: .rounded))
                             .foregroundStyle(HayameTheme.mutedText)
                     }

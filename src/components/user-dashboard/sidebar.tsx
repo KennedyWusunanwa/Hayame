@@ -30,7 +30,13 @@ export function UserDashboardSidebar({ user }: { user: UserProfile }) {
       >
         {user.avatar ? (
           <div className="relative h-10 w-10 overflow-hidden rounded-full border border-border">
-            <Image src={user.avatar} alt={user.name} fill className="object-cover" sizes="40px" />
+            <Image
+              src={user.avatar}
+              alt={user.name}
+              fill
+              className="object-cover"
+              sizes="40px"
+            />
           </div>
         ) : (
           <div className="flex h-10 w-10 items-center justify-center rounded-full border border-border bg-primary/10 text-sm font-semibold text-primary">

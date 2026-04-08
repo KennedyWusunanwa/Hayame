@@ -44,7 +44,8 @@ export const mockCars: MockCar[] = [
       "Clean and efficient SUV perfect for weekend getaways or business trips around Accra.",
     host: {
       name: "Ama Owusu",
-      avatar: "https://images.unsplash.com/photo-1502685104226-ee32379fefbe?auto=format&fit=crop&w=300&q=80",
+      avatar:
+        "https://images.unsplash.com/photo-1502685104226-ee32379fefbe?auto=format&fit=crop&w=300&q=80",
     },
   },
   {
@@ -64,7 +65,8 @@ export const mockCars: MockCar[] = [
     fuel_type: "petrol",
     image: "",
     features: ["Leather Seats", "Bluetooth", "Automatic", "Sunroof"],
-    description: "Luxury comfort with premium interior and seamless ride quality.",
+    description:
+      "Luxury comfort with premium interior and seamless ride quality.",
     host: {
       name: "Kwesi Lamptey",
       avatar:
@@ -88,7 +90,8 @@ export const mockCars: MockCar[] = [
     fuel_type: "petrol",
     image: "",
     features: ["Bluetooth", "Automatic", "USB Port", "Air Conditioning"],
-    description: "Reliable sedan with great fuel economy for trips across Kumasi.",
+    description:
+      "Reliable sedan with great fuel economy for trips across Kumasi.",
     host: {
       name: "Akua Agyeman",
       avatar:
@@ -136,7 +139,8 @@ export const mockCars: MockCar[] = [
     fuel_type: "diesel",
     image: "",
     features: ["4x4", "Leather Seats", "Automatic", "Air Conditioning"],
-    description: "Built for the north - roomy, rugged, and comfortable for long trips.",
+    description:
+      "Built for the north - roomy, rugged, and comfortable for long trips.",
     host: {
       name: "Hawa Sule",
       avatar:
@@ -184,7 +188,8 @@ export const mockCars: MockCar[] = [
     fuel_type: "diesel",
     image: "",
     features: ["4x4", "Bluetooth", "Automatic", "USB Port"],
-    description: "Powerful pickup ready for work trips and off-road adventures.",
+    description:
+      "Powerful pickup ready for work trips and off-road adventures.",
     host: {
       name: "Kojo Boadu",
       avatar:

@@ -4,6 +4,10 @@ import com.hayame.app.core.network.HayameApi
 import com.hayame.app.core.network.HostApplicationEnvelope
 import com.hayame.app.core.network.HostApplicationRequest
 import com.hayame.app.core.network.HostStatusDto
+import com.hayame.app.core.network.AppAnnouncementsEnvelope
+import com.hayame.app.core.network.NotificationPreferencesDto
+import com.hayame.app.core.network.NotificationPreferencesEnvelope
+import com.hayame.app.core.network.NotificationPreferencesUpdateRequest
 import com.hayame.app.core.network.PushRegisterRequest
 import com.hayame.app.core.network.PushRegisterResponse
 import com.hayame.app.core.network.PushStatusEnvelope
@@ -38,5 +42,32 @@ class HostRepository(
 
     suspend fun pushStatus(): PushStatusEnvelope {
         return authedCall { auth -> api.pushStatus(auth) }
+    }
+
+    suspend fun notificationPreferences(): NotificationPreferencesEnvelope {
+        return authedCall { auth -> api.notificationPreferences(auth) }
+    }
+
+    suspend fun updateNotificationPreferences(
+        preferences: NotificationPreferencesDto,
+    ): NotificationPreferencesEnvelope {
+        val body = NotificationPreferencesUpdateRequest(
+            booking_updates = preferences.booking_updates ?: true,
+            messages = preferences.messages ?: true,
+            account_security = preferences.account_security ?: true,
+            news_announcements = preferences.news_announcements ?: false,
+        )
+        return authedCall { auth -> api.updateNotificationPreferences(auth, body) }
+    }
+
+    suspend fun announcements(): AppAnnouncementsEnvelope {
+        val auth = sessionStore.authHeader()
+        return api.announcements(auth)
+    }
+
+    suspend fun markAnnouncementSeen(announcementId: String) {
+        authedCall { auth ->
+            api.markAnnouncementSeen(auth, announcementId)
+        }
     }
 }

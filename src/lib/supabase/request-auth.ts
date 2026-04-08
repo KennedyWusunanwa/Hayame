@@ -4,7 +4,9 @@ import { createSupabaseAdminClient } from "./admin";
 
 type SupabaseAuthClient = {
   auth: {
-    getUser: (jwt?: string) => Promise<{ data?: { user?: User | null } | null }>;
+    getUser: (
+      jwt?: string,
+    ) => Promise<{ data?: { user?: User | null } | null }>;
   };
 };
 
@@ -28,11 +30,16 @@ async function getHeaderAuthorizationFallback() {
 export async function getBearerToken(req?: Request) {
   const fromRequest = extractBearerToken(req?.headers.get("authorization"));
   if (fromRequest) return fromRequest;
-  const fromHeaders = extractBearerToken(await getHeaderAuthorizationFallback());
+  const fromHeaders = extractBearerToken(
+    await getHeaderAuthorizationFallback(),
+  );
   return fromHeaders;
 }
 
-export async function getRequestUser(supabase: SupabaseAuthClient, req?: Request) {
+export async function getRequestUser(
+  supabase: SupabaseAuthClient,
+  req?: Request,
+) {
   const cookieSessionUser = await supabase.auth.getUser().catch(() => null);
   const sessionUser = cookieSessionUser?.data?.user ?? null;
   if (sessionUser) return sessionUser;

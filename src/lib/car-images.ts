@@ -7,10 +7,30 @@ export type CarImageFallbackInput = {
 };
 
 const FALLBACK_PALETTES = [
-  { background: "#f4f8ff", accent: "#0e86d4", accentSoft: "#bfe3f8", text: "#10324b" },
-  { background: "#f9f4ec", accent: "#b7742a", accentSoft: "#ecd3b3", text: "#4f3414" },
-  { background: "#eef8f2", accent: "#2a8b57", accentSoft: "#bfe4cc", text: "#123923" },
-  { background: "#f7f2fb", accent: "#7b4db5", accentSoft: "#d7c5ee", text: "#3d2459" },
+  {
+    background: "#f4f8ff",
+    accent: "#0e86d4",
+    accentSoft: "#bfe3f8",
+    text: "#10324b",
+  },
+  {
+    background: "#f9f4ec",
+    accent: "#b7742a",
+    accentSoft: "#ecd3b3",
+    text: "#4f3414",
+  },
+  {
+    background: "#eef8f2",
+    accent: "#2a8b57",
+    accentSoft: "#bfe4cc",
+    text: "#123923",
+  },
+  {
+    background: "#f7f2fb",
+    accent: "#7b4db5",
+    accentSoft: "#d7c5ee",
+    text: "#3d2459",
+  },
 ];
 
 function cleanValue(value?: string | null) {
@@ -55,12 +75,15 @@ function locationLabel(input: CarImageFallbackInput) {
 
 export function isCarPlaceholderImage(src?: string | null) {
   const value = cleanValue(src).toLowerCase();
-  return value === "/car-placeholder.jpg" || value.endsWith("/car-placeholder.jpg");
+  return (
+    value === "/car-placeholder.jpg" || value.endsWith("/car-placeholder.jpg")
+  );
 }
 
 export function createCarFallbackImage(input: CarImageFallbackInput = {}) {
   const seed = buildSeed(input) || "hayame";
-  const palette = FALLBACK_PALETTES[hashString(seed) % FALLBACK_PALETTES.length];
+  const palette =
+    FALLBACK_PALETTES[hashString(seed) % FALLBACK_PALETTES.length];
   const title = cleanValue(input.title) || "Photo coming soon";
   const carType = cleanValue(input.carType) || "Vehicle listing";
   const location = locationLabel(input);
@@ -99,7 +122,10 @@ export function createCarFallbackImage(input: CarImageFallbackInput = {}) {
   return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
 }
 
-export function resolveCarImage(primaryImage: string | null | undefined, input: CarImageFallbackInput = {}) {
+export function resolveCarImage(
+  primaryImage: string | null | undefined,
+  input: CarImageFallbackInput = {},
+) {
   const image = cleanValue(primaryImage);
   if (image && !isCarPlaceholderImage(image)) {
     return image;
@@ -107,7 +133,10 @@ export function resolveCarImage(primaryImage: string | null | undefined, input: 
   return createCarFallbackImage(input);
 }
 
-export function resolveCarImages(images: Array<string | null | undefined>, input: CarImageFallbackInput = {}) {
+export function resolveCarImages(
+  images: Array<string | null | undefined>,
+  input: CarImageFallbackInput = {},
+) {
   const cleaned = Array.from(
     new Set(
       (images ?? [])

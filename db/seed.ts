@@ -8,7 +8,9 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 if (!supabaseUrl || !serviceKey) {
-  throw new Error("Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY before seeding.");
+  throw new Error(
+    "Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY before seeding.",
+  );
 }
 
 const supabase = createClient<Database>(supabaseUrl, serviceKey);
@@ -33,10 +35,22 @@ async function seed() {
 
   const hosts = [
     { email: "host1@hayame.com", password: "Password123", name: "Ama Owusu" },
-    { email: "host2@hayame.com", password: "Password123", name: "Kwesi Lamptey" },
-    { email: "host3@hayame.com", password: "Password123", name: "Akua Agyeman" },
+    {
+      email: "host2@hayame.com",
+      password: "Password123",
+      name: "Kwesi Lamptey",
+    },
+    {
+      email: "host3@hayame.com",
+      password: "Password123",
+      name: "Akua Agyeman",
+    },
   ];
-  const renter = { email: "guest@hayame.com", password: "Password123", name: "Nana Guest" };
+  const renter = {
+    email: "guest@hayame.com",
+    password: "Password123",
+    name: "Nana Guest",
+  };
 
   const hostIds = [];
   for (const host of hosts) {
@@ -49,12 +63,22 @@ async function seed() {
     });
   }
   const renterId = await ensureUser(renter.email, renter.password, renter.name);
-  await supabase.from("profiles").upsert({ id: renterId, full_name: renter.name, city: "Accra" });
+  await supabase
+    .from("profiles")
+    .upsert({ id: renterId, full_name: renter.name, city: "Accra" });
 
   // locations
-  const locations = Array.from(new Set(mockCars.map((car) => `${car.city}-${car.region}`))).map((key, index) => {
+  const locations = Array.from(
+    new Set(mockCars.map((car) => `${car.city}-${car.region}`)),
+  ).map((key, index) => {
     const [city, region] = key.split("-");
-    return { id: index + 1, city, region, lat: 5.56 + index * 0.02, lng: -0.2 - index * 0.02 };
+    return {
+      id: index + 1,
+      city,
+      region,
+      lat: 5.56 + index * 0.02,
+      lng: -0.2 - index * 0.02,
+    };
   });
   await supabase.from("locations").upsert(locations);
 
@@ -88,7 +112,11 @@ async function seed() {
   }
 
   // sample bookings
-  const sampleCar = await supabase.from("cars").select("id,daily_price").limit(1).single();
+  const sampleCar = await supabase
+    .from("cars")
+    .select("id,daily_price")
+    .limit(1)
+    .single();
   if (sampleCar.data) {
     await supabase.from("bookings").upsert({
       car_id: sampleCar.data.id,

@@ -64,6 +64,8 @@ final class AppState: ObservableObject {
     @Published var signupConfirmationPromptMessage: String?
     @Published var paymentFlowNotice: String?
     @Published var paymentFlowNoticeIsError = false
+    @Published var notificationPreferences = NotificationPreferences.defaults
+    @Published var activeAnnouncement: AppAnnouncement?
 
     private let api = APIClient.shared
     private let defaults = UserDefaults.standard
@@ -73,6 +75,7 @@ final class AppState: ObservableObject {
     private let apiBaseURLKey = "hayame.api_base_url"
     private let cachedUserNameKey = "hayame.cached_user_name"
     private let cachedUserAvatarKey = "hayame.cached_user_avatar"
+    private let seenAnnouncementIDsKey = "hayame.seen_announcement_ids"
 
     private var authToken: String?
     private var refreshToken: String?
@@ -88,6 +91,7 @@ final class AppState: ObservableObject {
     private var loadingConversationIDs: Set<String> = []
     private var pendingMessageDraftByConversationID: [String: String] = [:]
     private var lastServerMessageDateByConversationID: [String: Date] = [:]
+    private var pendingAnnouncements: [AppAnnouncement] = []
     private let localMessagePrefix = "local-msg-"
 
     static let iso8601WithFractional: ISO8601DateFormatter = {
@@ -162,7 +166,8 @@ final class AppState: ObservableObject {
             async let referenceTask: Void = refreshReferenceData()
             async let publicCarsTask: Void = syncPublicCars()
             async let bootstrapTask: Void = bootstrapSessionIfNeeded()
-            _ = await (referenceTask, publicCarsTask, bootstrapTask)
+            async let announcementTask: Void = refreshActiveAnnouncements()
+            _ = await (referenceTask, publicCarsTask, bootstrapTask, announcementTask)
         }
     }
 
@@ -343,6 +348,7 @@ final class AppState: ObservableObject {
         signupConfirmationPromptMessage = nil
         paymentFlowNotice = nil
         paymentFlowNoticeIsError = false
+        resetAnnouncementState()
         hasSyncedOwnedCarsOnce = false
         hasSyncedBookingsOnce = false
         hasSyncedConversationsOnce = false
@@ -352,6 +358,7 @@ final class AppState: ObservableObject {
 
         Task {
             await syncPublicCars()
+            await refreshActiveAnnouncements()
         }
     }
 
@@ -387,6 +394,7 @@ final class AppState: ObservableObject {
         signupConfirmationPromptMessage = nil
         paymentFlowNotice = nil
         paymentFlowNoticeIsError = false
+        resetAnnouncementState()
         hasSyncedOwnedCarsOnce = false
         hasSyncedBookingsOnce = false
         hasSyncedConversationsOnce = false
@@ -396,6 +404,7 @@ final class AppState: ObservableObject {
 
         Task {
             await syncPublicCars()
+            await refreshActiveAnnouncements()
         }
     }
 
@@ -431,12 +440,72 @@ final class AppState: ObservableObject {
         signupConfirmationPromptMessage = nil
         paymentFlowNotice = nil
         paymentFlowNoticeIsError = false
+        resetAnnouncementState()
         hasSyncedOwnedCarsOnce = false
         hasSyncedBookingsOnce = false
         hasSyncedConversationsOnce = false
         bookingsLoadState = .idle
         conversationsLoadState = .idle
         favoritesLoadState = .idle
+
+        Task {
+            await refreshActiveAnnouncements()
+        }
+    }
+
+    func updateNotificationPreference(
+        bookingUpdates: Bool? = nil,
+        messages: Bool? = nil,
+        accountSecurity: Bool? = nil,
+        newsAnnouncements: Bool? = nil
+    ) {
+        let current = notificationPreferences
+        let next = NotificationPreferences(
+            bookingUpdates: bookingUpdates ?? current.bookingUpdates,
+            messages: messages ?? current.messages,
+            accountSecurity: accountSecurity ?? current.accountSecurity,
+            newsAnnouncements: newsAnnouncements ?? current.newsAnnouncements
+        )
+
+        notificationPreferences = next
+        guard isAuthenticated else { return }
+
+        Task {
+            do {
+                let response = try await withAuthenticatedToken { token in
+                    try await api.updateNotificationPreferences(
+                        baseURL: apiBaseURL,
+                        token: token,
+                        preferences: next
+                    )
+                }
+                notificationPreferences = NotificationPreferences(dto: response.data)
+            } catch {
+                notificationPreferences = current
+                syncErrorMessage = errorMessage(error, fallback: "Unable to save notification settings.")
+            }
+        }
+    }
+
+    func dismissActiveAnnouncement() {
+        guard let announcement = activeAnnouncement else { return }
+
+        Task {
+            if announcement.showOnce {
+                markAnnouncementSeenLocally(announcement.id)
+
+                if let token = authToken?.trimmingCharacters(in: .whitespacesAndNewlines), !token.isEmpty {
+                    _ = try? await api.markAnnouncementSeen(
+                        baseURL: apiBaseURL,
+                        token: token,
+                        announcementID: announcement.id
+                    )
+                }
+            }
+
+            pendingAnnouncements.removeAll { $0.id == announcement.id }
+            activeAnnouncement = pendingAnnouncements.first
+        }
     }
 
     func saveProfile(fullName: String, city: String, phone: String, region: String, avatarURL: String? = nil) {
@@ -1508,9 +1577,11 @@ final class AppState: ObservableObject {
                 hostApplicationStatus = nil
                 hostAccessState = .unknown
                 ownedCars = []
+                resetAnnouncementState()
                 hasSyncedOwnedCarsOnce = false
                 stopPolling()
                 stopRealtimeMessages()
+                await refreshActiveAnnouncements()
                 return
             }
 
@@ -1751,11 +1822,30 @@ final class AppState: ObservableObject {
         }
     }
 
+    private func resetAnnouncementState() {
+        notificationPreferences = .defaults
+        pendingAnnouncements = []
+        activeAnnouncement = nil
+    }
+
+    private func seenAnnouncementIDs() -> Set<String> {
+        Set(defaults.stringArray(forKey: seenAnnouncementIDsKey) ?? [])
+    }
+
+    private func markAnnouncementSeenLocally(_ announcementID: String) {
+        let trimmed = announcementID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        var ids = seenAnnouncementIDs()
+        ids.insert(trimmed)
+        defaults.set(Array(ids).sorted(), forKey: seenAnnouncementIDsKey)
+    }
+
     // MARK: - Sync
 
     func refreshAllRemoteData() async {
         guard isAuthenticated else {
             await syncPublicCars()
+            await refreshActiveAnnouncements()
             return
         }
 
@@ -1764,12 +1854,54 @@ final class AppState: ObservableObject {
 
         await refreshReferenceData()
         await syncPublicCars()
+        await loadNotificationPreferences()
+        await refreshActiveAnnouncements()
         await syncOwnedCars()
         await syncFavorites()
         await syncBookings()
         await syncConversations()
         await syncHostApplication()
         await syncHostReviews()
+    }
+
+    private func loadNotificationPreferences() async {
+        guard isAuthenticated else {
+            notificationPreferences = .defaults
+            return
+        }
+
+        do {
+            let response = try await withAuthenticatedToken { token in
+                try await api.getNotificationPreferences(baseURL: apiBaseURL, token: token)
+            }
+            notificationPreferences = NotificationPreferences(dto: response.data)
+        } catch {
+            syncErrorMessage = errorMessage(error, fallback: "Unable to load notification settings.")
+        }
+    }
+
+    private func refreshActiveAnnouncements() async {
+        do {
+            let trimmedToken = authToken?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let resolvedToken = (trimmedToken?.isEmpty == false) ? trimmedToken : nil
+
+            let response: AppAnnouncementsEnvelopeDTO
+            do {
+                response = try await api.getAnnouncements(baseURL: apiBaseURL, token: resolvedToken)
+            } catch let apiError as APIError where apiError.statusCode == 401 {
+                response = try await api.getAnnouncements(baseURL: apiBaseURL, token: nil)
+            }
+
+            let locallySeen = seenAnnouncementIDs()
+            pendingAnnouncements = response.data.compactMap(AppAnnouncement.init).filter { announcement in
+                announcement.shouldDisplay(locallySeen: locallySeen)
+            }
+            activeAnnouncement = pendingAnnouncements.first
+        } catch {
+            if activeAnnouncement == nil {
+                pendingAnnouncements = []
+            }
+        }
     }
 
     private func syncPublicCars() async {

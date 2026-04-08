@@ -269,11 +269,11 @@ fun PrivacyScreen(onBack: () -> Unit) {
 fun ProtectionScreen(onBack: () -> Unit) {
     val sections = remember {
         listOf(
-            "Damage protection",
-            "Host protection",
-            "Trip coverage",
-            "Deposit protection",
-            "Disputes and emergency support",
+            "Damage and incident reporting" to "Hayame does not advertise bundled insurance on the platform today. Hosts should only list cars they are authorized to rent out and insure, and guests should report any new damage or trip issue promptly in Messages or Support.",
+            "Trip records and support review" to "Trip dates, pricing, messages, uploaded photos, and booking status are retained in the trip record so support can review cancellations, disputes, and post-trip issues consistently.",
+            "Host and guest accountability" to "Identity, phone, and email verification states are shown where available. When a policy breach or misuse report is raised, Hayame may review listing details, trip history, and conversation records before taking action.",
+            "Deposits and extra fees" to "If a listing includes a security deposit or trip fee, the amount is shown before checkout and recorded on the booking. Any deduction should be backed by trip evidence or an open dispute.",
+            "Disputes and emergency support" to "For accidents or immediate safety issues, contact local emergency services first. Then notify the other party and reach Hayame via Messages, the dispute flow, or support@hayame.com.",
         )
     }
 
@@ -290,17 +290,26 @@ fun ProtectionScreen(onBack: () -> Unit) {
             contentPadding = PaddingValues(vertical = 12.dp),
         ) {
             item {
-                Text(
-                    "Coverage details are informational and may vary by policy rollout.",
-                    color = MutedText,
-                    style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        "This page describes the support, evidence, and dispute process currently available on Hayame.",
+                        color = MutedText,
+                        style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+                    )
+                    Card(shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                        Text(
+                            text = "Hayame does not publish bundled insurance coverage on this page. Any third-party cover must be confirmed directly with the vehicle owner.",
+                            modifier = Modifier.padding(14.dp),
+                            color = MutedText,
+                        )
+                    }
+                }
             }
             items(sections) { section ->
                 Card(shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
                     Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text(section, color = BrandNavy, fontWeight = FontWeight.Bold)
-                        Text("Coming soon. Final terms and claim workflow will appear here.", color = MutedText)
+                        Text(section.first, color = BrandNavy, fontWeight = FontWeight.Bold)
+                        Text(section.second, color = MutedText)
                     }
                 }
             }

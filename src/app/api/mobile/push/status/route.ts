@@ -6,9 +6,11 @@ import { getRequestUser } from "@/lib/supabase/request-auth";
 function isPlaceholderValue(value: string) {
   const normalized = value.trim().toLowerCase();
   if (!normalized) return true;
-  if (normalized === "your_apple_team_id" || normalized === "your_apns_key_id") return true;
+  if (normalized === "your_apple_team_id" || normalized === "your_apns_key_id")
+    return true;
   if (normalized.includes("your_apns_p8_key")) return true;
-  if (normalized.includes("replace_me") || normalized.includes("placeholder")) return true;
+  if (normalized.includes("replace_me") || normalized.includes("placeholder"))
+    return true;
   return false;
 }
 
@@ -23,7 +25,8 @@ export async function GET(req: Request) {
   try {
     const supabase = await createSupabaseServerClient();
     const user = await getRequestUser(supabase as any, req);
-    if (!user) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+    if (!user)
+      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
 
     const admin = (() => {
       try {
@@ -47,16 +50,26 @@ export async function GET(req: Request) {
       .eq("user_id", user.id)
       .order("updated_at", { ascending: false });
     if (error) {
-      return NextResponse.json({ message: error.message ?? "Failed to load push status" }, { status: 400 });
+      return NextResponse.json(
+        { message: error.message ?? "Failed to load push status" },
+        { status: 400 },
+      );
     }
 
     const apnsConfigured =
       hasValue(process.env.APNS_TEAM_ID) &&
       hasValue(process.env.APNS_KEY_ID) &&
       hasValue(process.env.APNS_PRIVATE_KEY);
-    const fcmConfigured = hasValue(process.env.FCM_SERVER_KEY) || hasValue(process.env.FIREBASE_SERVER_KEY);
-    const topic = process.env.APNS_TOPIC?.trim() || process.env.IOS_BUNDLE_IDENTIFIER?.trim() || "com.hayame.app";
-    const useSandbox = ["1", "true", "yes", "on"].includes((process.env.APNS_USE_SANDBOX ?? "").trim().toLowerCase());
+    const fcmConfigured =
+      hasValue(process.env.FCM_SERVER_KEY) ||
+      hasValue(process.env.FIREBASE_SERVER_KEY);
+    const topic =
+      process.env.APNS_TOPIC?.trim() ||
+      process.env.IOS_BUNDLE_IDENTIFIER?.trim() ||
+      "com.hayame.app";
+    const useSandbox = ["1", "true", "yes", "on"].includes(
+      (process.env.APNS_USE_SANDBOX ?? "").trim().toLowerCase(),
+    );
 
     return NextResponse.json({
       push: {
@@ -73,13 +86,21 @@ export async function GET(req: Request) {
         },
         tokens: {
           total: (data ?? []).length,
-          ios: (data ?? []).filter((row: any) => String(row?.platform ?? "").toLowerCase() === "ios").length,
-          android: (data ?? []).filter((row: any) => String(row?.platform ?? "").toLowerCase() === "android").length,
+          ios: (data ?? []).filter(
+            (row: any) => String(row?.platform ?? "").toLowerCase() === "ios",
+          ).length,
+          android: (data ?? []).filter(
+            (row: any) =>
+              String(row?.platform ?? "").toLowerCase() === "android",
+          ).length,
           latestUpdatedAt: (data ?? [])[0]?.updated_at ?? null,
         },
       },
     });
   } catch (error: any) {
-    return NextResponse.json({ message: error.message ?? "Failed to fetch push status." }, { status: 400 });
+    return NextResponse.json(
+      { message: error.message ?? "Failed to fetch push status." },
+      { status: 400 },
+    );
   }
 }

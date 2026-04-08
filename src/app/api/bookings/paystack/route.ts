@@ -30,10 +30,14 @@ const BLOCKING_STATUSES = ["pending", "awaiting_host", "confirmed"];
 const SITE_URL =
   process.env.NEXT_PUBLIC_SITE_URL ??
   process.env.EMAIL_BASE_URL ??
-  (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
+  (process.env.VERCEL_URL
+    ? `https://${process.env.VERCEL_URL}`
+    : "http://localhost:3000");
 
 function extractAuthEmail(result: any): string | null {
-  return result?.data?.user?.email ?? result?.user?.email ?? result?.email ?? null;
+  return (
+    result?.data?.user?.email ?? result?.user?.email ?? result?.email ?? null
+  );
 }
 
 async function ensureBookingConversation(params: {
@@ -55,7 +59,10 @@ async function ensureBookingConversation(params: {
 
     if (existing?.id) {
       if ((existing as any).booking_id !== params.bookingId) {
-        await client.from("conversations").update({ booking_id: params.bookingId }).eq("id", existing.id);
+        await client
+          .from("conversations")
+          .update({ booking_id: params.bookingId })
+          .eq("id", existing.id);
       }
       return existing.id as string;
     }
@@ -93,7 +100,8 @@ export async function POST(req: Request) {
     const supabase = await createSupabaseServerClient();
     const supa = supabase as any;
     const user = await getRequestUser(supabase as any, req);
-    if (!user) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+    if (!user)
+      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
 
     // Ensure profile exists for renter_id FK
     await supa.from("profiles").upsert(
@@ -114,7 +122,10 @@ export async function POST(req: Request) {
     let { tripUseRegion, tripUseCity, tripUseAddress } = body;
     let heldBooking: any = null;
     if (!reference || !amount) {
-      return NextResponse.json({ message: "Missing booking or payment details" }, { status: 400 });
+      return NextResponse.json(
+        { message: "Missing booking or payment details" },
+        { status: 400 },
+      );
     }
 
     if (bookingId) {
@@ -126,20 +137,36 @@ export async function POST(req: Request) {
         .eq("id", bookingId)
         .single();
       if (bookingError || !booking) {
-        return NextResponse.json({ message: "Booking hold not found" }, { status: 404 });
+        return NextResponse.json(
+          { message: "Booking hold not found" },
+          { status: 404 },
+        );
       }
       if (booking.renter_id !== user.id) {
         return NextResponse.json({ message: "Forbidden" }, { status: 403 });
       }
       if (booking.status !== "pending") {
-        return NextResponse.json({ message: "Booking hold is no longer valid" }, { status: 400 });
+        return NextResponse.json(
+          { message: "Booking hold is no longer valid" },
+          { status: 400 },
+        );
       }
-      if (booking.hold_expires_at && new Date(booking.hold_expires_at) <= new Date()) {
+      if (
+        booking.hold_expires_at &&
+        new Date(booking.hold_expires_at) <= new Date()
+      ) {
         await supa
           .from("bookings")
-          .update({ status: "cancelled", payment_status: "failed", hold_expires_at: null })
+          .update({
+            status: "cancelled",
+            payment_status: "failed",
+            hold_expires_at: null,
+          })
           .eq("id", bookingId);
-        return NextResponse.json({ message: "Booking hold expired" }, { status: 409 });
+        return NextResponse.json(
+          { message: "Booking hold expired" },
+          { status: 409 },
+        );
       }
       heldBooking = booking;
       carId = booking.car_id;
@@ -149,11 +176,16 @@ export async function POST(req: Request) {
       tripUseCity = booking.trip_use_city ?? tripUseCity;
       tripUseAddress = booking.trip_use_address ?? tripUseAddress;
       body.tripOutsideAccra =
-        typeof booking.trip_outside_accra === "boolean" ? booking.trip_outside_accra : body.tripOutsideAccra;
+        typeof booking.trip_outside_accra === "boolean"
+          ? booking.trip_outside_accra
+          : body.tripOutsideAccra;
     }
 
     if (!carId || !startDate || !endDate) {
-      return NextResponse.json({ message: "Missing booking or payment details" }, { status: 400 });
+      return NextResponse.json(
+        { message: "Missing booking or payment details" },
+        { status: 400 },
+      );
     }
 
     const { data: carData, error: carError } = await supa
@@ -169,14 +201,24 @@ export async function POST(req: Request) {
       if (bookingId) {
         await supa
           .from("bookings")
-          .update({ status: "cancelled", payment_status: "failed", hold_expires_at: null })
+          .update({
+            status: "cancelled",
+            payment_status: "failed",
+            hold_expires_at: null,
+          })
           .eq("id", bookingId);
       }
-      return NextResponse.json({ message: "Car is unavailable" }, { status: 409 });
+      return NextResponse.json(
+        { message: "Car is unavailable" },
+        { status: 409 },
+      );
     }
 
     if (new Date(endDate) <= new Date(startDate)) {
-      return NextResponse.json({ message: "End date must be after start date" }, { status: 400 });
+      return NextResponse.json(
+        { message: "End date must be after start date" },
+        { status: 400 },
+      );
     }
 
     tripUseRegion = (tripUseRegion ?? "").trim();
@@ -186,16 +228,26 @@ export async function POST(req: Request) {
       if (bookingId) {
         await supa
           .from("bookings")
-          .update({ status: "cancelled", payment_status: "failed", hold_expires_at: null })
+          .update({
+            status: "cancelled",
+            payment_status: "failed",
+            hold_expires_at: null,
+          })
           .eq("id", bookingId);
       }
       return NextResponse.json(
-        { message: "Trip use location is required (region, city and exact area)." },
+        {
+          message:
+            "Trip use location is required (region, city and exact area).",
+        },
         { status: 400 },
       );
     }
 
-    const tripOutsideAccra = isLocationOutsideAccra({ region: tripUseRegion, city: tripUseCity });
+    const tripOutsideAccra = isLocationOutsideAccra({
+      region: tripUseRegion,
+      city: tripUseCity,
+    });
     const tripOutsideListingRegion = isOutsideListingRegion({
       tripRegion: tripUseRegion,
       listingRegion: car.region ?? null,
@@ -213,7 +265,11 @@ export async function POST(req: Request) {
       const nowIso = new Date().toISOString();
       await admin
         .from("bookings")
-        .update({ status: "cancelled", payment_status: "failed", hold_expires_at: null })
+        .update({
+          status: "cancelled",
+          payment_status: "failed",
+          hold_expires_at: null,
+        })
         .eq("status", "pending")
         .lt("hold_expires_at", nowIso);
     }
@@ -225,19 +281,31 @@ export async function POST(req: Request) {
       .in("status", BLOCKING_STATUSES)
       .lt("start_date", endDate)
       .gt("end_date", startDate);
-    const { data: conflicts } = bookingId ? await conflictsQuery.neq("id", bookingId) : await conflictsQuery;
+    const { data: conflicts } = bookingId
+      ? await conflictsQuery.neq("id", bookingId)
+      : await conflictsQuery;
 
     const activeConflicts = (conflicts ?? []).filter(
-      (row: any) => row.status !== "pending" || !row.hold_expires_at || new Date(row.hold_expires_at) > new Date(),
+      (row: any) =>
+        row.status !== "pending" ||
+        !row.hold_expires_at ||
+        new Date(row.hold_expires_at) > new Date(),
     );
     if (activeConflicts.length > 0) {
       if (bookingId) {
         await supa
           .from("bookings")
-          .update({ status: "cancelled", payment_status: "failed", hold_expires_at: null })
+          .update({
+            status: "cancelled",
+            payment_status: "failed",
+            hold_expires_at: null,
+          })
           .eq("id", bookingId);
       }
-      return NextResponse.json({ message: "Dates not available" }, { status: 409 });
+      return NextResponse.json(
+        { message: "Dates not available" },
+        { status: 409 },
+      );
     }
 
     const { data: blocked } = await conflictClient
@@ -251,10 +319,17 @@ export async function POST(req: Request) {
       if (bookingId) {
         await supa
           .from("bookings")
-          .update({ status: "cancelled", payment_status: "failed", hold_expires_at: null })
+          .update({
+            status: "cancelled",
+            payment_status: "failed",
+            hold_expires_at: null,
+          })
           .eq("id", bookingId);
       }
-      return NextResponse.json({ message: "Dates not available" }, { status: 409 });
+      return NextResponse.json(
+        { message: "Dates not available" },
+        { status: 409 },
+      );
     }
 
     const nights = Math.max(
@@ -269,22 +344,33 @@ export async function POST(req: Request) {
       .eq("id", 1)
       .maybeSingle();
     const envPlatformFee = Number(
-      process.env.NEXT_PUBLIC_PLATFORM_FEE_PERCENT ?? process.env.PLATFORM_FEE_PERCENT ?? "10",
+      process.env.NEXT_PUBLIC_PLATFORM_FEE_PERCENT ??
+        process.env.PLATFORM_FEE_PERCENT ??
+        "10",
     );
     const platformFeePercent = Number(
-      settings?.platform_fee_percent ?? (Number.isFinite(envPlatformFee) ? envPlatformFee : 10),
+      settings?.platform_fee_percent ??
+        (Number.isFinite(envPlatformFee) ? envPlatformFee : 10),
     );
     const platformFee = subtotal * (Math.max(platformFeePercent, 0) / 100);
     const insuranceFee = Math.max(Number(car.insurance_fee ?? 0), 0);
     const deliveryFee = Math.max(Number(car.delivery_fee ?? 0), 0);
     const depositAmount = Math.max(Number(car.deposit_amount ?? 0), 0);
-    const heldOutsideAccraSurcharge = Number(heldBooking?.outside_accra_surcharge);
+    const heldOutsideAccraSurcharge = Number(
+      heldBooking?.outside_accra_surcharge,
+    );
     const outsideAccraSurcharge = Number.isFinite(heldOutsideAccraSurcharge)
       ? Math.max(heldOutsideAccraSurcharge, 0)
       : tripOutsideListingRegion
         ? Math.max(Number(car.outside_accra_fee ?? 0), 0)
         : 0;
-    const total = subtotal + platformFee + insuranceFee + deliveryFee + outsideAccraSurcharge + depositAmount;
+    const total =
+      subtotal +
+      platformFee +
+      insuranceFee +
+      deliveryFee +
+      outsideAccraSurcharge +
+      depositAmount;
     const expectedAmount = Math.round(total * 100);
 
     const tx = await verifyPaystackTransaction(reference);
@@ -292,7 +378,11 @@ export async function POST(req: Request) {
       if (bookingId) {
         await supa
           .from("bookings")
-          .update({ status: "cancelled", payment_status: "failed", hold_expires_at: null })
+          .update({
+            status: "cancelled",
+            payment_status: "failed",
+            hold_expires_at: null,
+          })
           .eq("id", bookingId);
       }
       return NextResponse.json(
@@ -304,15 +394,24 @@ export async function POST(req: Request) {
       if (bookingId) {
         await supa
           .from("bookings")
-          .update({ status: "cancelled", payment_status: "failed", hold_expires_at: null })
+          .update({
+            status: "cancelled",
+            payment_status: "failed",
+            hold_expires_at: null,
+          })
           .eq("id", bookingId);
       }
-      return NextResponse.json({ message: "Payment not successful" }, { status: 400 });
+      return NextResponse.json(
+        { message: "Payment not successful" },
+        { status: 400 },
+      );
     }
 
     const finalStatus = car.instant_book ? "confirmed" : "awaiting_host";
     const approvedAt = car.instant_book ? new Date().toISOString() : null;
-    const tripUseLocationLine = [tripUseAddress, tripUseCity, tripUseRegion].filter(Boolean).join(", ");
+    const tripUseLocationLine = [tripUseAddress, tripUseCity, tripUseRegion]
+      .filter(Boolean)
+      .join(", ");
     const maybeAdmin = (() => {
       try {
         return createSupabaseAdminClient() as any;
@@ -321,16 +420,32 @@ export async function POST(req: Request) {
       }
     })();
 
-    const sendBookingEmails = async (booking: any, conversationId: string | null) => {
+    const sendBookingEmails = async (
+      booking: any,
+      conversationId: string | null,
+    ) => {
       if (!maybeAdmin) return;
       try {
         const renterId = booking.renter_id;
         const hostId = car.owner_id;
-        const [renterAuthResult, hostAuthResult, renterProfileResult, hostProfileResult] = await Promise.all([
+        const [
+          renterAuthResult,
+          hostAuthResult,
+          renterProfileResult,
+          hostProfileResult,
+        ] = await Promise.all([
           maybeAdmin.auth.admin.getUserById(renterId).catch(() => null),
           maybeAdmin.auth.admin.getUserById(hostId).catch(() => null),
-          maybeAdmin.from("profiles").select("full_name,phone").eq("id", renterId).maybeSingle(),
-          maybeAdmin.from("profiles").select("full_name,phone").eq("id", hostId).maybeSingle(),
+          maybeAdmin
+            .from("profiles")
+            .select("full_name,phone")
+            .eq("id", renterId)
+            .maybeSingle(),
+          maybeAdmin
+            .from("profiles")
+            .select("full_name,phone")
+            .eq("id", hostId)
+            .maybeSingle(),
         ]);
 
         const renterEmail = extractAuthEmail(renterAuthResult);
@@ -340,7 +455,9 @@ export async function POST(req: Request) {
         const renterName = renterProfile?.full_name ?? "Guest";
         const hostName = hostProfile?.full_name ?? "Host";
         const renterPhone = renterProfile?.phone ?? null;
-        const conversationUrl = conversationId ? `${SITE_URL}/messages?conversation=${conversationId}` : `${SITE_URL}/messages`;
+        const conversationUrl = conversationId
+          ? `${SITE_URL}/messages?conversation=${conversationId}`
+          : `${SITE_URL}/messages`;
 
         if (renterEmail) {
           const email = buildBookingPaidEmail({
@@ -446,11 +563,17 @@ export async function POST(req: Request) {
           });
         }
       } catch (emailError) {
-        console.error("[bookings/paystack] email notifications failed", emailError);
+        console.error(
+          "[bookings/paystack] email notifications failed",
+          emailError,
+        );
       }
     };
 
-    const sendBookingPushNotifications = async (booking: any, conversationId: string | null) => {
+    const sendBookingPushNotifications = async (
+      booking: any,
+      conversationId: string | null,
+    ) => {
       try {
         const bookingIdValue = String(booking?.id ?? "");
         const carTitle = String(car.title ?? "your trip");
@@ -469,18 +592,27 @@ export async function POST(req: Request) {
           const hostPushResult = await sendPushNotificationsToUsers({
             adminClient: maybeAdmin,
             userIds: [hostUserId],
-            title: isInstantBook ? "New instant booking" : "New booking request",
+            title: isInstantBook
+              ? "New instant booking"
+              : "New booking request",
             body: isInstantBook
               ? `${carTitle} has been booked and confirmed.`
               : `${carTitle} has a new request awaiting your approval.`,
-            collapseId: bookingIdValue ? `booking:${bookingIdValue}` : "booking:new",
+            collapseId: bookingIdValue
+              ? `booking:${bookingIdValue}`
+              : "booking:new",
+            preferenceKey: "booking_updates",
+            notificationCategory: "booking_updates",
             data: {
               ...sharedData,
               recipientRole: "host",
             },
           });
           if (hostPushResult.skipped || hostPushResult.delivered === 0) {
-            console.warn("[bookings/paystack] host push skipped or undelivered", hostPushResult);
+            console.warn(
+              "[bookings/paystack] host push skipped or undelivered",
+              hostPushResult,
+            );
           }
         }
 
@@ -492,18 +624,28 @@ export async function POST(req: Request) {
             body: isInstantBook
               ? `Your trip for ${carTitle} is confirmed.`
               : `Your request for ${carTitle} is awaiting host approval.`,
-            collapseId: bookingIdValue ? `booking:${bookingIdValue}` : "booking:new",
+            collapseId: bookingIdValue
+              ? `booking:${bookingIdValue}`
+              : "booking:new",
+            preferenceKey: "booking_updates",
+            notificationCategory: "booking_updates",
             data: {
               ...sharedData,
               recipientRole: "renter",
             },
           });
           if (renterPushResult.skipped || renterPushResult.delivered === 0) {
-            console.warn("[bookings/paystack] renter push skipped or undelivered", renterPushResult);
+            console.warn(
+              "[bookings/paystack] renter push skipped or undelivered",
+              renterPushResult,
+            );
           }
         }
       } catch (pushError) {
-        console.error("[bookings/paystack] push notifications failed", pushError);
+        console.error(
+          "[bookings/paystack] push notifications failed",
+          pushError,
+        );
       }
     };
 
@@ -532,7 +674,7 @@ export async function POST(req: Request) {
           paid_at: new Date().toISOString(),
           approved_at: approvedAt,
           hold_expires_at: null,
-      })
+        })
         .eq("id", bookingId)
         .select()
         .single();
@@ -612,6 +754,9 @@ export async function POST(req: Request) {
     await sendBookingPushNotifications(data, conversationId);
     return NextResponse.json({ data, conversationId });
   } catch (error: any) {
-    return NextResponse.json({ message: error.message ?? "Failed to create booking" }, { status: 400 });
+    return NextResponse.json(
+      { message: error.message ?? "Failed to create booking" },
+      { status: 400 },
+    );
   }
 }
