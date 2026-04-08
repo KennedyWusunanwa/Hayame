@@ -4,7 +4,10 @@ import {
   socialImageSize,
   SocialPreviewImage,
 } from "@/components/seo/social-preview-image";
-import { getSocialPreviewLogoSrc } from "@/lib/social-preview-logo";
+import {
+  getSocialPreviewCarSrc,
+  getSocialPreviewLogoSrc,
+} from "@/lib/social-preview-logo";
 
 export const runtime = "nodejs";
 export const alt = socialImageAlt;
@@ -12,6 +15,12 @@ export const size = socialImageSize;
 export const contentType = "image/png";
 
 export default async function OpenGraphImage() {
-  const logoSrc = await getSocialPreviewLogoSrc();
-  return new ImageResponse(<SocialPreviewImage logoSrc={logoSrc} />, size);
+  const [logoSrc, carSrc] = await Promise.all([
+    getSocialPreviewLogoSrc(),
+    getSocialPreviewCarSrc(),
+  ]);
+  return new ImageResponse(
+    <SocialPreviewImage logoSrc={logoSrc} carSrc={carSrc} />,
+    size,
+  );
 }
