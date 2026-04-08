@@ -1,7 +1,9 @@
 import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { AdminNotice } from "@/components/admin/admin-notice";
 import { AdminTabs } from "@/components/admin/admin-tabs";
+import { PendingSubmitButton } from "@/components/admin/pending-submit-button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -27,22 +29,91 @@ import { getInitials } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
+function buildAdminHref(
+  params: Record<string, string | number | boolean | null | undefined> = {},
+) {
+  const query = new URLSearchParams();
+
+  for (const [key, value] of Object.entries(params)) {
+    if (value === null || value === undefined || value === "") continue;
+    query.set(key, String(value));
+  }
+
+  const search = query.toString();
+  return search ? `/admin?${search}` : "/admin";
+}
+
+function redirectToAdmin(
+  params: Record<string, string | number | boolean | null | undefined> = {},
+) {
+  redirect(buildAdminHref(params));
+}
+
+function getAdminNotice(searchParams: {
+  notice?: string;
+  count?: string;
+}): {
+  tone: "success" | "error" | "info";
+  title: string;
+  description?: string;
+} | null {
+  switch (searchParams.notice) {
+    case "signed-out":
+      return {
+        tone: "info",
+        title: "Signed out",
+        description: "Your admin session has ended.",
+      };
+    case "host-approved":
+      return {
+        tone: "success",
+        title: "Host approved",
+        description: "The host application was approved and the user profile was updated.",
+      };
+    case "host-rejected":
+      return {
+        tone: "success",
+        title: "Host rejected",
+        description: "The rejection was saved and the applicant was updated.",
+      };
+    case "listing-deleted":
+      return {
+        tone: "success",
+        title: "Listing deleted",
+        description: "The vehicle listing was removed from the platform.",
+      };
+    case "listings-deleted": {
+      const count = Number(searchParams.count ?? "0");
+      return {
+        tone: "success",
+        title: "Listings deleted",
+        description:
+          count > 0
+            ? `${count} selected listing${count === 1 ? "" : "s"} removed.`
+            : "Selected listings were removed.",
+      };
+    }
+    default:
+      return null;
+  }
+}
+
 async function loginAction(formData: FormData) {
   "use server";
   const username = String(formData.get("username") ?? "");
   const password = String(formData.get("password") ?? "");
-  if (!username || !password) redirect("/admin?error=invalid");
+  if (!username || !password) redirectToAdmin({ error: "invalid" });
 
   const result = await signInAdmin(username, password);
-  if (result === "missing") redirect("/admin?error=missing");
-  if (result !== "ok") redirect("/admin?error=invalid");
-  redirect("/admin");
+  if (result === "missing") redirectToAdmin({ error: "missing" });
+  if (result !== "ok") redirectToAdmin({ error: "invalid" });
+  redirectToAdmin();
 }
 
 async function logoutAction() {
   "use server";
   await signOutAdmin();
-  redirect("/admin");
+  redirectToAdmin({ notice: "signed-out" });
 }
 
 async function reviewAction(formData: FormData) {
@@ -54,7 +125,7 @@ async function reviewAction(formData: FormData) {
   const reviewer = getAdminReviewerName();
 
   if (!applicationId || !["approve", "reject"].includes(action)) {
-    redirect("/admin");
+    redirectToAdmin();
   }
 
   const admin = createSupabaseAdminClient() as any;
@@ -222,7 +293,18 @@ async function reviewAction(formData: FormData) {
     }
   }
 
-  redirect("/admin");
+  const currentStatus =
+    typeof formData.get("status") === "string"
+      ? String(formData.get("status") ?? "")
+      : "";
+  const currentQuery =
+    typeof formData.get("q") === "string" ? String(formData.get("q") ?? "") : "";
+
+  redirectToAdmin({
+    notice: action === "approve" ? "host-approved" : "host-rejected",
+    status: currentStatus,
+    q: currentQuery,
+  });
 }
 
 async function deleteListingAction(formData: FormData) {
@@ -230,7 +312,7 @@ async function deleteListingAction(formData: FormData) {
   await requireAdminPage();
   const carId = String(formData.get("carId") ?? "");
   if (!carId) {
-    redirect("/admin");
+    redirectToAdmin();
   }
 
   const admin = createSupabaseAdminClient() as any;
@@ -241,7 +323,7 @@ async function deleteListingAction(formData: FormData) {
     target_type: "car",
     performed_by: getAdminReviewerName(),
   });
-  redirect("/admin");
+  redirectToAdmin({ notice: "listing-deleted" });
 }
 
 async function bulkDeleteListingsAction(formData: FormData) {
@@ -257,7 +339,7 @@ async function bulkDeleteListingsAction(formData: FormData) {
     ),
   );
   if (carIds.length === 0) {
-    redirect("/admin");
+    redirectToAdmin();
   }
 
   const admin = createSupabaseAdminClient() as any;
@@ -271,13 +353,19 @@ async function bulkDeleteListingsAction(formData: FormData) {
       car_ids: carIds,
     },
   });
-  redirect("/admin");
+  redirectToAdmin({ notice: "listings-deleted", count: carIds.length });
 }
 
 export default async function AdminPage({
   searchParams,
 }: {
-  searchParams: { error?: string; status?: string; q?: string };
+  searchParams: {
+    error?: string;
+    notice?: string;
+    status?: string;
+    q?: string;
+    count?: string;
+  };
 }) {
   const envReady = Boolean(
     isAdminAuthConfigured() &&
@@ -285,6 +373,7 @@ export default async function AdminPage({
     process.env.SUPABASE_SERVICE_ROLE_KEY,
   );
   const authed = await isAdminAuthenticated();
+  const notice = getAdminNotice(searchParams);
 
   if (!envReady) {
     return (
@@ -310,11 +399,27 @@ export default async function AdminPage({
           <CardHeader>
             <CardTitle>Admin sign in</CardTitle>
           </CardHeader>
-          <CardContent>
-            {searchParams?.error ? (
-              <p className="mb-3 text-sm text-red-600">
-                Invalid admin credentials.
-              </p>
+          <CardContent className="space-y-4">
+            {searchParams?.error === "invalid" ? (
+              <AdminNotice
+                tone="error"
+                title="Admin sign-in failed"
+                description="Check the username and password, then try again."
+              />
+            ) : null}
+            {searchParams?.error === "missing" ? (
+              <AdminNotice
+                tone="error"
+                title="Admin credentials are not configured"
+                description="Set the admin username and password environment variables before signing in."
+              />
+            ) : null}
+            {notice ? (
+              <AdminNotice
+                tone={notice.tone}
+                title={notice.title}
+                description={notice.description}
+              />
             ) : null}
             <form className="space-y-4" action={loginAction}>
               <div>
@@ -338,9 +443,12 @@ export default async function AdminPage({
                   required
                 />
               </div>
-              <button className="w-full rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white">
+              <PendingSubmitButton
+                pendingLabel="Signing in..."
+                className="w-full rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white"
+              >
                 Sign in
-              </button>
+              </PendingSubmitButton>
             </form>
           </CardContent>
         </Card>
@@ -467,7 +575,7 @@ export default async function AdminPage({
     .limit(12);
 
   return (
-    <div className="mx-auto max-w-6xl px-6 py-10">
+    <div className="mx-auto max-w-6xl space-y-6 px-6 py-10">
       <div className="flex items-center justify-between">
         <div>
           <p className="text-sm font-semibold text-primary">Admin</p>
@@ -495,12 +603,23 @@ export default async function AdminPage({
             Platform controls
           </Link>
           <form action={logoutAction}>
-            <button className="rounded-md border border-border px-3 py-2 text-sm font-semibold text-gray-700">
+            <PendingSubmitButton
+              pendingLabel="Signing out..."
+              className="rounded-md border border-border px-3 py-2 text-sm font-semibold text-gray-700"
+            >
               Sign out
-            </button>
+            </PendingSubmitButton>
           </form>
         </div>
       </div>
+
+      {notice ? (
+        <AdminNotice
+          tone={notice.tone}
+          title={notice.title}
+          description={notice.description}
+        />
+      ) : null}
 
       <AdminTabs
         overview={
@@ -658,12 +777,12 @@ export default async function AdminPage({
                       <p className="text-xs text-gray-700">
                         Select listings and delete them in one action.
                       </p>
-                      <button
-                        type="submit"
+                      <PendingSubmitButton
                         className="rounded-md border border-red-200 px-3 py-1 text-xs font-semibold text-red-700 hover:bg-red-50"
+                        pendingLabel="Deleting..."
                       >
                         Delete selected
-                      </button>
+                      </PendingSubmitButton>
                     </div>
                   ) : null}
                   <div className="space-y-3">
@@ -740,15 +859,15 @@ export default async function AdminPage({
                               >
                                 Edit
                               </Link>
-                              <button
-                                type="submit"
+                              <PendingSubmitButton
                                 formAction={deleteListingAction}
                                 name="carId"
                                 value={car.id}
                                 className="rounded-md border border-red-200 px-2 py-1 text-[11px] font-semibold text-red-700 hover:bg-red-50"
+                                pendingLabel="Deleting..."
                               >
                                 Delete
-                              </button>
+                              </PendingSubmitButton>
                             </div>
                           </div>
                           <div className="mt-2 text-xs text-gray-600">
@@ -1023,12 +1142,21 @@ export default async function AdminPage({
                             />
                             <input
                               type="hidden"
+                              name="status"
+                              value={statusFilter}
+                            />
+                            <input type="hidden" name="q" value={query} />
+                            <input
+                              type="hidden"
                               name="action"
                               value="approve"
                             />
-                            <button className="rounded-md bg-emerald-600 px-3 py-1 text-xs font-semibold text-white">
+                            <PendingSubmitButton
+                              pendingLabel="Approving..."
+                              className="rounded-md bg-emerald-600 px-3 py-1 text-xs font-semibold text-white"
+                            >
                               Approve
-                            </button>
+                            </PendingSubmitButton>
                           </form>
                           <form action={reviewAction}>
                             <input
@@ -1036,10 +1164,19 @@ export default async function AdminPage({
                               name="applicationId"
                               value={app.id}
                             />
+                            <input
+                              type="hidden"
+                              name="status"
+                              value={statusFilter}
+                            />
+                            <input type="hidden" name="q" value={query} />
                             <input type="hidden" name="action" value="reject" />
-                            <button className="rounded-md bg-red-600 px-3 py-1 text-xs font-semibold text-white">
+                            <PendingSubmitButton
+                              pendingLabel="Rejecting..."
+                              className="rounded-md bg-red-600 px-3 py-1 text-xs font-semibold text-white"
+                            >
                               Reject
-                            </button>
+                            </PendingSubmitButton>
                           </form>
                         </div>
                       ) : (
@@ -1164,6 +1301,12 @@ export default async function AdminPage({
                               >
                                 <input
                                   type="hidden"
+                                  name="status"
+                                  value={statusFilter}
+                                />
+                                <input type="hidden" name="q" value={query} />
+                                <input
+                                  type="hidden"
                                   name="applicationId"
                                   value={app.id}
                                 />
@@ -1172,14 +1315,23 @@ export default async function AdminPage({
                                   name="action"
                                   value="approve"
                                 />
-                                <button className="rounded-md bg-emerald-600 px-3 py-1 text-xs font-semibold text-white">
+                                <PendingSubmitButton
+                                  pendingLabel="Approving..."
+                                  className="rounded-md bg-emerald-600 px-3 py-1 text-xs font-semibold text-white"
+                                >
                                   Approve
-                                </button>
+                                </PendingSubmitButton>
                               </form>
                               <form
                                 action={reviewAction}
                                 className="flex items-center gap-2"
                               >
+                                <input
+                                  type="hidden"
+                                  name="status"
+                                  value={statusFilter}
+                                />
+                                <input type="hidden" name="q" value={query} />
                                 <input
                                   type="hidden"
                                   name="applicationId"
@@ -1195,9 +1347,12 @@ export default async function AdminPage({
                                   placeholder="Reason"
                                   className="hidden w-28 rounded-md border border-border px-2 py-1 text-xs text-gray-700 sm:block"
                                 />
-                                <button className="rounded-md bg-red-600 px-3 py-1 text-xs font-semibold text-white">
+                                <PendingSubmitButton
+                                  pendingLabel="Rejecting..."
+                                  className="rounded-md bg-red-600 px-3 py-1 text-xs font-semibold text-white"
+                                >
                                   Reject
-                                </button>
+                                </PendingSubmitButton>
                               </form>
                             </div>
                           ) : (

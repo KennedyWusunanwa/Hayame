@@ -1,6 +1,8 @@
 import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { AdminNotice } from "@/components/admin/admin-notice";
+import { PendingSubmitButton } from "@/components/admin/pending-submit-button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -11,7 +13,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { getAdminReviewerName, requireAdminPage } from "@/lib/admin-auth";
-import { sanitizeAnnouncementUrl } from "@/lib/notifications";
+import {
+  isMissingNotificationStorageError,
+  sanitizeAnnouncementUrl,
+} from "@/lib/notifications";
 import { resolveCarImage } from "@/lib/car-images";
 import { sendBroadcastPushNotifications } from "@/lib/push";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
@@ -50,6 +55,172 @@ function announcementPreferenceKey(category: string) {
   return category === "news" ? "news_announcements" : "account_security";
 }
 
+function buildAdminPlatformHref(
+  params: Record<string, string | number | boolean | null | undefined> = {},
+) {
+  const query = new URLSearchParams();
+
+  for (const [key, value] of Object.entries(params)) {
+    if (value === null || value === undefined || value === "") continue;
+    query.set(key, String(value));
+  }
+
+  const search = query.toString();
+  return search ? `/admin/platform?${search}` : "/admin/platform";
+}
+
+function redirectToAdminPlatform(
+  params: Record<string, string | number | boolean | null | undefined> = {},
+) {
+  redirect(buildAdminPlatformHref(params));
+}
+
+function formatPushReason(reason?: string) {
+  switch (reason) {
+    case "push-not-configured":
+      return "push credentials are not configured yet";
+    case "no-device-tokens":
+      return "no device tokens are registered yet";
+    case "preference-blocked":
+      return "all eligible recipients opted out";
+    case "admin-client-missing":
+      return "the admin database client was unavailable";
+    default:
+      return reason ? reason.replace(/-/g, " ") : null;
+  }
+}
+
+function getPlatformNotice(searchParams: {
+  notice?: string;
+  error?: string;
+  delivery?: string;
+  attempted?: string;
+  delivered?: string;
+  reason?: string;
+}): {
+  tone: "success" | "error" | "info";
+  title: string;
+  description?: string;
+} | null {
+  if (searchParams.error === "announcement-invalid") {
+    return {
+      tone: "error",
+      title: "Announcement not published",
+      description: "Add a title and a message with at least 8 characters.",
+    };
+  }
+
+  if (searchParams.error === "announcement-invalid-url") {
+    return {
+      tone: "error",
+      title: "CTA URL was rejected",
+      description:
+        "Use a valid https://, http://, or Hayame deep-link URL before publishing.",
+    };
+  }
+
+  if (searchParams.error === "announcement-storage") {
+    return {
+      tone: "error",
+      title: "Announcement storage is not ready",
+      description:
+        "Apply the latest database migration so the app announcements tables exist.",
+    };
+  }
+
+  if (searchParams.error === "announcement-save") {
+    return {
+      tone: "error",
+      title: "Announcement save failed",
+      description:
+        "The announcement could not be saved. Check the platform logs and database setup.",
+    };
+  }
+
+  switch (searchParams.notice) {
+    case "listing-approved":
+      return {
+        tone: "success",
+        title: "Listing approved",
+        description: "The vehicle is now visible as an approved listing.",
+      };
+    case "listing-rejected":
+      return {
+        tone: "success",
+        title: "Listing rejected",
+        description: "The rejection status and reason were saved.",
+      };
+    case "listing-deleted":
+      return {
+        tone: "success",
+        title: "Listing deleted",
+        description: "The listing was removed from the platform.",
+      };
+    case "booking-refunded":
+      return {
+        tone: "success",
+        title: "Refund processed",
+        description: "The booking refund action was saved successfully.",
+      };
+    case "review-hidden":
+      return {
+        tone: "success",
+        title: "Review hidden",
+        description: "The review is now hidden from guests.",
+      };
+    case "review-restored":
+      return {
+        tone: "success",
+        title: "Review restored",
+        description: "The review is visible again.",
+      };
+    case "dispute-updated":
+      return {
+        tone: "success",
+        title: "Dispute updated",
+        description: "The dispute status and resolution note were saved.",
+      };
+    case "announcement-archived":
+      return {
+        tone: "success",
+        title: "Announcement archived",
+        description: "It will stop appearing in the in-app announcements feed.",
+      };
+    case "announcement-created": {
+      const delivery = searchParams.delivery ?? "in_app";
+      const attempted = Number(searchParams.attempted ?? "0");
+      const delivered = Number(searchParams.delivered ?? "0");
+      const reason = formatPushReason(searchParams.reason);
+
+      if (delivery === "in_app") {
+        return {
+          tone: "success",
+          title: "Announcement published",
+          description: "The in-app announcement is now live for mobile users.",
+        };
+      }
+
+      if (!attempted) {
+        return {
+          tone: "info",
+          title: "Announcement saved",
+          description: reason
+            ? `The announcement was saved, but push delivery was skipped because ${reason}.`
+            : "The announcement was saved, but there were no push deliveries to send.",
+        };
+      }
+
+      return {
+        tone: delivered > 0 ? "success" : "info",
+        title: "Announcement published",
+        description: `Push delivered to ${delivered} of ${attempted} registered device${attempted === 1 ? "" : "s"}${reason ? `; ${reason}.` : "."}`,
+      };
+    }
+    default:
+      return null;
+  }
+}
+
 async function createAnnouncementAction(formData: FormData) {
   "use server";
   await requireAdminPage();
@@ -62,10 +233,15 @@ async function createAnnouncementAction(formData: FormData) {
   const audience = normalizeAnnouncementAudience(formData.get("audience"));
   const showOnce = isChecked(formData, "showOnce", true);
   const ctaLabel = String(formData.get("ctaLabel") ?? "").trim() || null;
-  const ctaUrl = sanitizeAnnouncementUrl(formData.get("ctaUrl"));
+  const rawCtaUrl = String(formData.get("ctaUrl") ?? "").trim();
+  const ctaUrl = sanitizeAnnouncementUrl(rawCtaUrl);
 
   if (!title || body.length < 8) {
-    redirect("/admin/platform");
+    redirectToAdminPlatform({ error: "announcement-invalid" });
+  }
+
+  if (rawCtaUrl && !ctaUrl) {
+    redirectToAdminPlatform({ error: "announcement-invalid-url" });
   }
 
   const publishedAt = new Date().toISOString();
@@ -91,7 +267,11 @@ async function createAnnouncementAction(formData: FormData) {
     .single();
 
   if (error || !announcement?.id) {
-    redirect("/admin/platform");
+    redirectToAdminPlatform({
+      error: isMissingNotificationStorageError(error)
+        ? "announcement-storage"
+        : "announcement-save",
+    });
   }
 
   let pushResult: Awaited<
@@ -129,7 +309,13 @@ async function createAnnouncementAction(formData: FormData) {
     },
   });
 
-  redirect("/admin/platform");
+  redirectToAdminPlatform({
+    notice: "announcement-created",
+    delivery,
+    attempted: pushResult?.attempted ?? 0,
+    delivered: pushResult?.delivered ?? 0,
+    reason: pushResult?.reason ?? "",
+  });
 }
 
 async function archiveAnnouncementAction(formData: FormData) {
@@ -138,7 +324,7 @@ async function archiveAnnouncementAction(formData: FormData) {
   const admin = createSupabaseAdminClient() as any;
   const announcementId = String(formData.get("announcementId") ?? "").trim();
   if (!announcementId) {
-    redirect("/admin/platform");
+    redirectToAdminPlatform();
   }
 
   const archivedAt = new Date().toISOString();
@@ -158,7 +344,7 @@ async function archiveAnnouncementAction(formData: FormData) {
     performed_by: getAdminReviewerName(),
   });
 
-  redirect("/admin/platform");
+  redirectToAdminPlatform({ notice: "announcement-archived" });
 }
 
 async function listingReviewAction(formData: FormData) {
@@ -169,7 +355,7 @@ async function listingReviewAction(formData: FormData) {
   const action = String(formData.get("action") ?? "");
   const reason = String(formData.get("reason") ?? "").trim();
   if (!carId || !["approve", "reject"].includes(action)) {
-    redirect("/admin/platform");
+    redirectToAdminPlatform();
   }
 
   await admin
@@ -191,7 +377,9 @@ async function listingReviewAction(formData: FormData) {
     metadata: action === "reject" ? { reason } : null,
   });
 
-  redirect("/admin/platform");
+  redirectToAdminPlatform({
+    notice: action === "approve" ? "listing-approved" : "listing-rejected",
+  });
 }
 
 async function deleteListingAction(formData: FormData) {
@@ -200,7 +388,7 @@ async function deleteListingAction(formData: FormData) {
   const admin = createSupabaseAdminClient() as any;
   const carId = String(formData.get("carId") ?? "");
   if (!carId) {
-    redirect("/admin/platform");
+    redirectToAdminPlatform();
   }
 
   await admin.from("cars").delete().eq("id", carId);
@@ -211,7 +399,7 @@ async function deleteListingAction(formData: FormData) {
     performed_by: getAdminReviewerName(),
   });
 
-  redirect("/admin/platform");
+  redirectToAdminPlatform({ notice: "listing-deleted" });
 }
 
 async function refundAction(formData: FormData) {
@@ -221,7 +409,7 @@ async function refundAction(formData: FormData) {
   const bookingId = String(formData.get("bookingId") ?? "");
   const reason =
     String(formData.get("reason") ?? "").trim() || "Refunded by admin";
-  if (!bookingId) redirect("/admin/platform");
+  if (!bookingId) redirectToAdminPlatform();
 
   const { data: booking } = await admin
     .from("bookings")
@@ -229,7 +417,7 @@ async function refundAction(formData: FormData) {
     .eq("id", bookingId)
     .maybeSingle();
   if (!booking || booking.payment_status !== "paid") {
-    redirect("/admin/platform");
+    redirectToAdminPlatform();
   }
 
   if (booking.payment_provider === "paystack" && booking.payment_reference) {
@@ -254,7 +442,7 @@ async function refundAction(formData: FormData) {
     metadata: { reason },
   });
 
-  redirect("/admin/platform");
+  redirectToAdminPlatform({ notice: "booking-refunded" });
 }
 
 async function reviewModerationAction(formData: FormData) {
@@ -265,7 +453,7 @@ async function reviewModerationAction(formData: FormData) {
   const action = String(formData.get("action") ?? "");
   const reason = String(formData.get("reason") ?? "").trim();
   if (!reviewId || !["hide", "show"].includes(action)) {
-    redirect("/admin/platform");
+    redirectToAdminPlatform();
   }
 
   await admin
@@ -286,7 +474,9 @@ async function reviewModerationAction(formData: FormData) {
     metadata: action === "hide" ? { reason } : null,
   });
 
-  redirect("/admin/platform");
+  redirectToAdminPlatform({
+    notice: action === "hide" ? "review-hidden" : "review-restored",
+  });
 }
 
 async function disputeAction(formData: FormData) {
@@ -300,7 +490,7 @@ async function disputeAction(formData: FormData) {
     !disputeId ||
     !["open", "under_review", "resolved", "closed"].includes(status)
   ) {
-    redirect("/admin/platform");
+    redirectToAdminPlatform();
   }
 
   await admin
@@ -320,12 +510,24 @@ async function disputeAction(formData: FormData) {
     metadata: { status, note },
   });
 
-  redirect("/admin/platform");
+  redirectToAdminPlatform({ notice: "dispute-updated" });
 }
 
-export default async function AdminPlatformPage() {
+export default async function AdminPlatformPage({
+  searchParams,
+}: {
+  searchParams: {
+    notice?: string;
+    error?: string;
+    delivery?: string;
+    attempted?: string;
+    delivered?: string;
+    reason?: string;
+  };
+}) {
   await requireAdminPage();
   const admin = createSupabaseAdminClient() as any;
+  const notice = getPlatformNotice(searchParams);
 
   const [
     pendingListings,
@@ -423,6 +625,14 @@ export default async function AdminPlatformPage() {
           Back to admin
         </Link>
       </div>
+
+      {notice ? (
+        <AdminNotice
+          tone={notice.tone}
+          title={notice.title}
+          description={notice.description}
+        />
+      ) : null}
 
       <Card>
         <CardHeader>
@@ -532,9 +742,12 @@ export default async function AdminPlatformPage() {
                               name="action"
                               value="approve"
                             />
-                            <button className="rounded-md bg-emerald-600 px-3 py-1 text-xs font-semibold text-white">
+                            <PendingSubmitButton
+                              pendingLabel="Approving..."
+                              className="rounded-md bg-emerald-600 px-3 py-1 text-xs font-semibold text-white"
+                            >
                               Approve
-                            </button>
+                            </PendingSubmitButton>
                           </form>
                           <form
                             action={listingReviewAction}
@@ -547,15 +760,21 @@ export default async function AdminPlatformPage() {
                               placeholder="Reason"
                               className="hidden rounded-md border border-border px-2 py-1 text-xs sm:block"
                             />
-                            <button className="rounded-md bg-red-600 px-3 py-1 text-xs font-semibold text-white">
+                            <PendingSubmitButton
+                              pendingLabel="Rejecting..."
+                              className="rounded-md bg-red-600 px-3 py-1 text-xs font-semibold text-white"
+                            >
                               Reject
-                            </button>
+                            </PendingSubmitButton>
                           </form>
                           <form action={deleteListingAction}>
                             <input type="hidden" name="carId" value={car.id} />
-                            <button className="rounded-md border border-red-200 px-3 py-1 text-xs font-semibold text-red-700 hover:bg-red-50">
+                            <PendingSubmitButton
+                              pendingLabel="Deleting..."
+                              className="rounded-md border border-red-200 px-3 py-1 text-xs font-semibold text-red-700 hover:bg-red-50"
+                            >
                               Delete
-                            </button>
+                            </PendingSubmitButton>
                           </form>
                         </div>
                       </TableCell>
@@ -623,9 +842,12 @@ export default async function AdminPlatformPage() {
                           placeholder="Reason"
                           className="hidden rounded-md border border-border px-2 py-1 text-xs sm:block"
                         />
-                        <button className="rounded-md bg-amber-600 px-3 py-1 text-xs font-semibold text-white">
+                        <PendingSubmitButton
+                          pendingLabel="Refunding..."
+                          className="rounded-md bg-amber-600 px-3 py-1 text-xs font-semibold text-white"
+                        >
                           Refund
-                        </button>
+                        </PendingSubmitButton>
                       </form>
                     </TableCell>
                   </TableRow>
@@ -699,9 +921,14 @@ export default async function AdminPlatformPage() {
                             className="hidden rounded-md border border-border px-2 py-1 text-xs sm:block"
                           />
                         ) : null}
-                        <button className="rounded-md border border-border px-3 py-1 text-xs font-semibold">
+                        <PendingSubmitButton
+                          pendingLabel={
+                            review.is_hidden ? "Restoring..." : "Hiding..."
+                          }
+                          className="rounded-md border border-border px-3 py-1 text-xs font-semibold"
+                        >
                           {review.is_hidden ? "Unhide" : "Hide"}
-                        </button>
+                        </PendingSubmitButton>
                       </form>
                     </TableCell>
                   </TableRow>
@@ -773,9 +1000,12 @@ export default async function AdminPlatformPage() {
                           placeholder="Resolution note"
                           className="hidden rounded-md border border-border px-2 py-1 text-xs sm:block"
                         />
-                        <button className="rounded-md border border-border px-3 py-1 text-xs font-semibold">
+                        <PendingSubmitButton
+                          pendingLabel="Saving..."
+                          className="rounded-md border border-border px-3 py-1 text-xs font-semibold"
+                        >
                           Save
-                        </button>
+                        </PendingSubmitButton>
                       </form>
                     </TableCell>
                   </TableRow>
@@ -947,9 +1177,12 @@ export default async function AdminPlatformPage() {
               <p className="text-xs text-gray-600">
                 `Push` and `both` send immediately. `news` pushes only go to users who opted into announcements.
               </p>
-              <button className="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white">
+              <PendingSubmitButton
+                pendingLabel="Publishing..."
+                className="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white"
+              >
                 Publish announcement
-              </button>
+              </PendingSubmitButton>
             </div>
           </form>
 
@@ -999,9 +1232,12 @@ export default async function AdminPlatformPage() {
                               name="announcementId"
                               value={announcement.id}
                             />
-                            <button className="rounded-md border border-border px-3 py-1 text-xs font-semibold">
+                            <PendingSubmitButton
+                              pendingLabel="Archiving..."
+                              className="rounded-md border border-border px-3 py-1 text-xs font-semibold"
+                            >
                               Archive
-                            </button>
+                            </PendingSubmitButton>
                           </form>
                         ) : (
                           <span className="text-xs text-gray-500">Archived</span>
