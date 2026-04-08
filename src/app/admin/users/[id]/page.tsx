@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { PendingSubmitButton } from "@/components/admin/pending-submit-button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -10,6 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { reviewHostApplication } from "@/lib/admin-host-applications";
 import { getAdminReviewerName, requireAdminPage } from "@/lib/admin-auth";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { formatCurrency } from "@/lib/utils";
@@ -198,14 +200,49 @@ async function updateUserAction(formData: FormData) {
   }
 }
 
+async function reviewUserHostApplicationAction(formData: FormData) {
+  "use server";
+  await requireAdminPage();
+
+  const reviewer = getAdminReviewerName();
+  const userId = String(formData.get("user_id") ?? "").trim();
+  const applicationId = String(formData.get("applicationId") ?? "").trim();
+  const action = String(formData.get("action") ?? "").trim();
+  const rejectionReason = parseNullableString(formData.get("rejectionReason"));
+
+  if (!userId || !applicationId || !["approve", "reject"].includes(action)) {
+    redirect(userId ? `/admin/users/${userId}` : "/admin");
+  }
+
+  const admin = createSupabaseAdminClient() as any;
+
+  try {
+    await reviewHostApplication({
+      admin,
+      applicationId,
+      action: action as "approve" | "reject",
+      rejectionReason,
+      reviewer,
+    });
+    redirect(
+      `/admin/users/${userId}?notice=${action === "approve" ? "host-approved" : "host-rejected"}#host-application`,
+    );
+  } catch (error: any) {
+    const message = encodeURIComponent(
+      error?.message ?? "Unable to review host application",
+    );
+    redirect(`/admin/users/${userId}?error=${message}#host-application`);
+  }
+}
+
 export default async function AdminUserDetailsPage({
   params,
   searchParams,
 }: {
   params: { id: string } | Promise<{ id: string }>;
   searchParams?:
-    | { saved?: string; error?: string }
-    | Promise<{ saved?: string; error?: string }>;
+    | { saved?: string; error?: string; notice?: string }
+    | Promise<{ saved?: string; error?: string; notice?: string }>;
 }) {
   await requireAdminPage();
   const resolvedParams = await params;
@@ -324,6 +361,16 @@ export default async function AdminUserDetailsPage({
       {resolvedSearch?.saved ? (
         <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
           User profile updated successfully.
+        </div>
+      ) : null}
+      {resolvedSearch?.notice === "host-approved" ? (
+        <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+          Host application approved.
+        </div>
+      ) : null}
+      {resolvedSearch?.notice === "host-rejected" ? (
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
+          Host application rejected.
         </div>
       ) : null}
       {resolvedSearch?.error ? (
@@ -509,6 +556,77 @@ export default async function AdminUserDetailsPage({
           )}
         </CardContent>
       </Card>
+
+      {latestApplication ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Host review actions</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <span
+                className={`rounded-full px-2 py-1 font-semibold ${
+                  latestApplication.status === "approved"
+                    ? "bg-emerald-100 text-emerald-700"
+                    : latestApplication.status === "rejected"
+                      ? "bg-red-100 text-red-700"
+                      : "bg-amber-100 text-amber-700"
+                }`}
+              >
+                {latestApplication.status}
+              </span>
+              <span className="rounded-full bg-gray-100 px-2 py-1 font-semibold text-gray-600">
+                Submitted {formatDate(latestApplication.created_at)}
+              </span>
+            </div>
+            <p className="text-sm text-gray-600">
+              Use these quick actions to approve or reject the latest host
+              request and send the standard admin updates.
+            </p>
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+              <form action={reviewUserHostApplicationAction}>
+                <input type="hidden" name="user_id" value={userId} />
+                <input
+                  type="hidden"
+                  name="applicationId"
+                  value={latestApplication.id}
+                />
+                <input type="hidden" name="action" value="approve" />
+                <PendingSubmitButton
+                  pendingLabel="Approving host..."
+                  className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white"
+                >
+                  Approve host
+                </PendingSubmitButton>
+              </form>
+              <form
+                action={reviewUserHostApplicationAction}
+                className="grid flex-1 gap-2 sm:grid-cols-[minmax(0,1fr)_auto]"
+              >
+                <input type="hidden" name="user_id" value={userId} />
+                <input
+                  type="hidden"
+                  name="applicationId"
+                  value={latestApplication.id}
+                />
+                <input type="hidden" name="action" value="reject" />
+                <input
+                  name="rejectionReason"
+                  defaultValue={latestApplication.rejection_reason ?? ""}
+                  placeholder="Reason for rejection"
+                  className={inputClassName}
+                />
+                <PendingSubmitButton
+                  pendingLabel="Rejecting host..."
+                  className="rounded-md bg-red-600 px-4 py-2 text-sm font-semibold text-white"
+                >
+                  Reject host
+                </PendingSubmitButton>
+              </form>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <form action={updateUserAction} className="space-y-6">
         <input type="hidden" name="user_id" value={userId} />
@@ -736,9 +854,12 @@ export default async function AdminUserDetailsPage({
         </Card>
 
         <div className="flex justify-end">
-          <button className="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white">
+          <PendingSubmitButton
+            pendingLabel="Saving user..."
+            className="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white"
+          >
             Save user changes
-          </button>
+          </PendingSubmitButton>
         </div>
       </form>
 

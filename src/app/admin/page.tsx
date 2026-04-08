@@ -1,10 +1,12 @@
 import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { AdminLoadingLink } from "@/components/admin/admin-loading-link";
 import { AdminNotice } from "@/components/admin/admin-notice";
 import { AdminTabs } from "@/components/admin/admin-tabs";
 import { PendingSubmitButton } from "@/components/admin/pending-submit-button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import {
   Table,
   TableBody,
@@ -13,6 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Textarea } from "@/components/ui/textarea";
 import {
   getAdminReviewerName,
   isAdminAuthConfigured,
@@ -21,10 +24,9 @@ import {
   signInAdmin,
   signOutAdmin,
 } from "@/lib/admin-auth";
+import { reviewHostApplication } from "@/lib/admin-host-applications";
 import { resolveCarImage } from "@/lib/car-images";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { buildHostApplicationDecisionEmail, sendEmailSafe } from "@/lib/email";
-import { sendPushNotificationsToUsers } from "@/lib/push";
 import { getInitials } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -131,169 +133,13 @@ async function reviewAction(formData: FormData) {
   }
 
   const admin = createSupabaseAdminClient() as any;
-  if (action === "approve") {
-    const { data: application } = await admin
-      .from("host_applications")
-      .select("user_id,full_name,phone")
-      .eq("id", applicationId)
-      .single();
-
-    const userId = (application as { user_id?: string } | null)?.user_id;
-    const hostPhone =
-      (application as { phone?: string | null } | null)?.phone ?? null;
-    const hostName =
-      (application as { full_name?: string | null } | null)?.full_name ??
-      "Host";
-
-    if (userId) {
-      await admin.from("profiles").upsert(
-        {
-          id: userId,
-          full_name: hostName,
-          phone: hostPhone,
-          is_host: true,
-          host_approved_at: new Date().toISOString(),
-          id_verified: true,
-          phone_verified: Boolean(hostPhone),
-          email_verified: true,
-          host_level: "verified_host",
-        },
-        { onConflict: "id" },
-      );
-    }
-
-    await admin
-      .from("host_applications")
-      .update({
-        status: "approved",
-        reviewed_at: new Date().toISOString(),
-        reviewed_by: reviewer,
-        rejection_reason: null,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", applicationId);
-
-    await admin.from("admin_actions").insert({
-      action: "host_application_approved",
-      target_id: applicationId,
-      target_type: "host_application",
-      performed_by: reviewer,
-      metadata: { user_id: userId },
-    });
-
-    if (userId) {
-      const { data: authUser } = await admin.auth.admin.getUserById(userId);
-      const email = authUser?.user?.email ?? null;
-      if (email) {
-        const template = buildHostApplicationDecisionEmail({
-          approved: true,
-          hostName,
-        });
-        await sendEmailSafe({
-          to: email,
-          ...template,
-          idempotencyKey: `host-application:${applicationId}:approved`,
-        });
-      }
-
-      try {
-        const pushResult = await sendPushNotificationsToUsers({
-          adminClient: admin,
-          userIds: [userId],
-          title: "Host application approved",
-          body: "Your host application is approved. You can now list cars and host trips.",
-          collapseId: `host-application:${applicationId}`,
-          preferenceKey: "account_security",
-          notificationCategory: "account_security",
-          data: {
-            type: "host_application",
-            status: "approved",
-            applicationId,
-          },
-        });
-        if (pushResult.skipped || pushResult.delivered === 0) {
-          console.warn(
-            "[admin] host approval push skipped or undelivered",
-            pushResult,
-          );
-        }
-      } catch (pushError) {
-        console.error("[admin] host approval push failed", pushError);
-      }
-    }
-  }
-
-  if (action === "reject") {
-    await admin
-      .from("host_applications")
-      .update({
-        status: "rejected",
-        reviewed_at: new Date().toISOString(),
-        reviewed_by: reviewer,
-        rejection_reason: rejectionReason || "Rejected by admin",
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", applicationId);
-
-    await admin.from("admin_actions").insert({
-      action: "host_application_rejected",
-      target_id: applicationId,
-      target_type: "host_application",
-      performed_by: reviewer,
-      metadata: { reason: rejectionReason || "Rejected by admin" },
-    });
-
-    const { data: application } = await admin
-      .from("host_applications")
-      .select("user_id,full_name")
-      .eq("id", applicationId)
-      .single();
-    const userId = (application as { user_id?: string } | null)?.user_id;
-    const hostName =
-      (application as { full_name?: string | null } | null)?.full_name ??
-      "Host";
-    if (userId) {
-      const { data: authUser } = await admin.auth.admin.getUserById(userId);
-      const email = authUser?.user?.email ?? null;
-      if (email) {
-        const template = buildHostApplicationDecisionEmail({
-          approved: false,
-          hostName,
-          reason: rejectionReason || "Rejected by admin",
-        });
-        await sendEmailSafe({
-          to: email,
-          ...template,
-          idempotencyKey: `host-application:${applicationId}:rejected`,
-        });
-      }
-
-      try {
-        const pushResult = await sendPushNotificationsToUsers({
-          adminClient: admin,
-          userIds: [userId],
-          title: "Host application update",
-          body: `Your host application was rejected.${rejectionReason ? ` Reason: ${rejectionReason}` : ""}`,
-          collapseId: `host-application:${applicationId}`,
-          preferenceKey: "account_security",
-          notificationCategory: "account_security",
-          data: {
-            type: "host_application",
-            status: "rejected",
-            applicationId,
-          },
-        });
-        if (pushResult.skipped || pushResult.delivered === 0) {
-          console.warn(
-            "[admin] host rejection push skipped or undelivered",
-            pushResult,
-          );
-        }
-      } catch (pushError) {
-        console.error("[admin] host rejection push failed", pushError);
-      }
-    }
-  }
+  await reviewHostApplication({
+    admin,
+    applicationId,
+    action: action as "approve" | "reject",
+    rejectionReason,
+    reviewer,
+  });
 
   const currentStatus =
     typeof formData.get("status") === "string"
@@ -656,8 +502,10 @@ export default async function AdminPage({
                   </p>
                 </CardContent>
               </Card>
-              <Link
+              <AdminLoadingLink
                 href={buildAdminHref({ tab: "applications", status: "pending" })}
+                indicator="overlay"
+                pendingLabel="Opening approvals..."
                 className="block transition-transform hover:-translate-y-0.5"
               >
                 <Card className="border-brand/25">
@@ -671,7 +519,7 @@ export default async function AdminPage({
                     </p>
                   </CardContent>
                 </Card>
-              </Link>
+              </AdminLoadingLink>
             </div>
 
             <Card>
@@ -1039,8 +887,10 @@ export default async function AdminPage({
             <CardContent>
               <div className="mb-4 flex flex-wrap items-center gap-2">
                 {["pending", "approved", "rejected"].map((status) => (
-                  <a
+                  <AdminLoadingLink
                     key={status}
+                    indicator="inline"
+                    pendingLabel="Loading..."
                     className={`rounded-full border px-3 py-1 text-xs font-semibold ${
                       statusFilter === status
                         ? "border-brand bg-brand text-white"
@@ -1053,10 +903,10 @@ export default async function AdminPage({
                     })}
                   >
                     {status}
-                  </a>
+                  </AdminLoadingLink>
                 ))}
                 <form
-                  className="flex-1 sm:flex-none"
+                  className="flex flex-1 flex-wrap gap-2 sm:flex-none"
                   action="/admin"
                   method="get"
                 >
@@ -1066,10 +916,327 @@ export default async function AdminPage({
                     name="q"
                     defaultValue={query}
                     placeholder="Search name or phone"
-                    className="w-full rounded-md border border-border px-3 py-1 text-xs text-gray-700 sm:w-64"
+                    className="min-w-0 flex-1 rounded-md border border-border px-3 py-1 text-xs text-gray-700 sm:w-64"
                   />
+                  <button
+                    type="submit"
+                    className="rounded-md border border-border px-3 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+                  >
+                    Search
+                  </button>
                 </form>
               </div>
+
+              <div className="grid gap-4 xl:grid-cols-2">
+                {applications?.map((app: any) => {
+                  const profileHref = app.user_id
+                    ? `/admin/users/${app.user_id}#host-application`
+                    : null;
+                  const submittedLabel = app.submitted_at
+                    ? new Date(app.submitted_at).toLocaleDateString()
+                    : app.created_at
+                      ? new Date(app.created_at).toLocaleDateString()
+                      : "—";
+                  const reviewedLabel = app.reviewed_at
+                    ? new Date(app.reviewed_at).toLocaleDateString()
+                    : "Not reviewed yet";
+                  const statusClassName =
+                    app.status === "approved"
+                      ? "bg-emerald-100 text-emerald-700"
+                      : app.status === "rejected"
+                        ? "bg-red-100 text-red-700"
+                        : "bg-amber-100 text-amber-700";
+
+                  return (
+                    <article
+                      key={app.id}
+                      className="rounded-2xl border border-border bg-white p-5 shadow-sm"
+                    >
+                      <div className="flex flex-col gap-5">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          {profileHref ? (
+                            <AdminLoadingLink
+                              href={profileHref}
+                              indicator="overlay"
+                              pendingLabel="Opening profile..."
+                              className="flex min-w-0 flex-1 items-start gap-3 rounded-xl border border-transparent p-1 hover:border-border hover:bg-gray-50"
+                            >
+                              <ProfileAvatar
+                                src={app.profiles?.avatar_url}
+                                name={
+                                  app.profiles?.full_name ??
+                                  app.full_name ??
+                                  "User"
+                                }
+                                className="h-12 w-12"
+                              />
+                              <div className="min-w-0">
+                                <p className="truncate text-base font-semibold text-foreground">
+                                  {app.full_name ?? "User"}
+                                </p>
+                                <p className="truncate text-sm text-gray-600">
+                                  {app.profiles?.full_name ?? "Profile record"}
+                                </p>
+                                <p className="mt-1 text-xs text-gray-500">
+                                  {app.phone ?? app.profiles?.phone ?? "No phone"}
+                                  {" · "}
+                                  {app.city ?? app.profiles?.city ?? "No city"}
+                                </p>
+                              </div>
+                            </AdminLoadingLink>
+                          ) : (
+                            <div className="flex min-w-0 flex-1 items-start gap-3">
+                              <ProfileAvatar
+                                src={app.profiles?.avatar_url}
+                                name={
+                                  app.profiles?.full_name ??
+                                  app.full_name ??
+                                  "User"
+                                }
+                                className="h-12 w-12"
+                              />
+                              <div className="min-w-0">
+                                <p className="truncate text-base font-semibold text-foreground">
+                                  {app.full_name ?? "User"}
+                                </p>
+                                <p className="truncate text-sm text-gray-600">
+                                  {app.profiles?.full_name ?? "Profile record"}
+                                </p>
+                                <p className="mt-1 text-xs text-gray-500">
+                                  {app.phone ?? app.profiles?.phone ?? "No phone"}
+                                </p>
+                              </div>
+                            </div>
+                          )}
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span
+                              className={`rounded-full px-3 py-1 text-xs font-semibold ${statusClassName}`}
+                            >
+                              {app.status}
+                            </span>
+                            <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-600">
+                              Submitted {submittedLabel}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <div className="rounded-xl border border-border bg-gray-50 p-3">
+                            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-500">
+                              Location
+                            </p>
+                            <p className="mt-2 text-sm text-gray-800">
+                              {app.city ?? app.profiles?.city ?? "—"}
+                              {app.region ? `, ${app.region}` : ""}
+                            </p>
+                          </div>
+                          <div className="rounded-xl border border-border bg-gray-50 p-3">
+                            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-500">
+                              Contact
+                            </p>
+                            <p className="mt-2 text-sm text-gray-800">
+                              {app.phone ?? app.profiles?.phone ?? "—"}
+                            </p>
+                          </div>
+                          <div className="rounded-xl border border-border bg-gray-50 p-3">
+                            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-500">
+                              ID details
+                            </p>
+                            <p className="mt-2 text-sm text-gray-800">
+                              {app.id_type ?? "—"}{" "}
+                              {app.id_number ? `• ${app.id_number}` : ""}
+                            </p>
+                          </div>
+                          <div className="rounded-xl border border-border bg-gray-50 p-3">
+                            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-500">
+                              Fleet size
+                            </p>
+                            <p className="mt-2 text-sm text-gray-800">
+                              {typeof app.fleet_size === "number"
+                                ? app.fleet_size
+                                : "—"}
+                            </p>
+                          </div>
+                          <div className="rounded-xl border border-border bg-gray-50 p-3 sm:col-span-2">
+                            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-500">
+                              Experience
+                            </p>
+                            <p className="mt-2 whitespace-pre-line text-sm text-gray-800">
+                              {app.experience ?? "—"}
+                            </p>
+                          </div>
+                          <div className="rounded-xl border border-border bg-gray-50 p-3 sm:col-span-2">
+                            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-500">
+                              Notes
+                            </p>
+                            <p className="mt-2 whitespace-pre-line text-sm text-gray-800">
+                              {app.note ?? "—"}
+                            </p>
+                          </div>
+                          <div className="rounded-xl border border-border bg-gray-50 p-3">
+                            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-500">
+                              Reviewed by
+                            </p>
+                            <p className="mt-2 text-sm text-gray-800">
+                              {app.reviewed_by ?? "—"}
+                            </p>
+                          </div>
+                          <div className="rounded-xl border border-border bg-gray-50 p-3">
+                            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-500">
+                              Reviewed at
+                            </p>
+                            <p className="mt-2 text-sm text-gray-800">
+                              {reviewedLabel}
+                            </p>
+                          </div>
+                          <div className="rounded-xl border border-border bg-gray-50 p-3 sm:col-span-2">
+                            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-500">
+                              Rejection reason
+                            </p>
+                            <p className="mt-2 whitespace-pre-line text-sm text-gray-800">
+                              {app.rejection_reason ?? "—"}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <div className="rounded-xl border border-border p-3">
+                            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-500">
+                              ID front
+                            </p>
+                            <div className="mt-2">
+                              <a
+                                className="inline-flex rounded-md border border-border px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+                                href={`/api/host-applications/${app.id}/files?type=front`}
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                Open ID front
+                              </a>
+                            </div>
+                          </div>
+                          <div className="rounded-xl border border-border p-3">
+                            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-500">
+                              ID back
+                            </p>
+                            <div className="mt-2">
+                              <a
+                                className="inline-flex rounded-md border border-border px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+                                href={`/api/host-applications/${app.id}/files?type=back`}
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                Open ID back
+                              </a>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="border-t border-border pt-4">
+                          <div className="flex flex-wrap items-center gap-2">
+                            {profileHref ? (
+                              <AdminLoadingLink
+                                href={profileHref}
+                                indicator="inline"
+                                pendingLabel="Opening..."
+                                className="inline-flex rounded-md border border-border px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+                              >
+                                Open profile
+                              </AdminLoadingLink>
+                            ) : null}
+                            {app.status !== "pending" ? (
+                              <span className="text-xs text-gray-500">
+                                This host application is already {app.status}.
+                              </span>
+                            ) : null}
+                          </div>
+
+                          {app.status === "pending" ? (
+                            <div className="mt-4 space-y-3">
+                              <form
+                                action={reviewAction}
+                                className="flex flex-wrap items-center gap-2"
+                              >
+                                <input
+                                  type="hidden"
+                                  name="applicationId"
+                                  value={app.id}
+                                />
+                                <input
+                                  type="hidden"
+                                  name="tab"
+                                  value="applications"
+                                />
+                                <input
+                                  type="hidden"
+                                  name="status"
+                                  value={statusFilter}
+                                />
+                                <input type="hidden" name="q" value={query} />
+                                <input
+                                  type="hidden"
+                                  name="action"
+                                  value="approve"
+                                />
+                                <PendingSubmitButton
+                                  pendingLabel="Approving host..."
+                                  className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white"
+                                >
+                                  Approve host
+                                </PendingSubmitButton>
+                              </form>
+
+                              <form
+                                action={reviewAction}
+                                className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_auto]"
+                              >
+                                <input
+                                  type="hidden"
+                                  name="applicationId"
+                                  value={app.id}
+                                />
+                                <input
+                                  type="hidden"
+                                  name="tab"
+                                  value="applications"
+                                />
+                                <input
+                                  type="hidden"
+                                  name="status"
+                                  value={statusFilter}
+                                />
+                                <input type="hidden" name="q" value={query} />
+                                <input
+                                  type="hidden"
+                                  name="action"
+                                  value="reject"
+                                />
+                                <Input
+                                  name="rejectionReason"
+                                  placeholder="Reason for rejection"
+                                />
+                                <PendingSubmitButton
+                                  pendingLabel="Rejecting host..."
+                                  className="rounded-md bg-red-600 px-4 py-2 text-sm font-semibold text-white"
+                                >
+                                  Reject host
+                                </PendingSubmitButton>
+                              </form>
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+                    </article>
+                  );
+                })}
+                {applications?.length === 0 ? (
+                  <p className="rounded-xl border border-border bg-white p-4 text-center text-sm text-gray-600 xl:col-span-2">
+                    No host applications yet.
+                  </p>
+                ) : null}
+              </div>
+
+              <div className="hidden">
 
               <div className="space-y-3 md:hidden">
                 {applications?.map((app: any) => (
@@ -1439,6 +1606,7 @@ export default async function AdminPage({
                     </TableBody>
                   </Table>
                 </div>
+              </div>
               </div>
             </CardContent>
           </Card>
