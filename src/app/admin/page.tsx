@@ -122,6 +122,8 @@ async function reviewAction(formData: FormData) {
   const action = String(formData.get("action") ?? "");
   const applicationId = String(formData.get("applicationId") ?? "");
   const rejectionReason = String(formData.get("rejectionReason") ?? "");
+  const currentTab =
+    typeof formData.get("tab") === "string" ? String(formData.get("tab")) : "";
   const reviewer = getAdminReviewerName();
 
   if (!applicationId || !["approve", "reject"].includes(action)) {
@@ -302,6 +304,7 @@ async function reviewAction(formData: FormData) {
 
   redirectToAdmin({
     notice: action === "approve" ? "host-approved" : "host-rejected",
+    tab: currentTab === "applications" ? "applications" : undefined,
     status: currentStatus,
     q: currentQuery,
   });
@@ -365,6 +368,7 @@ export default async function AdminPage({
     status?: string;
     q?: string;
     count?: string;
+    tab?: string;
   };
 }) {
   const envReady = Boolean(
@@ -474,11 +478,13 @@ export default async function AdminPage({
 
   const statusFilter = searchParams?.status ?? "pending";
   const query = (searchParams?.q ?? "").trim();
+  const initialTab =
+    searchParams?.tab === "applications" ? "applications" : "overview";
 
   let applicationsQuery = admin
     .from("host_applications")
     .select(
-      "id,full_name,phone,region,city,id_type,id_number,id_front_path,id_back_path,note,experience,fleet_size,status,submitted_at,created_at,reviewed_at,rejection_reason, reviewed_by, profiles:profiles!host_applications_user_id_fkey(full_name,avatar_url,phone,city)",
+      "id,user_id,full_name,phone,region,city,id_type,id_number,id_front_path,id_back_path,note,experience,fleet_size,status,submitted_at,created_at,reviewed_at,rejection_reason,reviewed_by,profiles:profiles!host_applications_user_id_fkey(full_name,avatar_url,phone,city)",
     )
     .order("created_at", { ascending: false });
 
@@ -622,6 +628,7 @@ export default async function AdminPage({
       ) : null}
 
       <AdminTabs
+        initialTab={initialTab}
         overview={
           <div className="space-y-6">
             <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -649,14 +656,22 @@ export default async function AdminPage({
                   </p>
                 </CardContent>
               </Card>
-              <Card>
-                <CardContent className="py-5">
-                  <p className="text-sm text-gray-600">Pending applications</p>
-                  <p className="text-2xl font-semibold text-foreground">
-                    {pendingCount ?? 0}
-                  </p>
-                </CardContent>
-              </Card>
+              <Link
+                href={buildAdminHref({ tab: "applications", status: "pending" })}
+                className="block transition-transform hover:-translate-y-0.5"
+              >
+                <Card className="border-brand/25">
+                  <CardContent className="py-5">
+                    <p className="text-sm text-gray-600">Pending applications</p>
+                    <p className="text-2xl font-semibold text-foreground">
+                      {pendingCount ?? 0}
+                    </p>
+                    <p className="mt-2 text-xs font-semibold text-brand">
+                      Open host approvals
+                    </p>
+                  </CardContent>
+                </Card>
+              </Link>
             </div>
 
             <Card>
@@ -1031,7 +1046,11 @@ export default async function AdminPage({
                         ? "border-brand bg-brand text-white"
                         : "border-border text-gray-700"
                     }`}
-                    href={`/admin?status=${status}&q=${encodeURIComponent(query)}`}
+                    href={buildAdminHref({
+                      tab: "applications",
+                      status,
+                      q: query || undefined,
+                    })}
                   >
                     {status}
                   </a>
@@ -1041,6 +1060,7 @@ export default async function AdminPage({
                   action="/admin"
                   method="get"
                 >
+                  <input type="hidden" name="tab" value="applications" />
                   <input type="hidden" name="status" value={statusFilter} />
                   <input
                     name="q"
@@ -1079,6 +1099,16 @@ export default async function AdminPage({
                         {app.status}
                       </span>
                     </div>
+                    {app.user_id ? (
+                      <div className="mt-3">
+                        <Link
+                          href={`/admin/users/${app.user_id}#host-application`}
+                          className="inline-flex rounded-md border border-border px-3 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+                        >
+                          View details
+                        </Link>
+                      </div>
+                    ) : null}
                     <div className="mt-3 grid gap-2 text-xs text-gray-600">
                       <div>Region: {app.region ?? "—"}</div>
                       <div>City: {app.city ?? app.profiles?.city ?? "—"}</div>
@@ -1142,6 +1172,11 @@ export default async function AdminPage({
                             />
                             <input
                               type="hidden"
+                              name="tab"
+                              value="applications"
+                            />
+                            <input
+                              type="hidden"
                               name="status"
                               value={statusFilter}
                             />
@@ -1163,6 +1198,11 @@ export default async function AdminPage({
                               type="hidden"
                               name="applicationId"
                               value={app.id}
+                            />
+                            <input
+                              type="hidden"
+                              name="tab"
+                              value="applications"
                             />
                             <input
                               type="hidden"
@@ -1195,25 +1235,26 @@ export default async function AdminPage({
               </div>
 
               <div className="hidden md:block">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Applicant</TableHead>
-                      <TableHead>Region</TableHead>
-                      <TableHead>City</TableHead>
-                      <TableHead>Phone</TableHead>
-                      <TableHead>Fleet</TableHead>
-                      <TableHead>Experience</TableHead>
-                      <TableHead>ID</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Submitted</TableHead>
-                      <TableHead>Notes</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {applications?.map((app: any) => (
-                      <TableRow key={app.id}>
+                <div className="overflow-x-auto rounded-xl border border-border">
+                  <Table className="min-w-[1180px]">
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Applicant</TableHead>
+                        <TableHead>Region</TableHead>
+                        <TableHead>City</TableHead>
+                        <TableHead>Phone</TableHead>
+                        <TableHead>Fleet</TableHead>
+                        <TableHead>Experience</TableHead>
+                        <TableHead>ID</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Submitted</TableHead>
+                        <TableHead>Notes</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {applications?.map((app: any) => (
+                        <TableRow key={app.id}>
                         <TableCell>
                           <div className="flex min-w-0 items-center gap-3">
                             <ProfileAvatar
@@ -1247,10 +1288,10 @@ export default async function AdminPage({
                             ? app.fleet_size
                             : "—"}
                         </TableCell>
-                        <TableCell className="text-xs text-gray-600">
+                        <TableCell className="max-w-[16rem] text-xs text-gray-600">
                           {app.experience ?? "—"}
                         </TableCell>
-                        <TableCell className="text-xs text-gray-600">
+                        <TableCell className="whitespace-nowrap text-xs text-gray-600">
                           {app.id_type ?? "—"} {app.id_number ?? ""}
                           <div className="mt-1 flex gap-2">
                             <a
@@ -1270,14 +1311,14 @@ export default async function AdminPage({
                         <TableCell className="text-sm font-semibold">
                           {app.status}
                         </TableCell>
-                        <TableCell className="text-xs text-gray-600">
+                        <TableCell className="whitespace-nowrap text-xs text-gray-600">
                           {app.submitted_at
                             ? new Date(app.submitted_at).toLocaleDateString()
                             : app.created_at
                               ? new Date(app.created_at).toLocaleDateString()
                               : "—"}
                         </TableCell>
-                        <TableCell className="text-xs text-gray-600">
+                        <TableCell className="max-w-[18rem] text-xs text-gray-600">
                           {app.note ?? "—"}
                           <div className="text-[11px] text-gray-500">
                             Reviewed by: {app.reviewed_by ?? "—"}
@@ -1293,12 +1334,26 @@ export default async function AdminPage({
                           </div>
                         </TableCell>
                         <TableCell className="text-right">
-                          {app.status === "pending" ? (
-                            <div className="flex items-center justify-end gap-2">
-                              <form
-                                action={reviewAction}
-                                className="flex items-center gap-2"
+                          <div className="flex items-center justify-end gap-2">
+                            {app.user_id ? (
+                              <Link
+                                href={`/admin/users/${app.user_id}#host-application`}
+                                className="rounded-md border border-border px-3 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50"
                               >
+                                View details
+                              </Link>
+                            ) : null}
+                            {app.status === "pending" ? (
+                              <>
+                                <form
+                                  action={reviewAction}
+                                  className="flex items-center gap-2"
+                              >
+                                <input
+                                  type="hidden"
+                                  name="tab"
+                                  value="applications"
+                                />
                                 <input
                                   type="hidden"
                                   name="status"
@@ -1328,6 +1383,11 @@ export default async function AdminPage({
                               >
                                 <input
                                   type="hidden"
+                                  name="tab"
+                                  value="applications"
+                                />
+                                <input
+                                  type="hidden"
                                   name="status"
                                   value={statusFilter}
                                 />
@@ -1354,29 +1414,31 @@ export default async function AdminPage({
                                   Reject
                                 </PendingSubmitButton>
                               </form>
-                            </div>
-                          ) : (
-                            <span className="text-xs text-gray-500">
-                              {app.status === "approved"
-                                ? "Approved"
-                                : "Rejected"}
-                            </span>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                    {applications?.length === 0 ? (
-                      <TableRow>
-                        <TableCell
-                          colSpan={11}
-                          className="text-center text-sm text-gray-600"
-                        >
-                          No host applications yet.
-                        </TableCell>
-                      </TableRow>
-                    ) : null}
-                  </TableBody>
-                </Table>
+                              </>
+                            ) : (
+                              <span className="text-xs text-gray-500">
+                                {app.status === "approved"
+                                  ? "Approved"
+                                  : "Rejected"}
+                              </span>
+                            )}
+                          </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                      {applications?.length === 0 ? (
+                        <TableRow>
+                          <TableCell
+                            colSpan={11}
+                            className="text-center text-sm text-gray-600"
+                          >
+                            No host applications yet.
+                          </TableCell>
+                        </TableRow>
+                      ) : null}
+                    </TableBody>
+                  </Table>
+                </div>
               </div>
             </CardContent>
           </Card>

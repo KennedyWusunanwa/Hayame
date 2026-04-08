@@ -1,17 +1,26 @@
 "use client";
 
-import { useState, useTransition, type ReactNode } from "react";
+import { useEffect, useState, useTransition, type ReactNode } from "react";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 
 type AdminTabsProps = {
+  initialTab?: "overview" | "applications";
   overview: ReactNode;
   applications: ReactNode;
 };
 
-export function AdminTabs({ overview, applications }: AdminTabsProps) {
-  const [tab, setTab] = useState<"overview" | "applications">("overview");
+export function AdminTabs({
+  initialTab = "overview",
+  overview,
+  applications,
+}: AdminTabsProps) {
+  const [tab, setTab] = useState<"overview" | "applications">(initialTab);
   const [isPending, pendingTransition] = useTransition();
+
+  useEffect(() => {
+    setTab(initialTab);
+  }, [initialTab]);
 
   function handleTabChange(nextTab: "overview" | "applications") {
     if (nextTab === tab) return;

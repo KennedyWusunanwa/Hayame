@@ -642,7 +642,7 @@ export default async function AdminUserDetailsPage({
           </CardContent>
         </Card>
 
-        <Card>
+        <Card id="host-application" className="scroll-mt-6">
           <CardHeader>
             <CardTitle>Edit host application</CardTitle>
           </CardHeader>
