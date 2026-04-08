@@ -6,6 +6,7 @@ import { Navbar } from "@/components/navbar";
 import { Footer } from "@/components/footer";
 import { NavigationLoader } from "@/components/navigation-loader";
 import { MessagingProvider } from "@/components/messages/messaging-provider";
+import { socialImageAlt } from "@/components/seo/social-preview-image";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -34,6 +35,7 @@ const siteUrl = resolveSiteUrl();
 
 const metadataBase = siteUrl ? new URL(siteUrl) : undefined;
 const socialImage = "/opengraph-image";
+const twitterSocialImage = "/twitter-image";
 
 export const metadata: Metadata = {
   metadataBase,
@@ -53,7 +55,7 @@ export const metadata: Metadata = {
         url: socialImage,
         width: 1200,
         height: 630,
-        alt: "Hayame homepage preview",
+        alt: socialImageAlt,
       },
     ],
   },
@@ -62,7 +64,14 @@ export const metadata: Metadata = {
     title: "Hayame 2.0 - Ghana Car Sharing",
     description:
       "Rent trusted cars in Ghana with airport pickup, verified hosts, and flexible bookings.",
-    images: [socialImage],
+    images: [
+      {
+        url: twitterSocialImage,
+        width: 1200,
+        height: 630,
+        alt: socialImageAlt,
+      },
+    ],
   },
   icons: {
     icon: [
