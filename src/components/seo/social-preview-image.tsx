@@ -1,33 +1,31 @@
-const featuredCars = [
+const benefits = [
+  "Airport pickup",
+  "Verified hosts",
+  "Flexible booking",
+];
+
+const highlights = [
   {
-    name: "Toyota RAV4",
-    details: "Airport pickup - Verified host",
-    price: "GHS 1,250",
-    rating: "4.9",
+    label: "Search flow",
+    value: "Accra to Kotoka Airport",
   },
   {
-    name: "Hyundai Tucson",
-    details: "Flexible return - Instant booking",
-    price: "GHS 980",
-    rating: "4.8",
+    label: "Trip style",
+    value: "SUV, automatic, 5 seats",
+  },
+  {
+    label: "Trust layer",
+    value: "Host approval and secure payments",
   },
 ];
 
-const metrics = [
-  { label: "Cars listed", value: "120+" },
-  { label: "Bookings", value: "2.4k" },
-  { label: "Approved hosts", value: "80+" },
-];
-
-const filters = ["Greater Accra", "SUV", "Apr 12 - 16", "Automatic"];
-
-export const socialImageAlt = "Hayame website preview";
+export const socialImageAlt = "Hayame logo social preview";
 export const socialImageSize = {
   width: 1200,
   height: 630,
 };
 
-export function SocialPreviewImage() {
+export function SocialPreviewImage({ logoSrc }: { logoSrc: string }) {
   return (
     <div
       style={{
@@ -35,9 +33,10 @@ export function SocialPreviewImage() {
         position: "relative",
         width: "100%",
         height: "100%",
-        padding: 28,
+        padding: 30,
+        overflow: "hidden",
         background:
-          "linear-gradient(135deg, #dbeafe 0%, #eef6ff 38%, #f8fbff 100%)",
+          "linear-gradient(180deg, #ffffff 0%, #f8fbff 56%, #eef6ff 100%)",
         fontFamily:
           'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
       }}
@@ -46,252 +45,90 @@ export function SocialPreviewImage() {
         style={{
           display: "flex",
           position: "absolute",
-          top: 32,
-          right: 72,
-          width: 220,
-          height: 220,
+          top: -90,
+          right: -10,
+          width: 360,
+          height: 360,
           borderRadius: 999,
-          background: "rgba(14, 134, 212, 0.12)",
+          background: "rgba(14, 134, 212, 0.08)",
         }}
       />
       <div
         style={{
           display: "flex",
           position: "absolute",
-          bottom: -60,
-          left: -20,
-          width: 300,
-          height: 300,
+          bottom: -120,
+          left: -70,
+          width: 360,
+          height: 360,
           borderRadius: 999,
-          background: "rgba(11, 31, 51, 0.08)",
+          background: "rgba(14, 134, 212, 0.10)",
+        }}
+      />
+      <div
+        style={{
+          display: "flex",
+          position: "absolute",
+          top: 112,
+          left: 52,
+          width: 148,
+          height: 148,
+          borderRadius: 34,
+          border: "1px solid rgba(14, 134, 212, 0.14)",
+          background: "rgba(237, 246, 253, 0.95)",
+          transform: "rotate(-10deg)",
+        }}
+      />
+      <div
+        style={{
+          display: "flex",
+          position: "absolute",
+          right: 66,
+          bottom: 102,
+          width: 176,
+          height: 176,
+          borderRadius: 40,
+          border: "1px solid rgba(14, 134, 212, 0.14)",
+          background: "rgba(255, 255, 255, 0.88)",
+          transform: "rotate(10deg)",
         }}
       />
 
       <div
         style={{
           display: "flex",
-          flexDirection: "column",
+          position: "relative",
           width: "100%",
           height: "100%",
-          overflow: "hidden",
-          borderRadius: 34,
-          border: "1px solid rgba(117, 143, 173, 0.22)",
-          background: "#ffffff",
-          boxShadow: "0 26px 80px rgba(15, 45, 84, 0.18)",
+          borderRadius: 38,
+          border: "1px solid rgba(168, 194, 220, 0.42)",
+          background: "rgba(255, 255, 255, 0.94)",
+          boxShadow: "0 30px 90px rgba(35, 76, 118, 0.14)",
+          padding: "36px 42px",
         }}
       >
         <div
           style={{
             display: "flex",
-            alignItems: "center",
+            flexDirection: "column",
             justifyContent: "space-between",
-            padding: "16px 22px",
-            borderBottom: "1px solid #e5eef7",
-            background: "rgba(250, 252, 255, 0.96)",
+            width: "100%",
+            height: "100%",
           }}
         >
           <div
             style={{
               display: "flex",
-              alignItems: "center",
-              gap: 10,
-            }}
-          >
-            {["#ff5f57", "#febc2e", "#28c840"].map((dot) => (
-              <div
-                key={dot}
-                style={{
-                  display: "flex",
-                  width: 12,
-                  height: 12,
-                  borderRadius: 999,
-                  background: dot,
-                }}
-              />
-            ))}
-          </div>
-
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              minWidth: 360,
-              borderRadius: 999,
-              border: "1px solid #dbe7f3",
-              background: "#ffffff",
-              padding: "10px 24px",
-              fontSize: 17,
-              fontWeight: 600,
-              color: "#36516c",
-            }}
-          >
-            www.hayamegh.com
-          </div>
-
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                borderRadius: 999,
-                background: "#eef6ff",
-                padding: "10px 16px",
-                fontSize: 15,
-                fontWeight: 700,
-                color: "#0e86d4",
-              }}
-            >
-              Share preview
-            </div>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                borderRadius: 999,
-                background: "#0e86d4",
-                padding: "10px 16px",
-                fontSize: 15,
-                fontWeight: 700,
-                color: "#ffffff",
-              }}
-            >
-              Book now
-            </div>
-          </div>
-        </div>
-
-        <div
-          style={{
-            display: "flex",
-            flex: 1,
-            padding: 22,
-            gap: 20,
-            background:
-              "linear-gradient(180deg, rgba(250, 252, 255, 0.92) 0%, rgba(245, 248, 252, 0.96) 100%)",
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              width: "60%",
-              borderRadius: 28,
-              padding: 26,
+              alignItems: "flex-start",
               justifyContent: "space-between",
-              background:
-                "linear-gradient(155deg, rgba(8, 16, 27, 0.96) 0%, rgba(10, 34, 58, 0.93) 52%, rgba(13, 72, 116, 0.90) 100%)",
-              boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
-              color: "#ffffff",
             }}
           >
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-              }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 12,
-                }}
-              >
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    width: 44,
-                    height: 44,
-                    borderRadius: 16,
-                    background: "#0e86d4",
-                    fontSize: 24,
-                    fontWeight: 900,
-                  }}
-                >
-                  H
-                </div>
-                <div
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 2,
-                  }}
-                >
-                  <div
-                    style={{
-                      display: "flex",
-                      fontSize: 24,
-                      fontWeight: 800,
-                    }}
-                  >
-                    Hayame
-                  </div>
-                  <div
-                    style={{
-                      display: "flex",
-                      fontSize: 12,
-                      textTransform: "uppercase",
-                      letterSpacing: "0.18em",
-                      color: "rgba(255,255,255,0.62)",
-                    }}
-                  >
-                    Ghana car sharing
-                  </div>
-                </div>
-              </div>
-
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 10,
-                }}
-              >
-                <div
-                  style={{
-                    display: "flex",
-                    borderRadius: 999,
-                    background: "rgba(255,255,255,0.12)",
-                    padding: "9px 14px",
-                    fontSize: 14,
-                    fontWeight: 600,
-                  }}
-                >
-                  Explore cars
-                </div>
-                <div
-                  style={{
-                    display: "flex",
-                    borderRadius: 999,
-                    background: "rgba(255,255,255,0.12)",
-                    padding: "9px 14px",
-                    fontSize: 14,
-                    fontWeight: 600,
-                  }}
-                >
-                  Become a host
-                </div>
-              </div>
-            </div>
-
             <div
               style={{
                 display: "flex",
                 flexDirection: "column",
                 gap: 14,
-                maxWidth: 520,
+                width: "58%",
               }}
             >
               <div
@@ -299,36 +136,183 @@ export function SocialPreviewImage() {
                   display: "flex",
                   alignSelf: "flex-start",
                   borderRadius: 999,
-                  background: "rgba(255,255,255,0.14)",
-                  padding: "9px 14px",
+                  background: "#edf6fd",
+                  border: "1px solid #d4e7f8",
+                  padding: "10px 16px",
                   fontSize: 15,
-                  fontWeight: 700,
-                  color: "#bfe5ff",
+                  fontWeight: 800,
+                  color: "#0e86d4",
                 }}
               >
-                Real website snapshot
+                Website link preview
               </div>
               <div
                 style={{
                   display: "flex",
-                  fontSize: 48,
-                  lineHeight: 1.05,
+                  fontSize: 56,
+                  lineHeight: 1.04,
                   fontWeight: 900,
                   letterSpacing: "-0.05em",
+                  color: "#10243a",
                 }}
               >
-                Rent a Car, Anytime, Anywhere in Ghana.
+                Hayame, styled around the real brand logo.
               </div>
               <div
                 style={{
                   display: "flex",
-                  fontSize: 22,
-                  lineHeight: 1.4,
-                  color: "rgba(255,255,255,0.78)",
+                  fontSize: 23,
+                  lineHeight: 1.42,
+                  color: "#4d647b",
+                  maxWidth: 560,
                 }}
               >
-                Airport pickup, verified hosts, trusted listings, and a clean
-                booking flow built for Accra and beyond.
+                Clean white background, strong blue brand accents, and booking
+                details that match the website experience.
+              </div>
+            </div>
+
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 12,
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  borderRadius: 999,
+                  background: "#ffffff",
+                  border: "1px solid #d9e7f4",
+                  padding: "10px 16px",
+                  fontSize: 15,
+                  fontWeight: 700,
+                  color: "#5c748d",
+                }}
+              >
+                www.hayamegh.com
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  borderRadius: 999,
+                  background: "#0e86d4",
+                  padding: "10px 16px",
+                  fontSize: 15,
+                  fontWeight: 800,
+                  color: "#ffffff",
+                }}
+              >
+                Book now
+              </div>
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 28,
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: 18,
+                width: "36%",
+              }}
+            >
+              {highlights.map((item) => (
+                <div
+                  key={item.label}
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 6,
+                    borderRadius: 24,
+                    border: "1px solid #dce8f4",
+                    background: "#ffffff",
+                    padding: "18px 20px",
+                    boxShadow: "0 14px 34px rgba(37, 85, 126, 0.08)",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      fontSize: 14,
+                      fontWeight: 800,
+                      textTransform: "uppercase",
+                      letterSpacing: "0.08em",
+                      color: "#7b90a3",
+                    }}
+                  >
+                    {item.label}
+                  </div>
+                  <div
+                    style={{
+                      display: "flex",
+                      fontSize: 22,
+                      lineHeight: 1.25,
+                      fontWeight: 800,
+                      color: "#13273d",
+                    }}
+                  >
+                    {item.value}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                width: "28%",
+                gap: 18,
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  width: 270,
+                  height: 270,
+                  borderRadius: 999,
+                  background:
+                    "radial-gradient(circle at center, #ffffff 0%, #f5faff 60%, #e6f3ff 100%)",
+                  border: "1px solid rgba(14, 134, 212, 0.18)",
+                  boxShadow: "0 18px 45px rgba(14, 134, 212, 0.14)",
+                }}
+              >
+                <img
+                  src={logoSrc}
+                  alt="Hayame logo"
+                  width="210"
+                  height="210"
+                  style={{
+                    objectFit: "contain",
+                  }}
+                />
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  borderRadius: 999,
+                  background: "#eef7ff",
+                  border: "1px solid #d5e8f8",
+                  padding: "10px 16px",
+                  fontSize: 15,
+                  fontWeight: 800,
+                  color: "#0e86d4",
+                }}
+              >
+                Ghana car sharing marketplace
               </div>
             </div>
 
@@ -336,51 +320,94 @@ export function SocialPreviewImage() {
               style={{
                 display: "flex",
                 flexDirection: "column",
-                gap: 16,
+                justifyContent: "space-between",
+                width: "36%",
+                gap: 18,
               }}
             >
               <div
                 style={{
                   display: "flex",
-                  alignItems: "center",
-                  gap: 10,
-                  flexWrap: "wrap",
-                  padding: 14,
-                  borderRadius: 22,
-                  background: "rgba(7, 24, 39, 0.42)",
-                  border: "1px solid rgba(255,255,255,0.10)",
+                  flexDirection: "column",
+                  gap: 12,
+                  borderRadius: 28,
+                  background:
+                    "linear-gradient(180deg, #0b1f33 0%, #12395f 100%)",
+                  padding: "20px 22px",
+                  color: "#ffffff",
+                  boxShadow: "0 18px 40px rgba(18, 57, 95, 0.20)",
                 }}
               >
-                {filters.map((filter) => (
-                  <div
-                    key={filter}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      borderRadius: 999,
-                      background: "rgba(255,255,255,0.12)",
-                      padding: "11px 14px",
-                      fontSize: 14,
-                      fontWeight: 700,
-                    }}
-                  >
-                    {filter}
-                  </div>
-                ))}
                 <div
                   style={{
                     display: "flex",
                     alignItems: "center",
-                    justifyContent: "center",
-                    marginLeft: "auto",
-                    borderRadius: 999,
-                    background: "#0e86d4",
-                    padding: "11px 18px",
-                    fontSize: 14,
-                    fontWeight: 800,
+                    justifyContent: "space-between",
                   }}
                 >
-                  Search
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 4,
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        fontSize: 15,
+                        fontWeight: 700,
+                        color: "rgba(255,255,255,0.70)",
+                      }}
+                    >
+                      Featured booking
+                    </div>
+                    <div
+                      style={{
+                        display: "flex",
+                        fontSize: 30,
+                        fontWeight: 900,
+                      }}
+                    >
+                      Toyota RAV4
+                    </div>
+                  </div>
+                  <div
+                    style={{
+                      display: "flex",
+                      borderRadius: 999,
+                      background: "#f8b400",
+                      padding: "8px 12px",
+                      fontSize: 14,
+                      fontWeight: 900,
+                      color: "#112131",
+                    }}
+                  >
+                    GHS 1,250
+                  </div>
+                </div>
+                <div
+                  style={{
+                    display: "flex",
+                    flexWrap: "wrap",
+                    gap: 10,
+                  }}
+                >
+                  {benefits.map((benefit) => (
+                    <div
+                      key={benefit}
+                      style={{
+                        display: "flex",
+                        borderRadius: 999,
+                        background: "rgba(255,255,255,0.12)",
+                        padding: "10px 13px",
+                        fontSize: 14,
+                        fontWeight: 700,
+                      }}
+                    >
+                      {benefit}
+                    </div>
+                  ))}
                 </div>
               </div>
 
@@ -391,300 +418,46 @@ export function SocialPreviewImage() {
                 }}
               >
                 {[
-                  "Secure MoMo & Card",
-                  "Transparent pricing",
-                  "Host approval workflow",
+                  { label: "Preview", value: "Brand-led" },
+                  { label: "Format", value: "1200 x 630" },
                 ].map((item) => (
                   <div
-                    key={item}
+                    key={item.label}
                     style={{
                       display: "flex",
                       flex: 1,
-                      alignItems: "center",
-                      justifyContent: "center",
-                      borderRadius: 18,
-                      background: "rgba(255,255,255,0.12)",
-                      border: "1px solid rgba(255,255,255,0.10)",
-                      padding: "14px 12px",
-                      fontSize: 14,
-                      fontWeight: 700,
-                      color: "#f4fbff",
-                    }}
-                  >
-                    {item}
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              width: "40%",
-              gap: 14,
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: 12,
-                borderRadius: 26,
-                padding: 18,
-                background: "#ffffff",
-                border: "1px solid #e3edf7",
-                boxShadow: "0 18px 50px rgba(24, 54, 93, 0.10)",
-              }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                }}
-              >
-                <div
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 3,
-                  }}
-                >
-                  <div
-                    style={{
-                      display: "flex",
-                      fontSize: 15,
-                      color: "#6b8297",
-                      fontWeight: 600,
-                    }}
-                  >
-                    Featured cars
-                  </div>
-                  <div
-                    style={{
-                      display: "flex",
-                      fontSize: 26,
-                      fontWeight: 800,
-                      color: "#0d1f31",
-                    }}
-                  >
-                    Accra bookings
-                  </div>
-                </div>
-
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    borderRadius: 999,
-                    background: "#edf7ff",
-                    padding: "8px 12px",
-                    fontSize: 14,
-                    fontWeight: 800,
-                    color: "#0e86d4",
-                  }}
-                >
-                  Live
-                </div>
-              </div>
-
-              {featuredCars.map((car) => (
-                <div
-                  key={car.name}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    gap: 14,
-                    borderRadius: 22,
-                    border: "1px solid #e4edf6",
-                    background: "#f8fbff",
-                    padding: 16,
-                  }}
-                >
-                  <div
-                    style={{
-                      display: "flex",
                       flexDirection: "column",
-                      gap: 5,
-                      flex: 1,
+                      gap: 6,
+                      borderRadius: 22,
+                      border: "1px solid #dbe7f3",
+                      background: "#ffffff",
+                      padding: "18px 16px",
                     }}
                   >
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        gap: 10,
-                      }}
-                    >
-                      <div
-                        style={{
-                          display: "flex",
-                          fontSize: 22,
-                          fontWeight: 800,
-                          color: "#10243b",
-                        }}
-                      >
-                        {car.name}
-                      </div>
-                      <div
-                        style={{
-                          display: "flex",
-                          borderRadius: 999,
-                          background: "#ffffff",
-                          padding: "6px 10px",
-                          fontSize: 13,
-                          fontWeight: 800,
-                          color: "#405972",
-                        }}
-                      >
-                        Rating {car.rating}
-                      </div>
-                    </div>
-                    <div
-                      style={{
-                        display: "flex",
-                        fontSize: 15,
-                        color: "#647b91",
-                        fontWeight: 600,
-                      }}
-                    >
-                      {car.details}
-                    </div>
-                  </div>
-                  <div
-                    style={{
-                      display: "flex",
-                      flexDirection: "column",
-                      alignItems: "flex-end",
-                      gap: 4,
-                    }}
-                  >
-                    <div
-                      style={{
-                        display: "flex",
-                        fontSize: 20,
-                        fontWeight: 900,
-                        color: "#0e86d4",
-                      }}
-                    >
-                      {car.price}
-                    </div>
                     <div
                       style={{
                         display: "flex",
                         fontSize: 13,
-                        fontWeight: 700,
-                        color: "#7289a0",
+                        fontWeight: 800,
+                        textTransform: "uppercase",
+                        letterSpacing: "0.08em",
+                        color: "#8498aa",
                       }}
                     >
-                      per trip
+                      {item.label}
+                    </div>
+                    <div
+                      style={{
+                        display: "flex",
+                        fontSize: 24,
+                        fontWeight: 900,
+                        color: "#152941",
+                      }}
+                    >
+                      {item.value}
                     </div>
                   </div>
-                </div>
-              ))}
-            </div>
-
-            <div
-              style={{
-                display: "flex",
-                gap: 12,
-              }}
-            >
-              {metrics.map((metric) => (
-                <div
-                  key={metric.label}
-                  style={{
-                    display: "flex",
-                    flex: 1,
-                    flexDirection: "column",
-                    gap: 6,
-                    borderRadius: 22,
-                    border: "1px solid #e3edf7",
-                    background: "#ffffff",
-                    padding: "16px 14px",
-                  }}
-                >
-                  <div
-                    style={{
-                      display: "flex",
-                      fontSize: 14,
-                      fontWeight: 700,
-                      color: "#6d8497",
-                    }}
-                  >
-                    {metric.label}
-                  </div>
-                  <div
-                    style={{
-                      display: "flex",
-                      fontSize: 28,
-                      fontWeight: 900,
-                      color: "#0d1f31",
-                    }}
-                  >
-                    {metric.value}
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                borderRadius: 22,
-                background: "#0f2237",
-                padding: "18px 20px",
-                color: "#ffffff",
-              }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 4,
-                }}
-              >
-                <div
-                  style={{
-                    display: "flex",
-                    fontSize: 14,
-                    fontWeight: 700,
-                    color: "rgba(255,255,255,0.62)",
-                  }}
-                >
-                  Booking experience
-                </div>
-                <div
-                  style={{
-                    display: "flex",
-                    fontSize: 24,
-                    fontWeight: 800,
-                  }}
-                >
-                  Clean website preview for every share
-                </div>
-              </div>
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  borderRadius: 999,
-                  background: "#f8b400",
-                  padding: "10px 14px",
-                  fontSize: 14,
-                  fontWeight: 900,
-                  color: "#111827",
-                }}
-              >
-                1200 x 630
+                ))}
               </div>
             </div>
           </div>
