@@ -8,7 +8,7 @@ export async function getSocialPreviewLogoSrc() {
 
 export async function getSocialPreviewCarSrc() {
   const carBuffer = await readFile(
-    join(process.cwd(), "public", "car-placeholder.jpg"),
+    join(process.cwd(), "public", "Mercedes-Benz GLE 2026.png"),
   );
-  return `data:image/jpeg;base64,${carBuffer.toString("base64")}`;
+  return `data:image/png;base64,${carBuffer.toString("base64")}`;
 }

@@ -398,7 +398,7 @@ export function SocialPreviewImage({
                         color: "#10243a",
                       }}
                     >
-                      Toyota RAV4
+                      Mercedes-Benz GLE 2026
                     </div>
                   </div>
                   <div
@@ -428,7 +428,7 @@ export function SocialPreviewImage({
                 >
                   <img
                     src={carSrc}
-                    alt="Featured car preview"
+                    alt="Mercedes-Benz GLE 2026"
                     width="420"
                     height="240"
                     style={{

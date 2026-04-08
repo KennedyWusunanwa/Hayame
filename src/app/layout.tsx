@@ -39,12 +39,12 @@ const twitterSocialImage = "/twitter-image";
 
 export const metadata: Metadata = {
   metadataBase,
-  title: "Hayame 2.0 - Ghana Car Sharing",
+  title: "Hayame - Ghana's No.1 Car Rental Service",
   description:
     "Turo-style peer-to-peer car rental marketplace for Ghana. Rent anytime, anywhere.",
   manifest: "/site.webmanifest",
   openGraph: {
-    title: "Hayame 2.0 - Ghana Car Sharing",
+    title: "Hayame - Ghana's No.1 Car Rental Service",
     description:
       "Rent trusted cars in Ghana with airport pickup, verified hosts, and flexible bookings.",
     url: "/",
@@ -61,7 +61,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Hayame 2.0 - Ghana Car Sharing",
+    title: "Hayame - Ghana's No.1 Car Rental Service",
     description:
       "Rent trusted cars in Ghana with airport pickup, verified hosts, and flexible bookings.",
     images: [
