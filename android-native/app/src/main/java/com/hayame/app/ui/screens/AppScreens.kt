@@ -1,6 +1,5 @@
 package com.hayame.app.ui.screens
 
-import android.app.DatePickerDialog
 import android.content.Context
 import android.content.Intent
 import android.graphics.BitmapFactory
@@ -8,12 +7,23 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.browser.customtabs.CustomTabsIntent
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,6 +34,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -32,6 +44,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items as gridItems
@@ -48,19 +61,23 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.automirrored.outlined.ExitToApp
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.outlined.AddCircleOutline
+import androidx.compose.material.icons.outlined.AccountBalance
 import androidx.compose.material.icons.outlined.AttachMoney
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.ChatBubble
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.outlined.CreditCard
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.DirectionsCar
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.LocationOn
 import androidx.compose.material.icons.outlined.MailOutline
 import androidx.compose.material.icons.outlined.MoreHoriz
 import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.PhoneIphone
 import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Shield
@@ -68,6 +85,7 @@ import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -117,9 +135,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -127,11 +147,14 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -182,16 +205,17 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.time.LocalDate
-import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
 import java.time.temporal.ChronoUnit
 import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.roundToInt
 
 @Composable
@@ -694,6 +718,7 @@ fun HostShell(
 ) {
     var tab by rememberSaveable { mutableStateOf(HostMainTab.DASHBOARD) }
     val conversationsState by viewModel.conversationsState.collectAsState()
+    val pendingHostTab by viewModel.pendingHostTab.collectAsState()
     val navigationItems = remember {
         listOf(
             HostMainTab.DASHBOARD to Icons.Outlined.Home,
@@ -708,6 +733,12 @@ fun HostShell(
         ?.data
         ?.sumOf { it.unread_count ?: 0 }
         ?: 0
+
+    LaunchedEffect(pendingHostTab) {
+        val requestedTab = pendingHostTab ?: return@LaunchedEffect
+        tab = requestedTab
+        viewModel.consumePendingHostTab(requestedTab)
+    }
 
     Scaffold(
         containerColor = Color(0xFFF2F5FA),
@@ -1152,13 +1183,10 @@ private fun HomeTab(
         item {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.Start,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text("Featured cars", style = MaterialTheme.typography.headlineLarge, color = BrandNavy, fontWeight = FontWeight.ExtraBold)
-                TextButton(onClick = onOpenExplore) {
-                    Text("Explore all", color = BrandBlue, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                }
             }
         }
 
@@ -1166,7 +1194,7 @@ private fun HomeTab(
             UiState.Loading -> item { LoadingBlock("Loading cars...") }
             is UiState.Error -> item { ErrorBlock(state.message, onRetry = { viewModel.loadCars(mapOf("sort" to "new_listings", "limit" to "48")) }) }
             UiState.Empty -> item { EmptyBlock("No cars yet", "No listings are available right now.") }
-            is UiState.Success -> items(state.data.take(3), key = { it.id }) { car ->
+            is UiState.Success -> items(state.data.take(7), key = { it.id }) { car ->
                 HomeFeaturedCarRow(
                     car = car,
                     isFavorite = favoriteIds.contains(car.id),
@@ -1181,6 +1209,13 @@ private fun HomeTab(
                 )
             }
             UiState.Idle -> item { LoadingBlock() }
+        }
+        item {
+            GradientPillButton(
+                text = "Explore More",
+                modifier = Modifier.fillMaxWidth(),
+                onClick = onOpenExplore,
+            )
         }
         item {
             SecondaryPillButton(
@@ -1273,42 +1308,67 @@ private fun HomeFeaturedCarRow(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(14.dp))
+                .clip(RoundedCornerShape(18.dp))
                 .background(Color.White)
-                .border(BorderStroke(1.dp, Color.Black.copy(alpha = 0.06f)), RoundedCornerShape(14.dp))
+                .border(BorderStroke(1.dp, Color.Black.copy(alpha = 0.06f)), RoundedCornerShape(18.dp))
                 .clickable(onClick = onOpen)
-                .padding(10.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
+                .padding(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            verticalAlignment = Alignment.Top,
         ) {
             AsyncImage(
                 model = car.image_url ?: car.car_photos?.firstOrNull()?.url,
                 contentDescription = null,
                 modifier = Modifier
-                    .size(width = 94.dp, height = 72.dp)
-                    .clip(RoundedCornerShape(12.dp))
+                    .size(width = 136.dp, height = 104.dp)
+                    .clip(RoundedCornerShape(14.dp))
                     .background(BrandLight),
                 contentScale = ContentScale.Crop,
             )
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(
                     car.title.orEmpty(),
-                    style = MaterialTheme.typography.titleMedium.copy(fontSize = 15.sp),
+                    style = MaterialTheme.typography.titleMedium.copy(fontSize = 17.sp),
                     color = BrandNavy,
                     fontWeight = FontWeight.Bold,
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
                     listOfNotNull(car.city, car.region).joinToString(", "),
-                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 12.sp),
+                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
                     color = MutedText,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = "★ ${String.format("%.1f", car.avg_rating ?: 0.0)}",
+                        style = MaterialTheme.typography.labelLarge.copy(fontSize = 12.sp),
+                        color = Warning,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    if (car.instant_book == true) {
+                        Surface(
+                            shape = RoundedCornerShape(999.dp),
+                            color = Success.copy(alpha = 0.14f),
+                        ) {
+                            Text(
+                                text = "Instant",
+                                color = Success,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            )
+                        }
+                    }
+                }
                 Text(
                     "GHS${(car.daily_price ?: 0.0).toInt()}/day",
-                    style = MaterialTheme.typography.bodyLarge.copy(fontSize = 13.sp),
+                    style = MaterialTheme.typography.bodyLarge.copy(fontSize = 15.sp),
                     color = BrandBlue,
                     fontWeight = FontWeight.Bold,
                 )
@@ -1467,6 +1527,7 @@ private fun ExploreTab(
                             CarCard(
                                 car = car,
                                 isFavorite = favoriteIds.contains(car.id),
+                                imageHeight = 220.dp,
                                 onClick = { onOpenCarDetail(car.id) },
                                 onFavoriteClick = {
                                     viewModel.toggleFavorite(
@@ -1574,7 +1635,7 @@ private fun ExploreGridCard(
                         contentDescription = null,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(148.dp)
+                            .height(184.dp)
                             .clip(RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp)),
                         contentScale = ContentScale.Crop,
                     )
@@ -1582,7 +1643,7 @@ private fun ExploreGridCard(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(148.dp)
+                            .height(184.dp)
                             .background(BrandLight),
                         contentAlignment = Alignment.Center,
                     ) {
@@ -1672,10 +1733,28 @@ private fun TripsTab(
     paddingValues: PaddingValues,
 ) {
     val bookingsState by viewModel.bookingsState.collectAsState()
+    val pendingBookingFocus by viewModel.pendingBookingFocus.collectAsState()
+    val listState = rememberLazyListState()
+    val guestTrips = (bookingsState as? UiState.Success<List<BookingDto>>)
+        ?.data
+        .orEmpty()
+        .filter {
+            !it.role.orEmpty().contains("owner", ignoreCase = true) &&
+                it.payment_status.equals("paid", ignoreCase = true)
+        }
 
     LaunchedEffect(Unit) { viewModel.loadBookings() }
 
+    LaunchedEffect(pendingBookingFocus, guestTrips) {
+        val bookingId = pendingBookingFocus ?: return@LaunchedEffect
+        val index = guestTrips.indexOfFirst { it.id == bookingId }
+        if (index < 0) return@LaunchedEffect
+        listState.animateScrollToItem(index + 1)
+        viewModel.consumePendingBookingFocus(bookingId)
+    }
+
     LazyColumn(
+        state = listState,
         modifier = Modifier
             .fillMaxSize()
             .padding(paddingValues)
@@ -1687,8 +1766,20 @@ private fun TripsTab(
             UiState.Loading -> item { LoadingBlock("Loading bookings...") }
             is UiState.Error -> item { ErrorBlock(state.message, onRetry = { viewModel.loadBookings() }) }
             UiState.Empty -> item { EmptyBlock("No trips yet", "Your bookings will appear here after payment.") }
-            is UiState.Success -> items(state.data, key = { it.id }) { booking ->
-                BookingCard(booking = booking, onApprove = { viewModel.approveBooking(it) }, onReject = { id, r -> viewModel.rejectBooking(id, r) }, onDispute = { id, r -> viewModel.createDispute(id, r) })
+            is UiState.Success -> {
+                if (guestTrips.isEmpty()) {
+                    item { EmptyBlock("No trips yet", "Your bookings will appear here after payment.") }
+                } else {
+                    items(guestTrips, key = { it.id }) { booking ->
+                        BookingCard(
+                            booking = booking,
+                            onApprove = { viewModel.approveBooking(it) },
+                            onReject = { id, r -> viewModel.rejectBooking(id, r) },
+                            onDispute = { id, r -> viewModel.createDispute(id, r) },
+                            isHighlighted = pendingBookingFocus == booking.id,
+                        )
+                    }
+                }
             }
             UiState.Idle -> item { LoadingBlock() }
         }
@@ -1697,24 +1788,56 @@ private fun TripsTab(
 }
 
 @Composable
-private fun BookingCard(booking: com.hayame.app.core.network.BookingDto, onApprove: (String) -> Unit, onReject: (String, String) -> Unit, onDispute: (String, String) -> Unit) {
+private fun BookingCard(
+    booking: com.hayame.app.core.network.BookingDto,
+    onApprove: (String) -> Unit,
+    onReject: (String, String) -> Unit,
+    onDispute: (String, String) -> Unit,
+    isHighlighted: Boolean = false,
+) {
     var disputeReason by remember { mutableStateOf("") }
+    val displayStatus = resolveBookingDisplayStatus(
+        status = booking.status,
+        startDate = booking.start_date,
+        endDate = booking.end_date,
+    )
+    val helperText = bookingHelperText(
+        status = displayStatus,
+        role = BookingDisplayRole.Renter,
+        paymentStatus = booking.payment_status,
+    )
+    val showPaidBadge = shouldShowCompletedPaidBadge(displayStatus, booking.payment_status)
     Card(
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = if (isHighlighted) 6.dp else 2.dp),
+        border = BorderStroke(
+            width = if (isHighlighted) 2.dp else 1.dp,
+            color = if (isHighlighted) BrandBlue else Color.Black.copy(alpha = 0.05f),
+        ),
     ) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(text = booking.cars?.title ?: "Trip with Hayame", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = BrandNavy)
-                    Text(text = "ID: #${booking.id.take(8).uppercase()}", style = MaterialTheme.typography.labelSmall, color = MutedText)
+                    Text(
+                        text = booking.cars?.title ?: "Trip with Hayame",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = BrandNavy,
+                    )
+                    Text(
+                        text = helperText,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MutedText,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
                 }
-                StatusBadge(status = booking.status ?: "pending")
+                BookingStatusBadgeStack(
+                    status = displayStatus,
+                    showPaidBadge = showPaidBadge,
+                )
             }
-            
-            HorizontalDivider(color = Color.LightGray.copy(alpha = 0.2f))
-            
+
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(24.dp)) {
                 Column {
                     Text("START", style = MaterialTheme.typography.labelSmall, color = MutedText)
@@ -2349,18 +2472,22 @@ private fun GradientPillButton(
 private fun SecondaryPillButton(
     text: String,
     modifier: Modifier = Modifier,
+    isSelected: Boolean = false,
     onClick: () -> Unit,
 ) {
     OutlinedButton(
         onClick = onClick,
         modifier = modifier.height(44.dp),
         shape = RoundedCornerShape(999.dp),
-        border = BorderStroke(1.dp, BrandBlue.copy(alpha = 0.25f)),
-        colors = ButtonDefaults.outlinedButtonColors(containerColor = BrandLight),
+        border = BorderStroke(1.dp, if (isSelected) BrandBlue else BrandBlue.copy(alpha = 0.25f)),
+        colors = ButtonDefaults.outlinedButtonColors(
+            containerColor = if (isSelected) BrandBlue else BrandLight,
+            contentColor = if (isSelected) Color.White else BrandNavy,
+        ),
     ) {
         Text(
             text = text,
-            color = BrandNavy,
+            color = if (isSelected) Color.White else BrandNavy,
             style = MaterialTheme.typography.bodyLarge.copy(fontSize = 15.sp),
             fontWeight = FontWeight.SemiBold,
         )
@@ -2499,6 +2626,8 @@ fun CarDetailScreen(
                 var selectedImageIndex by rememberSaveable(car.id) { mutableStateOf(0) }
                 var startDate by remember(car.id) { mutableStateOf(LocalDate.now()) }
                 var endDate by remember(car.id) { mutableStateOf(LocalDate.now().plusDays(1)) }
+                var blockedBookingDates by remember(car.id) { mutableStateOf<Set<LocalDate>>(emptySet()) }
+                var selectedQuickDuration by rememberSaveable(car.id) { mutableStateOf<Int?>(null) }
                 var tripUseRegion by remember(car.id) {
                     mutableStateOf(car.region?.trim().takeUnless { it.isNullOrBlank() } ?: "Greater Accra Region")
                 }
@@ -2511,6 +2640,8 @@ fun CarDetailScreen(
                 var reviewStatusMessage by remember(car.id) { mutableStateOf<String?>(null) }
                 var availabilityMessage by remember(car.id) { mutableStateOf<String?>(null) }
                 var isCheckingAvailability by remember(car.id) { mutableStateOf(false) }
+                var isLoadingBookingAvailability by remember(car.id) { mutableStateOf(false) }
+                var showFloatingBookingBar by rememberSaveable(car.id) { mutableStateOf(false) }
 
                 val regionOptions = remember(locations, car.region, tripUseRegion) {
                     buildList {
@@ -2557,9 +2688,76 @@ fun CarDetailScreen(
                     tripUseAddress = draft.address
                 }
 
-                LaunchedEffect(startDate) {
-                    if (!endDate.isAfter(startDate)) {
-                        endDate = startDate.plusDays(1)
+                LaunchedEffect(startDate, blockedBookingDates) {
+                    if (blockedBookingDates.isNotEmpty() && !isBookableStartDate(startDate, blockedBookingDates)) {
+                        nextBookableStartDate(
+                            from = if (startDate.isBefore(LocalDate.now())) LocalDate.now() else startDate,
+                            duration = 1,
+                            blockedDates = blockedBookingDates,
+                        )?.let { adjustedStart ->
+                            if (adjustedStart != startDate) {
+                                startDate = adjustedStart
+                                return@LaunchedEffect
+                            }
+                        }
+                    }
+
+                    preferredBookingEndDate(
+                        currentEnd = endDate,
+                        startDate = startDate,
+                        blockedDates = blockedBookingDates,
+                    )?.let { adjustedEnd ->
+                        if (adjustedEnd != endDate) {
+                            endDate = adjustedEnd
+                        }
+                    }
+                    selectedQuickDuration?.let { duration ->
+                        if (endDate != startDate.plusDays(duration.toLong())) {
+                            selectedQuickDuration = null
+                        }
+                    }
+                }
+
+                LaunchedEffect(car.id) {
+                    showFloatingBookingBar = false
+                    delay(90)
+                    showFloatingBookingBar = true
+                }
+
+                LaunchedEffect(car.id) {
+                    val today = LocalDate.now()
+                    isLoadingBookingAvailability = true
+                    viewModel.loadAvailabilitySnapshot(
+                        carId = car.id,
+                        startDate = today.toApiDate(),
+                        endDate = today.plusDays(180).toApiDate(),
+                    ) { envelope, error ->
+                        isLoadingBookingAvailability = false
+                        if (error != null) {
+                            availabilityMessage = error
+                            return@loadAvailabilitySnapshot
+                        }
+
+                        val blocked = envelope?.blockedDates.orEmpty().mapNotNull(::parseApiDate).toSet()
+                        blockedBookingDates = blocked
+                        selectedQuickDuration = null
+                        val nextStart = nextBookableStartDate(
+                            from = today,
+                            duration = 1,
+                            blockedDates = blocked,
+                        )
+
+                        if (nextStart == null) {
+                            availabilityMessage = "No upcoming available dates in the next 6 months."
+                            return@loadAvailabilitySnapshot
+                        }
+
+                        startDate = if (isBookableStartDate(startDate, blocked)) startDate else nextStart
+                        preferredBookingEndDate(
+                            currentEnd = endDate,
+                            startDate = startDate,
+                            blockedDates = blocked,
+                        )?.let { endDate = it }
                     }
                 }
 
@@ -2651,77 +2849,105 @@ fun CarDetailScreen(
                         return
                     }
                     isCheckingAvailability = true
-                    viewModel.checkAvailability(
+                    viewModel.loadAvailabilitySnapshot(
                         carId = car.id,
                         startDate = startDate.toApiDate(),
                         endDate = endDate.toApiDate(),
-                    ) { _, message ->
+                    ) { envelope, error ->
                         isCheckingAvailability = false
-                        availabilityMessage = message
-                    }
-                }
-
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(inner)
-                        .padding(horizontal = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp),
-                ) {
-                    item { Spacer(modifier = Modifier.height(2.dp)) }
-                    item {
-                        DetailSectionCard {
-                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    DetailPill("Car in ${car.city ?: "Ghana"}", BrandLight, BrandBlue)
-                                    DetailPill(car.car_type ?: "Car", BrandLight, BrandNavy)
-                                    DetailPill("Added $addedDateLabel", Color.Black.copy(alpha = 0.04f), MutedText)
-                                }
-
-                                Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.Top) {
-                                    Column(
-                                        modifier = Modifier.weight(1f),
-                                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                                    ) {
-                                        Text(
-                                            text = carTitle,
-                                            style = MaterialTheme.typography.headlineLarge,
-                                            fontWeight = FontWeight.ExtraBold,
-                                            color = BrandNavy,
-                                        )
-                                        Text(
-                                            text = listOfNotNull(car.city, car.region).joinToString(", "),
-                                            style = MaterialTheme.typography.titleMedium,
-                                            color = MutedText,
-                                        )
-                                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                            Text(
-                                                text = "★ ${String.format("%.1f", ratingValue)}",
-                                                style = MaterialTheme.typography.titleMedium,
-                                                fontWeight = FontWeight.Bold,
-                                                color = Warning,
-                                            )
-                                            Text(
-                                                text = "$reviewsCount reviews",
-                                                style = MaterialTheme.typography.titleMedium,
-                                                color = MutedText,
-                                            )
-                                        }
-                                    }
-                                    FavoriteOverviewButton(
-                                        isFavorite = favoriteIds.contains(car.id),
-                                        onClick = {
-                                            viewModel.toggleFavorite(
-                                                carId = car.id,
-                                                currentlyFavorite = favoriteIds.contains(car.id),
-                                                authDestination = NavRoutes.carDetail(car.id),
-                                            )
-                                        },
-                                    )
-                                }
+                        if (error != null) {
+                            availabilityMessage = error
+                        } else {
+                            blockedBookingDates = blockedBookingDates + envelope?.blockedDates.orEmpty().mapNotNull(::parseApiDate)
+                            availabilityMessage = if (envelope?.available == true) {
+                                "Dates are available."
+                            } else {
+                                envelope?.reason ?: "Selected dates are unavailable."
                             }
                         }
                     }
+                }
+
+            fun applyQuickTripDuration(days: Int) {
+                val adjustedStart = nextBookableStartDate(
+                    from = startDate,
+                    duration = days,
+                    blockedDates = blockedBookingDates,
+                )
+                if (adjustedStart == null) {
+                    selectedQuickDuration = null
+                    availabilityMessage = "No $days-day slot is available in the next 6 months."
+                } else {
+                    startDate = adjustedStart
+                    endDate = adjustedStart.plusDays(days.toLong())
+                    selectedQuickDuration = days
+                    availabilityMessage = null
+                }
+            }
+
+                Box(modifier = Modifier.fillMaxSize()) {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(inner)
+                            .padding(horizontal = 16.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp),
+                        contentPadding = PaddingValues(bottom = 152.dp),
+                    ) {
+                        item { Spacer(modifier = Modifier.height(2.dp)) }
+                        item {
+                            DetailSectionCard {
+                                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        DetailPill("Car in ${car.city ?: "Ghana"}", BrandLight, BrandBlue)
+                                        DetailPill(car.car_type ?: "Car", BrandLight, BrandNavy)
+                                        DetailPill("Added $addedDateLabel", Color.Black.copy(alpha = 0.04f), MutedText)
+                                    }
+
+                                    Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.Top) {
+                                        Column(
+                                            modifier = Modifier.weight(1f),
+                                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                                        ) {
+                                            Text(
+                                                text = carTitle,
+                                                style = MaterialTheme.typography.headlineLarge,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                color = BrandNavy,
+                                            )
+                                            Text(
+                                                text = listOfNotNull(car.city, car.region).joinToString(", "),
+                                                style = MaterialTheme.typography.titleMedium,
+                                                color = MutedText,
+                                            )
+                                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                                Text(
+                                                    text = "★ ${String.format("%.1f", ratingValue)}",
+                                                    style = MaterialTheme.typography.titleMedium,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = Warning,
+                                                )
+                                                Text(
+                                                    text = "$reviewsCount reviews",
+                                                    style = MaterialTheme.typography.titleMedium,
+                                                    color = MutedText,
+                                                )
+                                            }
+                                        }
+                                        FavoriteOverviewButton(
+                                            isFavorite = favoriteIds.contains(car.id),
+                                            onClick = {
+                                                viewModel.toggleFavorite(
+                                                    carId = car.id,
+                                                    currentlyFavorite = favoriteIds.contains(car.id),
+                                                    authDestination = NavRoutes.carDetail(car.id),
+                                                )
+                                            },
+                                        )
+                                    }
+                                }
+                            }
+                        }
 
                     item {
                         SectionHeader(title = "Car photo")
@@ -2942,184 +3168,226 @@ fun CarDetailScreen(
                         }
                     }
 
-                    item {
-                        SectionHeader(title = "Trip")
-                        DetailSectionCard {
-                            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                Text(
-                                    text = "GH₵$pricePerDay / day",
-                                    style = MaterialTheme.typography.headlineSmall,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = BrandNavy,
-                                )
-                                Text(
-                                    text = "Pay now with Paystack; host approval required before pickup.",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MutedText,
-                                )
-                                Text(
-                                    text = "Refunded if host rejects",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = Success,
-                                )
-
-                                Text("HOST VERIFICATION", style = MaterialTheme.typography.labelMedium, color = MutedText, fontWeight = FontWeight.Bold)
-                                HostVerificationLine("ID Verified", car.id_verified == true || car.owner?.id_verified == true)
-                                HostVerificationLine("Phone Verified", car.phone_verified == true || car.owner?.phone_verified == true)
-                                HostVerificationLine("Email Verified", car.email_verified == true || car.owner?.email_verified == true)
-
-                                InfoLine(label = "Cancellation", value = car.cancellation_policy ?: "Moderate")
-
-                                Text("TRIP DATES", style = MaterialTheme.typography.labelMedium, color = MutedText, fontWeight = FontWeight.Bold)
-                                DateSelectionRow(label = "Start date", date = startDate, minimumDate = LocalDate.now()) { startDate = it }
-                                DateSelectionRow(label = "End date", date = endDate, minimumDate = startDate.plusDays(1)) { endDate = it }
-
-                                Text("Quick select:", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = BrandNavy)
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    SecondaryPillButton(text = "2 days", modifier = Modifier.weight(1f)) { endDate = startDate.plusDays(2) }
-                                    SecondaryPillButton(text = "5 days", modifier = Modifier.weight(1f)) { endDate = startDate.plusDays(5) }
-                                    SecondaryPillButton(text = "7 days", modifier = Modifier.weight(1f)) { endDate = startDate.plusDays(7) }
-                                }
-
-                                Text("TRIP USE LOCATION", style = MaterialTheme.typography.labelMedium, color = MutedText, fontWeight = FontWeight.Bold)
-                                Text("Listing region: ${car.region ?: "Unknown"}", color = MutedText, style = MaterialTheme.typography.bodyMedium)
-
-                                SelectionField(
-                                    selected = tripUseRegion,
-                                    placeholder = "Select region",
-                                    options = regionOptions,
-                                    onSelected = { tripUseRegion = it },
-                                )
-                                SelectionField(
-                                    selected = tripUseCity,
-                                    placeholder = "Select city / district",
-                                    options = cityOptions,
-                                    onSelected = { tripUseCity = it },
-                                )
-                                OutlinedTextField(
-                                    value = tripUseAddress,
-                                    onValueChange = { tripUseAddress = it },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    placeholder = { Text("Exact area / destination") },
-                                    shape = RoundedCornerShape(14.dp),
-                                )
-                                Text("Minimum 3 characters.", style = MaterialTheme.typography.labelLarge, color = MutedText)
-
-                                Text(
-                                    text = if (outsideListingRegion) {
-                                        if (outsideRegionFee > 0) "Outside listing region trip (+GH₵$outsideRegionFee)" else "Outside listing region trip"
-                                    } else {
-                                        "Within listing region (no outside-region surcharge)"
-                                    },
-                                    color = if (outsideListingRegion) Warning else Success,
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    fontWeight = FontWeight.SemiBold,
-                                )
-                                if (outsideListingRegion) {
+                        item {
+                            SectionHeader(title = "Trip")
+                            DetailSectionCard {
+                                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                     Text(
-                                        text = "Trip use region differs from listing region (${car.region ?: "Unknown"}).",
-                                        color = MutedText,
+                                        text = "Pay now with Paystack; host approval required before pickup.",
                                         style = MaterialTheme.typography.bodyMedium,
+                                        color = MutedText,
+                                    )
+                                    Text(
+                                        text = "Refunded if host rejects",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = Success,
+                                    )
+
+                                    Text("HOST VERIFICATION", style = MaterialTheme.typography.labelMedium, color = MutedText, fontWeight = FontWeight.Bold)
+                                    HostVerificationLine("ID Verified", car.id_verified == true || car.owner?.id_verified == true)
+                                    HostVerificationLine("Phone Verified", car.phone_verified == true || car.owner?.phone_verified == true)
+                                    HostVerificationLine("Email Verified", car.email_verified == true || car.owner?.email_verified == true)
+
+                                    InfoLine(label = "Cancellation", value = car.cancellation_policy ?: "Moderate")
+
+                                    Text("TRIP DATES", style = MaterialTheme.typography.labelMedium, color = MutedText, fontWeight = FontWeight.Bold)
+                                    DateSelectionRow(
+                                        label = "Start date",
+                                        date = startDate,
+                                        minimumDate = LocalDate.now(),
+                                        blockedDates = blockedBookingDates,
+                                        isLoadingAvailability = isLoadingBookingAvailability,
+                                        selectionRange = startDate..endDate,
+                                        canSelectDate = { candidate -> isBookableStartDate(candidate, blockedBookingDates) },
+                                    ) {
+                                        selectedQuickDuration = null
+                                        startDate = it
+                                    }
+                                    DateSelectionRow(
+                                        label = "End date",
+                                        date = endDate,
+                                        minimumDate = startDate.plusDays(1),
+                                        blockedDates = blockedBookingDates,
+                                        isLoadingAvailability = isLoadingBookingAvailability,
+                                        selectionRange = startDate..endDate,
+                                        canSelectDate = { candidate -> isBookableEndDate(candidate, startDate, blockedBookingDates) },
+                                    ) {
+                                        selectedQuickDuration = null
+                                        endDate = it
+                                    }
+                                    Text(
+                                        text = "Unavailable dates are crossed out. The first available trip day is selected automatically.",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MutedText,
+                                    )
+
+                                    Text("Quick select:", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = BrandNavy)
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        SecondaryPillButton(text = "2 days", modifier = Modifier.weight(1f), isSelected = selectedQuickDuration == 2) { applyQuickTripDuration(2) }
+                                        SecondaryPillButton(text = "5 days", modifier = Modifier.weight(1f), isSelected = selectedQuickDuration == 5) { applyQuickTripDuration(5) }
+                                        SecondaryPillButton(text = "7 days", modifier = Modifier.weight(1f), isSelected = selectedQuickDuration == 7) { applyQuickTripDuration(7) }
+                                    }
+
+                                    Text("TRIP USE LOCATION", style = MaterialTheme.typography.labelMedium, color = MutedText, fontWeight = FontWeight.Bold)
+                                    Text("Listing region: ${car.region ?: "Unknown"}", color = MutedText, style = MaterialTheme.typography.bodyMedium)
+
+                                    SelectionField(
+                                        selected = tripUseRegion,
+                                        placeholder = "Select region",
+                                        options = regionOptions,
+                                        onSelected = { tripUseRegion = it },
+                                    )
+                                    SelectionField(
+                                        selected = tripUseCity,
+                                        placeholder = "Select city / district",
+                                        options = cityOptions,
+                                        onSelected = { tripUseCity = it },
+                                    )
+                                    OutlinedTextField(
+                                        value = tripUseAddress,
+                                        onValueChange = { tripUseAddress = it },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        placeholder = { Text("Exact area / destination") },
+                                        shape = RoundedCornerShape(14.dp),
+                                    )
+                                    Text("Minimum 3 characters.", style = MaterialTheme.typography.labelLarge, color = MutedText)
+
+                                    Text(
+                                        text = if (outsideListingRegion) {
+                                            if (outsideRegionFee > 0) "Outside listing region trip (+GH₵$outsideRegionFee)" else "Outside listing region trip"
+                                        } else {
+                                            "Within listing region (no outside-region surcharge)"
+                                        },
+                                        color = if (outsideListingRegion) Warning else Success,
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        fontWeight = FontWeight.SemiBold,
+                                    )
+                                    if (outsideListingRegion) {
+                                        Text(
+                                            text = "Trip use region differs from listing region (${car.region ?: "Unknown"}).",
+                                            color = MutedText,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                        )
+                                    }
+                                    if (outsideAccra) {
+                                        Text(
+                                            text = "Trip use location is also outside Accra.",
+                                            color = MutedText,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                        )
+                                    }
+
+                                    InfoLine(label = "Daily rate x $daysCount day(s)", value = "GH₵$subtotal")
+                                    InfoLine(label = "Insurance fee", value = "GH₵$insuranceFee")
+                                    InfoLine(label = "Delivery fee", value = "GH₵$deliveryFee")
+                                    InfoLine(
+                                        label = if (outsideSurcharge == 0) "Outside listing region surcharge (not applied)" else "Outside listing region surcharge",
+                                        value = "GH₵$outsideSurcharge",
+                                    )
+                                    InfoLine(label = "Deposit", value = "GH₵$depositAmount")
+                                    Text(
+                                        text = "Final payable total is calculated by the server at checkout.",
+                                        color = MutedText,
+                                        style = MaterialTheme.typography.labelLarge,
+                                    )
+
+                                    SecondaryPillButton(
+                                        text = "View protection details",
+                                        modifier = Modifier.fillMaxWidth(),
+                                        onClick = onOpenProtection,
                                     )
                                 }
-                                if (outsideAccra) {
-                                    Text(
-                                        text = "Trip use location is also outside Accra.",
-                                        color = MutedText,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                    )
-                                }
-
-                                InfoLine(label = "Daily rate x $daysCount day(s)", value = "GH₵$subtotal")
-                                InfoLine(label = "Insurance fee", value = "GH₵$insuranceFee")
-                                InfoLine(label = "Delivery fee", value = "GH₵$deliveryFee")
-                                InfoLine(
-                                    label = if (outsideSurcharge == 0) "Outside listing region surcharge (not applied)" else "Outside listing region surcharge",
-                                    value = "GH₵$outsideSurcharge",
-                                )
-                                InfoLine(label = "Deposit", value = "GH₵$depositAmount")
-                                Text(
-                                    text = "Final payable total is calculated by the server at checkout.",
-                                    color = MutedText,
-                                    style = MaterialTheme.typography.labelLarge,
-                                )
-
-                                SecondaryPillButton(
-                                    text = "View protection details",
-                                    modifier = Modifier.fillMaxWidth(),
-                                    onClick = onOpenProtection,
-                                )
-                                GradientPillButton(
-                                    text = if (isAuthenticated) "Book Now" else "Log in to Book",
-                                    modifier = Modifier.fillMaxWidth(),
-                                    onClick = ::openBookingFlow,
-                                )
                             }
                         }
-                    }
 
-                    item {
-                        SectionHeader(title = "Host")
-                        DetailSectionCard {
-                            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    HostAvatar(hostAvatar = hostAvatar, hostName = hostName)
-                                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                        Text(hostName, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = BrandNavy)
-                                        Text(hostLevel, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = BrandBlue)
-                                        if (hostLocation.isNotBlank()) {
-                                            Text(hostLocation, style = MaterialTheme.typography.bodyMedium, color = MutedText)
+                        item {
+                            SectionHeader(title = "Host")
+                            DetailSectionCard {
+                                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        HostAvatar(hostAvatar = hostAvatar, hostName = hostName)
+                                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                            Text(hostName, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = BrandNavy)
+                                            Text(hostLevel, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = BrandBlue)
+                                            if (hostLocation.isNotBlank()) {
+                                                Text(hostLocation, style = MaterialTheme.typography.bodyMedium, color = MutedText)
+                                            }
                                         }
                                     }
-                                }
 
-                                HostVerificationLine("ID Verified", car.id_verified == true || car.owner?.id_verified == true)
-                                HostVerificationLine("Phone Verified", car.phone_verified == true || car.owner?.phone_verified == true)
-                                HostVerificationLine("Email Verified", car.email_verified == true || car.owner?.email_verified == true)
-                                Text(
-                                    text = "Host level updates as verification and trip performance grow.",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MutedText,
-                                )
+                                    HostVerificationLine("ID Verified", car.id_verified == true || car.owner?.id_verified == true)
+                                    HostVerificationLine("Phone Verified", car.phone_verified == true || car.owner?.phone_verified == true)
+                                    HostVerificationLine("Email Verified", car.email_verified == true || car.owner?.email_verified == true)
+                                    Text(
+                                        text = "Host level updates as verification and trip performance grow.",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MutedText,
+                                    )
 
-                                TextButton(
-                                    onClick = { viewModel.showMessage("Host public profile is the next parity screen to expose on Android.") },
-                                    contentPadding = PaddingValues(0.dp),
-                                ) {
-                                    Text("View host", color = BrandBlue, fontWeight = FontWeight.Bold)
-                                }
+                                    TextButton(
+                                        onClick = { viewModel.showMessage("Host public profile is the next parity screen to expose on Android.") },
+                                        contentPadding = PaddingValues(0.dp),
+                                    ) {
+                                        Text("View host", color = BrandBlue, fontWeight = FontWeight.Bold)
+                                    }
 
-                                SecondaryPillButton(
-                                    text = "Message $hostName",
-                                    modifier = Modifier.fillMaxWidth(),
-                                    onClick = { openHostChat(quickMessages.firstOrNull()) },
-                                )
-                                Text("Use a quick prompt to start the chat.", style = MaterialTheme.typography.bodyMedium, color = MutedText)
-                                quickMessages.forEach { prompt ->
                                     SecondaryPillButton(
-                                        text = prompt,
+                                        text = "Message $hostName",
                                         modifier = Modifier.fillMaxWidth(),
-                                        onClick = { openHostChat(prompt) },
+                                        onClick = { openHostChat(quickMessages.firstOrNull()) },
+                                    )
+                                    Text("Use a quick prompt to start the chat.", style = MaterialTheme.typography.bodyMedium, color = MutedText)
+                                    quickMessages.forEach { prompt ->
+                                        SecondaryPillButton(
+                                            text = prompt,
+                                            modifier = Modifier.fillMaxWidth(),
+                                            onClick = { openHostChat(prompt) },
+                                        )
+                                    }
+                                    SecondaryPillButton(
+                                        text = "Chat without message",
+                                        modifier = Modifier.fillMaxWidth(),
+                                        onClick = { openHostChat(null) },
                                     )
                                 }
-                                SecondaryPillButton(
-                                    text = "Chat without message",
-                                    modifier = Modifier.fillMaxWidth(),
-                                    onClick = { openHostChat(null) },
-                                )
                             }
                         }
+                        item { Spacer(modifier = Modifier.height(24.dp)) }
                     }
-                    item { Spacer(modifier = Modifier.height(24.dp)) }
-                }
 
-                if (showGallery && imageUrls.isNotEmpty()) {
-                    FullScreenPhotoGallery(
-                        imageUrls = imageUrls,
-                        initialPage = selectedImageIndex,
-                        onDismiss = { showGallery = false },
-                    )
+                    AnimatedVisibility(
+                        visible = showFloatingBookingBar,
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(horizontal = 16.dp)
+                            .navigationBarsPadding()
+                            .imePadding()
+                            .padding(bottom = 12.dp),
+                        enter = fadeIn(animationSpec = tween(durationMillis = 220, delayMillis = 60)) +
+                            slideInVertically(
+                                initialOffsetY = { it / 2 },
+                                animationSpec = spring(dampingRatio = 0.88f, stiffness = 420f),
+                            ),
+                        exit = fadeOut(animationSpec = tween(durationMillis = 140)) +
+                            slideOutVertically(
+                                targetOffsetY = { it / 2 },
+                                animationSpec = tween(durationMillis = 160),
+                            ),
+                    ) {
+                        FloatingBookingBar(
+                            pricePerDay = pricePerDay,
+                            onBook = ::openBookingFlow,
+                        )
+                    }
+
+                    if (showGallery && imageUrls.isNotEmpty()) {
+                        FullScreenPhotoGallery(
+                            imageUrls = imageUrls,
+                            initialPage = selectedImageIndex,
+                            onDismiss = { showGallery = false },
+                        )
+                    }
                 }
             }
             else -> Unit
@@ -3143,6 +3411,81 @@ private fun DetailSectionCard(
             verticalArrangement = Arrangement.spacedBy(10.dp),
             content = content,
         )
+    }
+}
+
+@Composable
+private fun FloatingBookingBar(
+    pricePerDay: Int,
+    onBook: () -> Unit,
+) {
+    val isDarkTheme = isSystemInDarkTheme()
+    val containerColor = if (isDarkTheme) Color(0xD9162230) else Color.White.copy(alpha = 0.90f)
+    val borderColor = if (isDarkTheme) Color.White.copy(alpha = 0.10f) else Color.White.copy(alpha = 0.78f)
+    val primaryTextColor = if (isDarkTheme) Color.White else BrandNavy
+    val secondaryTextColor = if (isDarkTheme) Color.White.copy(alpha = 0.72f) else MutedText
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        color = containerColor,
+        tonalElevation = 6.dp,
+        shadowElevation = 12.dp,
+        border = BorderStroke(1.dp, borderColor),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(
+                    text = "Price per day",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = secondaryTextColor,
+                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.Bottom,
+                ) {
+                    Text(
+                        text = "GHS $pricePerDay",
+                        style = MaterialTheme.typography.headlineSmall.copy(fontSize = 24.sp),
+                        fontWeight = FontWeight.ExtraBold,
+                        color = primaryTextColor,
+                    )
+                    Text(
+                        text = "/ day",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = secondaryTextColor,
+                    )
+                }
+            }
+
+            Button(
+                onClick = onBook,
+                modifier = Modifier
+                    .height(48.dp)
+                    .widthIn(min = 134.dp),
+                shape = RoundedCornerShape(999.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = BrandBlue,
+                    contentColor = Color.White,
+                ),
+            ) {
+                Text(
+                    text = "Book now",
+                    style = MaterialTheme.typography.bodyLarge.copy(fontSize = 15.sp),
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+        }
     }
 }
 
@@ -3326,10 +3669,13 @@ private fun DateSelectionRow(
     label: String,
     date: LocalDate,
     minimumDate: LocalDate,
+    blockedDates: Set<LocalDate> = emptySet(),
+    isLoadingAvailability: Boolean = false,
+    selectionRange: ClosedRange<LocalDate>? = null,
+    canSelectDate: (LocalDate) -> Boolean = { candidate -> !candidate.isBefore(minimumDate) && candidate !in blockedDates },
     onDateSelected: (LocalDate) -> Unit,
 ) {
-    val context = LocalContext.current
-    val zoneId = remember { ZoneId.systemDefault() }
+    var showCalendar by remember(label, date, minimumDate, blockedDates, selectionRange) { mutableStateOf(false) }
 
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(
@@ -3340,29 +3686,189 @@ private fun DateSelectionRow(
         )
         Spacer(modifier = Modifier.weight(1f))
         Surface(
-            modifier = Modifier.clickable {
-                DatePickerDialog(
-                    context,
-                    { _, year, month, dayOfMonth ->
-                        onDateSelected(LocalDate.of(year, month + 1, dayOfMonth))
-                    },
-                    date.year,
-                    date.monthValue - 1,
-                    date.dayOfMonth,
-                ).apply {
-                    datePicker.minDate = minimumDate.atStartOfDay(zoneId).toInstant().toEpochMilli()
-                }.show()
-            },
+            modifier = Modifier.clickable { showCalendar = true },
             color = Color(0xFFF1F3F6),
             shape = RoundedCornerShape(999.dp),
         ) {
-            Text(
-                text = date.toDisplayDate(),
+            Row(
                 modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.SemiBold,
-                color = BrandNavy,
-            )
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text(
+                    text = date.toDisplayDate(),
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = BrandNavy,
+                )
+                if (isLoadingAvailability) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp,
+                        color = BrandBlue,
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Outlined.CalendarMonth,
+                        contentDescription = null,
+                        tint = BrandBlue,
+                    )
+                }
+            }
+        }
+    }
+
+    if (showCalendar) {
+        AvailabilityCalendarDialog(
+            title = "Choose $label",
+            selectedDate = date,
+            minimumDate = minimumDate,
+            blockedDates = blockedDates,
+            selectionRange = selectionRange,
+            canSelectDate = canSelectDate,
+            onDismiss = { showCalendar = false },
+        ) { selected ->
+            showCalendar = false
+            onDateSelected(selected)
+        }
+    }
+}
+
+private data class BookingCalendarMonthUi(
+    val title: String,
+    val weeks: List<List<LocalDate?>>,
+)
+
+@Composable
+private fun AvailabilityCalendarDialog(
+    title: String,
+    selectedDate: LocalDate,
+    minimumDate: LocalDate,
+    blockedDates: Set<LocalDate>,
+    selectionRange: ClosedRange<LocalDate>?,
+    canSelectDate: (LocalDate) -> Boolean,
+    onDismiss: () -> Unit,
+    onDateSelected: (LocalDate) -> Unit,
+) {
+    val darkMode = isSystemInDarkTheme()
+    val months = remember(minimumDate) { buildBookingCalendarMonths(minimumDate, 6) }
+    val weekdayLabels = remember { listOf("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat") }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 24.dp),
+            color = if (darkMode) Color(0xFF152033) else Color.White,
+            shape = RoundedCornerShape(28.dp),
+            tonalElevation = 8.dp,
+            shadowElevation = 18.dp,
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(18.dp),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = if (darkMode) Color.White else BrandNavy,
+                    )
+                    Spacer(modifier = Modifier.weight(1f))
+                    TextButton(onClick = onDismiss) {
+                        Text("Done")
+                    }
+                }
+
+                Text(
+                    text = "Unavailable days are crossed out. Only bookable dates can be selected.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (darkMode) Color.White.copy(alpha = 0.7f) else MutedText,
+                )
+
+                months.forEach { month ->
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(
+                                color = if (darkMode) Color.White.copy(alpha = 0.04f) else Color(0xFFF8FAFC),
+                                shape = RoundedCornerShape(20.dp),
+                            )
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Text(
+                            text = month.title,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = if (darkMode) Color.White else BrandNavy,
+                        )
+
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            weekdayLabels.forEach { weekday ->
+                                Text(
+                                    text = weekday,
+                                    modifier = Modifier.weight(1f),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (darkMode) Color.White.copy(alpha = 0.62f) else MutedText,
+                                    textAlign = TextAlign.Center,
+                                )
+                            }
+                        }
+
+                        month.weeks.forEach { week ->
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                week.forEach { day ->
+                                    if (day == null) {
+                                        Spacer(modifier = Modifier.weight(1f).height(42.dp))
+                                    } else {
+                                        val blocked = day in blockedDates
+                                        val selected = day == selectedDate
+                                        val inRange = selectionRange?.let { day >= it.start && day <= it.endInclusive } == true
+                                        val selectable = !day.isBefore(minimumDate) && canSelectDate(day)
+                                        Surface(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .height(42.dp)
+                                                .clickable(enabled = selectable) { onDateSelected(day) },
+                                            color = when {
+                                                selected -> BrandBlue
+                                                inRange && selectable -> BrandBlue.copy(alpha = 0.14f)
+                                                !selectable -> Color.Black.copy(alpha = if (darkMode) 0.14f else 0.03f)
+                                                else -> Color.Transparent
+                                            },
+                                            shape = CircleShape,
+                                        ) {
+                                            Box(contentAlignment = Alignment.Center) {
+                                                Text(
+                                                    text = day.dayOfMonth.toString(),
+                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    color = when {
+                                                        selected -> Color.White
+                                                        blocked || !selectable -> if (darkMode) Color.White.copy(alpha = 0.42f) else MutedText.copy(alpha = 0.6f)
+                                                        darkMode -> Color.White
+                                                        else -> BrandNavy
+                                                    },
+                                                    textDecoration = if (blocked || !selectable) TextDecoration.LineThrough else TextDecoration.None,
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -3494,22 +4000,41 @@ fun BookingScreen(
     val locations by viewModel.locations.collectAsState()
     val bookingDraft by viewModel.bookingDraft.collectAsState()
     val isAuthenticated by viewModel.isAuthenticated.collectAsState()
+    val me by viewModel.me.collectAsState()
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
 
     var startDate by remember(carId) { mutableStateOf(LocalDate.now()) }
     var endDate by remember(carId) { mutableStateOf(LocalDate.now().plusDays(1)) }
+    var blockedBookingDates by remember(carId) { mutableStateOf<Set<LocalDate>>(emptySet()) }
+    var selectedQuickDuration by rememberSaveable(carId) { mutableStateOf<Int?>(null) }
     var region by remember(carId) { mutableStateOf("Greater Accra Region") }
     var city by remember(carId) { mutableStateOf("Accra") }
     var address by remember(carId) { mutableStateOf("") }
+    var tripMode by rememberSaveable(carId) { mutableStateOf<CheckoutTripMode?>(null) }
+    var deliveryAddress by rememberSaveable(carId) { mutableStateOf("") }
+    var deliveryTime by rememberSaveable(carId) { mutableStateOf(defaultDeliveryTimeString()) }
+    var contactPhone by rememberSaveable(carId) { mutableStateOf("") }
+    var deliveryNotes by rememberSaveable(carId) { mutableStateOf("") }
     var paymentMessage by rememberSaveable(carId) { mutableStateOf<String?>(null) }
     var isProcessingPayment by rememberSaveable(carId) { mutableStateOf(false) }
+    var isLoadingBookingAvailability by rememberSaveable(carId) { mutableStateOf(false) }
     var initialized by rememberSaveable(carId) { mutableStateOf(false) }
     var awaitingPaymentReturn by rememberSaveable(carId) { mutableStateOf(false) }
+    var shouldVerifyAfterManualReturn by rememberSaveable(carId) { mutableStateOf(false) }
+    var currentStep by rememberSaveable(carId) { mutableStateOf(CheckoutStep.TRIP_DETAILS) }
 
     LaunchedEffect(carId) {
         viewModel.loadCarDetail(carId)
         viewModel.loadReferenceData()
+    }
+
+    fun resolvedTripAddress(): String = address.trim().ifBlank { city.trim() }
+
+    fun goBackWithinCheckout() {
+        val previousStep = CheckoutStep.values().getOrNull(currentStep.ordinal - 1) ?: return
+        paymentMessage = null
+        currentStep = previousStep
     }
 
     val regionOptions = remember(locations, region) {
@@ -3537,18 +4062,91 @@ fun BookingScreen(
         region = draft?.region?.takeIf { it.isNotBlank() } ?: (car.region ?: region)
         city = draft?.city?.takeIf { it.isNotBlank() } ?: (car.city ?: city)
         address = draft?.address.orEmpty()
+        tripMode = draft?.tripMode?.let(::parseCheckoutTripMode)
+            ?: if (car.delivery_available == true) null else CheckoutTripMode.PICKUP
+        deliveryAddress = draft?.deliveryAddress.orEmpty()
+        deliveryTime = draft?.deliveryTime?.takeIf { it.isNotBlank() } ?: defaultDeliveryTimeString()
+        contactPhone = draft?.contactPhone.orEmpty()
+        deliveryNotes = draft?.deliveryNotes.orEmpty()
         initialized = true
     }
 
-    LaunchedEffect(startDate) {
-        if (!endDate.isAfter(startDate)) {
-            endDate = startDate.plusDays(1)
+    LaunchedEffect(startDate, blockedBookingDates) {
+        if (blockedBookingDates.isNotEmpty() && !isBookableStartDate(startDate, blockedBookingDates)) {
+            nextBookableStartDate(
+                from = if (startDate.isBefore(LocalDate.now())) LocalDate.now() else startDate,
+                duration = 1,
+                blockedDates = blockedBookingDates,
+            )?.let { adjustedStart ->
+                if (adjustedStart != startDate) {
+                    startDate = adjustedStart
+                    return@LaunchedEffect
+                }
+            }
+        }
+
+        preferredBookingEndDate(
+            currentEnd = endDate,
+            startDate = startDate,
+            blockedDates = blockedBookingDates,
+        )?.let { adjustedEnd ->
+            if (adjustedEnd != endDate) {
+                endDate = adjustedEnd
+            }
+        }
+        selectedQuickDuration?.let { duration ->
+            if (endDate != startDate.plusDays(duration.toLong())) {
+                selectedQuickDuration = null
+            }
         }
     }
 
     LaunchedEffect(cityOptions, region) {
         if (cityOptions.none { it.equals(city, ignoreCase = true) }) {
             city = cityOptions.firstOrNull() ?: city
+        }
+    }
+
+    LaunchedEffect(tripMode, me?.preferredPhone()) {
+        if (tripMode == CheckoutTripMode.DELIVERY && contactPhone.isBlank()) {
+            contactPhone = me.preferredPhone().orEmpty()
+        }
+    }
+
+    LaunchedEffect(carId) {
+        val today = LocalDate.now()
+        isLoadingBookingAvailability = true
+        viewModel.loadAvailabilitySnapshot(
+            carId = carId,
+            startDate = today.toApiDate(),
+            endDate = today.plusDays(180).toApiDate(),
+        ) { envelope, error ->
+            isLoadingBookingAvailability = false
+            if (error != null) {
+                paymentMessage = error
+                return@loadAvailabilitySnapshot
+            }
+
+            val blocked = envelope?.blockedDates.orEmpty().mapNotNull(::parseApiDate).toSet()
+            blockedBookingDates = blocked
+            selectedQuickDuration = null
+            val nextStart = nextBookableStartDate(
+                from = today,
+                duration = 1,
+                blockedDates = blocked,
+            )
+
+            if (nextStart == null) {
+                paymentMessage = "No upcoming available dates in the next 6 months."
+                return@loadAvailabilitySnapshot
+            }
+
+            startDate = if (isBookableStartDate(startDate, blocked)) startDate else nextStart
+            preferredBookingEndDate(
+                currentEnd = endDate,
+                startDate = startDate,
+                blockedDates = blocked,
+            )?.let { endDate = it }
         }
     }
 
@@ -3562,35 +4160,7 @@ fun BookingScreen(
                 pendingPaystackCallbackUri.isNullOrBlank()
             ) {
                 awaitingPaymentReturn = false
-                isProcessingPayment = true
-                paymentMessage = null
-                viewModel.finalizePaystack(
-                    request = PaystackFinalizeRequest(
-                        bookingId = pendingCheckout!!.bookingId,
-                        carId = carId,
-                        startDate = startDate.toApiDate(),
-                        endDate = endDate.toApiDate(),
-                        tripUseRegion = region.trim(),
-                        tripUseCity = city.trim(),
-                        tripUseAddress = address.trim(),
-                        reference = pendingCheckout!!.reference,
-                        amount = (pendingCheckout!!.amount ?: 0.0).roundToInt(),
-                    ),
-                    onSuccess = { conversationId ->
-                        isProcessingPayment = false
-                        if (!conversationId.isNullOrBlank()) {
-                            viewModel.showMessage("Payment successful.")
-                            onOpenConversation(conversationId)
-                        } else {
-                            viewModel.showMessage("Payment successful. Your booking is now in Trips.")
-                            onBookingCompleted()
-                        }
-                    },
-                    onError = {
-                        isProcessingPayment = false
-                        paymentMessage = it
-                    },
-                )
+                shouldVerifyAfterManualReturn = true
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -3604,11 +4174,7 @@ fun BookingScreen(
             Scaffold(
                 containerColor = PageBackground,
                 topBar = {
-                    CheckoutTopBar(
-                        isProcessingPayment = false,
-                        onBack = onBack,
-                        onPay = {},
-                    )
+                    CheckoutTopBar(title = "Checkout", backLabel = "Cancel", onBack = onBack)
                 },
             ) { inner ->
                 Box(modifier = Modifier.padding(inner)) {
@@ -3621,11 +4187,7 @@ fun BookingScreen(
             Scaffold(
                 containerColor = PageBackground,
                 topBar = {
-                    CheckoutTopBar(
-                        isProcessingPayment = false,
-                        onBack = onBack,
-                        onPay = {},
-                    )
+                    CheckoutTopBar(title = "Checkout", backLabel = "Cancel", onBack = onBack)
                 },
             ) { inner ->
                 Box(modifier = Modifier.padding(inner)) {
@@ -3639,14 +4201,46 @@ fun BookingScreen(
             val carTitle = car.title?.takeIf { it.isNotBlank() } ?: "Hayame listing"
             val pricePerDay = (car.daily_price ?: 0.0).roundToInt()
             val insuranceFee = (car.insurance_fee ?: 0.0).roundToInt().coerceAtLeast(0)
-            val deliveryFee = (car.delivery_fee ?: 0.0).roundToInt().coerceAtLeast(0)
+            val deliveryAvailable = car.delivery_available == true
+            val baseDeliveryFee = if (deliveryAvailable) {
+                (car.delivery_fee ?: 0.0).roundToInt().coerceAtLeast(0)
+            } else {
+                0
+            }
+            val selectedTripMode = tripMode ?: CheckoutTripMode.PICKUP
+            val deliveryFee = if (selectedTripMode == CheckoutTripMode.DELIVERY) baseDeliveryFee else 0
             val depositAmount = (car.deposit_amount ?: 0.0).roundToInt().coerceAtLeast(0)
             val outsideListingRegion = !region.equals(car.region.orEmpty(), ignoreCase = true)
             val outsideRegionFee = (car.outside_accra_fee ?: 0.0).roundToInt().coerceAtLeast(0)
             val outsideSurcharge = if (outsideListingRegion) outsideRegionFee else 0
-            val tripOutsideAccra = !region.contains("accra", ignoreCase = true) || !city.contains("accra", ignoreCase = true)
             val nights = max(1, ChronoUnit.DAYS.between(startDate, endDate).toInt())
             val subtotal = pricePerDay * nights
+            val totalAmount = subtotal + insuranceFee + deliveryFee + outsideSurcharge + depositAmount
+            val locationHelperText = if (outsideListingRegion) {
+                if (outsideRegionFee > 0) "Outside listing region (+GHS $outsideRegionFee)" else "Outside listing region"
+            } else {
+                "Within listing region (no extra charges)"
+            }
+            val summaryImageUrl = remember(car.id, car.image_url, car.car_photos) {
+                resolveAppImage(car.image_url) ?: car.car_photos.orEmpty().firstNotNullOfOrNull { resolveAppImage(it.url) }
+            }
+
+            fun applyQuickTripDuration(days: Int) {
+                val adjustedStart = nextBookableStartDate(
+                    from = startDate,
+                    duration = days,
+                    blockedDates = blockedBookingDates,
+                )
+                if (adjustedStart == null) {
+                    selectedQuickDuration = null
+                    paymentMessage = "No $days-day slot is available in the next 6 months."
+                } else {
+                    startDate = adjustedStart
+                    endDate = adjustedStart.plusDays(days.toLong())
+                    selectedQuickDuration = days
+                    paymentMessage = null
+                }
+            }
 
             fun finalizePendingPayment(referenceOverride: String? = null) {
                 val checkout = pendingCheckout ?: return
@@ -3654,6 +4248,7 @@ fun BookingScreen(
                     ?.trim()
                     ?.takeIf { it.isNotBlank() }
                     ?: checkout.reference
+                awaitingPaymentReturn = false
                 isProcessingPayment = true
                 paymentMessage = null
                 viewModel.finalizePaystack(
@@ -3664,7 +4259,7 @@ fun BookingScreen(
                         endDate = endDate.toApiDate(),
                         tripUseRegion = region.trim(),
                         tripUseCity = city.trim(),
-                        tripUseAddress = address.trim(),
+                        tripUseAddress = resolvedTripAddress(),
                         reference = resolvedReference,
                         amount = (checkout.amount ?: 0.0).roundToInt(),
                     ),
@@ -3686,7 +4281,28 @@ fun BookingScreen(
             }
 
             fun beginPayment() {
+                val normalizedRegion = region.trim()
+                val normalizedCity = city.trim()
+                val normalizedAddress = resolvedTripAddress()
+                val normalizedDeliveryAddress = deliveryAddress.trim()
+                val normalizedDeliveryTime = deliveryTime.trim()
+                val normalizedContactPhone = contactPhone.trim()
+                val normalizedDeliveryNotes = deliveryNotes.trim()
+
                 if (!isAuthenticated) {
+                    viewModel.setBookingDraft(
+                        carId = carId,
+                        startDate = startDate.toApiDate(),
+                        endDate = endDate.toApiDate(),
+                        region = normalizedRegion,
+                        city = normalizedCity,
+                        address = address.trim(),
+                        tripMode = tripMode?.rawValue,
+                        deliveryAddress = normalizedDeliveryAddress,
+                        deliveryTime = normalizedDeliveryTime,
+                        contactPhone = normalizedContactPhone,
+                        deliveryNotes = normalizedDeliveryNotes,
+                    )
                     viewModel.requireAuthentication(
                         message = "Sign in or sign up to continue booking.",
                         destination = NavRoutes.booking(carId),
@@ -3697,13 +4313,31 @@ fun BookingScreen(
                     paymentMessage = "End date must be after start date."
                     return
                 }
-
-                val normalizedRegion = region.trim()
-                val normalizedCity = city.trim()
-                val normalizedAddress = address.trim()
-                if (normalizedCity.isBlank() || normalizedAddress.length < 3) {
-                    paymentMessage = "Enter city and exact area/destination (minimum 3 characters)."
+                if (normalizedRegion.isBlank()) {
+                    paymentMessage = "Select your trip region to continue."
                     return
+                }
+                if (normalizedCity.isBlank()) {
+                    paymentMessage = "Select your trip city to continue."
+                    return
+                }
+                if (deliveryAvailable && tripMode == null) {
+                    paymentMessage = "Choose pickup or delivery to continue."
+                    return
+                }
+                if (selectedTripMode == CheckoutTripMode.DELIVERY) {
+                    if (normalizedDeliveryAddress.length < 6) {
+                        paymentMessage = "Enter the exact delivery address."
+                        return
+                    }
+                    if (!isValidDeliveryTime(normalizedDeliveryTime)) {
+                        paymentMessage = "Enter a valid delivery time in HH:mm format."
+                        return
+                    }
+                    if (normalizedContactPhone.phoneDigitsCount() !in 7..15) {
+                        paymentMessage = "Enter a valid contact phone number."
+                        return
+                    }
                 }
 
                 isProcessingPayment = true
@@ -3714,19 +4348,30 @@ fun BookingScreen(
                     endDate = endDate.toApiDate(),
                     region = normalizedRegion,
                     city = normalizedCity,
-                    address = normalizedAddress,
+                    address = address.trim(),
+                    tripMode = tripMode?.rawValue,
+                    deliveryAddress = normalizedDeliveryAddress,
+                    deliveryTime = normalizedDeliveryTime,
+                    contactPhone = normalizedContactPhone,
+                    deliveryNotes = normalizedDeliveryNotes,
                 )
                 viewModel.createBookingHoldAndInitiatePayment(
                     carId = carId,
                     startDate = startDate.toApiDate(),
                     endDate = endDate.toApiDate(),
+                    tripMode = tripMode?.rawValue,
                     tripUseRegion = normalizedRegion,
                     tripUseCity = normalizedCity,
                     tripUseAddress = normalizedAddress,
+                    deliveryAddress = normalizedDeliveryAddress.takeIf { selectedTripMode == CheckoutTripMode.DELIVERY },
+                    deliveryTime = normalizedDeliveryTime.takeIf { selectedTripMode == CheckoutTripMode.DELIVERY },
+                    contactPhone = normalizedContactPhone.takeIf { selectedTripMode == CheckoutTripMode.DELIVERY },
+                    deliveryNotes = normalizedDeliveryNotes.takeIf { selectedTripMode == CheckoutTripMode.DELIVERY },
                     callbackUrl = "hayame://payment-callback",
                     onReady = {
                         isProcessingPayment = false
                         awaitingPaymentReturn = true
+                        shouldVerifyAfterManualReturn = false
                         openExternalUrl(context, it.payment_url ?: it.authorization_url)
                     },
                     onError = {
@@ -3741,8 +4386,9 @@ fun BookingScreen(
                 if (!pendingPaystackCallbackUri.isNullOrBlank() && pendingCheckout != null && !isProcessingPayment) {
                     val callbackResult = parsePaystackCallback(pendingPaystackCallbackUri)
                     awaitingPaymentReturn = false
+                    shouldVerifyAfterManualReturn = false
                     onPaystackCallbackConsumed()
-                    if (callbackResult.isCancelled) {
+                    if (callbackResult.isCancelled || callbackResult.reference.isNullOrBlank()) {
                         paymentMessage = "Payment was cancelled or not completed."
                     } else {
                         finalizePendingPayment(callbackResult.reference)
@@ -3750,152 +4396,581 @@ fun BookingScreen(
                 }
             }
 
+            LaunchedEffect(shouldVerifyAfterManualReturn, pendingCheckout?.reference) {
+                if (shouldVerifyAfterManualReturn && pendingCheckout != null && !isProcessingPayment) {
+                    shouldVerifyAfterManualReturn = false
+                    finalizePendingPayment()
+                }
+            }
+
             Scaffold(
                 containerColor = PageBackground,
                 topBar = {
                     CheckoutTopBar(
-                        isProcessingPayment = isProcessingPayment,
-                        onBack = onBack,
-                        onPay = ::beginPayment,
+                        title = currentStep.title,
+                        backLabel = if (currentStep == CheckoutStep.TRIP_DETAILS) "Cancel" else "Back",
+                        onBack = {
+                            if (currentStep == CheckoutStep.TRIP_DETAILS) onBack() else goBackWithinCheckout()
+                        },
                     )
                 },
+                bottomBar = {
+                    CheckoutBottomBar(
+                        buttonText = if (currentStep == CheckoutStep.PAYMENT) {
+                            if (isProcessingPayment) "Processing..." else "Make payment"
+                        } else {
+                            "Next"
+                        },
+                        note = currentStep.footerNote,
+                        error = paymentMessage,
+                        isLoading = isProcessingPayment && currentStep == CheckoutStep.PAYMENT,
+                    ) {
+                        when (currentStep) {
+                            CheckoutStep.TRIP_DETAILS -> {
+                                if (!endDate.isAfter(startDate)) {
+                                    paymentMessage = "Choose an end date after your start date."
+                                } else {
+                                    paymentMessage = null
+                                    currentStep = CheckoutStep.LOCATION
+                                }
+                            }
+
+                            CheckoutStep.LOCATION -> {
+                                if (deliveryAvailable && tripMode == null) {
+                                    paymentMessage = "Choose pickup or delivery to continue."
+                                } else if (region.trim().isBlank()) {
+                                    paymentMessage = "Select your trip region to continue."
+                                } else if (city.trim().isBlank()) {
+                                    paymentMessage = "Select your trip city to continue."
+                                } else if (selectedTripMode == CheckoutTripMode.DELIVERY && deliveryAddress.trim().length < 6) {
+                                    paymentMessage = "Enter the exact delivery address."
+                                } else if (selectedTripMode == CheckoutTripMode.DELIVERY && !isValidDeliveryTime(deliveryTime.trim())) {
+                                    paymentMessage = "Enter a valid delivery time in HH:mm format."
+                                } else if (selectedTripMode == CheckoutTripMode.DELIVERY && contactPhone.trim().phoneDigitsCount() !in 7..15) {
+                                    paymentMessage = "Enter a valid contact phone number."
+                                } else {
+                                    paymentMessage = null
+                                    currentStep = CheckoutStep.REVIEW
+                                }
+                            }
+
+                            CheckoutStep.REVIEW -> {
+                                paymentMessage = null
+                                currentStep = CheckoutStep.PAYMENT
+                            }
+
+                            CheckoutStep.PAYMENT -> beginPayment()
+                        }
+                    }
+                },
             ) { inner ->
-                LazyColumn(
+                Column(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(inner)
-                        .padding(horizontal = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
-                    item {
-                        Spacer(modifier = Modifier.height(6.dp))
-                        SectionHeader(title = "Trip dates")
-                        DetailSectionCard {
-                            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                DateSelectionRow(label = "Start date", date = startDate, minimumDate = LocalDate.now()) { startDate = it }
-                                DateSelectionRow(label = "End date", date = endDate, minimumDate = startDate.plusDays(1)) { endDate = it }
-                                Text("Quick select days", color = BrandNavy, fontWeight = FontWeight.SemiBold)
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    SecondaryPillButton(text = "2 days", modifier = Modifier.weight(1f)) { endDate = startDate.plusDays(2) }
-                                    SecondaryPillButton(text = "5 days", modifier = Modifier.weight(1f)) { endDate = startDate.plusDays(5) }
-                                    SecondaryPillButton(text = "7 days", modifier = Modifier.weight(1f)) { endDate = startDate.plusDays(7) }
-                                }
-                            }
-                        }
-                    }
+                    CheckoutProgressHeader(
+                        currentStep = currentStep,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                    )
 
-                    item {
-                        SectionHeader(title = "Trip use location")
-                        DetailSectionCard {
-                            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                SelectionField(
-                                    selected = region,
-                                    placeholder = "Region",
-                                    options = regionOptions,
-                                    onSelected = { region = it },
+                    AnimatedContent(
+                        targetState = currentStep,
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth(),
+                        transitionSpec = {
+                            if (targetState.ordinal > initialState.ordinal) {
+                                (slideInHorizontally(animationSpec = tween(240)) { it / 3 } + fadeIn(animationSpec = tween(220))).togetherWith(
+                                    slideOutHorizontally(animationSpec = tween(180)) { -it / 5 } + fadeOut(animationSpec = tween(180))
                                 )
-                                SelectionField(
-                                    selected = city,
-                                    placeholder = "City",
-                                    options = cityOptions,
-                                    onSelected = { city = it },
-                                )
-                                OutlinedTextField(
-                                    value = address,
-                                    onValueChange = { address = it },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    placeholder = { Text("Exact area / destination") },
-                                    shape = RoundedCornerShape(14.dp),
-                                )
-                                Text("Minimum 3 characters.", style = MaterialTheme.typography.labelLarge, color = MutedText)
-                                Text(
-                                    text = if (outsideListingRegion) {
-                                        if (outsideRegionFee > 0) "Outside listing region trip (+GHS$outsideRegionFee)" else "Outside listing region trip"
-                                    } else {
-                                        "Within listing region (no outside-region surcharge)"
-                                    },
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = if (outsideListingRegion) Warning else Success,
-                                )
-                                if (outsideListingRegion) {
-                                    Text(
-                                        text = "Trip use region differs from listing region (${car.region ?: "Unknown"}).",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MutedText,
-                                    )
-                                }
-                                if (tripOutsideAccra) {
-                                    Text(
-                                        text = "Trip use location is also outside Accra.",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MutedText,
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    item {
-                        SectionHeader(title = "Summary")
-                        DetailSectionCard {
-                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                InfoLine(label = "Car", value = carTitle)
-                                InfoLine(label = "Dates", value = "${startDate.toDisplayDate()} - ${endDate.toDisplayDate()}")
-                                InfoLine(label = "Daily x $nights", value = "GHS$subtotal")
-                                InfoLine(label = "Insurance fee", value = "GHS$insuranceFee")
-                                InfoLine(label = "Delivery fee", value = "GHS$deliveryFee")
-                                if (outsideRegionFee > 0 || outsideListingRegion) {
-                                    InfoLine(
-                                        label = if (outsideListingRegion) "Outside listing region surcharge" else "Outside listing region surcharge (not applied)",
-                                        value = "GHS$outsideSurcharge",
-                                    )
-                                }
-                                InfoLine(label = "Deposit", value = "GHS$depositAmount")
-                                Text(
-                                    text = "Final payable amount is calculated by the server during checkout.",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MutedText,
+                            } else {
+                                (slideInHorizontally(animationSpec = tween(240)) { -it / 3 } + fadeIn(animationSpec = tween(220))).togetherWith(
+                                    slideOutHorizontally(animationSpec = tween(180)) { it / 5 } + fadeOut(animationSpec = tween(180))
                                 )
                             }
-                        }
-                    }
+                        },
+                        label = "checkout-step",
+                    ) { step ->
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .verticalScroll(rememberScrollState())
+                                .padding(horizontal = 16.dp),
+                            verticalArrangement = Arrangement.spacedBy(16.dp),
+                        ) {
+                            when (step) {
+                                CheckoutStep.TRIP_DETAILS -> {
+                                    CheckoutStepCard {
+                                        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                                            DateSelectionRow(
+                                                label = "Start date",
+                                                date = startDate,
+                                                minimumDate = LocalDate.now(),
+                                                blockedDates = blockedBookingDates,
+                                                isLoadingAvailability = isLoadingBookingAvailability,
+                                                selectionRange = startDate..endDate,
+                                                canSelectDate = { candidate -> isBookableStartDate(candidate, blockedBookingDates) },
+                                            ) {
+                                                selectedQuickDuration = null
+                                                startDate = it
+                                            }
+                                            DateSelectionRow(
+                                                label = "End date",
+                                                date = endDate,
+                                                minimumDate = startDate.plusDays(1),
+                                                blockedDates = blockedBookingDates,
+                                                isLoadingAvailability = isLoadingBookingAvailability,
+                                                selectionRange = startDate..endDate,
+                                                canSelectDate = { candidate -> isBookableEndDate(candidate, startDate, blockedBookingDates) },
+                                            ) {
+                                                selectedQuickDuration = null
+                                                endDate = it
+                                            }
+                                            Text(
+                                                text = "Unavailable dates are crossed out. The first bookable day is selected for you automatically.",
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = MutedText,
+                                            )
+                                            Text(
+                                                text = "Quick select",
+                                                style = MaterialTheme.typography.bodyLarge,
+                                                fontWeight = FontWeight.Bold,
+                                                color = BrandNavy,
+                                            )
+                                            SecondaryPillButton(text = "2 days", modifier = Modifier.fillMaxWidth(), isSelected = selectedQuickDuration == 2) {
+                                                applyQuickTripDuration(2)
+                                            }
+                                            SecondaryPillButton(text = "5 days", modifier = Modifier.fillMaxWidth(), isSelected = selectedQuickDuration == 5) {
+                                                applyQuickTripDuration(5)
+                                            }
+                                            SecondaryPillButton(text = "7 days", modifier = Modifier.fillMaxWidth(), isSelected = selectedQuickDuration == 7) {
+                                                applyQuickTripDuration(7)
+                                            }
+                                        }
+                                    }
 
-                    if (!paymentMessage.isNullOrBlank()) {
-                        item {
-                            DetailSectionCard {
-                                Text(paymentMessage.orEmpty(), color = Danger, fontWeight = FontWeight.SemiBold)
-                            }
-                        }
-                    }
+                                    CheckoutStepCard {
+                                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            Text(
+                                                text = "Your trip",
+                                                style = MaterialTheme.typography.bodyLarge,
+                                                fontWeight = FontWeight.Bold,
+                                                color = BrandNavy,
+                                            )
+                                            Text(
+                                                text = "$nights day${if (nights == 1) "" else "s"}",
+                                                style = MaterialTheme.typography.headlineMedium,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                color = BrandBlue,
+                                            )
+                                            Text(
+                                                text = "Adjust your dates now. You'll review pricing before payment.",
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = MutedText,
+                                            )
+                                        }
+                                    }
+                                }
 
-                    if (pendingCheckout != null) {
-                        item {
-                            DetailSectionCard {
-                                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                    Text(
-                                        "Payment pending",
-                                        style = MaterialTheme.typography.titleLarge,
-                                        fontWeight = FontWeight.Bold,
-                                        color = BrandNavy,
-                                    )
-                                    Text(
-                                        "Complete the payment in the secure checkout sheet. We'll detect completion automatically when you return.",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MutedText,
-                                    )
-                                    InfoLine(label = "Reference", value = pendingCheckout!!.reference)
-                                    GradientPillButton(
-                                        text = "Verify payment",
-                                        modifier = Modifier.fillMaxWidth(),
-                                        onClick = { finalizePendingPayment() },
-                                    )
+                                CheckoutStep.LOCATION -> {
+                                    CheckoutStepCard {
+                                        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                                            CheckoutSectionHeader(
+                                                title = "Trip mode",
+                                                helpTitle = "Pickup or delivery",
+                                                helpMessage = "Pickup means you meet at the listing area and no delivery fee is charged. Delivery means the host brings the car to your preferred handoff point.",
+                                            )
+
+                                            if (deliveryAvailable) {
+                                                BookingModeOptionCard(
+                                                    title = CheckoutTripMode.PICKUP.label,
+                                                    subtitle = CheckoutTripMode.PICKUP.subtitle,
+                                                    trailingText = "No delivery fee",
+                                                    selected = tripMode == CheckoutTripMode.PICKUP,
+                                                    onClick = {
+                                                        tripMode = CheckoutTripMode.PICKUP
+                                                        paymentMessage = null
+                                                    },
+                                                )
+                                                BookingModeOptionCard(
+                                                    title = CheckoutTripMode.DELIVERY.label,
+                                                    subtitle = CheckoutTripMode.DELIVERY.subtitle,
+                                                    trailingText = if (baseDeliveryFee > 0) "GHS $baseDeliveryFee" else "Free",
+                                                    selected = tripMode == CheckoutTripMode.DELIVERY,
+                                                    onClick = {
+                                                        tripMode = CheckoutTripMode.DELIVERY
+                                                        if (contactPhone.isBlank()) {
+                                                            contactPhone = me.preferredPhone().orEmpty()
+                                                        }
+                                                        paymentMessage = null
+                                                    },
+                                                )
+                                                if (tripMode == null) {
+                                                    Text(
+                                                        text = "Choose pickup or delivery to continue.",
+                                                        style = MaterialTheme.typography.bodyMedium,
+                                                        fontWeight = FontWeight.SemiBold,
+                                                        color = Warning,
+                                                    )
+                                                }
+                                            } else {
+                                                BookingModeSummaryCard(
+                                                    title = CheckoutTripMode.PICKUP.label,
+                                                    message = "This listing is pickup only.",
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    if (tripMode == CheckoutTripMode.DELIVERY) {
+                                        CheckoutStepCard {
+                                            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                                                CheckoutSectionHeader(
+                                                    title = "Delivery details",
+                                                    helpTitle = "Delivery details",
+                                                    helpMessage = "These details are shared with the host so they know where and when to bring the car.",
+                                                )
+
+                                                OutlinedTextField(
+                                                    value = deliveryAddress,
+                                                    onValueChange = { deliveryAddress = it },
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    label = { Text("Delivery address") },
+                                                    placeholder = { Text("House number, street, landmark") },
+                                                    shape = RoundedCornerShape(16.dp),
+                                                    colors = OutlinedTextFieldDefaults.colors(
+                                                        focusedBorderColor = BrandBlue,
+                                                        unfocusedBorderColor = Color.Black.copy(alpha = 0.08f),
+                                                    ),
+                                                )
+                                                OutlinedTextField(
+                                                    value = deliveryTime,
+                                                    onValueChange = { deliveryTime = it.take(5) },
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    label = { Text("Preferred delivery time") },
+                                                    placeholder = { Text("10:00") },
+                                                    shape = RoundedCornerShape(16.dp),
+                                                    colors = OutlinedTextFieldDefaults.colors(
+                                                        focusedBorderColor = BrandBlue,
+                                                        unfocusedBorderColor = Color.Black.copy(alpha = 0.08f),
+                                                    ),
+                                                )
+                                                OutlinedTextField(
+                                                    value = contactPhone,
+                                                    onValueChange = { contactPhone = it },
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    label = { Text("Contact phone") },
+                                                    placeholder = { Text("+233 24 123 4567") },
+                                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                                                    shape = RoundedCornerShape(16.dp),
+                                                    colors = OutlinedTextFieldDefaults.colors(
+                                                        focusedBorderColor = BrandBlue,
+                                                        unfocusedBorderColor = Color.Black.copy(alpha = 0.08f),
+                                                    ),
+                                                )
+                                                OutlinedTextField(
+                                                    value = deliveryNotes,
+                                                    onValueChange = { deliveryNotes = it.take(500) },
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    label = { Text("Delivery notes (optional)") },
+                                                    placeholder = { Text("Gate code, landmark, or handoff notes") },
+                                                    minLines = 3,
+                                                    maxLines = 5,
+                                                    shape = RoundedCornerShape(16.dp),
+                                                    colors = OutlinedTextFieldDefaults.colors(
+                                                        focusedBorderColor = BrandBlue,
+                                                        unfocusedBorderColor = Color.Black.copy(alpha = 0.08f),
+                                                    ),
+                                                )
+                                                Text(
+                                                    text = if (deliveryFee > 0) {
+                                                        "Delivery fee: GHS $deliveryFee"
+                                                    } else {
+                                                        "This listing offers free delivery."
+                                                    },
+                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    color = BrandBlue,
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    CheckoutStepCard {
+                                        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                                            SelectionField(
+                                                selected = region,
+                                                placeholder = "Region",
+                                                options = regionOptions,
+                                                onSelected = { region = it },
+                                            )
+                                            SelectionField(
+                                                selected = city,
+                                                placeholder = "City",
+                                                options = cityOptions,
+                                                onSelected = { city = it },
+                                            )
+                                            OutlinedTextField(
+                                                value = address,
+                                                onValueChange = { address = it },
+                                                modifier = Modifier.fillMaxWidth(),
+                                                placeholder = { Text("Exact destination (optional)") },
+                                                shape = RoundedCornerShape(16.dp),
+                                                colors = OutlinedTextFieldDefaults.colors(
+                                                    focusedBorderColor = BrandBlue,
+                                                    unfocusedBorderColor = Color.Black.copy(alpha = 0.08f),
+                                                ),
+                                            )
+                                            Text(
+                                                text = locationHelperText,
+                                                style = MaterialTheme.typography.bodyLarge,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = if (outsideListingRegion) Warning else Success,
+                                            )
+                                        }
+                                    }
+
+                                    CheckoutStepCard {
+                                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            Text(
+                                                text = "Smart defaults",
+                                                style = MaterialTheme.typography.bodyLarge,
+                                                fontWeight = FontWeight.Bold,
+                                                color = BrandNavy,
+                                            )
+                                            Text(
+                                                text = "Trip use location stays separate from pickup or delivery so pricing and host handoff stay accurate.",
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = MutedText,
+                                            )
+                                        }
+                                    }
+                                }
+
+                                CheckoutStep.REVIEW -> {
+                                    CheckoutStepCard {
+                                        Row(
+                                            horizontalArrangement = Arrangement.spacedBy(14.dp),
+                                            verticalAlignment = Alignment.Top,
+                                        ) {
+                                            if (!summaryImageUrl.isNullOrBlank()) {
+                                                AsyncImage(
+                                                    model = summaryImageUrl,
+                                                    contentDescription = null,
+                                                    modifier = Modifier
+                                                        .size(width = 86.dp, height = 72.dp)
+                                                        .clip(RoundedCornerShape(16.dp)),
+                                                    contentScale = ContentScale.Crop,
+                                                )
+                                            } else {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(width = 86.dp, height = 72.dp)
+                                                        .background(BrandLight, RoundedCornerShape(16.dp)),
+                                                    contentAlignment = Alignment.Center,
+                                                ) {
+                                                    Icon(
+                                                        Icons.Outlined.DirectionsCar,
+                                                        contentDescription = null,
+                                                        tint = BrandBlue,
+                                                    )
+                                                }
+                                            }
+
+                                            Column(
+                                                modifier = Modifier.weight(1f),
+                                                verticalArrangement = Arrangement.spacedBy(6.dp),
+                                            ) {
+                                                Text(
+                                                    text = carTitle,
+                                                    style = MaterialTheme.typography.titleLarge,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = BrandNavy,
+                                                    maxLines = 2,
+                                                    overflow = TextOverflow.Ellipsis,
+                                                )
+                                                Text(
+                                                    text = "${startDate.toDisplayDate()} - ${endDate.toDisplayDate()}",
+                                                    style = MaterialTheme.typography.bodyLarge,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    color = BrandBlue,
+                                                )
+                                                Text(
+                                                    text = "$nights day${if (nights == 1) "" else "s"} • ${selectedTripMode.label}",
+                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    color = MutedText,
+                                                    maxLines = 2,
+                                                    overflow = TextOverflow.Ellipsis,
+                                                )
+                                                Text(
+                                                    text = resolvedTripAddress(),
+                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    color = MutedText,
+                                                    maxLines = 2,
+                                                    overflow = TextOverflow.Ellipsis,
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    CheckoutStepCard {
+                                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                            Text(
+                                                text = "Trip summary",
+                                                style = MaterialTheme.typography.bodyLarge,
+                                                fontWeight = FontWeight.Bold,
+                                                color = BrandNavy,
+                                            )
+                                            InfoLine(label = "Trip mode", value = selectedTripMode.label)
+                                            InfoLine(label = "Trip use area", value = resolvedTripAddress())
+                                            if (selectedTripMode == CheckoutTripMode.DELIVERY) {
+                                                InfoLine(label = "Delivery address", value = deliveryAddress.trim().ifBlank { "Not provided" })
+                                                InfoLine(label = "Delivery time", value = deliveryTime.trim().ifBlank { "Not provided" })
+                                                InfoLine(label = "Contact phone", value = contactPhone.trim().ifBlank { "Not provided" })
+                                                if (deliveryNotes.trim().isNotBlank()) {
+                                                    InfoLine(label = "Delivery notes", value = deliveryNotes.trim())
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    CheckoutStepCard {
+                                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                            Text(
+                                                text = "Price breakdown",
+                                                style = MaterialTheme.typography.bodyLarge,
+                                                fontWeight = FontWeight.Bold,
+                                                color = BrandNavy,
+                                            )
+                                            InfoLine(label = "Daily rate × $nights", value = "GHS $subtotal")
+                                            InfoLine(label = "Insurance", value = "GHS $insuranceFee")
+                                            if (selectedTripMode == CheckoutTripMode.DELIVERY) {
+                                                InfoLine(label = "Delivery", value = "GHS $deliveryFee")
+                                            }
+                                            if (outsideListingRegion || outsideSurcharge > 0) {
+                                                InfoLine(label = "Outside region fee", value = "GHS $outsideSurcharge")
+                                            }
+                                            InfoLine(label = "Deposit", value = "GHS $depositAmount")
+                                            HorizontalDivider(color = Color.Black.copy(alpha = 0.08f))
+                                            Row(verticalAlignment = Alignment.Bottom) {
+                                                Text(
+                                                    text = "Total",
+                                                    style = MaterialTheme.typography.bodyLarge,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = BrandNavy,
+                                                )
+                                                Spacer(modifier = Modifier.weight(1f))
+                                                Text(
+                                                    text = "GHS $totalAmount",
+                                                    style = MaterialTheme.typography.headlineMedium,
+                                                    fontWeight = FontWeight.ExtraBold,
+                                                    color = BrandBlue,
+                                                )
+                                            }
+                                            Text(
+                                                text = "No hidden fees. This is the amount shown before payment.",
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = MutedText,
+                                            )
+                                        }
+                                    }
+                                }
+
+                                CheckoutStep.PAYMENT -> {
+                                    CheckoutStepCard {
+                                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                            Text(
+                                                text = "Total amount",
+                                                style = MaterialTheme.typography.bodyLarge,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MutedText,
+                                            )
+                                            Text(
+                                                text = "GHS $totalAmount",
+                                                style = MaterialTheme.typography.headlineLarge,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                color = BrandNavy,
+                                            )
+                                            Text(
+                                                text = "Secure payment with no hidden fees.",
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = MutedText,
+                                            )
+                                        }
+                                    }
+
+                                    CheckoutStepCard {
+                                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                            Text(
+                                                text = "Payment methods",
+                                                style = MaterialTheme.typography.bodyLarge,
+                                                fontWeight = FontWeight.Bold,
+                                                color = BrandNavy,
+                                            )
+                                            CheckoutPaymentMethodRow(
+                                                title = "Mobile Money",
+                                                subtitle = "Fast checkout from your phone",
+                                                icon = Icons.Outlined.PhoneIphone,
+                                            )
+                                            CheckoutPaymentMethodRow(
+                                                title = "Card",
+                                                subtitle = "Visa and Mastercard supported",
+                                                icon = Icons.Outlined.CreditCard,
+                                            )
+                                            CheckoutPaymentMethodRow(
+                                                title = "Bank transfer",
+                                                subtitle = "Available in secure checkout",
+                                                icon = Icons.Outlined.AccountBalance,
+                                            )
+                                        }
+                                    }
+
+                                    CheckoutStepCard {
+                                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                            Text(
+                                                text = "What happens next",
+                                                style = MaterialTheme.typography.bodyLarge,
+                                                fontWeight = FontWeight.Bold,
+                                                color = BrandNavy,
+                                            )
+                                            Text(
+                                                text = "Tap Make payment and we'll open the secure checkout sheet to finish your booking.",
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = MutedText,
+                                            )
+                                        }
+                                    }
+
+                                    if (pendingCheckout != null) {
+                                        CheckoutStepCard {
+                                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                                Text(
+                                                    text = "Payment pending",
+                                                    style = MaterialTheme.typography.titleLarge,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = BrandNavy,
+                                                )
+                                                Text(
+                                                    text = "Complete the payment in the secure checkout sheet. We'll detect completion automatically when you return.",
+                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    color = MutedText,
+                                                )
+                                                InfoLine(label = "Reference", value = pendingCheckout!!.reference)
+                                                GradientPillButton(
+                                                    text = "Verify payment",
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    onClick = { finalizePendingPayment() },
+                                                )
+                                            }
+                                        }
+                                    }
                                 }
                             }
+
+                            Spacer(modifier = Modifier.height(24.dp))
                         }
                     }
-
-                    item { Spacer(modifier = Modifier.height(24.dp)) }
                 }
 
                 if (isProcessingPayment) {
@@ -3908,11 +4983,163 @@ fun BookingScreen(
     }
 }
 
+private enum class CheckoutTripMode(
+    val rawValue: String,
+    val label: String,
+    val subtitle: String,
+) {
+    PICKUP(
+        rawValue = "pickup",
+        label = "Pickup",
+        subtitle = "Pick up the car at the listing area and avoid the delivery fee.",
+    ),
+    DELIVERY(
+        rawValue = "delivery",
+        label = "Delivery",
+        subtitle = "Have the host bring the car to your preferred handoff point.",
+    ),
+}
+
+private fun parseCheckoutTripMode(value: String?): CheckoutTripMode? {
+    return CheckoutTripMode.entries.firstOrNull { it.rawValue.equals(value?.trim(), ignoreCase = true) }
+}
+
+private fun defaultDeliveryTimeString(): String = "10:00"
+
+private fun isValidDeliveryTime(value: String): Boolean {
+    return Regex("""^\d{2}:\d{2}$""").matches(value.trim())
+}
+
+private fun String.phoneDigitsCount(): Int = count { it.isDigit() }
+
+@Composable
+private fun CheckoutSectionHeader(
+    title: String,
+    helpTitle: String? = null,
+    helpMessage: String? = null,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = FontWeight.Bold,
+            color = BrandNavy,
+        )
+        if (!helpTitle.isNullOrBlank() && !helpMessage.isNullOrBlank()) {
+            InlineInfoButton(title = helpTitle, message = helpMessage)
+        }
+    }
+}
+
+@Composable
+private fun InlineInfoButton(
+    title: String,
+    message: String,
+) {
+    var open by remember { mutableStateOf(false) }
+
+    IconButton(onClick = { open = true }, modifier = Modifier.size(22.dp)) {
+        Icon(
+            Icons.Outlined.Info,
+            contentDescription = title,
+            tint = BrandBlue,
+            modifier = Modifier.size(16.dp),
+        )
+    }
+
+    if (open) {
+        AlertDialog(
+            onDismissRequest = { open = false },
+            confirmButton = {
+                TextButton(onClick = { open = false }) {
+                    Text("OK")
+                }
+            },
+            title = { Text(title, color = BrandNavy, fontWeight = FontWeight.Bold) },
+            text = { Text(message, color = MutedText) },
+        )
+    }
+}
+
+@Composable
+private fun BookingModeOptionCard(
+    title: String,
+    subtitle: String,
+    trailingText: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        color = if (selected) BrandBlue.copy(alpha = 0.1f) else BrandLight,
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(
+            1.dp,
+            if (selected) BrandBlue else Color.Black.copy(alpha = 0.05f),
+        ),
+    ) {
+        Row(
+            modifier = Modifier.padding(14.dp),
+            verticalAlignment = Alignment.Top,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(title, color = BrandNavy, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyLarge)
+                Text(subtitle, color = MutedText, style = MaterialTheme.typography.bodyMedium)
+            }
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(trailingText, color = BrandBlue, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge)
+                Surface(
+                    modifier = Modifier.size(18.dp),
+                    shape = CircleShape,
+                    color = if (selected) BrandBlue else Color.Transparent,
+                    border = BorderStroke(2.dp, if (selected) BrandBlue else Color.Black.copy(alpha = 0.14f)),
+                ) {}
+            }
+        }
+    }
+}
+
+@Composable
+private fun BookingModeSummaryCard(
+    title: String,
+    message: String,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = BrandLight,
+        shape = RoundedCornerShape(16.dp),
+    ) {
+        Row(
+            modifier = Modifier.padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text("✓", color = Success, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(title, color = BrandNavy, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyLarge)
+                Text(message, color = MutedText, style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+    }
+}
+
 @Composable
 private fun CheckoutTopBar(
-    isProcessingPayment: Boolean,
+    title: String,
+    backLabel: String,
     onBack: () -> Unit,
-    onPay: () -> Unit,
 ) {
     Surface(color = Color.White, shadowElevation = 2.dp) {
         Box(
@@ -3921,37 +5148,268 @@ private fun CheckoutTopBar(
                 .padding(horizontal = 8.dp, vertical = 10.dp),
         ) {
             TextButton(onClick = onBack, modifier = Modifier.align(Alignment.CenterStart)) {
-                Text("Cancel", color = BrandBlue, fontWeight = FontWeight.Bold)
+                Text(backLabel, color = BrandBlue, fontWeight = FontWeight.Bold)
             }
             Text(
-                text = "Checkout",
+                text = title,
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.ExtraBold,
                 color = BrandNavy,
                 modifier = Modifier.align(Alignment.Center),
             )
-            TextButton(
-                onClick = onPay,
-                enabled = !isProcessingPayment,
-                modifier = Modifier.align(Alignment.CenterEnd),
+        }
+    }
+}
+
+private enum class CheckoutStep(
+    val title: String,
+    val subtitle: String,
+    val progressLabel: String,
+    val footerNote: String,
+) {
+    TRIP_DETAILS(
+        title = "Trip details",
+        subtitle = "Set your dates first. Nothing else competes for attention here.",
+        progressLabel = "Trip",
+        footerNote = "Choose your dates first.",
+    ),
+    LOCATION(
+        title = "Location",
+        subtitle = "Choose pickup or delivery, then confirm where the trip will happen.",
+        progressLabel = "Location",
+        footerNote = "Pickup or delivery comes first. Then confirm the trip area.",
+    ),
+    REVIEW(
+        title = "Review & price",
+        subtitle = "See the trip mode, handoff details, and every charge before you pay.",
+        progressLabel = "Review",
+        footerNote = "Review every charge before continuing.",
+    ),
+    PAYMENT(
+        title = "Checkout",
+        subtitle = "Confirm the total, then complete payment securely.",
+        progressLabel = "Pay",
+        footerNote = "Secure payment. No hidden fees.",
+    ),
+}
+
+@Composable
+private fun CheckoutProgressHeader(
+    currentStep: CheckoutStep,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Text(
+            text = "Step ${currentStep.ordinal + 1} of ${CheckoutStep.values().size}",
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.Bold,
+            color = BrandBlue,
+        )
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(
+                text = currentStep.title,
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.ExtraBold,
+                color = BrandNavy,
+            )
+            Text(
+                text = currentStep.subtitle,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MutedText,
+            )
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            CheckoutStep.values().forEach { step ->
+                CheckoutProgressItem(
+                    step = step,
+                    isActive = step == currentStep,
+                    isCompleted = step.ordinal < currentStep.ordinal,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CheckoutProgressItem(
+    step: CheckoutStep,
+    isActive: Boolean,
+    isCompleted: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Surface(
+            modifier = Modifier.size(28.dp),
+            shape = CircleShape,
+            color = if (isActive || isCompleted) BrandBlue else Color.White,
+            border = BorderStroke(1.dp, if (isActive || isCompleted) BrandBlue else Color.Black.copy(alpha = 0.08f)),
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Text(
+                    text = if (isCompleted) "✓" else "${step.ordinal + 1}",
+                    color = if (isActive || isCompleted) Color.White else MutedText,
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.labelLarge,
+                )
+            }
+        }
+        Text(
+            text = step.progressLabel,
+            style = MaterialTheme.typography.labelMedium,
+            color = if (isActive || isCompleted) BrandNavy else MutedText,
+            fontWeight = FontWeight.SemiBold,
+        )
+    }
+}
+
+@Composable
+private fun CheckoutStepCard(
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Card(
+        shape = RoundedCornerShape(22.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        border = BorderStroke(1.dp, Color.Black.copy(alpha = 0.05f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            content = content,
+        )
+    }
+}
+
+@Composable
+private fun CheckoutBottomBar(
+    buttonText: String,
+    note: String,
+    error: String?,
+    isLoading: Boolean,
+    onClick: () -> Unit,
+) {
+    Surface(color = Color.White.copy(alpha = 0.96f), shadowElevation = 10.dp) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            if (!error.isNullOrBlank()) {
+                Text(
+                    text = error,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Danger,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+
+            Button(
+                onClick = onClick,
+                enabled = !isLoading,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(54.dp),
+                shape = RoundedCornerShape(18.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
+                contentPadding = PaddingValues(0.dp),
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.horizontalGradient(colors = listOf(BrandBlue, BrandNavy)),
+                            RoundedCornerShape(18.dp),
+                        ),
+                    contentAlignment = Alignment.Center,
                 ) {
-                    if (isProcessingPayment) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(16.dp),
-                            strokeWidth = 2.dp,
-                            color = BrandBlue,
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        if (isLoading) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp,
+                                color = Color.White,
+                            )
+                        }
+                        Text(
+                            text = buttonText,
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color.White,
                         )
                     }
-                    Text(
-                        text = if (isProcessingPayment) "Processing..." else "Pay",
-                        color = BrandBlue,
-                        fontWeight = FontWeight.Bold,
-                    )
                 }
+            }
+
+            Text(
+                text = note,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MutedText,
+            )
+        }
+    }
+}
+
+@Composable
+private fun CheckoutPaymentMethodRow(
+    title: String,
+    subtitle: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+) {
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = BrandLight,
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(34.dp)
+                    .background(BrandBlue.copy(alpha = 0.12f), CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = BrandBlue,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = BrandNavy,
+                )
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MutedText,
+                )
             }
         }
     }
@@ -3991,6 +5449,99 @@ private fun PaymentProcessingOverlay() {
 private fun parseApiDate(value: String?): LocalDate? {
     if (value.isNullOrBlank()) return null
     return runCatching { LocalDate.parse(value, DateTimeFormatter.ISO_LOCAL_DATE) }.getOrNull()
+}
+
+private fun buildBookingCalendarMonths(startDate: LocalDate, count: Int): List<BookingCalendarMonthUi> {
+    val monthFormatter = DateTimeFormatter.ofPattern("LLLL yyyy")
+    val firstMonth = startDate.withDayOfMonth(1)
+
+    return (0 until count).map { offset ->
+        val monthStart = firstMonth.plusMonths(offset.toLong())
+        val daysInMonth = monthStart.lengthOfMonth()
+        val leadingEmptyCells = monthStart.dayOfWeek.value % 7
+        val cells = buildList<LocalDate?> {
+            repeat(leadingEmptyCells) { add(null) }
+            repeat(daysInMonth) { dayIndex -> add(monthStart.plusDays(dayIndex.toLong())) }
+        }
+        val weeks = cells.chunked(7).map { week ->
+            if (week.size < 7) {
+                week + List(7 - week.size) { null }
+            } else {
+                week
+            }
+        }
+
+        BookingCalendarMonthUi(
+            title = monthStart.format(monthFormatter),
+            weeks = weeks,
+        )
+    }
+}
+
+private fun isContinuousBookingRangeAvailable(
+    startDate: LocalDate,
+    endDate: LocalDate,
+    blockedDates: Set<LocalDate>,
+): Boolean {
+    if (!endDate.isAfter(startDate)) return false
+    var current = startDate
+    while (!current.isAfter(endDate)) {
+        if (current in blockedDates) return false
+        current = current.plusDays(1)
+    }
+    return true
+}
+
+private fun isBookableStartDate(date: LocalDate, blockedDates: Set<LocalDate>): Boolean {
+    return !date.isBefore(LocalDate.now()) &&
+        isContinuousBookingRangeAvailable(
+            startDate = date,
+            endDate = date.plusDays(1),
+            blockedDates = blockedDates,
+        )
+}
+
+private fun isBookableEndDate(date: LocalDate, startDate: LocalDate, blockedDates: Set<LocalDate>): Boolean {
+    return date.isAfter(startDate) &&
+        isContinuousBookingRangeAvailable(
+            startDate = startDate,
+            endDate = date,
+            blockedDates = blockedDates,
+        )
+}
+
+private fun preferredBookingEndDate(
+    currentEnd: LocalDate,
+    startDate: LocalDate,
+    blockedDates: Set<LocalDate>,
+): LocalDate? {
+    if (isBookableEndDate(currentEnd, startDate, blockedDates)) {
+        return currentEnd
+    }
+
+    val fallback = startDate.plusDays(1)
+    return if (isContinuousBookingRangeAvailable(startDate, fallback, blockedDates)) fallback else null
+}
+
+private fun nextBookableStartDate(
+    from: LocalDate,
+    duration: Int,
+    blockedDates: Set<LocalDate>,
+): LocalDate? {
+    var current = from
+    repeat(180) {
+        if (
+            isContinuousBookingRangeAvailable(
+                startDate = current,
+                endDate = current.plusDays(duration.toLong()),
+                blockedDates = blockedDates,
+            )
+        ) {
+            return current
+        }
+        current = current.plusDays(1)
+    }
+    return null
 }
 
 private data class PaystackCallbackResult(
@@ -4438,6 +5989,8 @@ fun HostCarsScreen(
                 UiState.Empty -> item { EmptyBlock("No listings yet", "Create your first listing to start hosting.") }
                 is UiState.Success -> {
                     items(s.data, key = { it.id }) { car ->
+                        val thumbnailUrl = resolveAppImage(car.image_url)
+                            ?: car.car_photos.orEmpty().firstNotNullOfOrNull { resolveAppImage(it.url) }
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -4446,19 +5999,42 @@ fun HostCarsScreen(
                             colors = CardDefaults.cardColors(containerColor = Color.White),
                         ) {
                             Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                                    Text(
-                                        car.title ?: listOfNotNull(car.brand, car.model).joinToString(" "),
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        color = BrandNavy,
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.Top,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                ) {
+                                    HostListingThumbnail(imageUrl = thumbnailUrl)
+
+                                    Column(
                                         modifier = Modifier.weight(1f),
-                                    )
-                                    StatusBadge(status = if (car.approval_status.equals("approved", ignoreCase = true)) "approved" else "pending")
-                                }
-                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                    Text(listOfNotNull(car.city, car.region).joinToString(", "), color = MutedText)
-                                    Text("GH₵${(car.daily_price ?: 0.0).toInt()} / day", color = BrandBlue, fontWeight = FontWeight.Bold)
+                                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            verticalAlignment = Alignment.Top,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        ) {
+                                            Text(
+                                                car.title ?: listOfNotNull(car.brand, car.model).joinToString(" "),
+                                                style = MaterialTheme.typography.titleMedium,
+                                                fontWeight = FontWeight.Bold,
+                                                color = BrandNavy,
+                                                modifier = Modifier.weight(1f),
+                                            )
+                                            StatusBadge(status = if (car.approval_status.equals("approved", ignoreCase = true)) "approved" else "pending")
+                                        }
+                                        Text(
+                                            listOfNotNull(car.city, car.region).joinToString(", "),
+                                            color = MutedText,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                        )
+                                        Text(
+                                            "GH₵${(car.daily_price ?: 0.0).toInt()} / day",
+                                            color = BrandBlue,
+                                            fontWeight = FontWeight.Bold,
+                                        )
+                                    }
                                 }
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                                     OutlinedButton(onClick = { onEdit(car.id) }, modifier = Modifier.weight(1f)) { Text("Open") }
@@ -4536,19 +6112,36 @@ fun HostCarEditorScreen(
     var outsideAccraFee by rememberSaveable(carId) { mutableStateOf("") }
     var cancellationPolicy by rememberSaveable(carId) { mutableStateOf("Moderate") }
     var pendingUploads by remember { mutableStateOf(emptyList<PendingListingUpload>()) }
+    var currentStepIndex by rememberSaveable(carId) { mutableStateOf(0) }
+    var showInsuranceField by rememberSaveable(carId) { mutableStateOf(false) }
+    var showDepositField by rememberSaveable(carId) { mutableStateOf(false) }
+    var showOutsideRegionFeeField by rememberSaveable(carId) { mutableStateOf(false) }
+    var hasCustomTitleOverride by rememberSaveable(carId) { mutableStateOf(false) }
+    var lastAutoGeneratedTitle by rememberSaveable(carId) { mutableStateOf("") }
+
+    val currentStep = HostListingEditorStep.entries[currentStepIndex.coerceIn(0, HostListingEditorStep.entries.lastIndex)]
 
     val regionOptions = remember(locations, region) {
         withCurrentOption(locations.keys.filter { it.isNotBlank() }.sorted(), region)
     }
+    val strictCityOptions = remember(locations, region) {
+        if (region.isBlank()) {
+            emptyList()
+        } else {
+            locations[region].orEmpty().filter { it.isNotBlank() }.distinct().sorted()
+        }
+    }
     val cityOptions = remember(locations, region, city) {
-        val options = if (region.isBlank()) emptyList() else locations[region].orEmpty()
-        withCurrentOption(options.filter { it.isNotBlank() }.distinct().sorted(), city)
+        withCurrentOption(strictCityOptions, city)
     }
     val brandOptions = remember(catalog, brand) {
         withCurrentOption(catalog.keys.filter { it.isNotBlank() }.sorted(), brand)
     }
+    val strictModelOptions = remember(catalog, brand) {
+        catalog[brand].orEmpty().filter { it.isNotBlank() }.distinct().sorted()
+    }
     val modelOptions = remember(catalog, brand, model) {
-        withCurrentOption(catalog[brand].orEmpty().filter { it.isNotBlank() }.distinct().sorted(), model)
+        withCurrentOption(strictModelOptions, model)
     }
     val typeOptions = remember(carType) {
         withCurrentOption(
@@ -4559,6 +6152,145 @@ fun HostCarEditorScreen(
     val transmissionOptions = remember { listOf("Automatic", "Manual") }
     val fuelOptions = remember { listOf("Petrol", "Diesel", "Hybrid", "Electric") }
     val cancellationOptions = remember { listOf("Flexible", "Moderate", "Strict") }
+    val yearOptions = remember(currentYear, maxListingYear) { (maxListingYear downTo minListingYear).map(Int::toString) }
+    val existingCoverUrl = remember(existingCar?.id, existingCar?.image_url, existingCar?.car_photos) {
+        existingCar?.let { car ->
+            resolveAppImage(car.image_url) ?: car.car_photos.orEmpty().firstNotNullOfOrNull { resolveAppImage(it.url) }
+        }
+    }
+    val pricingSuggestion = remember(carType, yearInput) {
+        suggestedListingPricing(
+            carType = carType,
+            year = yearInput.trim().toIntOrNull() ?: currentYear,
+        )
+    }
+    val generatedListingTitle = remember(brand, model, yearInput) {
+        buildGeneratedListingTitle(
+            brand = brand,
+            model = model,
+            year = yearInput.trim().toIntOrNull(),
+        )
+    }
+    val generatedListingTitlePreview = generatedListingTitle ?: "Select brand, model and year"
+
+    fun normalizedListingTitle(value: String): String {
+        return value.trim().replace(Regex("\\s+"), " ")
+    }
+
+    fun configureGeneratedTitleState() {
+        val generated = normalizedListingTitle(
+            buildGeneratedListingTitle(
+                brand = brand,
+                model = model,
+                year = yearInput.trim().toIntOrNull(),
+            ).orEmpty(),
+        )
+        val current = normalizedListingTitle(title)
+        lastAutoGeneratedTitle = generated
+        hasCustomTitleOverride = current.isNotBlank() &&
+            (generated.isBlank() || !current.equals(generated, ignoreCase = true))
+        if (current.isBlank() && generated.isNotBlank()) {
+            title = generated
+            hasCustomTitleOverride = false
+        }
+    }
+
+    fun updateTitleOverrideState(newValue: String) {
+        val current = normalizedListingTitle(newValue)
+        val generated = normalizedListingTitle(
+            buildGeneratedListingTitle(
+                brand = brand,
+                model = model,
+                year = yearInput.trim().toIntOrNull(),
+            ).orEmpty(),
+        )
+        hasCustomTitleOverride = current.isNotBlank() &&
+            (generated.isBlank() || !current.equals(generated, ignoreCase = true))
+        if (current.isBlank()) {
+            lastAutoGeneratedTitle = generated
+            title = generated
+            hasCustomTitleOverride = false
+        }
+    }
+
+    fun syncGeneratedTitleIfNeeded(force: Boolean = false) {
+        val generated = normalizedListingTitle(
+            buildGeneratedListingTitle(
+                brand = brand,
+                model = model,
+                year = yearInput.trim().toIntOrNull(),
+            ).orEmpty(),
+        )
+        val current = normalizedListingTitle(title)
+        val previousGenerated = normalizedListingTitle(lastAutoGeneratedTitle)
+        val matchesPreviousGenerated = previousGenerated.isNotBlank() &&
+            current.equals(previousGenerated, ignoreCase = true)
+        val shouldApply = force || current.isBlank() || !hasCustomTitleOverride || matchesPreviousGenerated
+
+        lastAutoGeneratedTitle = generated
+        if (generated.isBlank() && !force && current.isNotBlank()) return
+
+        if (shouldApply && title != generated) {
+            title = generated
+            hasCustomTitleOverride = false
+        }
+    }
+
+    fun jumpToStep(step: HostListingEditorStep) {
+        currentStepIndex = step.ordinal
+    }
+
+    fun validationError(step: HostListingEditorStep): String? {
+        val parsedYear = yearInput.trim().toIntOrNull()
+        val parsedDailyPrice = dailyPrice.trim().toIntOrNull()
+        val parsedSeats = seats.trim().toIntOrNull()
+        val normalizedCancellation = cancellationPolicy.trim().ifBlank { "Moderate" }
+
+        return when (step) {
+            HostListingEditorStep.BASIC_INFO -> when {
+                title.trim().length < 3 -> "Add a listing title before continuing."
+                brand.trim().isEmpty() -> "Brand is required."
+                model.trim().isEmpty() -> "Model is required."
+                parsedYear == null || parsedYear !in minListingYear..maxListingYear -> "Enter a valid year."
+                else -> null
+            }
+
+            HostListingEditorStep.VEHICLE_DETAILS -> when {
+                carType.trim().isEmpty() -> "Select a car type to continue."
+                parsedSeats == null || parsedSeats !in 2..8 -> "Seats must be between 2 and 8."
+                description.trim().length < 10 -> "Description must be at least 10 characters."
+                else -> null
+            }
+
+            HostListingEditorStep.PRICING -> when {
+                parsedDailyPrice == null || parsedDailyPrice !in 50..10_000 ->
+                    "Daily price must be between GHS 50 and GHS 10,000."
+                else -> null
+            }
+
+            HostListingEditorStep.LOCATION -> when {
+                region.trim().length < 2 -> "Region is required."
+                city.trim().length < 2 -> "City is required."
+                else -> null
+            }
+
+            HostListingEditorStep.FEATURES_RULES -> when {
+                normalizedCancellation !in cancellationOptions -> "Choose a valid cancellation policy."
+                else -> null
+            }
+
+            HostListingEditorStep.PHOTOS -> when {
+                isCreate && pendingUploads.isEmpty() -> "Add at least one photo before publishing."
+                else -> null
+            }
+
+            HostListingEditorStep.REVIEW -> null
+        }
+    }
+
+    fun firstInvalidStep(): HostListingEditorStep? {
+        return HostListingEditorStep.entries.firstOrNull { validationError(it) != null }
+    }
 
     fun currentDraft(): ListingEditorDraftState {
         return ListingEditorDraftState(
@@ -4606,6 +6338,10 @@ fun HostCarEditorScreen(
         depositAmount = draft.depositAmount.asOptionalFeeText()
         outsideAccraFee = draft.outsideAccraFee.asOptionalFeeText()
         cancellationPolicy = draft.cancellationPolicy.ifBlank { "Moderate" }
+        showInsuranceField = draft.insuranceFee > 0
+        showDepositField = draft.depositAmount > 0
+        showOutsideRegionFeeField = draft.outsideAccraFee > 0
+        configureGeneratedTitleState()
     }
 
     fun persistCreateDraftIfNeeded() {
@@ -4716,19 +6452,27 @@ fun HostCarEditorScreen(
             depositAmount = ((existingCar.deposit_amount ?: 0.0).roundToInt()).asOptionalFeeText()
             outsideAccraFee = ((existingCar.outside_accra_fee ?: 0.0).roundToInt()).asOptionalFeeText()
             cancellationPolicy = normalizeSelectionLabel(existingCar.cancellation_policy, "Moderate")
+            showInsuranceField = insuranceFee.isNotBlank()
+            showDepositField = depositAmount.isNotBlank()
+            showOutsideRegionFeeField = outsideAccraFee.isNotBlank()
+            configureGeneratedTitleState()
         }
     }
 
-    LaunchedEffect(region, cityOptions) {
-        if (city.isNotBlank() && city !in cityOptions) {
-            city = cityOptions.firstOrNull().orEmpty()
+    LaunchedEffect(region, strictCityOptions) {
+        if (city.isNotBlank() && strictCityOptions.none { it.equals(city, ignoreCase = true) }) {
+            city = strictCityOptions.firstOrNull().orEmpty()
         }
     }
 
-    LaunchedEffect(brand, modelOptions) {
-        if (model.isNotBlank() && model !in modelOptions) {
-            model = modelOptions.firstOrNull().orEmpty()
+    LaunchedEffect(brand, strictModelOptions) {
+        if (model.isNotBlank() && strictModelOptions.none { it.equals(model, ignoreCase = true) }) {
+            model = ""
         }
+    }
+
+    LaunchedEffect(brand, model, yearInput) {
+        syncGeneratedTitleIfNeeded()
     }
 
     LaunchedEffect(deliveryAvailable) {
@@ -4763,6 +6507,14 @@ fun HostCarEditorScreen(
     }
 
     fun saveListing() {
+        val invalidStep = firstInvalidStep()
+        if (invalidStep != null) {
+            editorError = validationError(invalidStep)
+            editorNotice = null
+            jumpToStep(invalidStep)
+            return
+        }
+
         val parsedYear = yearInput.trim().toIntOrNull()
         val parsedDailyPrice = dailyPrice.trim().toIntOrNull()
         val parsedSeats = seats.trim().toIntOrNull()
@@ -4772,24 +6524,8 @@ fun HostCarEditorScreen(
         val parsedOutsideAccraFee = outsideAccraFee.trim().toIntOrNull() ?: 0
         val normalizedCancellation = cancellationPolicy.trim().ifBlank { "Moderate" }
 
-        editorError = when {
-            brand.trim().isEmpty() -> "Brand is required."
-            model.trim().isEmpty() -> "Model is required."
-            parsedYear == null || parsedYear !in minListingYear..maxListingYear -> "Enter a valid year."
-            parsedDailyPrice == null || parsedDailyPrice !in 50..10_000 -> "Daily price must be between GHS 50 and GHS 10,000."
-            region.trim().length < 2 -> "Region is required."
-            city.trim().length < 2 -> "City is required."
-            description.trim().length < 10 -> "Description must be at least 10 characters."
-            parsedSeats == null || parsedSeats !in 2..8 -> "Seats must be between 2 and 8."
-            normalizedCancellation !in cancellationOptions -> "Choose a valid cancellation policy."
-            else -> null
-        }
-        if (editorError != null) {
-            editorNotice = null
-            return
-        }
-
         editorNotice = null
+        editorError = null
         isSaving = true
 
         val payload = buildJsonObject {
@@ -4857,7 +6593,34 @@ fun HostCarEditorScreen(
         }
     }
 
+    fun handleBackAction() {
+        if (currentStep == HostListingEditorStep.BASIC_INFO) {
+            onBack()
+        } else {
+            jumpToStep(HostListingEditorStep.entries[currentStep.ordinal - 1])
+        }
+    }
+
+    fun handlePrimaryAction() {
+        if (currentStep == HostListingEditorStep.REVIEW) {
+            saveListing()
+            return
+        }
+
+        val error = validationError(currentStep)
+        if (error != null) {
+            editorError = error
+            editorNotice = null
+            return
+        }
+
+        editorError = null
+        editorNotice = null
+        jumpToStep(HostListingEditorStep.entries[currentStep.ordinal + 1])
+    }
+
     Scaffold(
+        containerColor = PageBackground,
         topBar = {
             Surface(color = Color.White, tonalElevation = 2.dp) {
                 Row(
@@ -4869,6 +6632,13 @@ fun HostCarEditorScreen(
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
+                    Text(
+                        if (isCreate) "Create Listing" else "Edit Listing",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = BrandNavy,
+                        modifier = Modifier.weight(1f),
+                    )
                     if (isCreate) {
                         TextButton(
                             onClick = {
@@ -4881,272 +6651,541 @@ fun HostCarEditorScreen(
                             Text("Save Draft", color = BrandBlue, fontWeight = FontWeight.Bold)
                         }
                     }
-                    Text(
-                        if (isCreate) "Create Listing" else "Edit Listing",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = BrandNavy,
-                        modifier = Modifier.weight(1f),
-                    )
-                    TextButton(onClick = ::saveListing, enabled = !isSaving) {
-                        Text(
-                            if (isSaving) "Saving..." else if (isCreate) "Create" else "Save",
-                            color = BrandBlue,
-                            fontWeight = FontWeight.Bold,
-                        )
-                    }
                 }
             }
         },
+        bottomBar = {
+            HostListingBottomBar(
+                backTitle = if (currentStep == HostListingEditorStep.BASIC_INFO) "Cancel" else "Back",
+                primaryTitle = if (currentStep == HostListingEditorStep.REVIEW) {
+                    if (isSaving) "Publishing..." else if (isCreate) "Publish Listing" else "Save Listing"
+                } else {
+                    "Next"
+                },
+                isPrimaryDisabled = isSaving,
+                onBack = ::handleBackAction,
+                onPrimary = ::handlePrimaryAction,
+            )
+        },
     ) { inner ->
-        LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(inner).padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(inner),
         ) {
-            item {
-                Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
-                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text("Listing", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = BrandNavy)
-                        OutlinedTextField(
-                            value = title,
-                            onValueChange = { title = it },
-                            label = { Text("Listing title") },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(16.dp),
-                        )
-                        SelectionTextField(label = "Brand", value = brand, options = brandOptions, onValueChange = { brand = it }, allowCustomValue = false)
-                        SelectionTextField(label = "Model", value = model, options = modelOptions, onValueChange = { model = it }, allowCustomValue = false)
-                        OutlinedTextField(
-                            value = yearInput,
-                            onValueChange = { yearInput = it.filter(Char::isDigit).take(4) },
-                            label = { Text("Year") },
-                            modifier = Modifier.fillMaxWidth(),
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            shape = RoundedCornerShape(16.dp),
-                        )
-                        Text(
-                            "Valid range: $minListingYear-$maxListingYear",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MutedText,
-                        )
-                    }
+            Column(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                HostListingProgressHeader(currentStep = currentStep)
+                if (!editorNotice.isNullOrBlank()) {
+                    HostListingStatusBanner(text = editorNotice.orEmpty(), color = Success)
+                }
+                if (!editorError.isNullOrBlank()) {
+                    HostListingStatusBanner(text = editorError.orEmpty(), color = Danger)
                 }
             }
-            item {
-                Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
-                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text("Pricing", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = BrandNavy)
-                        OutlinedTextField(
-                            value = dailyPrice,
-                            onValueChange = { dailyPrice = it.filter(Char::isDigit) },
-                            label = { Text("Daily price") },
-                            modifier = Modifier.fillMaxWidth(),
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            shape = RoundedCornerShape(16.dp),
-                            suffix = { Text("/day") },
+
+            AnimatedContent(
+                targetState = currentStep,
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+                transitionSpec = {
+                    if (targetState.ordinal > initialState.ordinal) {
+                        (slideInHorizontally(animationSpec = tween(240)) { it / 3 } + fadeIn(animationSpec = tween(220))).togetherWith(
+                            slideOutHorizontally(animationSpec = tween(180)) { -it / 5 } + fadeOut(animationSpec = tween(180))
                         )
-                        OutlinedTextField(
-                            value = insuranceFee,
-                            onValueChange = { insuranceFee = it.filter(Char::isDigit) },
-                            label = { Text("Insurance (per trip)") },
-                            modifier = Modifier.fillMaxWidth(),
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            shape = RoundedCornerShape(16.dp),
-                        )
-                        OutlinedTextField(
-                            value = depositAmount,
-                            onValueChange = { depositAmount = it.filter(Char::isDigit) },
-                            label = { Text("Security deposit") },
-                            modifier = Modifier.fillMaxWidth(),
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            shape = RoundedCornerShape(16.dp),
+                    } else {
+                        (slideInHorizontally(animationSpec = tween(240)) { -it / 3 } + fadeIn(animationSpec = tween(220))).togetherWith(
+                            slideOutHorizontally(animationSpec = tween(180)) { it / 5 } + fadeOut(animationSpec = tween(180))
                         )
                     }
-                }
-            }
-            item {
-                Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
-                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text("Location", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = BrandNavy)
-                        SelectionTextField(label = "Region", value = region, options = regionOptions, onValueChange = { region = it }, allowCustomValue = false)
-                        SelectionTextField(label = "City", value = city, options = cityOptions, onValueChange = { city = it }, allowCustomValue = false)
-                    }
-                }
-            }
-            item {
-                Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
-                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text("Vehicle info", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = BrandNavy)
-                        SelectionTextField(label = "Car type", value = carType, options = typeOptions, onValueChange = { carType = it }, allowCustomValue = false)
-                        SelectionTextField(label = "Transmission", value = transmission, options = transmissionOptions, onValueChange = { transmission = it }, allowCustomValue = false)
-                        SelectionTextField(label = "Fuel", value = fuelType, options = fuelOptions, onValueChange = { fuelType = it }, allowCustomValue = false)
-                        OutlinedTextField(
-                            value = seats,
-                            onValueChange = { seats = it.filter(Char::isDigit).take(1) },
-                            label = { Text("Seats") },
-                            modifier = Modifier.fillMaxWidth(),
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            shape = RoundedCornerShape(16.dp),
-                        )
-                        OutlinedTextField(
-                            value = description,
-                            onValueChange = { description = it },
-                            label = { Text("Description") },
-                            modifier = Modifier.fillMaxWidth(),
-                            minLines = 3,
-                            maxLines = 8,
-                            shape = RoundedCornerShape(16.dp),
-                        )
-                    }
-                }
-            }
-            item {
-                Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
-                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text("Booking options", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = BrandNavy)
-                        HostToggleRow("Instant Book", instantBook) { instantBook = it }
-                        HostToggleRow("Delivery available", deliveryAvailable) { deliveryAvailable = it }
-                        HostToggleRow("Air conditioning", airConditioning) { airConditioning = it }
-                        SelectionTextField(label = "Cancellation", value = cancellationPolicy, options = cancellationOptions, onValueChange = { cancellationPolicy = it }, allowCustomValue = false)
-                    }
-                }
-            }
-            item {
-                Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
-                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text("Extra fees", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = BrandNavy)
-                        if (deliveryAvailable) {
-                            OutlinedTextField(
-                                value = deliveryFee,
-                                onValueChange = { deliveryFee = it.filter(Char::isDigit) },
-                                label = { Text("Delivery fee") },
-                                modifier = Modifier.fillMaxWidth(),
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                shape = RoundedCornerShape(16.dp),
+                },
+                label = "host-listing-step",
+            ) { step ->
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    when (step) {
+                        HostListingEditorStep.BASIC_INFO -> {
+                            HostListingStepIntro(
+                                title = "Basic Info",
+                                subtitle = "Keep it short, clear, and easy to scan in search results.",
                             )
-                        } else {
-                            Text(
-                                "Delivery fee is disabled until delivery is enabled.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MutedText,
-                            )
-                        }
-                        OutlinedTextField(
-                            value = outsideAccraFee,
-                            onValueChange = { outsideAccraFee = it.filter(Char::isDigit) },
-                            label = { Text("Outside listing region fee") },
-                            modifier = Modifier.fillMaxWidth(),
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            shape = RoundedCornerShape(16.dp),
-                        )
-                    }
-                }
-            }
-            item {
-                Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
-                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text("Photos", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = BrandNavy)
-                        Text(
-                            "Upload from Photos or Files. Maximum 7 photos, up to 4MB each. Best quality: clear landscape shots around 1600x900 or higher.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MutedText,
-                        )
-                        if (isCreate) {
-                            if (pendingUploads.isEmpty()) {
-                                Text("No photos selected yet.", style = MaterialTheme.typography.labelLarge, color = MutedText)
-                            } else {
-                                LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                    items(pendingUploads, key = { it.id }) { pending ->
-                                        Box {
-                                            AsyncImage(
-                                                model = pending.previewUri,
-                                                contentDescription = pending.name,
-                                                modifier = Modifier
-                                                    .size(width = 96.dp, height = 72.dp)
-                                                    .clip(RoundedCornerShape(10.dp)),
-                                                contentScale = ContentScale.Crop,
-                                            )
-                                            IconButton(
-                                                onClick = { removePendingUpload(pending.id) },
-                                                modifier = Modifier
-                                                    .align(Alignment.TopEnd)
-                                                    .offset(x = 6.dp, y = (-6).dp)
-                                                    .size(28.dp)
-                                                    .background(Color.White.copy(alpha = 0.92f), CircleShape),
-                                            ) {
-                                                Icon(Icons.Outlined.Close, contentDescription = "Remove photo", tint = Danger)
+                            HostListingStepCard {
+                                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                                    FieldLabelWithInfo(
+                                        label = "Listing title",
+                                        helpTitle = "Listing title",
+                                        helpMessage = "We auto-generate the default title from the brand, model, and year so listings stay clean and consistent. You can still edit it if you need a custom title.",
+                                    )
+                                    OutlinedTextField(
+                                        value = title,
+                                        onValueChange = {
+                                            title = it
+                                            updateTitleOverrideState(it)
+                                        },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        placeholder = { Text("e.g. Honda Civic 2019") },
+                                        shape = RoundedCornerShape(16.dp),
+                                    )
+                                    Text(
+                                        text = if (hasCustomTitleOverride) {
+                                            "Custom title active. Clear it to return to the default format: $generatedListingTitlePreview"
+                                        } else {
+                                            "Default format: $generatedListingTitlePreview"
+                                        },
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MutedText,
+                                    )
+                                    SelectionTextField(
+                                        label = "Brand",
+                                        value = brand,
+                                        options = brandOptions,
+                                        onValueChange = { selection ->
+                                            brand = selection
+                                            val updatedModels = catalog[selection].orEmpty()
+                                                .filter { it.isNotBlank() }
+                                                .distinct()
+                                                .sorted()
+                                            if (updatedModels.none { it.equals(model, ignoreCase = true) }) {
+                                                model = ""
                                             }
+                                        },
+                                        allowCustomValue = false,
+                                    )
+                                    SelectionTextField(
+                                        label = "Model",
+                                        value = model,
+                                        options = modelOptions,
+                                        onValueChange = { model = it },
+                                        allowCustomValue = false,
+                                    )
+                                    SelectionTextField(
+                                        label = "Year",
+                                        value = yearInput,
+                                        options = withCurrentOption(yearOptions, yearInput),
+                                        onValueChange = { yearInput = it.filter(Char::isDigit).take(4) },
+                                        allowCustomValue = false,
+                                    )
+                                    Text(
+                                        text = "Valid range: $minListingYear-$maxListingYear",
+                                        style = MaterialTheme.typography.labelLarge,
+                                        color = MutedText,
+                                    )
+                                }
+                            }
+                        }
+
+                        HostListingEditorStep.VEHICLE_DETAILS -> {
+                            HostListingStepIntro(
+                                title = "Vehicle Details",
+                                subtitle = "Describe the car clearly before guests get to the review screen.",
+                            )
+                            HostListingStepCard {
+                                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                                    SelectionTextField("Car type", carType, typeOptions, { carType = it }, allowCustomValue = false)
+                                    SelectionTextField("Transmission", transmission, transmissionOptions, { transmission = it }, allowCustomValue = false)
+                                    SelectionTextField("Fuel type", fuelType, fuelOptions, { fuelType = it }, allowCustomValue = false)
+                                    HostSeatsStepper(
+                                        seats = seats.trim().toIntOrNull()?.coerceIn(2, 8) ?: 5,
+                                        onSeatsChange = { seats = it.toString() },
+                                    )
+                                    OutlinedTextField(
+                                        value = description,
+                                        onValueChange = { description = it },
+                                        label = { Text("Description") },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        minLines = 4,
+                                        maxLines = 8,
+                                        shape = RoundedCornerShape(16.dp),
+                                    )
+                                    Text(
+                                        text = "Tell guests about condition, comfort, and what makes pickup easy.",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MutedText,
+                                    )
+                                }
+                            }
+                        }
+
+                        HostListingEditorStep.PRICING -> {
+                            HostListingStepIntro(
+                                title = "Pricing",
+                                subtitle = "Set the base day rate first, then reveal extras only when you need them.",
+                            )
+                            HostListingStepCard {
+                                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                                    HostHeroPriceField(
+                                        value = dailyPrice,
+                                        onValueChange = { dailyPrice = it.filter(Char::isDigit) },
+                                        suggestionText = "Suggested: GHS ${pricingSuggestion.first}–${pricingSuggestion.second}/day",
+                                    )
+                                    Text(
+                                        text = "Optional add-ons",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = BrandNavy,
+                                    )
+                                    if (showInsuranceField || insuranceFee.isNotBlank()) {
+                                        OutlinedTextField(
+                                            value = insuranceFee,
+                                            onValueChange = { insuranceFee = it.filter(Char::isDigit) },
+                                            label = { Text("Insurance (per trip)") },
+                                            modifier = Modifier.fillMaxWidth(),
+                                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                            shape = RoundedCornerShape(16.dp),
+                                        )
+                                        SecondaryPillButton(text = "Remove insurance", modifier = Modifier.fillMaxWidth()) {
+                                            showInsuranceField = false
+                                            insuranceFee = ""
+                                        }
+                                    } else {
+                                        SecondaryPillButton(text = "Add insurance", modifier = Modifier.fillMaxWidth()) {
+                                            showInsuranceField = true
+                                        }
+                                    }
+
+                                    if (showDepositField || depositAmount.isNotBlank()) {
+                                        OutlinedTextField(
+                                            value = depositAmount,
+                                            onValueChange = { depositAmount = it.filter(Char::isDigit) },
+                                            label = { Text("Security deposit") },
+                                            modifier = Modifier.fillMaxWidth(),
+                                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                            shape = RoundedCornerShape(16.dp),
+                                        )
+                                        SecondaryPillButton(text = "Remove security deposit", modifier = Modifier.fillMaxWidth()) {
+                                            showDepositField = false
+                                            depositAmount = ""
+                                        }
+                                    } else {
+                                        SecondaryPillButton(text = "Add security deposit", modifier = Modifier.fillMaxWidth()) {
+                                            showDepositField = true
                                         }
                                     }
                                 }
                             }
-                            SecondaryPillButton(
-                                text = if (pendingUploads.size >= maxPhotos) "Photo limit reached" else "Add from Photos",
-                                modifier = Modifier.fillMaxWidth(),
-                                onClick = { pickPhotos.launch("image/*") },
+                        }
+
+                        HostListingEditorStep.LOCATION -> {
+                            HostListingStepIntro(
+                                title = "Location",
+                                subtitle = "Search quality improves when the region and city are precise.",
                             )
-                            SecondaryPillButton(
-                                text = "Add from Files",
-                                modifier = Modifier.fillMaxWidth(),
-                                onClick = { pickFiles.launch(arrayOf("image/*")) },
+                            HostListingStepCard {
+                                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                                    SelectionTextField(
+                                        "Region",
+                                        region,
+                                        regionOptions,
+                                        { selection ->
+                                            region = selection
+                                            val updatedCities = locations[selection].orEmpty()
+                                                .filter { it.isNotBlank() }
+                                                .distinct()
+                                                .sorted()
+                                            if (updatedCities.none { it.equals(city, ignoreCase = true) }) {
+                                                city = updatedCities.firstOrNull().orEmpty()
+                                            }
+                                        },
+                                        allowCustomValue = false,
+                                    )
+                                    SelectionTextField("City", city, cityOptions, { city = it }, allowCustomValue = false)
+                                    Text(
+                                        text = "Guests use this to find nearby cars, so keep it accurate.",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MutedText,
+                                    )
+                                }
+                            }
+                        }
+
+                        HostListingEditorStep.FEATURES_RULES -> {
+                            HostListingStepIntro(
+                                title = "Features & Rules",
+                                subtitle = "Set the booking behavior and any optional trip charges here.",
                             )
-                            Text(
-                                "${pendingUploads.size} / $maxPhotos selected. Selected images upload automatically after listing creation.",
-                                style = MaterialTheme.typography.labelLarge,
-                                color = MutedText,
+                            HostListingStepCard {
+                                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                                    HostToggleRow(
+                                        label = "Instant Book",
+                                        checked = instantBook,
+                                        helpTitle = "Instant Book",
+                                        helpMessage = "When Instant Book is on, guests can confirm the trip immediately after payment instead of waiting for you to manually approve the request.",
+                                    ) { instantBook = it }
+                                    HostToggleRow(
+                                        label = "Delivery available",
+                                        checked = deliveryAvailable,
+                                        helpTitle = "Delivery",
+                                        helpMessage = "Turn this on if you want guests to choose delivery during checkout. Add a delivery fee only if you charge for bringing the car to them.",
+                                    ) { deliveryAvailable = it }
+                                    HostToggleRow("Air conditioning", airConditioning) { airConditioning = it }
+                                    SelectionTextField(
+                                        label = "Cancellation policy",
+                                        value = cancellationPolicy,
+                                        options = cancellationOptions,
+                                        onValueChange = { cancellationPolicy = it },
+                                        allowCustomValue = false,
+                                    )
+                                }
+                            }
+
+                            if (deliveryAvailable || deliveryFee.isNotBlank()) {
+                                HostListingStepCard {
+                                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                        OutlinedTextField(
+                                            value = deliveryFee,
+                                            onValueChange = { deliveryFee = it.filter(Char::isDigit) },
+                                            label = { Text("Delivery fee") },
+                                            modifier = Modifier.fillMaxWidth(),
+                                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                            shape = RoundedCornerShape(16.dp),
+                                        )
+                                        Text(
+                                            text = "Only applied when delivery is enabled.",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MutedText,
+                                        )
+                                    }
+                                }
+                            }
+
+                            HostListingStepCard {
+                                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    Text(
+                                        text = "Extra trip rule",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = BrandNavy,
+                                    )
+                                    if (showOutsideRegionFeeField || outsideAccraFee.isNotBlank()) {
+                                        OutlinedTextField(
+                                            value = outsideAccraFee,
+                                            onValueChange = { outsideAccraFee = it.filter(Char::isDigit) },
+                                            label = { Text("Outside listing region fee") },
+                                            modifier = Modifier.fillMaxWidth(),
+                                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                            shape = RoundedCornerShape(16.dp),
+                                        )
+                                        SecondaryPillButton(text = "Remove outside-region fee", modifier = Modifier.fillMaxWidth()) {
+                                            showOutsideRegionFeeField = false
+                                            outsideAccraFee = ""
+                                        }
+                                    } else {
+                                        SecondaryPillButton(text = "Add outside listing region fee", modifier = Modifier.fillMaxWidth()) {
+                                            showOutsideRegionFeeField = true
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        HostListingEditorStep.PHOTOS -> {
+                            HostListingStepIntro(
+                                title = "Photos",
+                                subtitle = "The first photo becomes the cover, so lead with your strongest angle.",
                             )
-                        } else if (!carId.isNullOrBlank() && carId != "new") {
-                            SecondaryPillButton(
-                                text = "Manage listing photos",
-                                modifier = Modifier.fillMaxWidth(),
-                                onClick = { onOpenPhotos(carId) },
+                            HostListingStepCard {
+                                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                                    Text(
+                                        text = "Upload clear exterior and interior photos. Maximum $maxPhotos photos, up to 4MB each.",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MutedText,
+                                    )
+                                    if (isCreate) {
+                                        if (pendingUploads.isEmpty()) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .height(180.dp)
+                                                    .background(BrandLight, RoundedCornerShape(20.dp)),
+                                                contentAlignment = Alignment.Center,
+                                            ) {
+                                                Text("No photos selected yet.", color = MutedText)
+                                            }
+                                        } else {
+                                            HostPendingUploadGrid(
+                                                uploads = pendingUploads,
+                                                onRemove = ::removePendingUpload,
+                                                onReorder = { from, to ->
+                                                    pendingUploads = pendingUploads.moveItem(from, to)
+                                                },
+                                            )
+                                            Text(
+                                                text = "Long-press and drag to reorder. The first photo is the cover.",
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = MutedText,
+                                            )
+                                        }
+                                        SecondaryPillButton(
+                                            text = if (pendingUploads.size >= maxPhotos) "Photo limit reached" else "Add from Photos",
+                                            modifier = Modifier.fillMaxWidth(),
+                                            onClick = { pickPhotos.launch("image/*") },
+                                        )
+                                        SecondaryPillButton(
+                                            text = "Add from Files",
+                                            modifier = Modifier.fillMaxWidth(),
+                                            onClick = { pickFiles.launch(arrayOf("image/*")) },
+                                        )
+                                    } else {
+                                        if (!existingCoverUrl.isNullOrBlank()) {
+                                            AsyncImage(
+                                                model = existingCoverUrl,
+                                                contentDescription = "Current cover",
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .height(200.dp)
+                                                    .clip(RoundedCornerShape(18.dp)),
+                                                contentScale = ContentScale.Crop,
+                                            )
+                                        }
+                                        if (!carId.isNullOrBlank() && carId != "new") {
+                                            SecondaryPillButton(
+                                                text = "Manage listing photos",
+                                                modifier = Modifier.fillMaxWidth(),
+                                                onClick = { onOpenPhotos(carId) },
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        HostListingEditorStep.REVIEW -> {
+                            HostListingStepIntro(
+                                title = "Review & Publish",
+                                subtitle = "Check the full listing once, then publish with confidence.",
                             )
+
+                            HostListingSummaryCard(
+                                title = "Basic info",
+                                lines = listOf(
+                                    title.ifBlank { "Title pending" },
+                                    listOf(brand, model, yearInput).filter { it.isNotBlank() }.joinToString(" • "),
+                                ),
+                                onEdit = { jumpToStep(HostListingEditorStep.BASIC_INFO) },
+                            )
+                            HostListingSummaryCard(
+                                title = "Vehicle details",
+                                lines = listOf(
+                                    listOf(carType, transmission, fuelType).filter { it.isNotBlank() }.joinToString(" • "),
+                                    "${seats.trim().ifBlank { "5" }} seats",
+                                    description.ifBlank { "Description pending" },
+                                ),
+                                onEdit = { jumpToStep(HostListingEditorStep.VEHICLE_DETAILS) },
+                            )
+                            HostListingSummaryCard(
+                                title = "Pricing",
+                                lines = listOf(
+                                    "GHS ${dailyPrice.ifBlank { "0" }} / day",
+                                    if (insuranceFee.isBlank()) "Insurance not added" else "Insurance: GHS $insuranceFee",
+                                    if (depositAmount.isBlank()) "Deposit not added" else "Deposit: GHS $depositAmount",
+                                ),
+                                onEdit = { jumpToStep(HostListingEditorStep.PRICING) },
+                            )
+                            HostListingSummaryCard(
+                                title = "Location",
+                                lines = listOf(
+                                    region.ifBlank { "Region pending" },
+                                    city.ifBlank { "City pending" },
+                                ),
+                                onEdit = { jumpToStep(HostListingEditorStep.LOCATION) },
+                            )
+                            HostListingSummaryCard(
+                                title = "Features & rules",
+                                lines = listOf(
+                                    if (instantBook) "Instant Book enabled" else "Instant Book off",
+                                    if (deliveryAvailable) "Delivery enabled" else "Delivery off",
+                                    if (airConditioning) "Air conditioning included" else "Air conditioning off",
+                                    cancellationPolicy,
+                                ),
+                                onEdit = { jumpToStep(HostListingEditorStep.FEATURES_RULES) },
+                            )
+                            HostListingStepCard {
+                                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            text = "Photos",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = BrandNavy,
+                                            modifier = Modifier.weight(1f),
+                                        )
+                                        TextButton(onClick = { jumpToStep(HostListingEditorStep.PHOTOS) }) {
+                                            Text("Edit")
+                                        }
+                                    }
+                                    Text(
+                                        text = if (isCreate) {
+                                            if (pendingUploads.isEmpty()) "No photos added yet" else "${pendingUploads.size} photo(s) ready"
+                                        } else {
+                                            val currentCount = existingCar?.car_photos?.size ?: 0
+                                            if (currentCount == 0) "No photos uploaded yet" else "$currentCount current photo(s)"
+                                        },
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MutedText,
+                                    )
+                                    when {
+                                        isCreate && pendingUploads.isNotEmpty() -> {
+                                            AsyncImage(
+                                                model = pendingUploads.first().previewUri,
+                                                contentDescription = "Cover preview",
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .height(180.dp)
+                                                    .clip(RoundedCornerShape(18.dp)),
+                                                contentScale = ContentScale.Crop,
+                                            )
+                                        }
+                                        !existingCoverUrl.isNullOrBlank() -> {
+                                            AsyncImage(
+                                                model = existingCoverUrl,
+                                                contentDescription = "Current cover",
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .height(180.dp)
+                                                    .clip(RoundedCornerShape(18.dp)),
+                                                contentScale = ContentScale.Crop,
+                                            )
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
-                }
-            }
-            item {
-                Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
-                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text("Availability", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = BrandNavy)
-                        if (isCreate) {
-                            Text(
-                                "Create the listing first, then configure availability windows.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = Warning,
-                            )
-                        } else if (!carId.isNullOrBlank() && carId != "new") {
-                            SecondaryPillButton(
-                                text = "Edit blocked dates and weekly blocks",
-                                modifier = Modifier.fillMaxWidth(),
-                                onClick = { onOpenAvailability(carId) },
-                            )
+
+                    if (!isCreate && currentStep != HostListingEditorStep.REVIEW && !carId.isNullOrBlank() && carId != "new") {
+                        HostListingStepCard {
+                            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                Text(
+                                    text = "Availability",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = BrandNavy,
+                                )
+                                Text(
+                                    text = "Blocked dates remain in the availability editor after you save changes.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MutedText,
+                                )
+                                SecondaryPillButton(
+                                    text = "Edit blocked dates and weekly blocks",
+                                    modifier = Modifier.fillMaxWidth(),
+                                    onClick = { onOpenAvailability(carId) },
+                                )
+                            }
                         }
                     }
+
+                    Spacer(modifier = Modifier.height(120.dp))
                 }
             }
-            if (!editorNotice.isNullOrBlank()) {
-                item {
-                    Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
-                        Text(editorNotice.orEmpty(), color = Success, modifier = Modifier.padding(16.dp))
-                    }
-                }
-            }
-            if (!editorError.isNullOrBlank()) {
-                item {
-                    Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
-                        Text(editorError.orEmpty(), color = Danger, modifier = Modifier.padding(16.dp))
-                    }
-                }
-            }
-            item {
-                GradientPillButton(
-                    text = if (isSaving) "Saving..." else if (isCreate) "Create listing" else "Save listing",
-                    modifier = Modifier.fillMaxWidth(),
-                    onClick = ::saveListing,
-                )
-            }
-            item { Spacer(modifier = Modifier.height(24.dp)) }
         }
     }
 }
@@ -5159,7 +7198,9 @@ fun HostBookingsScreen(
 ) {
     val bookingsState by viewModel.bookingsState.collectAsState()
     val me by viewModel.me.collectAsState()
+    val pendingBookingFocus by viewModel.pendingBookingFocus.collectAsState()
     val currentUserId = me?.user?.id.orEmpty()
+    val listState = rememberLazyListState()
 
     LaunchedEffect(Unit) { viewModel.loadBookings() }
 
@@ -5168,12 +7209,21 @@ fun HostBookingsScreen(
         .orEmpty()
         .filter { isHostBooking(it, currentUserId) }
 
+    LaunchedEffect(pendingBookingFocus, hostBookings) {
+        val bookingId = pendingBookingFocus ?: return@LaunchedEffect
+        val index = hostBookings.indexOfFirst { it.id == bookingId }
+        if (index < 0) return@LaunchedEffect
+        listState.animateScrollToItem(index)
+        viewModel.consumePendingBookingFocus(bookingId)
+    }
+
     Scaffold(
         topBar = {
             PageTopBar(title = "Host Bookings")
         },
     ) { inner ->
         LazyColumn(
+            state = listState,
             modifier = Modifier.fillMaxSize().padding(inner).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
@@ -5187,15 +7237,56 @@ fun HostBookingsScreen(
                     } else {
                         items(hostBookings, key = { it.id }) { booking ->
                             val canAct = booking.status.equals("awaiting_host", ignoreCase = true) && booking.payment_status.equals("paid", ignoreCase = true)
-                            Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                            Card(
+                                shape = RoundedCornerShape(16.dp),
+                                colors = CardDefaults.cardColors(containerColor = Color.White),
+                                border = BorderStroke(
+                                    width = if (pendingBookingFocus == booking.id) 2.dp else 1.dp,
+                                    color = if (pendingBookingFocus == booking.id) BrandBlue else Color.Black.copy(alpha = 0.05f),
+                                ),
+                                elevation = CardDefaults.cardElevation(
+                                    defaultElevation = if (pendingBookingFocus == booking.id) 6.dp else 1.dp,
+                                ),
+                            ) {
+                                val displayStatus = resolveBookingDisplayStatus(
+                                    status = booking.status,
+                                    startDate = booking.start_date,
+                                    endDate = booking.end_date,
+                                )
+                                val helperText = bookingHelperText(
+                                    status = displayStatus,
+                                    role = BookingDisplayRole.Host,
+                                    paymentStatus = booking.payment_status,
+                                )
+                                val showPaidBadge = shouldShowCompletedPaidBadge(
+                                    displayStatus,
+                                    booking.payment_status,
+                                )
                                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) {
                                         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                            Text("Booking Request", style = MaterialTheme.typography.labelMedium, color = MutedText, fontWeight = FontWeight.Bold)
-                                            Text(booking.renter?.full_name ?: "Guest", style = MaterialTheme.typography.titleMedium, color = BrandNavy, fontWeight = FontWeight.Bold)
-                                            Text(booking.cars?.title ?: "Hayame listing", style = MaterialTheme.typography.bodyLarge, color = BrandBlue, fontWeight = FontWeight.SemiBold)
+                                            Text(
+                                                booking.cars?.title ?: "Hayame listing",
+                                                style = MaterialTheme.typography.titleMedium,
+                                                color = BrandNavy,
+                                                fontWeight = FontWeight.Bold,
+                                            )
+                                            Text(
+                                                text = "Renter: ${booking.renter?.full_name ?: "Guest"}",
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = MutedText,
+                                                fontWeight = FontWeight.Medium,
+                                            )
+                                            Text(
+                                                text = helperText,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MutedText,
+                                            )
                                         }
-                                        StatusBadge(status = booking.status ?: "pending")
+                                        BookingStatusBadgeStack(
+                                            status = displayStatus,
+                                            showPaidBadge = showPaidBadge,
+                                        )
                                     }
                                     InfoLine(label = "Trip", value = "${booking.start_date.orEmpty().ifBlank { "-" }} - ${booking.end_date.orEmpty().ifBlank { "-" }}")
                                     InfoLine(label = "Trip use", value = booking.trip_use_address ?: listOfNotNull(booking.trip_use_city, booking.trip_use_region).joinToString(", ").ifBlank { "Not provided" })
@@ -5231,9 +7322,6 @@ fun HostBookingsScreen(
                                                 Text("Approve")
                                             }
                                         }
-                                    }
-                                    if (booking.status.equals("awaiting_host", ignoreCase = true) && !booking.payment_status.equals("paid", ignoreCase = true)) {
-                                        Text("Waiting for renter payment before approval.", color = Warning, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                                     }
                                 }
                             }
@@ -5807,7 +7895,48 @@ private fun Int.asOptionalFeeText(): String {
     return if (this == 0) "" else this.toString()
 }
 
+private fun buildGeneratedListingTitle(
+    brand: String?,
+    model: String?,
+    year: Int?,
+): String? {
+    val normalizedBrand = brand.orEmpty().trim().replace(Regex("\\s+"), " ")
+    val normalizedModel = model.orEmpty().trim().replace(Regex("\\s+"), " ")
+    val normalizedYear = year?.takeIf { it > 0 }?.toString().orEmpty()
+    if (normalizedBrand.isBlank() || normalizedModel.isBlank() || normalizedYear.isBlank()) {
+        return null
+    }
+    return "$normalizedBrand $normalizedModel $normalizedYear"
+}
+
 private fun resolveAppImage(raw: String?): String? = RemoteImageUrlResolver.resolve(raw)
+
+@Composable
+private fun HostListingThumbnail(imageUrl: String?) {
+    Box(
+        modifier = Modifier
+            .size(width = 92.dp, height = 76.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(BrandLight),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (!imageUrl.isNullOrBlank()) {
+            AsyncImage(
+                model = imageUrl,
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop,
+            )
+        } else {
+            Icon(
+                Icons.Outlined.DirectionsCar,
+                contentDescription = null,
+                tint = BrandBlue,
+                modifier = Modifier.size(22.dp),
+            )
+        }
+    }
+}
 
 private fun avatarInitials(value: String?, fallback: String = "U"): String {
     val initials = value
@@ -6047,14 +8176,390 @@ private fun HostQuickActionCard(
 }
 
 @Composable
-private fun HostToggleRow(label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+private fun HostToggleRow(
+    label: String,
+    checked: Boolean,
+    helpTitle: String? = null,
+    helpMessage: String? = null,
+    onCheckedChange: (Boolean) -> Unit,
+) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text(label, modifier = Modifier.weight(1f), color = BrandNavy, style = MaterialTheme.typography.bodyLarge)
+        FieldLabelWithInfo(
+            label = label,
+            helpTitle = helpTitle,
+            helpMessage = helpMessage,
+            modifier = Modifier.weight(1f),
+        )
         Switch(checked = checked, onCheckedChange = onCheckedChange)
+    }
+}
+
+@Composable
+private fun FieldLabelWithInfo(
+    label: String,
+    helpTitle: String? = null,
+    helpMessage: String? = null,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text(
+            label,
+            color = BrandNavy,
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = FontWeight.Bold,
+        )
+        if (!helpTitle.isNullOrBlank() && !helpMessage.isNullOrBlank()) {
+            InlineInfoButton(title = helpTitle, message = helpMessage)
+        }
+    }
+}
+
+private enum class HostListingEditorStep(val title: String, val shortTitle: String) {
+    BASIC_INFO("Basic Info", "Info"),
+    VEHICLE_DETAILS("Vehicle Details", "Details"),
+    PRICING("Pricing", "Pricing"),
+    LOCATION("Location", "Place"),
+    FEATURES_RULES("Features & Rules", "Rules"),
+    PHOTOS("Photos", "Photos"),
+    REVIEW("Review & Publish", "Review"),
+}
+
+private fun suggestedListingPricing(carType: String, year: Int): Pair<Int, Int> {
+    val base = when (carType.trim().lowercase()) {
+        "luxury" -> 520
+        "van" -> 360
+        "pickup" -> 340
+        "suv" -> 310
+        "coupe" -> 290
+        "hatchback" -> 220
+        else -> 250
+    }
+    val lower = max(120, base + ((year - 2018) * 8))
+    return lower to (lower + 70)
+}
+
+private fun <T> List<T>.moveItem(fromIndex: Int, toIndex: Int): List<T> {
+    if (fromIndex == toIndex || fromIndex !in indices || toIndex !in indices) return this
+    val mutable = toMutableList()
+    val moved = mutable.removeAt(fromIndex)
+    mutable.add(toIndex, moved)
+    return mutable.toList()
+}
+
+private fun calculatePhotoReorderTarget(fromIndex: Int, dragOffset: Offset, totalCount: Int): Int {
+    var targetIndex = fromIndex
+    if (dragOffset.x > 72f) targetIndex += 1
+    if (dragOffset.x < -72f) targetIndex -= 1
+    if (dragOffset.y > 92f) targetIndex += 2
+    if (dragOffset.y < -92f) targetIndex -= 2
+    return targetIndex.coerceIn(0, max(totalCount - 1, 0))
+}
+
+@Composable
+private fun HostListingProgressHeader(currentStep: HostListingEditorStep) {
+    Card(
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Text(
+                text = "Step ${currentStep.ordinal + 1} of ${HostListingEditorStep.entries.size}",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                color = BrandBlue,
+            )
+            Text(
+                text = currentStep.title,
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.ExtraBold,
+                color = BrandNavy,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                HostListingEditorStep.entries.forEach { step ->
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(8.dp),
+                            color = if (step.ordinal <= currentStep.ordinal) BrandBlue else Color.White,
+                            shape = RoundedCornerShape(999.dp),
+                            border = BorderStroke(
+                                1.dp,
+                                if (step.ordinal <= currentStep.ordinal) BrandBlue else Color.Black.copy(alpha = 0.08f),
+                            ),
+                        ) {}
+                        Text(
+                            text = step.shortTitle,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = if (step == currentStep) BrandBlue else MutedText,
+                            modifier = Modifier.fillMaxWidth(),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            textAlign = TextAlign.Center,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HostListingStatusBanner(text: String, color: Color) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = color.copy(alpha = 0.08f),
+        shape = RoundedCornerShape(18.dp),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(10.dp)
+                    .background(color, CircleShape),
+            )
+            Text(text = text, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = color)
+        }
+    }
+}
+
+@Composable
+private fun HostListingStepIntro(title: String, subtitle: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(text = title, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.ExtraBold, color = BrandNavy)
+        Text(text = subtitle, style = MaterialTheme.typography.bodyMedium, color = MutedText)
+    }
+}
+
+@Composable
+private fun HostListingStepCard(content: @Composable ColumnScope.() -> Unit) {
+    Card(
+        shape = RoundedCornerShape(22.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            content = content,
+        )
+    }
+}
+
+@Composable
+private fun HostHeroPriceField(value: String, onValueChange: (String) -> Unit, suggestionText: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(text = "Daily price", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = BrandNavy)
+        Surface(
+            color = BrandLight,
+            shape = RoundedCornerShape(22.dp),
+            border = BorderStroke(1.dp, BrandBlue.copy(alpha = 0.14f)),
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 18.dp, vertical = 18.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text("GHS", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = BrandBlue)
+                OutlinedTextField(
+                    value = value,
+                    onValueChange = { onValueChange(it.filter(Char::isDigit)) },
+                    modifier = Modifier.weight(1f),
+                    textStyle = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.ExtraBold, color = BrandNavy),
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    shape = RoundedCornerShape(16.dp),
+                )
+                Text("/ day", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold, color = MutedText)
+            }
+        }
+        Text(text = suggestionText, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = BrandBlue)
+        Text(
+            text = "This is the main number guests notice first, so keep it competitive and easy to justify.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MutedText,
+        )
+    }
+}
+
+@Composable
+private fun HostSeatsStepper(seats: Int, onSeatsChange: (Int) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(text = "Seats", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = BrandNavy)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Color(0xFFF7F9FC), RoundedCornerShape(16.dp))
+                .padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            SecondaryPillButton(text = "-", modifier = Modifier.widthIn(min = 56.dp)) {
+                onSeatsChange(max(2, seats - 1))
+            }
+            Text(
+                text = "$seats seats",
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.ExtraBold,
+                color = BrandBlue,
+                textAlign = TextAlign.Center,
+            )
+            SecondaryPillButton(text = "+", modifier = Modifier.widthIn(min = 56.dp)) {
+                onSeatsChange(min(8, seats + 1))
+            }
+        }
+    }
+}
+
+@Composable
+private fun HostListingBottomBar(
+    backTitle: String,
+    primaryTitle: String,
+    isPrimaryDisabled: Boolean,
+    onBack: () -> Unit,
+    onPrimary: () -> Unit,
+) {
+    Surface(color = Color.White.copy(alpha = 0.96f), tonalElevation = 6.dp) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp)
+                .navigationBarsPadding(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            SecondaryPillButton(text = backTitle, modifier = Modifier.widthIn(min = 110.dp), onClick = onBack)
+            Button(
+                onClick = onPrimary,
+                modifier = Modifier.weight(1f),
+                enabled = !isPrimaryDisabled,
+                shape = RoundedCornerShape(18.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
+                contentPadding = PaddingValues(),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            brush = Brush.horizontalGradient(colors = listOf(BrandBlue, BrandNavy)),
+                            shape = RoundedCornerShape(18.dp),
+                        )
+                        .padding(vertical = 16.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(primaryTitle, color = Color.White, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HostListingSummaryCard(title: String, lines: List<String>, onEdit: () -> Unit) {
+    HostListingStepCard {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(text = title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = BrandNavy, modifier = Modifier.weight(1f))
+            TextButton(onClick = onEdit) {
+                Text("Edit")
+            }
+        }
+        lines.filter { it.isNotBlank() }.forEach { line ->
+            Text(text = line, style = MaterialTheme.typography.bodyMedium, color = MutedText)
+        }
+    }
+}
+
+@Composable
+private fun HostPendingUploadGrid(
+    uploads: List<PendingListingUpload>,
+    onRemove: (String) -> Unit,
+    onReorder: (Int, Int) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        uploads.chunked(2).forEachIndexed { rowIndex, row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                row.forEachIndexed { columnIndex, upload ->
+                    val index = rowIndex * 2 + columnIndex
+                    var dragOffset by remember(upload.id) { mutableStateOf(Offset.Zero) }
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(148.dp)
+                            .offset { IntOffset(dragOffset.x.roundToInt(), dragOffset.y.roundToInt()) }
+                            .zIndex(if (dragOffset != Offset.Zero) 1f else 0f)
+                            .clip(RoundedCornerShape(18.dp))
+                            .background(BrandLight)
+                            .pointerInput(upload.id, uploads.size) {
+                                detectDragGesturesAfterLongPress(
+                                    onDrag = { change, amount ->
+                                        change.consume()
+                                        dragOffset += amount
+                                    },
+                                    onDragEnd = {
+                                        val target = calculatePhotoReorderTarget(index, dragOffset, uploads.size)
+                                        if (target != index) {
+                                            onReorder(index, target)
+                                        }
+                                        dragOffset = Offset.Zero
+                                    },
+                                    onDragCancel = {
+                                        dragOffset = Offset.Zero
+                                    },
+                                )
+                            },
+                    ) {
+                        AsyncImage(
+                            model = upload.previewUri,
+                            contentDescription = upload.name,
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop,
+                        )
+                        Text(
+                            text = if (index == 0) "Cover" else "Drag",
+                            modifier = Modifier
+                                .align(Alignment.BottomStart)
+                                .padding(10.dp)
+                                .background(if (index == 0) BrandBlue else Color.Black.copy(alpha = 0.58f), RoundedCornerShape(999.dp))
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White,
+                        )
+                        IconButton(
+                            onClick = { onRemove(upload.id) },
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(6.dp)
+                                .size(30.dp)
+                                .background(Color.White.copy(alpha = 0.92f), CircleShape),
+                        ) {
+                            Icon(Icons.Outlined.Close, contentDescription = "Remove photo", tint = Danger)
+                        }
+                    }
+                }
+                if (row.size == 1) {
+                    Spacer(modifier = Modifier.weight(1f))
+                }
+            }
+        }
     }
 }
 

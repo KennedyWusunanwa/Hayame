@@ -28,9 +28,14 @@ class BookingRepository(
         carId: String,
         startDate: String,
         endDate: String,
+        tripMode: String?,
         tripUseRegion: String,
         tripUseCity: String,
         tripUseAddress: String,
+        deliveryAddress: String?,
+        deliveryTime: String?,
+        contactPhone: String?,
+        deliveryNotes: String?,
     ): BookingHoldResponse {
         return authedCall { auth ->
             api.createBookingHold(
@@ -39,9 +44,14 @@ class BookingRepository(
                     carId = carId,
                     startDate = startDate,
                     endDate = endDate,
+                    tripMode = tripMode,
                     tripUseRegion = tripUseRegion,
                     tripUseCity = tripUseCity,
                     tripUseAddress = tripUseAddress,
+                    deliveryAddress = deliveryAddress,
+                    deliveryTime = deliveryTime,
+                    contactPhone = contactPhone,
+                    deliveryNotes = deliveryNotes,
                 ),
             )
         }

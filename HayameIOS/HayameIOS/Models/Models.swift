@@ -50,11 +50,116 @@ enum BookingStatus: String, Codable, CaseIterable {
     }
 }
 
+enum BookingDisplayContext {
+    case renter
+    case host
+}
+
+enum BookingDisplayStatus: Equatable {
+    case pending
+    case confirmed
+    case ongoing
+    case completed
+    case cancelled
+    case rejected
+    case refunded
+
+    var label: String {
+        switch self {
+        case .pending: return "Pending"
+        case .confirmed: return "Confirmed"
+        case .ongoing: return "Ongoing"
+        case .completed: return "Completed"
+        case .cancelled: return "Cancelled"
+        case .rejected: return "Rejected"
+        case .refunded: return "Refunded"
+        }
+    }
+
+    func helperText(
+        for context: BookingDisplayContext,
+        paymentStatus: PaymentStatus? = nil
+    ) -> String {
+        switch self {
+        case .pending:
+            switch context {
+            case .renter:
+                return "Waiting for host confirmation."
+            case .host:
+                return paymentStatus == .paid
+                    ? "Review this request and decide what happens next."
+                    : "Waiting for renter payment before approval."
+            }
+        case .confirmed:
+            switch context {
+            case .renter:
+                return "Your trip is confirmed. Get ready."
+            case .host:
+                return "Booking confirmed. Prepare for handoff."
+            }
+        case .ongoing:
+            switch context {
+            case .renter:
+                return "Your trip is in progress."
+            case .host:
+                return "Trip is in progress."
+            }
+        case .completed:
+            return "Trip completed successfully."
+        case .cancelled:
+            return "This booking was cancelled."
+        case .rejected:
+            return "This booking was rejected."
+        case .refunded:
+            return "This booking was refunded."
+        }
+    }
+}
+
 enum PaymentStatus: String, Codable, CaseIterable {
     case pending
     case paid
     case refunded
     case failed
+}
+
+enum BookingTripMode: String, Codable, CaseIterable, Identifiable {
+    case pickup
+    case delivery
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .pickup: return "Pickup"
+        case .delivery: return "Delivery"
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .pickup:
+            return "Pick up the car at the listing area and save the delivery fee."
+        case .delivery:
+            return "Have the host bring the car to your preferred handoff point."
+        }
+    }
+
+    var helperTitle: String {
+        switch self {
+        case .pickup: return "Pickup"
+        case .delivery: return "Delivery"
+        }
+    }
+
+    var helperMessage: String {
+        switch self {
+        case .pickup:
+            return "Pickup means you meet at the listing area and no delivery fee is charged."
+        case .delivery:
+            return "Delivery means the host brings the car to you. Add the exact address, preferred time, and a contact number."
+        }
+    }
 }
 
 enum HostApplicationStatus: String, Codable {
@@ -249,6 +354,45 @@ extension Car {
     }
 }
 
+func buildListingTitle(
+    brand: String?,
+    model: String?,
+    carYear: Int?
+) -> String? {
+    let normalizedBrand = normalizeListingTitleComponent(brand)
+    let normalizedModel = normalizeListingTitleComponent(model)
+    let normalizedYear: String
+    if let carYear, carYear > 0 {
+        normalizedYear = String(carYear)
+    } else {
+        normalizedYear = ""
+    }
+
+    guard !normalizedBrand.isEmpty, !normalizedModel.isEmpty, !normalizedYear.isEmpty else {
+        return nil
+    }
+
+    return "\(normalizedBrand) \(normalizedModel) \(normalizedYear)"
+}
+
+func buildListingTitlePreview(
+    brand: String?,
+    model: String?,
+    carYear: Int?
+) -> String {
+    buildListingTitle(brand: brand, model: model, carYear: carYear) ?? "Select brand, model and year"
+}
+
+private func normalizeListingTitleComponent(_ rawValue: String?) -> String {
+    let trimmed = (rawValue ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return "" }
+    return trimmed.replacingOccurrences(
+        of: #"\s+"#,
+        with: " ",
+        options: .regularExpression
+    )
+}
+
 struct Booking: Identifiable, Hashable {
     let id: String
     var carID: String
@@ -277,6 +421,36 @@ struct Booking: Identifiable, Hashable {
     var paymentReference: String? = nil
     var rejectionReason: String? = nil
     var createdAt: Date
+}
+
+extension Booking {
+    var displayStatus: BookingDisplayStatus {
+        switch status {
+        case .completed:
+            return .completed
+        case .cancelled:
+            return .cancelled
+        case .rejected:
+            return .rejected
+        case .refunded:
+            return .refunded
+        case .confirmed:
+            let now = Date()
+            if now >= endDate {
+                return .completed
+            }
+            if now >= startDate && now < endDate {
+                return .ongoing
+            }
+            return .confirmed
+        case .pending, .awaitingHost:
+            return .pending
+        }
+    }
+
+    var shouldShowCompletedPaidBadge: Bool {
+        displayStatus == .completed && paymentStatus == .paid
+    }
 }
 
 struct Review: Identifiable, Hashable {
@@ -357,6 +531,13 @@ struct ListingDraft: Hashable, Codable {
     var depositAmount: Int = 0
     var outsideAccraFee: Int = 0
     var cancellationPolicy: String = "Moderate"
+}
+
+struct BookingDeliveryDetails: Hashable, Codable {
+    var address: String = ""
+    var time: String = ""
+    var contactPhone: String = ""
+    var notes: String = ""
 }
 
 struct ExploreFilterState: Hashable {

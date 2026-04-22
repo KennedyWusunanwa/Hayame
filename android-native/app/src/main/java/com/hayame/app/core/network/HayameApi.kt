@@ -6,6 +6,7 @@ import okhttp3.RequestBody
 import retrofit2.http.Body
 import retrofit2.http.DELETE
 import retrofit2.http.GET
+import retrofit2.http.HTTP
 import retrofit2.http.Header
 import retrofit2.http.Multipart
 import retrofit2.http.PATCH
@@ -222,6 +223,12 @@ interface HayameApi {
         @Header("Authorization") auth: String,
         @Body body: PushRegisterRequest,
     ): PushRegisterResponse
+
+    @HTTP(method = "DELETE", path = "api/mobile/push/unregister", hasBody = true)
+    suspend fun unregisterPush(
+        @Header("Authorization") auth: String,
+        @Body body: PushRegisterRequest,
+    ): PushUnregisterResponse
 
     @GET("api/mobile/push/status")
     suspend fun pushStatus(@Header("Authorization") auth: String): PushStatusEnvelope

@@ -17,9 +17,19 @@ type PushConfig = {
   useSandbox: boolean;
 };
 
-type FcmConfig = {
+type FcmLegacyConfig = {
+  mode: "legacy";
   serverKey: string;
 };
+
+type FcmV1Config = {
+  mode: "v1";
+  projectId: string;
+  clientEmail: string;
+  privateKey: string;
+};
+
+type FcmConfig = FcmLegacyConfig | FcmV1Config;
 
 type ApnsSendResult = {
   ok: boolean;
@@ -50,6 +60,31 @@ type CachedJwt = {
   cacheKey: string;
 };
 
+type CachedOauthToken = {
+  accessToken: string;
+  expiresAt: number;
+  cacheKey: string;
+};
+
+export type PushConfigurationStatus = {
+  configured: boolean;
+  apns: {
+    configured: boolean;
+    teamIdConfigured: boolean;
+    keyIdConfigured: boolean;
+    privateKeyConfigured: boolean;
+    topic: string;
+    useSandbox: boolean;
+  };
+  fcm: {
+    configured: boolean;
+    mode: "v1" | "legacy" | null;
+    projectId: string | null;
+    serverKeyConfigured: boolean;
+    serviceAccountConfigured: boolean;
+  };
+};
+
 type PushSendResult = {
   attempted: number;
   delivered: number;
@@ -71,10 +106,15 @@ const INVALID_FCM_TOKEN_REASONS = new Set([
   "InvalidRegistration",
   "NotRegistered",
   "MismatchSenderId",
+  "UNREGISTERED",
+  "SENDER_ID_MISMATCH",
 ]);
 const MESSAGE_FALLBACK = "You have a new notification.";
+const FCM_OAUTH_AUDIENCE = "https://oauth2.googleapis.com/token";
+const FCM_OAUTH_SCOPE = "https://www.googleapis.com/auth/firebase.messaging";
 
 let cachedJwt: CachedJwt | null = null;
+let cachedFcmAccessToken: CachedOauthToken | null = null;
 
 function normalizeEnvValue(value: string | undefined | null) {
   return value?.trim() ?? "";
@@ -130,14 +170,106 @@ function resolvePushConfig(): PushConfig | null {
   };
 }
 
+function resolveFirebaseServiceAccount(): Omit<FcmV1Config, "mode"> | null {
+  const projectIdEnv =
+    normalizeEnvValue(process.env.FIREBASE_PROJECT_ID) ||
+    normalizeEnvValue(process.env.FCM_PROJECT_ID);
+  const clientEmailEnv = normalizeEnvValue(process.env.FIREBASE_CLIENT_EMAIL);
+  const privateKeyEnv = normalizeEnvValue(process.env.FIREBASE_PRIVATE_KEY);
+  const rawServiceAccount =
+    normalizeEnvValue(process.env.FIREBASE_SERVICE_ACCOUNT_JSON) ||
+    normalizeEnvValue(process.env.GOOGLE_SERVICE_ACCOUNT_JSON);
+
+  let projectId = projectIdEnv;
+  let clientEmail = clientEmailEnv;
+  let privateKey = privateKeyEnv;
+
+  if (rawServiceAccount && !isPlaceholderValue(rawServiceAccount)) {
+    try {
+      const parsed = JSON.parse(rawServiceAccount) as {
+        project_id?: string;
+        client_email?: string;
+        private_key?: string;
+      };
+      projectId = projectId || normalizeEnvValue(parsed.project_id);
+      clientEmail = clientEmail || normalizeEnvValue(parsed.client_email);
+      privateKey = privateKey || normalizeEnvValue(parsed.private_key);
+    } catch {
+      return null;
+    }
+  }
+
+  if (
+    !hasConfiguredValue(projectId) ||
+    !hasConfiguredValue(clientEmail) ||
+    !hasConfiguredValue(privateKey)
+  ) {
+    return null;
+  }
+
+  return {
+    projectId,
+    clientEmail,
+    privateKey: privateKey.replace(/\\n/g, "\n"),
+  };
+}
+
 function resolveFcmConfig(): FcmConfig | null {
+  const serviceAccount = resolveFirebaseServiceAccount();
+  if (serviceAccount) {
+    return {
+      mode: "v1",
+      projectId: serviceAccount.projectId,
+      clientEmail: serviceAccount.clientEmail,
+      privateKey: serviceAccount.privateKey,
+    };
+  }
+
   const serverKey =
     normalizeEnvValue(process.env.FCM_SERVER_KEY) ||
     normalizeEnvValue(process.env.FIREBASE_SERVER_KEY);
   if (!hasConfiguredValue(serverKey)) {
     return null;
   }
-  return { serverKey };
+  return { mode: "legacy", serverKey };
+}
+
+export function getPushConfigurationStatus(): PushConfigurationStatus {
+  const apnsConfig = resolvePushConfig();
+  const apnsTopic =
+    normalizeEnvValue(process.env.APNS_TOPIC) ||
+    normalizeEnvValue(process.env.IOS_BUNDLE_IDENTIFIER) ||
+    "com.hayame.app";
+  const apnsUseSandbox = ["1", "true", "yes", "on"].includes(
+    normalizeEnvValue(process.env.APNS_USE_SANDBOX).toLowerCase(),
+  );
+  const serviceAccount = resolveFirebaseServiceAccount();
+  const serverKeyConfigured =
+    hasConfiguredValue(process.env.FCM_SERVER_KEY) ||
+    hasConfiguredValue(process.env.FIREBASE_SERVER_KEY);
+  const fcmConfig = resolveFcmConfig();
+
+  return {
+    configured: Boolean(apnsConfig || fcmConfig),
+    apns: {
+      configured: Boolean(apnsConfig),
+      teamIdConfigured: hasConfiguredValue(process.env.APNS_TEAM_ID),
+      keyIdConfigured: hasConfiguredValue(process.env.APNS_KEY_ID),
+      privateKeyConfigured: hasConfiguredValue(process.env.APNS_PRIVATE_KEY),
+      topic: apnsTopic,
+      useSandbox: apnsUseSandbox,
+    },
+    fcm: {
+      configured: Boolean(fcmConfig),
+      mode: fcmConfig?.mode ?? null,
+      projectId:
+        (fcmConfig?.mode === "v1" ? fcmConfig.projectId : null) ??
+        serviceAccount?.projectId ??
+        null,
+      serverKeyConfigured,
+      serviceAccountConfigured: Boolean(serviceAccount),
+    },
+  };
 }
 
 function base64Url(input: string | Buffer) {
@@ -177,6 +309,69 @@ function buildApnsJwt(config: PushConfig) {
     expiresAt: now + 50 * 60,
   };
   return jwt;
+}
+
+async function getFcmAccessToken(config: FcmV1Config) {
+  const now = Math.floor(Date.now() / 1000);
+  const cacheKey = `${config.projectId}:${config.clientEmail}`;
+  if (
+    cachedFcmAccessToken &&
+    cachedFcmAccessToken.cacheKey === cacheKey &&
+    cachedFcmAccessToken.expiresAt > now + 60
+  ) {
+    return cachedFcmAccessToken.accessToken;
+  }
+
+  const header = base64Url(JSON.stringify({ alg: "RS256", typ: "JWT" }));
+  const payload = base64Url(
+    JSON.stringify({
+      iss: config.clientEmail,
+      sub: config.clientEmail,
+      aud: FCM_OAUTH_AUDIENCE,
+      scope: FCM_OAUTH_SCOPE,
+      iat: now,
+      exp: now + 3600,
+    }),
+  );
+  const tokenBody = `${header}.${payload}`;
+
+  const signer = createSign("RSA-SHA256");
+  signer.update(tokenBody);
+  signer.end();
+  const signature = signer.sign(config.privateKey);
+  const assertion = `${tokenBody}.${base64Url(signature)}`;
+
+  const response = await fetch(FCM_OAUTH_AUDIENCE, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: new URLSearchParams({
+      grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+      assertion,
+    }),
+  });
+
+  const raw = await response.text();
+  if (!response.ok) {
+    throw new Error(raw || `fcm_oauth_${response.status}`);
+  }
+
+  const parsed = JSON.parse(raw) as {
+    access_token?: string;
+    expires_in?: number;
+  };
+  const accessToken = normalizeEnvValue(parsed.access_token);
+  if (!accessToken) {
+    throw new Error("fcm_oauth_missing_access_token");
+  }
+
+  cachedFcmAccessToken = {
+    accessToken,
+    cacheKey,
+    expiresAt: now + Math.max(60, Number(parsed.expires_in ?? 3600) - 60),
+  };
+  return accessToken;
 }
 
 function sanitizeData(data: Record<string, PushDataValue> | undefined) {
@@ -372,28 +567,82 @@ async function sendFcmPush(params: {
   data?: Record<string, string | number | boolean | null>;
   collapseId?: string;
 }): Promise<FcmSendResult> {
-  const payload: Record<string, unknown> = {
-    to: params.deviceToken,
-    priority: "high",
-    notification: {
+  const dataPayload = Object.fromEntries(
+    Object.entries({
       title: trimMessage(params.title, "Hayame"),
       body: trimMessage(params.body, MESSAGE_FALLBACK),
-      sound: "default",
-    },
-  };
-  if (params.collapseId) {
-    payload.collapse_key = params.collapseId;
-  }
-  if (params.data && Object.keys(params.data).length > 0) {
-    payload.data = Object.fromEntries(
-      Object.entries(params.data).map(([key, value]) => [
-        key,
-        String(value ?? ""),
-      ]),
-    );
-  }
+      ...(params.data ?? {}),
+    }).map(([key, value]) => [key, String(value ?? "")]),
+  );
 
   try {
+    if (params.config.mode === "v1") {
+      const accessToken = await getFcmAccessToken(params.config);
+      const message: Record<string, unknown> = {
+        token: params.deviceToken,
+        data: dataPayload,
+        android: {
+          priority: "HIGH",
+        },
+      };
+      if (params.collapseId) {
+        message.android = {
+          ...(message.android as Record<string, unknown>),
+          collapseKey: params.collapseId,
+        };
+      }
+
+      const response = await fetch(
+        `https://fcm.googleapis.com/v1/projects/${params.config.projectId}/messages:send`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ message }),
+        },
+      );
+
+      const raw = await response.text();
+      let reason: string | null = null;
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw) as {
+            error?: {
+              status?: string;
+              message?: string;
+              details?: Array<{ errorCode?: string }>;
+            };
+          };
+          reason =
+            parsed.error?.details?.find(
+              (detail) => typeof detail?.errorCode === "string",
+            )?.errorCode ??
+            parsed.error?.status ??
+            parsed.error?.message ??
+            null;
+        } catch {
+          reason = null;
+        }
+      }
+
+      return {
+        ok: response.ok && !reason,
+        statusCode: response.status,
+        reason,
+      };
+    }
+
+    const payload: Record<string, unknown> = {
+      to: params.deviceToken,
+      priority: "high",
+      data: dataPayload,
+    };
+    if (params.collapseId) {
+      payload.collapse_key = params.collapseId;
+    }
+
     const response = await fetch("https://fcm.googleapis.com/fcm/send", {
       method: "POST",
       headers: {
@@ -420,9 +669,8 @@ async function sendFcmPush(params: {
       }
     }
 
-    const ok = response.ok && !reason;
     return {
-      ok,
+      ok: response.ok && !reason,
       statusCode: response.status,
       reason,
     };

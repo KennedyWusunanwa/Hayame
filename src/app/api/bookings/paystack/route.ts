@@ -3,6 +3,13 @@ import { differenceInCalendarDays } from "date-fns";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getRequestUser } from "@/lib/supabase/request-auth";
+import {
+  normalizeBookingDelivery,
+  normalizeBookingTripMode,
+  resolveBookingTripMode,
+  toNullableBookingDelivery,
+  validateBookingDelivery,
+} from "@/lib/booking-delivery";
 import { verifyPaystackTransaction } from "@/lib/paystack";
 import { isLocationOutsideAccra, isOutsideListingRegion } from "@/lib/utils";
 import {
@@ -17,10 +24,15 @@ type Body = {
   carId?: string;
   startDate?: string;
   endDate?: string;
+  tripMode?: string;
   tripUseRegion?: string;
   tripUseCity?: string;
   tripUseAddress?: string;
   tripOutsideAccra?: boolean;
+  deliveryAddress?: string;
+  deliveryTime?: string;
+  contactPhone?: string;
+  deliveryNotes?: string;
   reference?: string;
   amount?: number;
   bookingId?: string;
@@ -120,6 +132,7 @@ export async function POST(req: Request) {
     const { reference, amount, bookingId } = body;
     let { carId, startDate, endDate } = body;
     let { tripUseRegion, tripUseCity, tripUseAddress } = body;
+    let { deliveryAddress, deliveryTime, contactPhone, deliveryNotes } = body;
     let heldBooking: any = null;
     if (!reference || !amount) {
       return NextResponse.json(
@@ -132,7 +145,7 @@ export async function POST(req: Request) {
       const { data: booking, error: bookingError } = await supa
         .from("bookings")
         .select(
-          "id,car_id,renter_id,start_date,end_date,status,hold_expires_at,trip_use_region,trip_use_city,trip_use_address,trip_outside_accra,trip_outside_listing_region,outside_accra_surcharge",
+          "id,car_id,renter_id,start_date,end_date,status,hold_expires_at,delivery_address,delivery_time,contact_phone,delivery_notes,delivery_fee,trip_use_region,trip_use_city,trip_use_address,trip_outside_accra,trip_outside_listing_region,outside_accra_surcharge",
         )
         .eq("id", bookingId)
         .single();
@@ -175,6 +188,10 @@ export async function POST(req: Request) {
       tripUseRegion = booking.trip_use_region ?? tripUseRegion;
       tripUseCity = booking.trip_use_city ?? tripUseCity;
       tripUseAddress = booking.trip_use_address ?? tripUseAddress;
+      deliveryAddress = booking.delivery_address ?? deliveryAddress;
+      deliveryTime = booking.delivery_time ?? deliveryTime;
+      contactPhone = booking.contact_phone ?? contactPhone;
+      deliveryNotes = booking.delivery_notes ?? deliveryNotes;
       body.tripOutsideAccra =
         typeof booking.trip_outside_accra === "boolean"
           ? booking.trip_outside_accra
@@ -191,7 +208,7 @@ export async function POST(req: Request) {
     const { data: carData, error: carError } = await supa
       .from("cars")
       .select(
-        "id,title,daily_price,owner_id,instant_book,is_available,city,region,delivery_fee,insurance_fee,deposit_amount,outside_accra_fee",
+        "id,title,daily_price,owner_id,instant_book,is_available,city,region,delivery_fee,delivery_available,insurance_fee,deposit_amount,outside_accra_fee",
       )
       .eq("id", carId)
       .single();
@@ -243,6 +260,72 @@ export async function POST(req: Request) {
         { status: 400 },
       );
     }
+
+    const requestedTripMode = normalizeBookingTripMode(body.tripMode);
+    if (requestedTripMode === "delivery" && car.delivery_available !== true) {
+      if (bookingId) {
+        await supa
+          .from("bookings")
+          .update({
+            status: "cancelled",
+            payment_status: "failed",
+            hold_expires_at: null,
+          })
+          .eq("id", bookingId);
+      }
+      return NextResponse.json(
+        { message: "Delivery is not available for this car." },
+        { status: 400 },
+      );
+    }
+
+    const normalizedDelivery = normalizeBookingDelivery({
+      deliveryAddress,
+      deliveryTime,
+      contactPhone,
+      deliveryNotes,
+    });
+    const tripMode = bookingId
+      ? resolveBookingTripMode({
+          deliveryAvailable: car.delivery_available,
+          deliveryFee: heldBooking?.delivery_fee ?? car.delivery_fee,
+          deliveryAddress,
+          deliveryTime,
+          contactPhone,
+          deliveryNotes,
+        })
+      : resolveBookingTripMode({
+          tripMode: body.tripMode,
+          deliveryAvailable: car.delivery_available,
+          deliveryFee: car.delivery_fee,
+          deliveryAddress,
+          deliveryTime,
+          contactPhone,
+          deliveryNotes,
+        });
+    const deliveryValidationError = validateBookingDelivery(normalizedDelivery, {
+      required: tripMode === "delivery",
+    });
+    if (deliveryValidationError) {
+      if (bookingId) {
+        await supa
+          .from("bookings")
+          .update({
+            status: "cancelled",
+            payment_status: "failed",
+            hold_expires_at: null,
+          })
+          .eq("id", bookingId);
+      }
+      return NextResponse.json(
+        { message: deliveryValidationError },
+        { status: 400 },
+      );
+    }
+    const deliveryColumns =
+      tripMode === "delivery"
+        ? toNullableBookingDelivery(normalizedDelivery)
+        : toNullableBookingDelivery({});
 
     const tripOutsideAccra = isLocationOutsideAccra({
       region: tripUseRegion,
@@ -354,7 +437,13 @@ export async function POST(req: Request) {
     );
     const platformFee = subtotal * (Math.max(platformFeePercent, 0) / 100);
     const insuranceFee = Math.max(Number(car.insurance_fee ?? 0), 0);
-    const deliveryFee = Math.max(Number(car.delivery_fee ?? 0), 0);
+    const heldDeliveryFee = Number(heldBooking?.delivery_fee);
+    const deliveryFee =
+      tripMode === "delivery"
+        ? bookingId && Number.isFinite(heldDeliveryFee)
+          ? Math.max(heldDeliveryFee, 0)
+          : Math.max(Number(car.delivery_fee ?? 0), 0)
+        : 0;
     const depositAmount = Math.max(Number(car.deposit_amount ?? 0), 0);
     const heldOutsideAccraSurcharge = Number(
       heldBooking?.outside_accra_surcharge,
@@ -663,6 +752,7 @@ export async function POST(req: Request) {
           delivery_fee: deliveryFee,
           outside_accra_surcharge: outsideAccraSurcharge,
           deposit_amount: depositAmount,
+          ...deliveryColumns,
           trip_use_region: tripUseRegion,
           trip_use_city: tripUseCity,
           trip_use_address: tripUseAddress,
@@ -727,6 +817,7 @@ export async function POST(req: Request) {
         delivery_fee: deliveryFee,
         outside_accra_surcharge: outsideAccraSurcharge,
         deposit_amount: depositAmount,
+        ...deliveryColumns,
         trip_use_region: tripUseRegion,
         trip_use_city: tripUseCity,
         trip_use_address: tripUseAddress,

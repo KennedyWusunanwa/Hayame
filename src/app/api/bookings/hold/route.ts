@@ -3,6 +3,13 @@ import { addMinutes, isAfter, parseISO } from "date-fns";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getRequestUser } from "@/lib/supabase/request-auth";
+import {
+  normalizeBookingDelivery,
+  normalizeBookingTripMode,
+  resolveBookingTripMode,
+  toNullableBookingDelivery,
+  validateBookingDelivery,
+} from "@/lib/booking-delivery";
 import { bookingSchema } from "@/lib/validators";
 import { isLocationOutsideAccra, isOutsideListingRegion } from "@/lib/utils";
 
@@ -42,10 +49,18 @@ export async function POST(req: Request) {
     const tripUseRegion = parsed.tripUseRegion.trim();
     const tripUseCity = parsed.tripUseCity.trim();
     const tripUseAddress = parsed.tripUseAddress.trim();
+    const deliveryDetails = normalizeBookingDelivery({
+      deliveryAddress: parsed.deliveryAddress,
+      deliveryTime: parsed.deliveryTime,
+      contactPhone: parsed.contactPhone,
+      deliveryNotes: parsed.deliveryNotes,
+    });
 
     const { data: car, error: carError } = await db
       .from("cars")
-      .select("id,is_available,city,region,outside_accra_fee")
+      .select(
+        "id,is_available,city,region,outside_accra_fee,delivery_fee,delivery_available",
+      )
       .eq("id", parsed.carId)
       .maybeSingle();
     if (carError || !car) {
@@ -57,6 +72,39 @@ export async function POST(req: Request) {
         { status: 409 },
       );
     }
+
+    const requestedTripMode = normalizeBookingTripMode(parsed.tripMode);
+    if (
+      requestedTripMode === "delivery" &&
+      (car as any).delivery_available !== true
+    ) {
+      return NextResponse.json(
+        { message: "Delivery is not available for this car." },
+        { status: 400 },
+      );
+    }
+    const tripMode = resolveBookingTripMode({
+      tripMode: parsed.tripMode,
+      deliveryAvailable: (car as any).delivery_available,
+      deliveryFee: (car as any).delivery_fee,
+      ...deliveryDetails,
+    });
+    const deliveryFee = tripMode === "delivery"
+      ? Math.max(Number((car as any).delivery_fee ?? 0), 0)
+      : 0;
+    const deliveryValidationError = validateBookingDelivery(deliveryDetails, {
+      required: tripMode === "delivery",
+    });
+    if (deliveryValidationError) {
+      return NextResponse.json(
+        { message: deliveryValidationError },
+        { status: 400 },
+      );
+    }
+    const deliveryColumns =
+      tripMode === "delivery"
+        ? toNullableBookingDelivery(deliveryDetails)
+        : toNullableBookingDelivery({});
 
     const tripOutsideAccra = isLocationOutsideAccra({
       region: tripUseRegion,
@@ -90,7 +138,7 @@ export async function POST(req: Request) {
     const { data: existingHold } = await db
       .from("bookings")
       .select(
-        "id,hold_expires_at,trip_use_region,trip_use_city,trip_use_address,trip_outside_accra,trip_outside_listing_region,outside_accra_surcharge",
+        "id,hold_expires_at,delivery_address,delivery_time,contact_phone,delivery_notes,delivery_fee,trip_use_region,trip_use_city,trip_use_address,trip_outside_accra,trip_outside_listing_region,outside_accra_surcharge",
       )
       .eq("car_id", parsed.carId)
       .eq("renter_id", user.id)
@@ -101,6 +149,11 @@ export async function POST(req: Request) {
       .maybeSingle();
     if (existingHold?.id && existingHold.hold_expires_at) {
       const needsUpdate =
+        existingHold.delivery_address !== deliveryColumns.delivery_address ||
+        existingHold.delivery_time !== deliveryColumns.delivery_time ||
+        existingHold.contact_phone !== deliveryColumns.contact_phone ||
+        existingHold.delivery_notes !== deliveryColumns.delivery_notes ||
+        Number(existingHold.delivery_fee ?? 0) !== deliveryFee ||
         existingHold.trip_use_region !== tripUseRegion ||
         existingHold.trip_use_city !== tripUseCity ||
         existingHold.trip_use_address !== tripUseAddress ||
@@ -114,6 +167,8 @@ export async function POST(req: Request) {
         await db
           .from("bookings")
           .update({
+            ...deliveryColumns,
+            delivery_fee: deliveryFee,
             trip_use_region: tripUseRegion,
             trip_use_city: tripUseCity,
             trip_use_address: tripUseAddress,
@@ -175,6 +230,8 @@ export async function POST(req: Request) {
         status: "pending",
         payment_status: "pending",
         hold_expires_at: holdExpiresAt,
+        ...deliveryColumns,
+        delivery_fee: deliveryFee,
         trip_use_region: tripUseRegion,
         trip_use_city: tripUseCity,
         trip_use_address: tripUseAddress,

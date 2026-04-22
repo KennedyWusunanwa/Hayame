@@ -1,6 +1,35 @@
 import AuthenticationServices
 import UIKit
 
+enum InAppBrowserAuthenticatorError: LocalizedError {
+    case cancelled
+    case missingCallback
+    case unableToOpen
+    case message(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .cancelled:
+            return "Payment was cancelled before completion."
+        case .missingCallback:
+            return "No callback URL returned from Paystack."
+        case .unableToOpen:
+            return "Unable to open in-app browser checkout."
+        case .message(let message):
+            return message
+        }
+    }
+
+    var shouldAttemptPaymentVerificationFallback: Bool {
+        switch self {
+        case .cancelled, .missingCallback:
+            return true
+        case .unableToOpen, .message:
+            return false
+        }
+    }
+}
+
 @MainActor
 final class InAppBrowserAuthenticator: NSObject {
     static let shared = InAppBrowserAuthenticator()
@@ -18,27 +47,31 @@ final class InAppBrowserAuthenticator: NSObject {
                 if let error {
                     if let authError = error as? ASWebAuthenticationSessionError,
                        authError.code == .canceledLogin {
-                        continuation.resume(throwing: APIError(message: "Payment was cancelled before completion."))
+                        continuation.resume(throwing: InAppBrowserAuthenticatorError.cancelled)
                         return
                     }
-                    continuation.resume(throwing: APIError(message: error.localizedDescription.isEmpty ? "Unable to complete payment authentication." : error.localizedDescription))
+                    continuation.resume(
+                        throwing: InAppBrowserAuthenticatorError.message(
+                            error.localizedDescription.isEmpty ? "Unable to complete payment authentication." : error.localizedDescription
+                        )
+                    )
                     return
                 }
 
                 guard let callbackURL else {
-                    continuation.resume(throwing: APIError(message: "No callback URL returned from Paystack."))
+                    continuation.resume(throwing: InAppBrowserAuthenticatorError.missingCallback)
                     return
                 }
                 continuation.resume(returning: callbackURL)
             }
 
             session.presentationContextProvider = self
-            session.prefersEphemeralWebBrowserSession = true
+            session.prefersEphemeralWebBrowserSession = false
             self.authSession = session
 
             if !session.start() {
                 self.authSession = nil
-                continuation.resume(throwing: APIError(message: "Unable to open in-app browser checkout."))
+                continuation.resume(throwing: InAppBrowserAuthenticatorError.unableToOpen)
             }
         }
     }

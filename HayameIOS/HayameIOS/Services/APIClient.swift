@@ -191,6 +191,13 @@ struct PushRegisterResponseDTO: Decodable {
     let message: String?
 }
 
+struct PushUnregisterResponseDTO: Decodable {
+    let unregistered: Bool?
+    let removed: Int?
+    let warning: String?
+    let message: String?
+}
+
 struct NotificationPreferencesDTO: Decodable {
     let booking_updates: Bool?
     let messages: Bool?
@@ -880,26 +887,43 @@ struct APIClient {
         carID: String,
         startDate: String,
         endDate: String,
+        tripMode: BookingTripMode?,
         tripUseRegion: String,
         tripUseCity: String,
-        tripUseAddress: String
+        tripUseAddress: String,
+        deliveryDetails: BookingDeliveryDetails
     ) async throws -> BookingHoldDTO {
         struct Payload: Encodable {
             let carId: String
             let startDate: String
             let endDate: String
+            let tripMode: String?
             let tripUseRegion: String
             let tripUseCity: String
             let tripUseAddress: String
+            let deliveryAddress: String?
+            let deliveryTime: String?
+            let contactPhone: String?
+            let deliveryNotes: String?
+        }
+
+        func nilIfBlank(_ value: String) -> String? {
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? nil : trimmed
         }
 
         let payload = Payload(
             carId: carID,
             startDate: startDate,
             endDate: endDate,
+            tripMode: tripMode?.rawValue,
             tripUseRegion: tripUseRegion,
             tripUseCity: tripUseCity,
-            tripUseAddress: tripUseAddress
+            tripUseAddress: tripUseAddress,
+            deliveryAddress: nilIfBlank(deliveryDetails.address),
+            deliveryTime: nilIfBlank(deliveryDetails.time),
+            contactPhone: nilIfBlank(deliveryDetails.contactPhone),
+            deliveryNotes: nilIfBlank(deliveryDetails.notes)
         )
 
         return try await request(
@@ -1178,14 +1202,42 @@ struct APIClient {
 
     // MARK: - Push
 
-    func registerPushToken(baseURL: String, token: String, deviceToken: String) async throws -> PushRegisterResponseDTO {
+    func registerPushToken(
+        baseURL: String,
+        token: String,
+        deviceToken: String,
+        previousDeviceToken: String? = nil
+    ) async throws -> PushRegisterResponseDTO {
         struct Payload: Encodable {
             let deviceToken: String
+            let previousDeviceToken: String?
             let platform: String
         }
         return try await request(
             path: "/api/mobile/push/register",
             method: .POST,
+            body: Payload(
+                deviceToken: deviceToken,
+                previousDeviceToken: previousDeviceToken,
+                platform: "ios"
+            ),
+            baseURL: baseURL,
+            token: token
+        )
+    }
+
+    func unregisterPushToken(
+        baseURL: String,
+        token: String,
+        deviceToken: String
+    ) async throws -> PushUnregisterResponseDTO {
+        struct Payload: Encodable {
+            let deviceToken: String
+            let platform: String
+        }
+        return try await request(
+            path: "/api/mobile/push/unregister",
+            method: .DELETE,
             body: Payload(deviceToken: deviceToken, platform: "ios"),
             baseURL: baseURL,
             token: token

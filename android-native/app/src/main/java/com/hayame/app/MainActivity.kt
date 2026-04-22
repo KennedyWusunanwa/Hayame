@@ -20,6 +20,8 @@ class MainActivity : ComponentActivity() {
     private val viewModel: AppViewModel by viewModels { viewModelFactory }
 
     private var pendingConversationId by mutableStateOf<String?>(null)
+    private var pendingBookingId by mutableStateOf<String?>(null)
+    private var pendingBookingRecipientRole by mutableStateOf<String?>(null)
     private var pendingPaystackCallbackUri by mutableStateOf<String?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -42,8 +44,14 @@ class MainActivity : ComponentActivity() {
                 HayameNavApp(
                     viewModel = viewModel,
                     pendingConversationId = pendingConversationId,
+                    pendingBookingId = pendingBookingId,
+                    pendingBookingRecipientRole = pendingBookingRecipientRole,
                     pendingPaystackCallbackUri = pendingPaystackCallbackUri,
                     onConversationConsumed = { pendingConversationId = null },
+                    onBookingConsumed = {
+                        pendingBookingId = null
+                        pendingBookingRecipientRole = null
+                    },
                     onPaystackCallbackConsumed = { pendingPaystackCallbackUri = null },
                 )
             }
@@ -62,6 +70,17 @@ class MainActivity : ComponentActivity() {
         val resolved = if (!fromExtra.isNullOrBlank()) fromExtra else fromData
         if (!resolved.isNullOrBlank()) {
             pendingConversationId = resolved
+            return
+        }
+
+        val bookingFromExtra = intent?.getStringExtra("bookingId")
+        val bookingFromData = intent?.data?.getQueryParameter("bookingId")
+        val resolvedBooking = if (!bookingFromExtra.isNullOrBlank()) bookingFromExtra else bookingFromData
+        if (!resolvedBooking.isNullOrBlank()) {
+            pendingBookingId = resolvedBooking
+            pendingBookingRecipientRole =
+                intent?.getStringExtra("recipientRole")
+                    ?: intent?.data?.getQueryParameter("recipientRole")
             return
         }
 

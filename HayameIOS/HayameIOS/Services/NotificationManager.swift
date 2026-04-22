@@ -5,6 +5,14 @@ import UserNotifications
 extension Notification.Name {
     static let hayameDidRegisterPushToken = Notification.Name("hayameDidRegisterPushToken")
     static let hayamePushRegistrationFailed = Notification.Name("hayamePushRegistrationFailed")
+    static let hayameDidOpenPushNotification = Notification.Name("hayameDidOpenPushNotification")
+}
+
+struct PushNotificationRoute: Equatable {
+    let conversationID: String?
+    let bookingID: String?
+    let recipientRole: String?
+    let participantName: String?
 }
 
 @MainActor
@@ -16,6 +24,9 @@ final class NotificationManager: NSObject, ObservableObject {
 
     private let defaults = UserDefaults.standard
     private let apnsTokenDefaultsKey = "hayame.apns.device_token"
+    private let lastUploadedPushTokenDefaultsKey = "hayame.apns.last_uploaded_token"
+    private let remotePushEnabledDefaultsKey = "hayame.apns.remote_push_enabled"
+    private var pendingNotificationRoute: PushNotificationRoute?
 
     var apnsDeviceToken: String? {
         let token = defaults.string(forKey: apnsTokenDefaultsKey)?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -23,14 +34,32 @@ final class NotificationManager: NSObject, ObservableObject {
         return token
     }
 
+    var lastUploadedPushToken: String? {
+        let token = defaults.string(forKey: lastUploadedPushTokenDefaultsKey)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let token, !token.isEmpty else { return nil }
+        return token
+    }
+
+    var shouldUseRemotePushDelivery: Bool {
+        let authorizedStatuses: Set<UNAuthorizationStatus> = [.authorized, .provisional, .ephemeral]
+        return authorizedStatuses.contains(authorizationStatus) &&
+            defaults.bool(forKey: remotePushEnabledDefaultsKey) &&
+            apnsDeviceToken != nil &&
+            lastUploadedPushToken != nil
+    }
+
     private override init() {
         super.init()
     }
 
-    func configure() {
+    func configure(launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) {
         UNUserNotificationCenter.current().delegate = self
         Task {
             await refreshAuthorizationStatus()
+        }
+
+        if let remoteNotification = launchOptions?[.remoteNotification] as? [AnyHashable: Any] {
+            handleNotificationResponse(userInfo: remoteNotification)
         }
     }
 
@@ -74,6 +103,7 @@ final class NotificationManager: NSObject, ObservableObject {
 
     func handleRemoteNotificationRegistrationFailure(_ error: Error) {
         defaults.removeObject(forKey: apnsTokenDefaultsKey)
+        defaults.set(false, forKey: remotePushEnabledDefaultsKey)
         registrationErrorMessage = error.localizedDescription
         NotificationCenter.default.post(
             name: .hayamePushRegistrationFailed,
@@ -83,9 +113,91 @@ final class NotificationManager: NSObject, ObservableObject {
         print("[push] APNs registration failed:", error.localizedDescription)
     }
 
+    func markPushTokenRegistration(token: String, deliveryEnabled: Bool) {
+        let normalized = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return }
+        defaults.set(normalized, forKey: lastUploadedPushTokenDefaultsKey)
+        defaults.set(deliveryEnabled, forKey: remotePushEnabledDefaultsKey)
+    }
+
+    func markRemotePushDeliveryUnavailable() {
+        defaults.set(false, forKey: remotePushEnabledDefaultsKey)
+    }
+
+    func clearPushRegistrationState() {
+        defaults.removeObject(forKey: lastUploadedPushTokenDefaultsKey)
+        defaults.set(false, forKey: remotePushEnabledDefaultsKey)
+    }
+
+    func consumePendingNotificationRoute() -> PushNotificationRoute? {
+        let route = pendingNotificationRoute
+        pendingNotificationRoute = nil
+        return route
+    }
+
+    func handleNotificationResponse(userInfo: [AnyHashable: Any]) {
+        guard let route = parseNotificationRoute(from: userInfo) else { return }
+        pendingNotificationRoute = route
+        NotificationCenter.default.post(name: .hayameDidOpenPushNotification, object: nil)
+    }
+
     private func refreshAuthorizationStatus() async {
         let settings = await UNUserNotificationCenter.current().notificationSettings()
         authorizationStatus = settings.authorizationStatus
+    }
+
+    private func parseNotificationRoute(from userInfo: [AnyHashable: Any]) -> PushNotificationRoute? {
+        let conversationID = pushString(forKey: "conversationId", in: userInfo)
+        let bookingID = pushString(forKey: "bookingId", in: userInfo)
+        let recipientRole = pushString(forKey: "recipientRole", in: userInfo)
+        let participantName =
+            pushString(forKey: "participantName", in: userInfo) ??
+            participantName(from: alertTitle(from: userInfo))
+
+        guard conversationID != nil || bookingID != nil else { return nil }
+        return PushNotificationRoute(
+            conversationID: conversationID,
+            bookingID: bookingID,
+            recipientRole: recipientRole?.lowercased(),
+            participantName: participantName
+        )
+    }
+
+    private func pushString(forKey key: String, in userInfo: [AnyHashable: Any]) -> String? {
+        if let direct = stringValue(userInfo[key]) {
+            return direct
+        }
+        if let nested = userInfo["data"] as? [AnyHashable: Any],
+           let value = stringValue(nested[key]) {
+            return value
+        }
+        return nil
+    }
+
+    private func stringValue(_ value: Any?) -> String? {
+        guard let value else { return nil }
+        let normalized = String(describing: value).trimmingCharacters(in: .whitespacesAndNewlines)
+        return normalized.isEmpty ? nil : normalized
+    }
+
+    private func alertTitle(from userInfo: [AnyHashable: Any]) -> String? {
+        guard let aps = userInfo["aps"] as? [AnyHashable: Any] else { return nil }
+        if let alert = aps["alert"] as? String {
+            let normalized = alert.trimmingCharacters(in: .whitespacesAndNewlines)
+            return normalized.isEmpty ? nil : normalized
+        }
+        if let alert = aps["alert"] as? [AnyHashable: Any] {
+            return stringValue(alert["title"])
+        }
+        return nil
+    }
+
+    private func participantName(from title: String?) -> String? {
+        guard let title else { return nil }
+        let prefix = "New message from "
+        guard title.hasPrefix(prefix) else { return nil }
+        let value = title.dropFirst(prefix.count).trimmingCharacters(in: .whitespacesAndNewlines)
+        return value.isEmpty ? nil : value
     }
 }
 
@@ -97,6 +209,19 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
     ) {
         completionHandler([.banner, .badge, .sound])
     }
+
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        Task { @MainActor in
+            NotificationManager.shared.handleNotificationResponse(
+                userInfo: response.notification.request.content.userInfo
+            )
+            completionHandler()
+        }
+    }
 }
 
 final class AppDelegate: NSObject, UIApplicationDelegate {
@@ -106,7 +231,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     ) -> Bool {
         configureSystemBarAppearance()
         Task { @MainActor in
-            NotificationManager.shared.configure()
+            NotificationManager.shared.configure(launchOptions: launchOptions)
         }
         return true
     }

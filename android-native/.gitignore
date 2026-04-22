@@ -1,9 +1,9 @@
 .DS_Store
 .gradle/
 .idea/
-.kotlin/
 build/
 app/build/
-captures/
 local.properties
+captures/
 *.iml
+app/google-services.json

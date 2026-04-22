@@ -2,6 +2,7 @@ package com.hayame.app.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.hayame.app.core.network.AvailabilityEnvelope
 import com.hayame.app.core.network.AppAnnouncementDto
 import com.hayame.app.core.network.BookingDto
 import com.hayame.app.core.network.CarDto
@@ -24,6 +25,8 @@ import com.hayame.app.core.repo.HostRepository
 import com.hayame.app.core.repo.MessagingRepository
 import com.hayame.app.core.repo.StorageRepository
 import com.hayame.app.core.session.SessionStore
+import com.hayame.app.push.PushTokenStore
+import com.hayame.app.ui.navigation.HostMainTab
 import com.hayame.app.ui.state.UiState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -41,6 +44,11 @@ data class BookingDraft(
     val region: String,
     val city: String,
     val address: String,
+    val tripMode: String? = null,
+    val deliveryAddress: String = "",
+    val deliveryTime: String = "",
+    val contactPhone: String = "",
+    val deliveryNotes: String = "",
 )
 
 data class ListingSubmissionResult(
@@ -103,6 +111,12 @@ class AppViewModel(
 
     private val _selectedConversationId = MutableStateFlow<String?>(null)
     val selectedConversationId: StateFlow<String?> = _selectedConversationId.asStateFlow()
+
+    private val _pendingBookingFocus = MutableStateFlow<String?>(null)
+    val pendingBookingFocus: StateFlow<String?> = _pendingBookingFocus.asStateFlow()
+
+    private val _pendingHostTab = MutableStateFlow<HostMainTab?>(null)
+    val pendingHostTab: StateFlow<HostMainTab?> = _pendingHostTab.asStateFlow()
 
     private val _myCarsState = MutableStateFlow<UiState<List<CarDto>>>(UiState.Idle)
     val myCarsState: StateFlow<UiState<List<CarDto>>> = _myCarsState.asStateFlow()
@@ -271,7 +285,15 @@ class AppViewModel(
 
     fun logout() {
         viewModelScope.launch {
+            val pushToken =
+                PushTokenStore.lastUploadedToken()
+                    ?: PushTokenHolder.token
+                    ?: PushTokenStore.currentToken()
+            if (!pushToken.isNullOrBlank()) {
+                runCatching { hostRepository.unregisterAndroidPushToken(pushToken) }
+            }
             authRepository.logout()
+            PushTokenStore.clearUploadedToken()
             _isAuthenticated.value = false
             _isGuestMode.value = false
             _authPrompt.value = null
@@ -287,6 +309,8 @@ class AppViewModel(
             _bookingDraft.value = null
             _pendingCheckout.value = null
             _notificationPreferences.value = defaultNotificationPreferences
+            _pendingBookingFocus.value = null
+            _pendingHostTab.value = null
             pendingAnnouncements = emptyList()
             _activeAnnouncement.value = null
             loadCars()
@@ -365,17 +389,34 @@ class AppViewModel(
         endDate: String,
         onResult: (available: Boolean, message: String?) -> Unit,
     ) {
+        loadAvailabilitySnapshot(
+            carId = carId,
+            startDate = startDate,
+            endDate = endDate,
+        ) { envelope, error ->
+            if (error != null) {
+                onResult(false, error)
+            } else if (envelope?.available == true) {
+                onResult(true, "Dates are available.")
+            } else {
+                onResult(false, envelope?.reason ?: "Selected dates are unavailable.")
+            }
+        }
+    }
+
+    fun loadAvailabilitySnapshot(
+        carId: String,
+        startDate: String,
+        endDate: String,
+        onResult: (AvailabilityEnvelope?, String?) -> Unit,
+    ) {
         viewModelScope.launch {
             runCatching { carsRepository.getAvailability(carId, startDate, endDate) }
                 .onSuccess { envelope ->
-                    if (envelope.available == true) {
-                        onResult(true, "Dates are available.")
-                    } else {
-                        onResult(false, envelope.reason ?: "Selected dates are unavailable.")
-                    }
+                    onResult(envelope, null)
                 }
                 .onFailure {
-                    onResult(false, it.readableMessage("Unable to check availability."))
+                    onResult(null, it.readableMessage("Unable to check availability."))
                 }
         }
     }
@@ -426,9 +467,14 @@ class AppViewModel(
         carId: String,
         startDate: String,
         endDate: String,
+        tripMode: String?,
         tripUseRegion: String,
         tripUseCity: String,
         tripUseAddress: String,
+        deliveryAddress: String?,
+        deliveryTime: String?,
+        contactPhone: String?,
+        deliveryNotes: String?,
         callbackUrl: String,
         onReady: (PaystackInitDto) -> Unit,
         onError: (String) -> Unit = {},
@@ -439,9 +485,14 @@ class AppViewModel(
                     carId = carId,
                     startDate = startDate,
                     endDate = endDate,
+                    tripMode = tripMode,
                     tripUseRegion = tripUseRegion,
                     tripUseCity = tripUseCity,
                     tripUseAddress = tripUseAddress,
+                    deliveryAddress = deliveryAddress,
+                    deliveryTime = deliveryTime,
+                    contactPhone = contactPhone,
+                    deliveryNotes = deliveryNotes,
                 )
                 val initiated = bookingRepository.initiatePaystack(
                     bookingId = hold.bookingId,
@@ -480,6 +531,11 @@ class AppViewModel(
         viewModelScope.launch {
             runCatching { bookingRepository.finalizePaystack(request) }
                 .onSuccess { result ->
+                    val paymentStatus = result.data?.payment_status?.trim()?.lowercase()
+                    if (paymentStatus != "paid") {
+                        onError("Payment not completed yet. Finish payment in secure checkout before verifying.")
+                        return@onSuccess
+                    }
                     _pendingCheckout.value = null
                     _bookingDraft.value = null
                     loadBookings()
@@ -552,6 +608,11 @@ class AppViewModel(
         region: String,
         city: String,
         address: String,
+        tripMode: String? = null,
+        deliveryAddress: String = "",
+        deliveryTime: String = "",
+        contactPhone: String = "",
+        deliveryNotes: String = "",
     ) {
         _bookingDraft.value = BookingDraft(
             carId = carId,
@@ -560,6 +621,11 @@ class AppViewModel(
             region = region,
             city = city,
             address = address,
+            tripMode = tripMode,
+            deliveryAddress = deliveryAddress,
+            deliveryTime = deliveryTime,
+            contactPhone = contactPhone,
+            deliveryNotes = deliveryNotes,
         )
     }
 
@@ -681,6 +747,27 @@ class AppViewModel(
     fun selectConversation(conversationId: String) {
         _selectedConversationId.value = conversationId
         loadMessages(conversationId)
+    }
+
+    fun focusBooking(bookingId: String, openHostBookings: Boolean = false) {
+        val normalized = bookingId.trim()
+        if (normalized.isBlank()) return
+        _pendingBookingFocus.value = normalized
+        if (openHostBookings) {
+            _pendingHostTab.value = HostMainTab.BOOKINGS
+        }
+    }
+
+    fun consumePendingBookingFocus(bookingId: String) {
+        if (_pendingBookingFocus.value == bookingId) {
+            _pendingBookingFocus.value = null
+        }
+    }
+
+    fun consumePendingHostTab(tab: HostMainTab) {
+        if (_pendingHostTab.value == tab) {
+            _pendingHostTab.value = null
+        }
     }
 
     fun loadMessages(conversationId: String, since: String? = null) {
@@ -992,10 +1079,17 @@ class AppViewModel(
 
     fun registerPushIfAvailable(token: String? = null) {
         viewModelScope.launch {
-            val pushToken = token ?: PushTokenHolder.token
+            val pushToken =
+                token?.trim().takeUnless { it.isNullOrBlank() }
+                    ?: PushTokenHolder.token
+                    ?: PushTokenStore.currentToken()
             if (pushToken.isNullOrBlank()) return@launch
-            runCatching { hostRepository.registerAndroidPushToken(pushToken) }
+            val previousToken = PushTokenStore.lastUploadedToken()?.takeIf { it != pushToken }
+            runCatching { hostRepository.registerAndroidPushToken(pushToken, previousToken) }
                 .onSuccess { response ->
+                    if (response.registered != false) {
+                        PushTokenStore.markUploadedToken(pushToken)
+                    }
                     response.warning?.let { _snackbar.value = it }
                 }
         }
@@ -1014,7 +1108,9 @@ class AppViewModel(
         }
 
         fun cachePushToken(token: String?) {
-            PushTokenHolder.token = token
+            val normalized = token?.trim()?.takeIf { it.isNotEmpty() }
+            PushTokenHolder.token = normalized
+            PushTokenStore.saveCurrentToken(normalized)
         }
     }
 }

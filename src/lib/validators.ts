@@ -36,10 +36,15 @@ export const bookingSchema = z.object({
   carId: z.string().uuid().or(z.string()),
   startDate: z.string(),
   endDate: z.string(),
+  tripMode: z.enum(["pickup", "delivery"]).optional(),
   tripUseRegion: z.string().trim().min(2, "Trip use region is required"),
   tripUseCity: z.string().trim().min(2, "Trip use city is required"),
   tripUseAddress: z.string().trim().min(3, "Trip use location is required"),
   tripOutsideAccra: z.boolean().optional(),
+  deliveryAddress: z.string().trim().optional(),
+  deliveryTime: z.string().trim().optional(),
+  contactPhone: z.string().trim().optional(),
+  deliveryNotes: z.string().trim().optional(),
 });
 
 export const favoriteSchema = z.object({

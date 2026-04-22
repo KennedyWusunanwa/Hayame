@@ -9,6 +9,7 @@ import com.hayame.app.core.repo.HostRepository
 import com.hayame.app.core.repo.MessagingRepository
 import com.hayame.app.core.repo.StorageRepository
 import com.hayame.app.core.session.SessionStore
+import com.hayame.app.push.PushTokenStore
 
 class HayameApplication : Application() {
     lateinit var container: AppContainer
@@ -16,6 +17,7 @@ class HayameApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        PushTokenStore.initialize(this)
         container = AppContainer(this)
     }
 }

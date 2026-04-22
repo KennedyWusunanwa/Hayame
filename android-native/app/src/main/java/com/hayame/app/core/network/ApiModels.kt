@@ -439,6 +439,14 @@ data class PushRegisterResponse(
 )
 
 @Serializable
+data class PushUnregisterResponse(
+    val unregistered: Boolean? = null,
+    val removed: Int? = null,
+    val warning: String? = null,
+    val message: String? = null,
+)
+
+@Serializable
 data class PushStatusEnvelope(
     val push: PushStatusDto? = null,
 )
@@ -553,9 +561,14 @@ data class BookingHoldRequest(
     val carId: String,
     val startDate: String,
     val endDate: String,
+    val tripMode: String? = null,
     val tripUseRegion: String,
     val tripUseCity: String,
     val tripUseAddress: String,
+    val deliveryAddress: String? = null,
+    val deliveryTime: String? = null,
+    val contactPhone: String? = null,
+    val deliveryNotes: String? = null,
 )
 
 @Serializable
@@ -657,6 +670,7 @@ data class MessageSendRequest(
 data class PushRegisterRequest(
     val deviceToken: String,
     val platform: String,
+    val previousDeviceToken: String? = null,
 )
 
 @Serializable

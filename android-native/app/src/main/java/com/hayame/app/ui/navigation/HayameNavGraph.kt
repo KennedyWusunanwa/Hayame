@@ -68,8 +68,11 @@ import com.hayame.app.ui.viewmodel.AppViewModel
 fun HayameNavApp(
     viewModel: AppViewModel,
     pendingConversationId: String?,
+    pendingBookingId: String?,
+    pendingBookingRecipientRole: String?,
     pendingPaystackCallbackUri: String?,
     onConversationConsumed: () -> Unit,
+    onBookingConsumed: () -> Unit,
     onPaystackCallbackConsumed: () -> Unit,
 ) {
     val navController = rememberNavController()
@@ -158,6 +161,25 @@ fun HayameNavApp(
             launchSingleTop = true
         }
         onConversationConsumed()
+    }
+
+    LaunchedEffect(pendingBookingId, pendingBookingRecipientRole, bootstrapping, isAuthenticated) {
+        val bookingId = pendingBookingId
+        if (bootstrapping || !isAuthenticated || bookingId.isNullOrBlank()) return@LaunchedEffect
+
+        val role = pendingBookingRecipientRole?.trim()?.lowercase()
+        if (role == "host") {
+            viewModel.focusBooking(bookingId, openHostBookings = true)
+            navController.navigate(NavRoutes.HostShell) {
+                launchSingleTop = true
+            }
+        } else {
+            viewModel.focusBooking(bookingId)
+            navController.navigate(NavRoutes.main(MainTab.TRIPS)) {
+                launchSingleTop = true
+            }
+        }
+        onBookingConsumed()
     }
 
     activeAnnouncement?.let { announcement ->

@@ -101,6 +101,7 @@ fun EmptyBlock(title: String, subtitle: String) {
 fun CarCard(
     car: CarDto,
     isFavorite: Boolean,
+    imageHeight: androidx.compose.ui.unit.Dp = 180.dp,
     onClick: () -> Unit,
     onFavoriteClick: () -> Unit,
 ) {
@@ -119,7 +120,7 @@ fun CarCard(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(180.dp)
+                    .height(imageHeight)
                     .clip(RoundedCornerShape(16.dp))
                     .background(BrandLight),
             ) {

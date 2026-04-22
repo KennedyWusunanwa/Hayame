@@ -41,6 +41,7 @@ final class AppState: ObservableObject {
     @Published var messagesByConversation: [String: [ChatMessage]] = [:]
     @Published var pendingConversationID: String?
     @Published var pendingConversationParticipantName: String?
+    @Published var pendingBookingID: String?
 
     @Published var exploreSearchText = ""
     @Published var exploreFilters = ExploreFilterState()
@@ -83,6 +84,7 @@ final class AppState: ObservableObject {
     private var conversationRealtimeTask: Task<Void, Never>?
     private var pushTokenObserver: NSObjectProtocol?
     private var pushRegistrationFailureObserver: NSObjectProtocol?
+    private var pushNotificationRouteObserver: NSObjectProtocol?
     private var hasSyncedOwnedCarsOnce = false
     private var hasSyncedBookingsOnce = false
     private var hasSyncedConversationsOnce = false
@@ -92,6 +94,7 @@ final class AppState: ObservableObject {
     private var pendingMessageDraftByConversationID: [String: String] = [:]
     private var lastServerMessageDateByConversationID: [String: Date] = [:]
     private var pendingAnnouncements: [AppAnnouncement] = []
+    private var deferredPushNotificationRoute: PushNotificationRoute?
     private let localMessagePrefix = "local-msg-"
 
     static let iso8601WithFractional: ISO8601DateFormatter = {
@@ -162,6 +165,17 @@ final class AppState: ObservableObject {
                 }
             }
         }
+        pushNotificationRouteObserver = NotificationCenter.default.addObserver(
+            forName: .hayameDidOpenPushNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self else { return }
+            Task { @MainActor in
+                self.routePendingPushNotificationIfNeeded()
+            }
+        }
+        routePendingPushNotificationIfNeeded()
         Task {
             async let referenceTask: Void = refreshReferenceData()
             async let publicCarsTask: Void = syncPublicCars()
@@ -318,9 +332,18 @@ final class AppState: ObservableObject {
     }
 
     func signOut() {
+        let authTokenSnapshot = authToken
+        let baseURLSnapshot = apiBaseURL
+        let deviceTokenSnapshot = NotificationManager.shared.lastUploadedPushToken ?? NotificationManager.shared.apnsDeviceToken
+        unregisterPushDeviceTokenIfPossible(
+            authToken: authTokenSnapshot,
+            baseURL: baseURLSnapshot,
+            deviceToken: deviceTokenSnapshot
+        )
         stopPolling()
         stopRealtimeMessages()
         clearPersistedSession()
+        NotificationManager.shared.clearPushRegistrationState()
         isAuthenticated = false
         isGuestMode = false
         currentUser = .anonymousGuest
@@ -337,7 +360,9 @@ final class AppState: ObservableObject {
         loadingConversationIDs = []
         pendingConversationID = nil
         pendingConversationParticipantName = nil
+        pendingBookingID = nil
         pendingMessageDraftByConversationID = [:]
+        deferredPushNotificationRoute = nil
         hostApplication = nil
         hostApplicationStatus = nil
         hostAccessState = .unknown
@@ -363,9 +388,18 @@ final class AppState: ObservableObject {
     }
 
     func continueAsGuest() {
+        let authTokenSnapshot = authToken
+        let baseURLSnapshot = apiBaseURL
+        let deviceTokenSnapshot = NotificationManager.shared.lastUploadedPushToken ?? NotificationManager.shared.apnsDeviceToken
+        unregisterPushDeviceTokenIfPossible(
+            authToken: authTokenSnapshot,
+            baseURL: baseURLSnapshot,
+            deviceToken: deviceTokenSnapshot
+        )
         stopPolling()
         stopRealtimeMessages()
         clearPersistedSession()
+        NotificationManager.shared.clearPushRegistrationState()
         isAuthenticated = false
         isGuestMode = true
         currentUser = .anonymousGuest
@@ -383,7 +417,9 @@ final class AppState: ObservableObject {
         loadingConversationIDs = []
         pendingConversationID = nil
         pendingConversationParticipantName = nil
+        pendingBookingID = nil
         pendingMessageDraftByConversationID = [:]
+        deferredPushNotificationRoute = nil
         hostApplication = nil
         hostApplicationStatus = nil
         hostAccessState = .renter
@@ -429,7 +465,9 @@ final class AppState: ObservableObject {
         loadingConversationIDs = []
         pendingConversationID = nil
         pendingConversationParticipantName = nil
+        pendingBookingID = nil
         pendingMessageDraftByConversationID = [:]
+        deferredPushNotificationRoute = nil
         hostApplication = nil
         hostApplicationStatus = nil
         hostAccessState = .unknown
@@ -831,7 +869,12 @@ final class AppState: ObservableObject {
         )
     }
 
-    func openConversationInInbox(conversationID: String, participantName: String, draft: String? = nil) {
+    func openConversationInInbox(
+        conversationID: String,
+        participantName: String,
+        draft: String? = nil,
+        preferHostInbox: Bool = false
+    ) {
         let trimmedDraft = draft?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if !trimmedDraft.isEmpty {
             pendingMessageDraftByConversationID[conversationID] = trimmedDraft
@@ -839,13 +882,61 @@ final class AppState: ObservableObject {
         markConversationRead(conversationID)
         pendingConversationID = conversationID
         pendingConversationParticipantName = participantName
-        renterTab = .inbox
+        if preferHostInbox && hostAccessState == .host {
+            hostModeEnabled = true
+            hostTab = .inbox
+        } else {
+            renterTab = .inbox
+        }
     }
 
     func consumePendingConversationDraft(for conversationID: String) -> String? {
         let draft = pendingMessageDraftByConversationID[conversationID]
         pendingMessageDraftByConversationID.removeValue(forKey: conversationID)
         return draft
+    }
+
+    func consumePendingBookingFocus(ifMatches bookingID: String) {
+        guard pendingBookingID == bookingID else { return }
+        pendingBookingID = nil
+    }
+
+    private func routePendingPushNotificationIfNeeded() {
+        let route = NotificationManager.shared.consumePendingNotificationRoute() ?? deferredPushNotificationRoute
+        guard let route else { return }
+
+        if authToken?.isEmpty == false && !isAuthenticated {
+            deferredPushNotificationRoute = route
+            return
+        }
+
+        if route.recipientRole == "host", hostAccessState != .host {
+            if hostAccessState == .unknown || (isAuthenticated && hostApplicationStatus == nil) {
+                deferredPushNotificationRoute = route
+                return
+            }
+        }
+
+        deferredPushNotificationRoute = nil
+
+        if let conversationID = route.conversationID {
+            openConversationInInbox(
+                conversationID: conversationID,
+                participantName: route.participantName ?? "Chat",
+                preferHostInbox: route.recipientRole == "host"
+            )
+            return
+        }
+
+        guard let bookingID = route.bookingID else { return }
+        pendingBookingID = bookingID
+
+        if route.recipientRole == "host", hostAccessState == .host {
+            hostModeEnabled = true
+            hostTab = .bookings
+        } else {
+            renterTab = .trips
+        }
     }
 
     func uploadProfileAvatar(
@@ -1103,9 +1194,11 @@ final class AppState: ObservableObject {
 
     func beginBookingPayment(
         for car: Car,
+        tripMode: BookingTripMode?,
         region: String,
         city: String,
         address: String,
+        deliveryDetails: BookingDeliveryDetails,
         start: Date,
         end: Date
     ) async throws -> PaystackCheckoutSession {
@@ -1121,9 +1214,13 @@ final class AppState: ObservableObject {
         let normalizedRegion = MockDataService.normalizedRegion(region)
         let normalizedCity = city.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedAddress = address.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedAddress = normalizedAddress.isEmpty ? normalizedCity : normalizedAddress
 
-        if normalizedCity.isEmpty || normalizedAddress.count < 3 {
-            throw APIError(message: "Enter city and exact area/destination (minimum 3 characters).")
+        if normalizedCity.isEmpty {
+            throw APIError(message: "Select your trip city before continuing.")
+        }
+        if car.deliveryAvailable, tripMode == nil {
+            throw APIError(message: "Choose pickup or delivery before continuing.")
         }
 
         do {
@@ -1134,9 +1231,11 @@ final class AppState: ObservableObject {
                     carID: car.id,
                     startDate: startDate,
                     endDate: endDate,
+                    tripMode: tripMode,
                     tripUseRegion: normalizedRegion,
                     tripUseCity: normalizedCity,
-                    tripUseAddress: normalizedAddress
+                    tripUseAddress: resolvedAddress,
+                    deliveryDetails: deliveryDetails
                 )
 
                 let initiated = try await api.initiatePaystackCheckout(
@@ -1163,7 +1262,7 @@ final class AppState: ObservableObject {
                     endDate: endDate,
                     tripUseRegion: normalizedRegion,
                     tripUseCity: normalizedCity,
-                    tripUseAddress: normalizedAddress,
+                    tripUseAddress: resolvedAddress,
                     reference: initiated.reference,
                     amountMinor: amountMinor,
                     authorizationURL: checkoutURL
@@ -1185,7 +1284,15 @@ final class AppState: ObservableObject {
             throw APIError(message: "Log in to complete payment.")
         }
 
-        let resolvedReference = paystackReference(from: callbackURL) ?? checkout.reference
+        let resolvedReference: String
+        if let callbackURL {
+            guard let callbackReference = paystackReference(from: callbackURL), !callbackReference.isEmpty else {
+                throw APIError(message: "Payment was cancelled or not completed.")
+            }
+            resolvedReference = callbackReference
+        } else {
+            resolvedReference = checkout.reference
+        }
         if resolvedReference.isEmpty {
             throw APIError(message: "Missing payment reference from callback.")
         }
@@ -1205,6 +1312,10 @@ final class AppState: ObservableObject {
                     reference: resolvedReference,
                     amountMinor: checkout.amountMinor
                 )
+            }
+            let paymentStatus = finalized.data?.payment_status?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            guard paymentStatus == "paid" else {
+                throw APIError(message: "Payment not completed yet. Finish payment in secure checkout before verifying.")
             }
             await syncBookings()
             await syncConversations()
@@ -1517,6 +1628,7 @@ final class AppState: ObservableObject {
         startPolling()
         await NotificationManager.shared.enableUserNotifications()
         await registerPushDeviceTokenIfAvailable()
+        routePendingPushNotificationIfNeeded()
     }
 
     private func shouldAutoSwitchToProductionBaseURL(after error: Error) -> Bool {
@@ -1556,6 +1668,7 @@ final class AppState: ObservableObject {
             startPolling()
             await NotificationManager.shared.enableUserNotifications()
             await registerPushDeviceTokenIfAvailable()
+            routePendingPushNotificationIfNeeded()
         } catch {
             if let apiError = error as? APIError, apiError.statusCode == 401 {
                 let refreshed = await refreshAccessTokenIfPossible()
@@ -1566,6 +1679,7 @@ final class AppState: ObservableObject {
                         startPolling()
                         await NotificationManager.shared.enableUserNotifications()
                         await registerPushDeviceTokenIfAvailable()
+                        routePendingPushNotificationIfNeeded()
                         return
                     } catch {}
                 }
@@ -2842,24 +2956,62 @@ final class AppState: ObservableObject {
     private func registerPushDeviceTokenIfAvailable() async {
         guard isAuthenticated else { return }
         guard let deviceToken = NotificationManager.shared.apnsDeviceToken else { return }
+        let previousDeviceToken = NotificationManager.shared.lastUploadedPushToken
+        let previousTokenToReplace =
+            previousDeviceToken == deviceToken ? nil : previousDeviceToken
         do {
             let registration = try await withAuthenticatedToken { token in
-                try await api.registerPushToken(baseURL: apiBaseURL, token: token, deviceToken: deviceToken)
+                try await api.registerPushToken(
+                    baseURL: apiBaseURL,
+                    token: token,
+                    deviceToken: deviceToken,
+                    previousDeviceToken: previousTokenToReplace
+                )
             }
+            let warning = registration.warning?.trimmingCharacters(in: .whitespacesAndNewlines)
+            NotificationManager.shared.markPushTokenRegistration(
+                token: deviceToken,
+                deliveryEnabled: registration.registered != false && (warning == nil || warning?.isEmpty == true)
+            )
             if let warning = registration.warning?.trimmingCharacters(in: .whitespacesAndNewlines), !warning.isEmpty {
                 syncErrorMessage = warning
             } else if registration.registered == false {
                 syncErrorMessage = registration.message ?? "Push token registration failed."
+                NotificationManager.shared.markRemotePushDeliveryUnavailable()
             }
         } catch let apiError as APIError {
             // Push registration endpoint may not be deployed yet.
             if apiError.statusCode != 404 {
                 syncErrorMessage = apiError.message
             }
-        } catch {}
+            NotificationManager.shared.markRemotePushDeliveryUnavailable()
+        } catch {
+            NotificationManager.shared.markRemotePushDeliveryUnavailable()
+        }
+    }
+
+    private func unregisterPushDeviceTokenIfPossible(
+        authToken: String?,
+        baseURL: String,
+        deviceToken: String?
+    ) {
+        guard let authToken, let deviceToken else { return }
+        let trimmedToken = deviceToken.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedToken.isEmpty else { return }
+
+        Task {
+            do {
+                _ = try await api.unregisterPushToken(
+                    baseURL: baseURL,
+                    token: authToken,
+                    deviceToken: trimmedToken
+                )
+            } catch {}
+        }
     }
 
     private func notifyOnConversationChanges(previousUnread: [String: Int], current: [Conversation]) async {
+        guard !NotificationManager.shared.shouldUseRemotePushDelivery else { return }
         for conversation in current {
             let oldUnread = previousUnread[conversation.id] ?? 0
             guard conversation.unreadCount > oldUnread else { continue }
@@ -2873,6 +3025,7 @@ final class AppState: ObservableObject {
     }
 
     private func notifyOnBookingChanges(previous: [String: Booking], next: [String: Booking]) async {
+        guard !NotificationManager.shared.shouldUseRemotePushDelivery else { return }
         for booking in next.values {
             let isHostContext = booking.hostID == currentUser.id
             if let existing = previous[booking.id] {
@@ -2973,6 +3126,9 @@ final class AppState: ObservableObject {
         }
         if let pushRegistrationFailureObserver {
             NotificationCenter.default.removeObserver(pushRegistrationFailureObserver)
+        }
+        if let pushNotificationRouteObserver {
+            NotificationCenter.default.removeObserver(pushNotificationRouteObserver)
         }
     }
 

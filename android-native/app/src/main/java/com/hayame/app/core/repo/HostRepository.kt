@@ -10,6 +10,7 @@ import com.hayame.app.core.network.NotificationPreferencesEnvelope
 import com.hayame.app.core.network.NotificationPreferencesUpdateRequest
 import com.hayame.app.core.network.PushRegisterRequest
 import com.hayame.app.core.network.PushRegisterResponse
+import com.hayame.app.core.network.PushUnregisterResponse
 import com.hayame.app.core.network.PushStatusEnvelope
 import com.hayame.app.core.session.SessionStore
 
@@ -34,9 +35,31 @@ class HostRepository(
         return authedCall { auth -> api.activateHost(auth) }
     }
 
-    suspend fun registerAndroidPushToken(token: String): PushRegisterResponse {
+    suspend fun registerAndroidPushToken(
+        token: String,
+        previousToken: String? = null,
+    ): PushRegisterResponse {
         return authedCall { auth ->
-            api.registerPush(auth = auth, body = PushRegisterRequest(deviceToken = token, platform = "android"))
+            api.registerPush(
+                auth = auth,
+                body = PushRegisterRequest(
+                    deviceToken = token,
+                    platform = "android",
+                    previousDeviceToken = previousToken,
+                ),
+            )
+        }
+    }
+
+    suspend fun unregisterAndroidPushToken(token: String): PushUnregisterResponse {
+        return authedCall { auth ->
+            api.unregisterPush(
+                auth = auth,
+                body = PushRegisterRequest(
+                    deviceToken = token,
+                    platform = "android",
+                ),
+            )
         }
     }
 

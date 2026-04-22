@@ -447,14 +447,14 @@ struct CarCardView: View {
     let favoriteAction: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 12) {
             ZStack(alignment: .topTrailing) {
                 NetworkOrFallbackImage(
                     urlString: car.imageNames.first,
-                    targetSize: CGSize(width: 360, height: 220)
+                    targetSize: CGSize(width: 420, height: 300)
                 )
-                    .frame(height: 120)
-                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .frame(height: 164)
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
 
                 if showsFavoriteButton {
                     Button(action: favoriteAction) {
@@ -472,18 +472,18 @@ struct CarCardView: View {
 
             VStack(alignment: .leading, spacing: 6) {
                 Text(car.displayTitle)
-                    .font(.system(size: 15, weight: .bold, design: .rounded))
+                    .font(.system(size: 16, weight: .bold, design: .rounded))
                     .foregroundStyle(HayameTheme.brandNavy)
-                    .lineLimit(1)
+                    .lineLimit(2)
 
                 Text("\(car.city), \(car.region)")
-                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .font(.system(size: 13, weight: .medium, design: .rounded))
                     .foregroundStyle(HayameTheme.mutedText)
-                    .lineLimit(1)
+                    .lineLimit(2)
 
                 HStack(spacing: 8) {
                     Label(String(format: "%.1f", car.rating), systemImage: "star.fill")
-                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
                         .foregroundStyle(.orange)
 
                     if car.instantBook {
@@ -501,7 +501,7 @@ struct CarCardView: View {
 
                 HStack(alignment: .firstTextBaseline, spacing: 4) {
                     Text("GHS\(car.dailyPrice)")
-                        .font(.system(size: 18, weight: .bold, design: .rounded))
+                        .font(.system(size: 20, weight: .bold, design: .rounded))
                         .foregroundStyle(HayameTheme.brandNavy)
                     Text("/ day")
                         .font(.system(size: 12, weight: .semibold, design: .rounded))
@@ -509,18 +509,18 @@ struct CarCardView: View {
                 }
             }
         }
-        .padding(10)
+        .padding(12)
         .background(Color.white)
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .stroke(Color.black.opacity(0.05), lineWidth: 1)
         )
     }
 }
 
 struct BookingStatusBadge: View {
-    let status: BookingStatus
+    let status: BookingDisplayStatus
 
     var body: some View {
         Text(status.label)
@@ -534,19 +534,74 @@ struct BookingStatusBadge: View {
 
     private var background: Color {
         switch status {
-        case .pending, .awaitingHost: return HayameTheme.warning.opacity(0.16)
+        case .pending: return HayameTheme.warning.opacity(0.16)
         case .confirmed: return HayameTheme.brandBlue.opacity(0.15)
-        case .completed: return HayameTheme.success.opacity(0.16)
+        case .ongoing: return HayameTheme.success.opacity(0.16)
+        case .completed: return Color.black.opacity(0.06)
         case .cancelled, .rejected, .refunded: return HayameTheme.danger.opacity(0.16)
         }
     }
 
     private var foreground: Color {
         switch status {
-        case .pending, .awaitingHost: return HayameTheme.warning
+        case .pending: return HayameTheme.warning
         case .confirmed: return HayameTheme.brandBlue
-        case .completed: return HayameTheme.success
+        case .ongoing: return HayameTheme.success
+        case .completed: return HayameTheme.mutedText
         case .cancelled, .rejected, .refunded: return HayameTheme.danger
+        }
+    }
+}
+
+struct BookingPaymentBadge: View {
+    let label: String
+
+    var body: some View {
+        Text(label)
+            .font(.system(size: 10, weight: .bold, design: .rounded))
+            .foregroundStyle(HayameTheme.success)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(HayameTheme.success.opacity(0.15))
+            .clipShape(Capsule())
+    }
+}
+
+struct BookingStatusHeader: View {
+    let title: String
+    let subtitle: String?
+    let helperText: String?
+    let status: BookingDisplayStatus
+    var showPaidBadge = false
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(title)
+                    .font(.system(size: 16, weight: .bold, design: .rounded))
+                    .foregroundStyle(HayameTheme.brandNavy)
+
+                if let subtitle, !subtitle.isEmpty {
+                    Text(subtitle)
+                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                        .foregroundStyle(HayameTheme.mutedText)
+                }
+
+                if let helperText, !helperText.isEmpty {
+                    Text(helperText)
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .foregroundStyle(HayameTheme.mutedText)
+                }
+            }
+
+            Spacer(minLength: 12)
+
+            VStack(alignment: .trailing, spacing: 6) {
+                BookingStatusBadge(status: status)
+                if showPaidBadge {
+                    BookingPaymentBadge(label: "Paid")
+                }
+            }
         }
     }
 }
@@ -556,18 +611,13 @@ struct BookingRowCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(booking.carTitle)
-                        .font(.system(size: 16, weight: .bold, design: .rounded))
-                        .foregroundStyle(HayameTheme.brandNavy)
-                    Text("\(booking.tripUseCity), \(booking.tripUseRegion)")
-                        .font(.system(size: 12, weight: .medium, design: .rounded))
-                        .foregroundStyle(HayameTheme.mutedText)
-                }
-                Spacer()
-                BookingStatusBadge(status: booking.status)
-            }
+            BookingStatusHeader(
+                title: booking.carTitle,
+                subtitle: "\(booking.tripUseCity), \(booking.tripUseRegion)",
+                helperText: booking.displayStatus.helperText(for: .renter, paymentStatus: booking.paymentStatus),
+                status: booking.displayStatus,
+                showPaidBadge: booking.shouldShowCompletedPaidBadge
+            )
 
             HStack(spacing: 14) {
                 Label(booking.startDate.hayameDateLabel(), systemImage: "calendar")

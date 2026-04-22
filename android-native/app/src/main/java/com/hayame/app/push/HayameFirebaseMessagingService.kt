@@ -8,17 +8,31 @@ import android.content.Intent
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import com.hayame.app.HayameApplication
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import com.hayame.app.MainActivity
 import com.hayame.app.R
 import com.hayame.app.ui.viewmodel.AppViewModel
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 class HayameFirebaseMessagingService : FirebaseMessagingService() {
 
     override fun onNewToken(token: String) {
         super.onNewToken(token)
         AppViewModel.cachePushToken(token)
+        val previousToken = PushTokenStore.lastUploadedToken()?.takeIf { it != token }
+        val container = (application as? HayameApplication)?.container ?: return
+        CoroutineScope(Dispatchers.IO).launch {
+            runCatching { container.hostRepository.registerAndroidPushToken(token, previousToken) }
+                .onSuccess { response ->
+                    if (response.registered != false) {
+                        PushTokenStore.markUploadedToken(token)
+                    }
+                }
+        }
     }
 
     override fun onMessageReceived(message: RemoteMessage) {
@@ -31,11 +45,13 @@ class HayameFirebaseMessagingService : FirebaseMessagingService() {
 
         val conversationId = message.data["conversationId"]
         val bookingId = message.data["bookingId"]
+        val recipientRole = message.data["recipientRole"]
 
         val intent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             putExtra("conversationId", conversationId)
             putExtra("bookingId", bookingId)
+            putExtra("recipientRole", recipientRole)
         }
         val pendingIntent = PendingIntent.getActivity(
             this,
@@ -48,6 +64,7 @@ class HayameFirebaseMessagingService : FirebaseMessagingService() {
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle(title)
             .setContentText(body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
             .setContentIntent(pendingIntent)

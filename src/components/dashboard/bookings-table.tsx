@@ -2,21 +2,32 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { differenceInCalendarDays, format, parseISO } from "date-fns";
+import { format, parseISO } from "date-fns";
+import {
+  CalendarDays,
+  ChevronRight,
+  Clock3,
+  MapPinned,
+  Phone,
+} from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { TripStatusTracker } from "@/components/trip-status-tracker";
+  buildMapsSearchUrl,
+  buildTelephoneUrl,
+  formatDeliveryTimeLabel,
+} from "@/lib/booking-delivery";
+import {
+  type DisplayStatus,
+  getBookingHelperText,
+  getDisplayStatus,
+  getStatusClasses,
+  getStatusLabel,
+  shouldShowCompletedPaidBadge,
+} from "@/lib/booking-status";
 import { formatCurrency, getInitials } from "@/lib/utils";
 
 type BookingPerson = {
@@ -33,6 +44,10 @@ type BookingRow = {
   start_date: string;
   end_date: string;
   status: string;
+  delivery_address?: string | null;
+  delivery_time?: string | null;
+  contact_phone?: string | null;
+  delivery_notes?: string | null;
   trip_use_region?: string | null;
   trip_use_city?: string | null;
   trip_use_address?: string | null;
@@ -94,7 +109,7 @@ export function BookingsTable({ mode = "host" }: { mode?: "host" | "renter" }) {
   };
 
   useEffect(() => {
-    load();
+    void load();
   }, []);
 
   const handleAction = async (
@@ -220,80 +235,66 @@ export function BookingsTable({ mode = "host" }: { mode?: "host" | "renter" }) {
   if (mode === "renter") {
     return (
       <div className="space-y-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Your bookings</CardTitle>
-            {error ? <p className="text-sm text-red-600">{error}</p> : null}
-          </CardHeader>
-          <CardContent>
-            <BookingsList
-              rows={renterRows}
-              isOwnerView={false}
-              loading={loading}
-              updatingId={updatingId}
-              disputingId={disputingId}
-              messagingId={messagingId}
-              onAction={handleAction}
-              onDispute={openDispute}
-              onMessage={startConversation}
-            />
-          </CardContent>
-        </Card>
+        <BookingsSection
+          title="Your trips"
+          description="See what is happening now and the next action for each trip."
+          rows={renterRows}
+          isOwnerView={false}
+          loading={loading}
+          error={error}
+          updatingId={updatingId}
+          disputingId={disputingId}
+          messagingId={messagingId}
+          onAction={handleAction}
+          onDispute={openDispute}
+          onMessage={startConversation}
+        />
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Bookings on your cars</CardTitle>
-          <p className="text-sm text-gray-600">
-            Approve or reject requests quickly, then message guests if needed.
-          </p>
-          {error ? <p className="text-sm text-red-600">{error}</p> : null}
-        </CardHeader>
-        <CardContent>
-          <BookingsList
-            rows={ownerRows}
-            isOwnerView={true}
-            loading={loading}
-            updatingId={updatingId}
-            disputingId={disputingId}
-            messagingId={messagingId}
-            onAction={handleAction}
-            onDispute={openDispute}
-            onMessage={startConversation}
-          />
-        </CardContent>
-      </Card>
+      <BookingsSection
+        title="Guest bookings"
+        description="Review incoming requests, confirm live trips, and work from delivery details."
+        rows={ownerRows}
+        isOwnerView={true}
+        loading={loading}
+        error={error}
+        updatingId={updatingId}
+        disputingId={disputingId}
+        messagingId={messagingId}
+        onAction={handleAction}
+        onDispute={openDispute}
+        onMessage={startConversation}
+      />
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Your bookings</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <BookingsList
-            rows={renterRows}
-            isOwnerView={false}
-            loading={loading}
-            updatingId={updatingId}
-            disputingId={disputingId}
-            messagingId={messagingId}
-            onAction={handleAction}
-            onDispute={openDispute}
-            onMessage={startConversation}
-          />
-        </CardContent>
-      </Card>
+      <BookingsSection
+        title="Your trips"
+        description="Trips you booked yourself."
+        rows={renterRows}
+        isOwnerView={false}
+        loading={loading}
+        error={null}
+        updatingId={updatingId}
+        disputingId={disputingId}
+        messagingId={messagingId}
+        onAction={handleAction}
+        onDispute={openDispute}
+        onMessage={startConversation}
+      />
     </div>
   );
 }
 
-function BookingsList({
+function BookingsSection({
+  title,
+  description,
   rows,
   isOwnerView,
   loading,
+  error,
   updatingId,
   disputingId,
   messagingId,
@@ -301,9 +302,12 @@ function BookingsList({
   onDispute,
   onMessage,
 }: {
+  title: string;
+  description?: string;
   rows: BookingRow[];
   isOwnerView: boolean;
   loading: boolean;
+  error: string | null;
   updatingId: string | null;
   disputingId: string | null;
   messagingId: string | null;
@@ -311,443 +315,478 @@ function BookingsList({
   onDispute: (id: string) => void;
   onMessage: (booking: BookingRow, isOwnerView: boolean) => void;
 }) {
-  if (rows.length === 0 && !loading) {
-    return (
-      <p className="text-center text-sm text-gray-600">
-        {isOwnerView ? "No bookings on your cars yet." : "No trips booked yet."}
-      </p>
-    );
-  }
+  return (
+    <Card className="border-border">
+      <CardHeader>
+        <CardTitle>{title}</CardTitle>
+        {description ? (
+          <p className="text-sm text-gray-600">{description}</p>
+        ) : null}
+        {error ? <p className="text-sm text-red-600">{error}</p> : null}
+      </CardHeader>
+      <CardContent>
+        {loading && rows.length === 0 ? (
+          <p className="text-center text-sm text-gray-600">
+            Loading bookings...
+          </p>
+        ) : rows.length === 0 ? (
+          <p className="text-center text-sm text-gray-600">
+            {isOwnerView ? "No bookings on your cars yet." : "No trips booked yet."}
+          </p>
+        ) : (
+          <div className="space-y-4">
+            {rows.map((booking) =>
+              isOwnerView ? (
+                <HostBookingCard
+                  key={booking.id}
+                  booking={booking}
+                  updatingId={updatingId}
+                  messagingId={messagingId}
+                  onAction={onAction}
+                  onMessage={onMessage}
+                />
+              ) : (
+                <RenterBookingCard
+                  key={booking.id}
+                  booking={booking}
+                  disputingId={disputingId}
+                  messagingId={messagingId}
+                  onDispute={onDispute}
+                  onMessage={onMessage}
+                />
+              ),
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function RenterBookingCard({
+  booking,
+  disputingId,
+  messagingId,
+  onDispute,
+  onMessage,
+}: {
+  booking: BookingRow;
+  disputingId: string | null;
+  messagingId: string | null;
+  onDispute: (id: string) => void;
+  onMessage: (booking: BookingRow, isOwnerView: boolean) => void;
+}) {
+  const displayStatus = getDisplayStatus(booking);
+  const showPaidBadge = shouldShowCompletedPaidBadge(booking, displayStatus);
+  const image = booking.cars?.car_photos?.[0]?.url ?? null;
+  const location = [booking.cars?.city, booking.cars?.region]
+    .filter(Boolean)
+    .join(", ");
+  const hostName = booking.cars?.owner?.full_name ?? "Host";
+  const showDeliveryCard = displayStatus === "confirmed";
 
   return (
-    <div className="space-y-4">
-      <div className="space-y-3 md:hidden">
-        {rows.map((booking) => {
-          const awaiting = booking.status === "awaiting_host";
-          const canAct =
-            isOwnerView && awaiting && booking.payment_status === "paid";
-          const personName = isOwnerView
-            ? (booking.renter?.full_name ?? "Guest")
-            : (booking.cars?.owner?.full_name ?? "Host");
-          const personLabel = isOwnerView ? "Booked by" : "Host";
-          const location = [booking.cars?.city, booking.cars?.region]
-            .filter(Boolean)
-            .join(", ");
-          const image =
-            booking.cars?.car_photos?.[0]?.url ??
-            booking.cars?.owner?.avatar_url ??
-            null;
-          const durationNights = getDurationNights(booking);
-          const tripMode =
-            Number(booking.delivery_fee ?? 0) > 0 ? "Delivery" : "Pickup";
-          const tripUseLocation = formatTripUseLocation(booking);
+    <article className="rounded-3xl border border-border bg-white p-4 shadow-sm">
+      <div className="flex gap-4">
+        <ListingThumb image={image} title={booking.cars?.title ?? "Listing"} />
 
-          return (
-            <details
-              key={booking.id}
-              className="overflow-hidden rounded-xl border border-border bg-white"
-            >
-              <summary className="list-none cursor-pointer p-3">
-                <div className="flex items-start gap-3">
-                  <div className="relative h-16 w-20 shrink-0 overflow-hidden rounded-lg border border-border bg-gray-100">
-                    {image ? (
-                      <Image
-                        src={image}
-                        alt={booking.cars?.title ?? "Listing"}
-                        fill
-                        className="object-cover"
-                        sizes="80px"
-                      />
-                    ) : (
-                      <div className="flex h-full w-full items-center justify-center text-xs font-semibold text-gray-500">
-                        {getInitials(booking.cars?.title ?? "Car")}
-                      </div>
-                    )}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold text-foreground">
-                      {booking.cars?.title ?? booking.car_id}
-                    </p>
-                    <p className="mt-0.5 truncate text-xs text-gray-600">
-                      {location || "Location not set"}
-                    </p>
-                    <p className="mt-1 text-xs text-gray-700">
-                      {personLabel}:{" "}
-                      <span className="font-semibold">{personName}</span>
-                    </p>
-                    <div className="mt-2 flex flex-wrap items-center gap-2">
-                      <Badge variant={statusVariant(booking.status)}>
-                        {statusLabel(booking.status)}
-                      </Badge>
-                      <Badge variant={paymentVariant(booking.payment_status)}>
-                        {paymentLabel(booking.payment_status)}
-                      </Badge>
-                    </div>
-                    <p className="mt-2 text-xs text-gray-700">
-                      {formatDateLabel(booking.start_date)} to{" "}
-                      {formatDateLabel(booking.end_date)} | {durationNights}{" "}
-                      night(s)
-                    </p>
-                    <p className="text-xs text-gray-600">
-                      Use: {tripUseLocation}
-                      {booking.trip_outside_listing_region
-                        ? " (Outside listing region)"
-                        : booking.trip_outside_accra
-                          ? " (Outside Accra)"
-                          : ""}
-                    </p>
-                    <p className="text-xs text-gray-600">
-                      Booked: {formatDateLabel(booking.created_at)}
-                    </p>
-                    <p className="text-sm font-semibold text-foreground">
-                      {formatCurrency(booking.total_price)}
-                    </p>
-                  </div>
-                </div>
-              </summary>
+        <div className="min-w-0 flex-1 space-y-3">
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div className="min-w-0 space-y-2">
+              <h3 className="text-lg font-semibold text-foreground">
+                {booking.cars?.title ?? booking.car_id}
+              </h3>
+              <p className="text-sm text-gray-600">
+                {getBookingHelperText(
+                  displayStatus,
+                  "guest",
+                  booking.payment_status,
+                )}
+              </p>
+              <p className="flex items-center gap-2 text-sm text-gray-700">
+                <CalendarDays className="h-4 w-4 text-gray-400" />
+                <span>
+                  {formatDateLabel(booking.start_date)} to{" "}
+                  {formatDateLabel(booking.end_date)}
+                </span>
+              </p>
+            </div>
 
-              <div className="border-t border-border px-3 pb-3 pt-2">
-                <div className="mb-3 flex flex-wrap gap-2">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-8 px-3 text-xs"
-                    onClick={() => onMessage(booking, isOwnerView)}
-                    disabled={messagingId === booking.id}
-                  >
-                    {messagingId === booking.id ? "Opening..." : "Message"}
-                  </Button>
-                  {!isOwnerView && booking.payment_status === "paid" ? (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-8 px-3 text-xs"
-                      disabled={disputingId === booking.id}
-                      onClick={() => onDispute(booking.id)}
-                    >
-                      {disputingId === booking.id
-                        ? "Opening..."
-                        : "Open dispute"}
+            <div className="flex flex-col items-start gap-3 md:items-end">
+              <div className="flex flex-wrap gap-2">
+                <StatusPill status={displayStatus} />
+                {showPaidBadge ? <PaymentPill /> : null}
+              </div>
+
+              <div className="text-left md:text-right">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">
+                  Total
+                </p>
+                <p className="text-lg font-semibold text-foreground">
+                  {formatCurrency(Number(booking.total_price ?? 0))}
+                </p>
+                {location ? <p className="text-sm text-gray-600">{location}</p> : null}
+              </div>
+            </div>
+          </div>
+
+          {showDeliveryCard ? (
+            <DeliveryDetailsCard
+              address={booking.delivery_address}
+              time={booking.delivery_time}
+              phone={booking.contact_phone}
+              notes={booking.delivery_notes}
+              phoneLabel="Contact"
+            />
+          ) : null}
+
+          <div className="flex flex-wrap gap-2">
+            {displayStatus === "confirmed" ? (
+              <Button
+                size="sm"
+                className="rounded-xl"
+                onClick={() => onMessage(booking, false)}
+                disabled={messagingId === booking.id}
+              >
+                {messagingId === booking.id ? "Opening..." : "Contact host"}
+              </Button>
+            ) : null}
+
+            {displayStatus === "ongoing" ? (
+              <>
+                <Button
+                  size="sm"
+                  className="rounded-xl"
+                  onClick={() => onMessage(booking, false)}
+                  disabled={messagingId === booking.id}
+                >
+                  {messagingId === booking.id ? "Opening..." : "Message host"}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="rounded-xl"
+                  onClick={() => onDispute(booking.id)}
+                  disabled={disputingId === booking.id}
+                >
+                  {disputingId === booking.id ? "Opening..." : "Open dispute"}
+                </Button>
+              </>
+            ) : null}
+
+            {displayStatus === "completed" ? (
+              <Button size="sm" asChild className="rounded-xl">
+                <Link href={`/cars/${booking.car_id}#reviews`}>
+                  Leave review
+                  <ChevronRight className="h-4 w-4" />
+                </Link>
+              </Button>
+            ) : null}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3 text-sm text-gray-600">
+            <span>Host: {hostName}</span>
+            {booking.rejection_reason && displayStatus === "rejected" ? (
+              <span>Reason: {booking.rejection_reason}</span>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function HostBookingCard({
+  booking,
+  updatingId,
+  messagingId,
+  onAction,
+  onMessage,
+}: {
+  booking: BookingRow;
+  updatingId: string | null;
+  messagingId: string | null;
+  onAction: (id: string, action: "approve" | "reject") => void;
+  onMessage: (booking: BookingRow, isOwnerView: boolean) => void;
+}) {
+  const displayStatus = getDisplayStatus(booking);
+  const showPaidBadge = shouldShowCompletedPaidBadge(booking, displayStatus);
+  const canAct =
+    booking.status === "awaiting_host" && booking.payment_status === "paid";
+  const image = booking.cars?.car_photos?.[0]?.url ?? null;
+  const renterName = booking.renter?.full_name ?? "Guest";
+  const deliveryPhone = booking.contact_phone ?? booking.renter?.phone ?? null;
+  const tripUseLocation = formatTripUseLocation(booking);
+  const mapsUrl =
+    buildMapsSearchUrl(booking.delivery_address) ??
+    (tripUseLocation !== "Not provided"
+      ? buildMapsSearchUrl(tripUseLocation)
+      : null);
+  const phoneUrl = buildTelephoneUrl(deliveryPhone);
+
+  return (
+    <article className="rounded-3xl border border-border bg-white p-4 shadow-sm">
+      <div className="flex gap-4">
+        <ListingThumb image={image} title={booking.cars?.title ?? "Listing"} />
+
+        <div className="min-w-0 flex-1 space-y-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div className="space-y-2">
+              <h3 className="text-lg font-semibold text-foreground">
+                {booking.cars?.title ?? booking.car_id}
+              </h3>
+              <p className="text-sm text-gray-600">
+                {getBookingHelperText(
+                  displayStatus,
+                  "host",
+                  booking.payment_status,
+                )}
+              </p>
+              <div className="flex flex-wrap items-center gap-3 text-sm text-gray-700">
+                <span>{formatDateLabel(booking.start_date)} to {formatDateLabel(booking.end_date)}</span>
+                <span>Renter: {renterName}</span>
+              </div>
+            </div>
+
+            <div className="flex flex-col items-start gap-3 lg:items-end">
+              <div className="flex flex-wrap gap-2">
+                <StatusPill status={displayStatus} />
+                {showPaidBadge ? <PaymentPill /> : null}
+              </div>
+
+              <div className="text-left lg:text-right">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">
+                  Booking total
+                </p>
+                <p className="text-lg font-semibold text-foreground">
+                  {formatCurrency(Number(booking.total_price ?? 0))}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-[1fr_0.9fr]">
+            <div className="rounded-2xl border border-border bg-gray-50 p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <h4 className="text-sm font-semibold text-foreground">
+                  Delivery Details
+                </h4>
+                <div className="flex flex-wrap gap-2">
+                  {phoneUrl ? (
+                    <Button size="sm" variant="outline" asChild className="rounded-xl">
+                      <a href={phoneUrl}>
+                        Call renter
+                      </a>
+                    </Button>
+                  ) : null}
+                  {mapsUrl ? (
+                    <Button size="sm" variant="outline" asChild className="rounded-xl">
+                      <a href={mapsUrl} target="_blank" rel="noreferrer">
+                        Open in Maps
+                      </a>
                     </Button>
                   ) : null}
                 </div>
-
-                {canAct ? (
-                  <div className="mb-3 flex flex-wrap gap-2">
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      className="h-8 px-3 text-xs"
-                      onClick={() => onAction(booking.id, "reject")}
-                      disabled={updatingId === booking.id}
-                    >
-                      Reject & refund
-                    </Button>
-                    <Button
-                      size="sm"
-                      className="h-8 px-3 text-xs"
-                      onClick={() => onAction(booking.id, "approve")}
-                      disabled={updatingId === booking.id}
-                    >
-                      Approve
-                    </Button>
-                  </div>
-                ) : null}
-
-                <TripStatusTracker
-                  status={booking.status}
-                  startDate={booking.start_date}
-                  endDate={booking.end_date}
-                />
-
-                <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
-                  <Detail label="Trip mode" value={tripMode} />
-                  <Detail
-                    label="Duration"
-                    value={`${durationNights} night(s)`}
-                  />
-                  <Detail
-                    label="Start"
-                    value={formatDateLabel(booking.start_date)}
-                  />
-                  <Detail
-                    label="End"
-                    value={formatDateLabel(booking.end_date)}
-                  />
-                  <Detail label="Use location" value={tripUseLocation} />
-                  <Detail
-                    label="Daily rate"
-                    value={formatCurrency(Number(booking.daily_rate ?? 0))}
-                  />
-                  <Detail
-                    label="Subtotal"
-                    value={formatCurrency(Number(booking.subtotal ?? 0))}
-                  />
-                  <Detail
-                    label="Platform fee"
-                    value={formatCurrency(Number(booking.platform_fee ?? 0))}
-                  />
-                  <Detail
-                    label="Insurance fee"
-                    value={formatCurrency(Number(booking.insurance_fee ?? 0))}
-                  />
-                  <Detail
-                    label="Delivery fee"
-                    value={formatCurrency(Number(booking.delivery_fee ?? 0))}
-                  />
-                  <Detail
-                    label="Outside listing region fee"
-                    value={formatCurrency(
-                      Number(booking.outside_accra_surcharge ?? 0),
-                    )}
-                  />
-                  <Detail
-                    label="Deposit"
-                    value={formatCurrency(Number(booking.deposit_amount ?? 0))}
-                  />
-                  <Detail
-                    label="Total"
-                    value={formatCurrency(Number(booking.total_price ?? 0))}
-                  />
-                  <Detail
-                    label="Payment ref"
-                    value={booking.payment_reference ?? "N/A"}
-                  />
-                </div>
-
-                {booking.rejection_reason ? (
-                  <p className="mt-2 rounded-md bg-red-50 px-2 py-1 text-xs text-red-700">
-                    Rejection reason: {booking.rejection_reason}
-                  </p>
-                ) : null}
-
-                <div className="mt-3 text-[11px] text-gray-600">
-                  {booking.cars?.cancellation_policy ? (
-                    <span className="rounded-full bg-gray-100 px-2 py-1 font-semibold capitalize text-gray-700">
-                      {booking.cars.cancellation_policy} cancellation
-                    </span>
-                  ) : (
-                    <Link
-                      href="/cancellation"
-                      className="font-semibold text-brand"
-                    >
-                      View cancellation policy
-                    </Link>
-                  )}
-                </div>
               </div>
-            </details>
-          );
-        })}
-      </div>
 
-      <div className="hidden md:block">
-        <div className="overflow-x-auto rounded-xl border border-border bg-white">
-          <Table className="w-full table-fixed">
-            <TableHeader className="bg-gray-50/80">
-              <TableRow>
-                <TableHead className="w-[23%]">Listing</TableHead>
-                <TableHead className="w-[12%]">
-                  {isOwnerView ? "Booked by" : "Host"}
-                </TableHead>
-                <TableHead className="w-[13%]">Dates</TableHead>
-                <TableHead className="w-[17%]">Status</TableHead>
-                <TableHead className="w-[10%]">Payment</TableHead>
-                <TableHead className="w-[12%] min-w-[116px] text-right">
-                  Total
-                </TableHead>
-                <TableHead className="w-[13%] min-w-[124px] text-right">
-                  Actions
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map((booking) => {
-                const awaiting = booking.status === "awaiting_host";
-                const canAct =
-                  isOwnerView && awaiting && booking.payment_status === "paid";
-                const personName = isOwnerView
-                  ? (booking.renter?.full_name ?? "Guest")
-                  : (booking.cars?.owner?.full_name ?? "Host");
-                const image =
-                  booking.cars?.car_photos?.[0]?.url ??
-                  booking.cars?.owner?.avatar_url ??
-                  null;
-                const location = [booking.cars?.city, booking.cars?.region]
-                  .filter(Boolean)
-                  .join(", ");
-                const durationNights = getDurationNights(booking);
-                const tripUseLocation = formatTripUseLocation(booking);
+              <div className="grid gap-3 sm:grid-cols-2">
+                <DetailTile
+                  label="Address"
+                  value={booking.delivery_address ?? "Not provided"}
+                />
+                <DetailTile
+                  label="Time"
+                  value={formatDeliveryTimeLabel(booking.delivery_time)}
+                />
+                <DetailTile
+                  label="Phone"
+                  value={deliveryPhone ?? "Not provided"}
+                  href={phoneUrl}
+                />
+                <DetailTile
+                  label="Notes"
+                  value={booking.delivery_notes ?? "No delivery notes"}
+                />
+              </div>
+            </div>
 
-                return (
-                  <TableRow key={booking.id}>
-                    <TableCell className="align-top">
-                      <div className="flex min-w-0 items-start gap-3">
-                        <div className="relative h-14 w-20 shrink-0 overflow-hidden rounded-md border border-border bg-gray-100">
-                          {image ? (
-                            <Image
-                              src={image}
-                              alt={booking.cars?.title ?? "Listing"}
-                              fill
-                              className="object-cover"
-                              sizes="80px"
-                            />
-                          ) : (
-                            <div className="flex h-full w-full items-center justify-center text-xs font-semibold text-gray-500">
-                              {getInitials(booking.cars?.title ?? "Car")}
-                            </div>
-                          )}
-                        </div>
-                        <div className="min-w-0">
-                          <div className="break-words text-base font-semibold leading-tight">
-                            {booking.cars?.title ?? booking.car_id}
-                          </div>
-                          <div className="mt-1 break-words text-sm text-gray-600">
-                            {location || "Location not set"}
-                          </div>
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell className="align-top">
-                      <div className="break-words text-base font-semibold leading-tight">
-                        {personName}
-                      </div>
-                      <div className="mt-1 break-words text-sm text-gray-600">
-                        {booking.renter?.phone ??
-                          booking.cars?.owner?.phone ??
-                          "No phone"}
-                      </div>
-                    </TableCell>
-                    <TableCell className="align-top">
-                      <div className="text-base leading-tight">
-                        {formatDateLabel(booking.start_date)} -{" "}
-                        {formatDateLabel(booking.end_date)}
-                      </div>
-                      <div className="mt-1 text-sm text-gray-600">
-                        {durationNights} night(s)
-                      </div>
-                      <div className="mt-1 text-xs text-gray-600">
-                        Use: {tripUseLocation}
-                        {booking.trip_outside_listing_region
-                          ? " (Outside listing region)"
-                          : booking.trip_outside_accra
-                            ? " (Outside Accra)"
-                            : ""}
-                      </div>
-                      <div className="mt-1 text-sm text-gray-600">
-                        Booked: {formatDateLabel(booking.created_at)}
-                      </div>
-                    </TableCell>
-                    <TableCell className="align-top">
-                      <div className="max-w-[230px] space-y-2 overflow-hidden">
-                        <Badge variant={statusVariant(booking.status)}>
-                          {statusLabel(booking.status)}
-                        </Badge>
-                        <p className="text-xs text-gray-600">
-                          {statusSummaryLabel(booking.status)}
-                        </p>
-                        {booking.cars?.cancellation_policy ? (
-                          <div className="text-xs text-gray-600">
-                            <span className="inline-flex rounded-full bg-gray-100 px-2 py-1 font-semibold capitalize text-gray-700">
-                              {booking.cars.cancellation_policy} cancellation
-                            </span>
-                          </div>
-                        ) : null}
-                      </div>
-                    </TableCell>
-                    <TableCell className="align-top">
-                      <Badge variant={paymentVariant(booking.payment_status)}>
-                        {paymentLabel(booking.payment_status)}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="align-top pr-2 text-right text-base font-semibold tabular-nums whitespace-nowrap">
-                      {formatCurrency(booking.total_price)}
-                    </TableCell>
-                    <TableCell className="relative z-10 align-top">
-                      <div className="ml-auto flex w-full max-w-[136px] flex-col gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-9 w-full justify-center rounded-lg border-2 px-2 text-xs font-semibold"
-                          onClick={() => onMessage(booking, isOwnerView)}
-                          disabled={messagingId === booking.id}
-                        >
-                          {messagingId === booking.id
-                            ? "Opening..."
-                            : "Message"}
-                        </Button>
-                        {canAct ? (
-                          <div className="grid grid-cols-2 gap-2">
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              className="h-9 w-full rounded-lg px-1 text-xs font-semibold"
-                              onClick={() => onAction(booking.id, "reject")}
-                              disabled={updatingId === booking.id}
-                            >
-                              Reject
-                            </Button>
-                            <Button
-                              size="sm"
-                              className="h-9 w-full rounded-lg px-1 text-xs font-semibold"
-                              onClick={() => onAction(booking.id, "approve")}
-                              disabled={updatingId === booking.id}
-                            >
-                              Approve
-                            </Button>
-                          </div>
-                        ) : null}
-                        {!isOwnerView && booking.payment_status === "paid" ? (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-8 w-full rounded-lg px-2 text-xs font-semibold"
-                            disabled={disputingId === booking.id}
-                            onClick={() => onDispute(booking.id)}
-                          >
-                            {disputingId === booking.id
-                              ? "Opening..."
-                              : "Open dispute"}
-                          </Button>
-                        ) : null}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
+            <div className="rounded-2xl border border-border bg-white p-4">
+              <h4 className="mb-3 text-sm font-semibold text-foreground">
+                Trip plan
+              </h4>
+              <div className="space-y-3">
+                <InfoRow
+                  icon={<MapPinned className="h-4 w-4" />}
+                  label="Use location"
+                  value={tripUseLocation}
+                />
+                <InfoRow
+                  icon={<Clock3 className="h-4 w-4" />}
+                  label="Booked"
+                  value={formatDateLabel(booking.created_at)}
+                />
+                <InfoRow
+                  icon={<Phone className="h-4 w-4" />}
+                  label="Renter phone"
+                  value={booking.renter?.phone ?? "Not provided"}
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              className="rounded-xl"
+              onClick={() => onMessage(booking, true)}
+              disabled={messagingId === booking.id}
+            >
+              {messagingId === booking.id ? "Opening..." : "Message renter"}
+            </Button>
+
+            {canAct ? (
+              <>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  className="rounded-xl"
+                  onClick={() => onAction(booking.id, "reject")}
+                  disabled={updatingId === booking.id}
+                >
+                  Reject & refund
+                </Button>
+                <Button
+                  size="sm"
+                  className="rounded-xl"
+                  onClick={() => onAction(booking.id, "approve")}
+                  disabled={updatingId === booking.id}
+                >
+                  Approve booking
+                </Button>
+              </>
+            ) : null}
+          </div>
         </div>
       </div>
+    </article>
+  );
+}
+
+function ListingThumb({
+  image,
+  title,
+}: {
+  image: string | null;
+  title: string;
+}) {
+  return (
+    <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-2xl border border-border bg-gray-100">
+      {image ? (
+        <Image
+          src={image}
+          alt={title}
+          fill
+          className="object-cover"
+          sizes="64px"
+        />
+      ) : (
+        <div className="flex h-full w-full items-center justify-center text-xs font-semibold text-gray-500">
+          {getInitials(title || "Car")}
+        </div>
+      )}
     </div>
   );
 }
 
-function Detail({ label, value }: { label: string; value: string }) {
+function DeliveryDetailsCard({
+  address,
+  time,
+  phone,
+  notes,
+  phoneLabel,
+}: {
+  address?: string | null;
+  time?: string | null;
+  phone?: string | null;
+  notes?: string | null;
+  phoneLabel: string;
+}) {
   return (
-    <div className="rounded-md border border-border bg-gray-50 px-2 py-1">
-      <p className="text-[10px] uppercase tracking-wide text-gray-500">
+    <div className="rounded-2xl border border-border bg-gray-50 p-4">
+      <h4 className="mb-3 text-sm font-semibold text-foreground">
+        Delivery details
+      </h4>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <DetailTile label="Address" value={address ?? "Not provided"} />
+        <DetailTile label="Time" value={formatDeliveryTimeLabel(time)} />
+        <DetailTile label={phoneLabel} value={phone ?? "Not provided"} />
+        {notes ? <DetailTile label="Notes" value={notes} /> : null}
+      </div>
+    </div>
+  );
+}
+
+function DetailTile({
+  label,
+  value,
+  href,
+}: {
+  label: string;
+  value: string;
+  href?: string | null;
+}) {
+  return (
+    <div className="rounded-2xl border border-border bg-white px-3 py-2">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-500">
         {label}
       </p>
-      <p className="truncate font-semibold text-foreground">{value}</p>
+      {href ? (
+        <a href={href} className="mt-1 inline-block text-sm font-semibold text-brand">
+          {value}
+        </a>
+      ) : (
+        <p className="mt-1 text-sm font-semibold text-foreground">{value}</p>
+      )}
     </div>
   );
 }
 
-function getDurationNights(booking: BookingRow) {
-  if (typeof booking.nights === "number" && booking.nights > 0)
-    return booking.nights;
-  try {
-    return Math.max(
-      differenceInCalendarDays(
-        parseISO(booking.end_date),
-        parseISO(booking.start_date),
-      ),
-      1,
-    );
-  } catch {
-    return 1;
-  }
+function InfoRow({
+  icon,
+  label,
+  value,
+}: {
+  icon: ReactNode;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="flex items-start gap-3">
+      <div className="rounded-xl bg-gray-100 p-2 text-gray-600">{icon}</div>
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">
+          {label}
+        </p>
+        <p className="text-sm text-foreground">{value}</p>
+      </div>
+    </div>
+  );
+}
+
+function StatusPill({ status }: { status: DisplayStatus }) {
+  return (
+    <span className={getStatusClasses(status)}>
+      {getStatusLabel(status)}
+    </span>
+  );
+}
+
+function PaymentPill() {
+  return (
+    <span className="inline-flex w-fit items-center rounded-full bg-emerald-50 px-3 py-1 text-sm font-semibold text-emerald-800">
+      Paid
+    </span>
+  );
 }
 
 function bookingSortTimestamp(booking: BookingRow) {
@@ -767,77 +806,6 @@ function formatDateLabel(value?: string | null) {
   }
 }
 
-function statusLabel(status?: string) {
-  switch (status) {
-    case "pending":
-      return "Pending hold";
-    case "awaiting_host":
-      return "Awaiting host";
-    case "confirmed":
-      return "Confirmed";
-    case "rejected":
-      return "Rejected";
-    case "cancelled":
-      return "Cancelled";
-    case "completed":
-      return "Completed";
-    case "refunded":
-      return "Refunded";
-    default:
-      return "Pending";
-  }
-}
-
-function statusVariant(
-  status?: string,
-): "default" | "secondary" | "outline" | "muted" {
-  switch (status) {
-    case "pending":
-      return "muted";
-    case "awaiting_host":
-      return "secondary";
-    case "confirmed":
-      return "default";
-    case "completed":
-      return "default";
-    case "rejected":
-    case "cancelled":
-      return "outline";
-    case "refunded":
-      return "outline";
-    default:
-      return "muted";
-  }
-}
-
-function paymentLabel(status?: string | null) {
-  switch (status) {
-    case "paid":
-      return "Paid";
-    case "refunded":
-      return "Refunded";
-    case "failed":
-      return "Failed";
-    default:
-      return "Pending";
-  }
-}
-
-function paymentVariant(
-  status?: string | null,
-): "default" | "secondary" | "outline" | "muted" {
-  switch (status) {
-    case "paid":
-      return "default";
-    case "refunded":
-      return "outline";
-    case "failed":
-      return "outline";
-    default:
-      return "muted";
-  }
-}
-
 function formatTripUseLocation(
   booking: Pick<
     BookingRow,
@@ -847,27 +815,6 @@ function formatTripUseLocation(
   return (
     [booking.trip_use_address, booking.trip_use_city, booking.trip_use_region]
       .filter(Boolean)
-      .join(", ") || "N/A"
+      .join(", ") || "Not provided"
   );
-}
-
-function statusSummaryLabel(status?: string) {
-  switch (status) {
-    case "awaiting_host":
-      return "Host response required";
-    case "confirmed":
-      return "Confirmed and ready for trip";
-    case "completed":
-      return "Trip completed";
-    case "rejected":
-      return "Rejected by host";
-    case "cancelled":
-      return "Booking cancelled";
-    case "refunded":
-      return "Payment refunded";
-    case "pending":
-      return "Pending payment hold";
-    default:
-      return "Status update pending";
-  }
 }
