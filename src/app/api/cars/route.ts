@@ -211,7 +211,7 @@ export async function GET(req: Request) {
       (row: any) => row?.instant_book === true,
     );
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       data: normalizedRows,
       meta: {
         platform_fee_percent: platformFeePercent,
@@ -235,6 +235,15 @@ export async function GET(req: Request) {
         },
       },
     });
+    if (!mineOnly) {
+      response.headers.set(
+        "Cache-Control",
+        "public, s-maxage=30, stale-while-revalidate=120",
+      );
+    } else {
+      response.headers.set("Cache-Control", "private, no-store");
+    }
+    return response;
   } catch (error: any) {
     return NextResponse.json({ message: error.message }, { status: 500 });
   }

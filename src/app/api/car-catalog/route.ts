@@ -26,7 +26,12 @@ export async function GET() {
       models: modelsByMake.get(make.id) ?? [],
     }));
 
-    return NextResponse.json({ makes: out });
+    const response = NextResponse.json({ makes: out });
+    response.headers.set(
+      "Cache-Control",
+      "public, s-maxage=300, stale-while-revalidate=3600",
+    );
+    return response;
   } catch (error: any) {
     return NextResponse.json(
       { message: error.message ?? "Failed to load catalog" },

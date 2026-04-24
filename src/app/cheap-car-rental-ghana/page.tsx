@@ -26,7 +26,7 @@ export default function CheapCarRentalGhanaPage() {
         {
           question: "Are extra fees always included?",
           answer:
-            "Booking summaries clearly show charged amounts and items marked as coming soon.",
+            "Booking summaries clearly show the platform, insurance, delivery, deposit, and outside-region fees that apply before checkout.",
         },
       ]}
     />

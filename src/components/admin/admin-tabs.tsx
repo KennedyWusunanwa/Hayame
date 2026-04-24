@@ -1,48 +1,23 @@
 "use client";
 
-import { useEffect, useState, useTransition, type ReactNode } from "react";
-import { Spinner } from "@/components/ui/spinner";
+import { useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 type AdminTabsProps = {
-  initialTab?: "overview" | "applications";
   overview: ReactNode;
   applications: ReactNode;
 };
 
-export function AdminTabs({
-  initialTab = "overview",
-  overview,
-  applications,
-}: AdminTabsProps) {
-  const [tab, setTab] = useState<"overview" | "applications">(initialTab);
-  const [isPending, pendingTransition] = useTransition();
-
-  useEffect(() => {
-    setTab(initialTab);
-  }, [initialTab]);
-
-  function handleTabChange(nextTab: "overview" | "applications") {
-    if (nextTab === tab) return;
-    pendingTransition(() => setTab(nextTab));
-  }
+export function AdminTabs({ overview, applications }: AdminTabsProps) {
+  const [tab, setTab] = useState<"overview" | "applications">("overview");
 
   return (
     <div className="space-y-6">
       <div className="sticky top-0 z-10 -mx-6 bg-white/95 px-6 py-3 shadow-sm backdrop-blur md:hidden">
-        <div className="mb-2 flex items-center justify-between text-[11px] font-medium uppercase tracking-[0.14em] text-gray-500">
-          <span>Admin sections</span>
-          {isPending ? (
-            <span className="inline-flex items-center gap-2">
-              <Spinner size={12} />
-              Loading...
-            </span>
-          ) : null}
-        </div>
         <div className="grid grid-cols-2 gap-2">
           <button
             type="button"
-            onClick={() => handleTabChange("overview")}
+            onClick={() => setTab("overview")}
             className={cn(
               "rounded-full border px-3 py-2 text-sm font-semibold",
               tab === "overview"
@@ -54,7 +29,7 @@ export function AdminTabs({
           </button>
           <button
             type="button"
-            onClick={() => handleTabChange("applications")}
+            onClick={() => setTab("applications")}
             className={cn(
               "rounded-full border px-3 py-2 text-sm font-semibold",
               tab === "applications"
@@ -67,25 +42,11 @@ export function AdminTabs({
         </div>
       </div>
 
-      <div
-        aria-busy={isPending}
-        className={cn(
-          "transition-opacity duration-150",
-          isPending ? "opacity-70" : "opacity-100",
-          tab === "overview" ? "block" : "hidden",
-          "md:block",
-        )}
-      >
+      <div className={cn(tab === "overview" ? "block" : "hidden", "md:block")}>
         {overview}
       </div>
       <div
-        aria-busy={isPending}
-        className={cn(
-          "transition-opacity duration-150",
-          isPending ? "opacity-70" : "opacity-100",
-          tab === "applications" ? "block" : "hidden",
-          "md:block",
-        )}
+        className={cn(tab === "applications" ? "block" : "hidden", "md:block")}
       >
         {applications}
       </div>

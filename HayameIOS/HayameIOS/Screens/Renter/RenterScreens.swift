@@ -3275,7 +3275,11 @@ private func bookingAddingDays(_ days: Int, to date: Date) -> Date {
 }
 
 private func bookingDateSet(from rawValues: [String]) -> Set<Date> {
-    Set(rawValues.compactMap { AppState.dateOnlyFormatter.date(from: $0) }.map(bookingDay))
+    let formatter = DateFormatter()
+    formatter.calendar = Calendar(identifier: .gregorian)
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.dateFormat = "yyyy-MM-dd"
+    return Set(rawValues.compactMap { formatter.date(from: $0) }.map(bookingDay))
 }
 
 private func isContinuousBookingRangeAvailable(startDate: Date, endDate: Date, blockedDates: Set<Date>) -> Bool {

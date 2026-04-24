@@ -11,7 +11,7 @@ Native iOS app for Hayame (Ghana car sharing marketplace), built with SwiftUI.
 ## Open in Xcode
 
 1. Open `HayameIOS.xcodeproj`
-2. Select scheme: `HayameIOS`
+2. Select scheme: `Hayame`
 3. Build/run on simulator or device
 
 ## Configure API
@@ -50,5 +50,5 @@ Default production API base URL is `https://www.hayamegh.com`.
 ## Build (CLI)
 
 ```bash
-xcodebuild -scheme HayameIOS -destination 'generic/platform=iOS Simulator' build
+xcodebuild -scheme Hayame -destination 'generic/platform=iOS Simulator' build
 ```

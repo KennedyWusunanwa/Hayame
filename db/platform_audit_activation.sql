@@ -242,6 +242,10 @@ alter table public.bookings add column if not exists platform_fee numeric defaul
 alter table public.bookings add column if not exists insurance_fee numeric default 0;
 alter table public.bookings add column if not exists delivery_fee numeric default 0;
 alter table public.bookings add column if not exists deposit_amount numeric default 0;
+alter table public.bookings add column if not exists delivery_address text;
+alter table public.bookings add column if not exists delivery_time text;
+alter table public.bookings add column if not exists contact_phone text;
+alter table public.bookings add column if not exists delivery_notes text;
 alter table public.bookings add column if not exists updated_at timestamptz default now();
 
 update public.bookings

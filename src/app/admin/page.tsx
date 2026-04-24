@@ -1,12 +1,8 @@
 import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { AdminLoadingLink } from "@/components/admin/admin-loading-link";
-import { AdminNotice } from "@/components/admin/admin-notice";
 import { AdminTabs } from "@/components/admin/admin-tabs";
-import { PendingSubmitButton } from "@/components/admin/pending-submit-button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import {
   Table,
   TableBody,
@@ -15,7 +11,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Textarea } from "@/components/ui/textarea";
 import {
   getAdminReviewerName,
   isAdminAuthConfigured,
@@ -24,98 +19,30 @@ import {
   signInAdmin,
   signOutAdmin,
 } from "@/lib/admin-auth";
-import { reviewHostApplication } from "@/lib/admin-host-applications";
 import { resolveCarImage } from "@/lib/car-images";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { buildHostApplicationDecisionEmail, sendEmailSafe } from "@/lib/email";
+import { sendPushNotificationsToUsers } from "@/lib/push";
 import { getInitials } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
-
-function buildAdminHref(
-  params: Record<string, string | number | boolean | null | undefined> = {},
-) {
-  const query = new URLSearchParams();
-
-  for (const [key, value] of Object.entries(params)) {
-    if (value === null || value === undefined || value === "") continue;
-    query.set(key, String(value));
-  }
-
-  const search = query.toString();
-  return search ? `/admin?${search}` : "/admin";
-}
-
-function redirectToAdmin(
-  params: Record<string, string | number | boolean | null | undefined> = {},
-) {
-  redirect(buildAdminHref(params));
-}
-
-function getAdminNotice(searchParams: {
-  notice?: string;
-  count?: string;
-}): {
-  tone: "success" | "error" | "info";
-  title: string;
-  description?: string;
-} | null {
-  switch (searchParams.notice) {
-    case "signed-out":
-      return {
-        tone: "info",
-        title: "Signed out",
-        description: "Your admin session has ended.",
-      };
-    case "host-approved":
-      return {
-        tone: "success",
-        title: "Host approved",
-        description: "The host application was approved and the user profile was updated.",
-      };
-    case "host-rejected":
-      return {
-        tone: "success",
-        title: "Host rejected",
-        description: "The rejection was saved and the applicant was updated.",
-      };
-    case "listing-deleted":
-      return {
-        tone: "success",
-        title: "Listing deleted",
-        description: "The vehicle listing was removed from the platform.",
-      };
-    case "listings-deleted": {
-      const count = Number(searchParams.count ?? "0");
-      return {
-        tone: "success",
-        title: "Listings deleted",
-        description:
-          count > 0
-            ? `${count} selected listing${count === 1 ? "" : "s"} removed.`
-            : "Selected listings were removed.",
-      };
-    }
-    default:
-      return null;
-  }
-}
 
 async function loginAction(formData: FormData) {
   "use server";
   const username = String(formData.get("username") ?? "");
   const password = String(formData.get("password") ?? "");
-  if (!username || !password) redirectToAdmin({ error: "invalid" });
+  if (!username || !password) redirect("/admin?error=invalid");
 
   const result = await signInAdmin(username, password);
-  if (result === "missing") redirectToAdmin({ error: "missing" });
-  if (result !== "ok") redirectToAdmin({ error: "invalid" });
-  redirectToAdmin();
+  if (result === "missing") redirect("/admin?error=missing");
+  if (result !== "ok") redirect("/admin?error=invalid");
+  redirect("/admin");
 }
 
 async function logoutAction() {
   "use server";
   await signOutAdmin();
-  redirectToAdmin({ notice: "signed-out" });
+  redirect("/admin");
 }
 
 async function reviewAction(formData: FormData) {
@@ -124,36 +51,178 @@ async function reviewAction(formData: FormData) {
   const action = String(formData.get("action") ?? "");
   const applicationId = String(formData.get("applicationId") ?? "");
   const rejectionReason = String(formData.get("rejectionReason") ?? "");
-  const currentTab =
-    typeof formData.get("tab") === "string" ? String(formData.get("tab")) : "";
   const reviewer = getAdminReviewerName();
 
   if (!applicationId || !["approve", "reject"].includes(action)) {
-    redirectToAdmin();
+    redirect("/admin");
   }
 
   const admin = createSupabaseAdminClient() as any;
-  await reviewHostApplication({
-    admin,
-    applicationId,
-    action: action as "approve" | "reject",
-    rejectionReason,
-    reviewer,
-  });
+  if (action === "approve") {
+    const { data: application } = await admin
+      .from("host_applications")
+      .select("user_id,full_name,phone")
+      .eq("id", applicationId)
+      .single();
 
-  const currentStatus =
-    typeof formData.get("status") === "string"
-      ? String(formData.get("status") ?? "")
-      : "";
-  const currentQuery =
-    typeof formData.get("q") === "string" ? String(formData.get("q") ?? "") : "";
+    const userId = (application as { user_id?: string } | null)?.user_id;
+    const hostPhone =
+      (application as { phone?: string | null } | null)?.phone ?? null;
+    const hostName =
+      (application as { full_name?: string | null } | null)?.full_name ??
+      "Host";
 
-  redirectToAdmin({
-    notice: action === "approve" ? "host-approved" : "host-rejected",
-    tab: currentTab === "applications" ? "applications" : undefined,
-    status: currentStatus,
-    q: currentQuery,
-  });
+    if (userId) {
+      await admin.from("profiles").upsert(
+        {
+          id: userId,
+          full_name: hostName,
+          phone: hostPhone,
+          is_host: true,
+          host_approved_at: new Date().toISOString(),
+          id_verified: true,
+          phone_verified: Boolean(hostPhone),
+          email_verified: true,
+          host_level: "verified_host",
+        },
+        { onConflict: "id" },
+      );
+    }
+
+    await admin
+      .from("host_applications")
+      .update({
+        status: "approved",
+        reviewed_at: new Date().toISOString(),
+        reviewed_by: reviewer,
+        rejection_reason: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", applicationId);
+
+    await admin.from("admin_actions").insert({
+      action: "host_application_approved",
+      target_id: applicationId,
+      target_type: "host_application",
+      performed_by: reviewer,
+      metadata: { user_id: userId },
+    });
+
+    if (userId) {
+      const { data: authUser } = await admin.auth.admin.getUserById(userId);
+      const email = authUser?.user?.email ?? null;
+      if (email) {
+        const template = buildHostApplicationDecisionEmail({
+          approved: true,
+          hostName,
+        });
+        await sendEmailSafe({
+          to: email,
+          ...template,
+          idempotencyKey: `host-application:${applicationId}:approved`,
+        });
+      }
+
+      try {
+        const pushResult = await sendPushNotificationsToUsers({
+          adminClient: admin,
+          userIds: [userId],
+          title: "Host application approved",
+          body: "Your host application is approved. You can now list cars and host trips.",
+          collapseId: `host-application:${applicationId}`,
+          preferenceKey: "account_security",
+          notificationCategory: "account_security",
+          data: {
+            type: "host_application",
+            status: "approved",
+            applicationId,
+          },
+        });
+        if (pushResult.skipped || pushResult.delivered === 0) {
+          console.warn(
+            "[admin] host approval push skipped or undelivered",
+            pushResult,
+          );
+        }
+      } catch (pushError) {
+        console.error("[admin] host approval push failed", pushError);
+      }
+    }
+  }
+
+  if (action === "reject") {
+    await admin
+      .from("host_applications")
+      .update({
+        status: "rejected",
+        reviewed_at: new Date().toISOString(),
+        reviewed_by: reviewer,
+        rejection_reason: rejectionReason || "Rejected by admin",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", applicationId);
+
+    await admin.from("admin_actions").insert({
+      action: "host_application_rejected",
+      target_id: applicationId,
+      target_type: "host_application",
+      performed_by: reviewer,
+      metadata: { reason: rejectionReason || "Rejected by admin" },
+    });
+
+    const { data: application } = await admin
+      .from("host_applications")
+      .select("user_id,full_name")
+      .eq("id", applicationId)
+      .single();
+    const userId = (application as { user_id?: string } | null)?.user_id;
+    const hostName =
+      (application as { full_name?: string | null } | null)?.full_name ??
+      "Host";
+    if (userId) {
+      const { data: authUser } = await admin.auth.admin.getUserById(userId);
+      const email = authUser?.user?.email ?? null;
+      if (email) {
+        const template = buildHostApplicationDecisionEmail({
+          approved: false,
+          hostName,
+          reason: rejectionReason || "Rejected by admin",
+        });
+        await sendEmailSafe({
+          to: email,
+          ...template,
+          idempotencyKey: `host-application:${applicationId}:rejected`,
+        });
+      }
+
+      try {
+        const pushResult = await sendPushNotificationsToUsers({
+          adminClient: admin,
+          userIds: [userId],
+          title: "Host application update",
+          body: `Your host application was rejected.${rejectionReason ? ` Reason: ${rejectionReason}` : ""}`,
+          collapseId: `host-application:${applicationId}`,
+          preferenceKey: "account_security",
+          notificationCategory: "account_security",
+          data: {
+            type: "host_application",
+            status: "rejected",
+            applicationId,
+          },
+        });
+        if (pushResult.skipped || pushResult.delivered === 0) {
+          console.warn(
+            "[admin] host rejection push skipped or undelivered",
+            pushResult,
+          );
+        }
+      } catch (pushError) {
+        console.error("[admin] host rejection push failed", pushError);
+      }
+    }
+  }
+
+  redirect("/admin");
 }
 
 async function deleteListingAction(formData: FormData) {
@@ -161,7 +230,7 @@ async function deleteListingAction(formData: FormData) {
   await requireAdminPage();
   const carId = String(formData.get("carId") ?? "");
   if (!carId) {
-    redirectToAdmin();
+    redirect("/admin");
   }
 
   const admin = createSupabaseAdminClient() as any;
@@ -172,7 +241,7 @@ async function deleteListingAction(formData: FormData) {
     target_type: "car",
     performed_by: getAdminReviewerName(),
   });
-  redirectToAdmin({ notice: "listing-deleted" });
+  redirect("/admin");
 }
 
 async function bulkDeleteListingsAction(formData: FormData) {
@@ -188,7 +257,7 @@ async function bulkDeleteListingsAction(formData: FormData) {
     ),
   );
   if (carIds.length === 0) {
-    redirectToAdmin();
+    redirect("/admin");
   }
 
   const admin = createSupabaseAdminClient() as any;
@@ -202,20 +271,13 @@ async function bulkDeleteListingsAction(formData: FormData) {
       car_ids: carIds,
     },
   });
-  redirectToAdmin({ notice: "listings-deleted", count: carIds.length });
+  redirect("/admin");
 }
 
 export default async function AdminPage({
   searchParams,
 }: {
-  searchParams: {
-    error?: string;
-    notice?: string;
-    status?: string;
-    q?: string;
-    count?: string;
-    tab?: string;
-  };
+  searchParams: { error?: string; status?: string; q?: string };
 }) {
   const envReady = Boolean(
     isAdminAuthConfigured() &&
@@ -223,7 +285,6 @@ export default async function AdminPage({
     process.env.SUPABASE_SERVICE_ROLE_KEY,
   );
   const authed = await isAdminAuthenticated();
-  const notice = getAdminNotice(searchParams);
 
   if (!envReady) {
     return (
@@ -249,27 +310,11 @@ export default async function AdminPage({
           <CardHeader>
             <CardTitle>Admin sign in</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
-            {searchParams?.error === "invalid" ? (
-              <AdminNotice
-                tone="error"
-                title="Admin sign-in failed"
-                description="Check the username and password, then try again."
-              />
-            ) : null}
-            {searchParams?.error === "missing" ? (
-              <AdminNotice
-                tone="error"
-                title="Admin credentials are not configured"
-                description="Set the admin username and password environment variables before signing in."
-              />
-            ) : null}
-            {notice ? (
-              <AdminNotice
-                tone={notice.tone}
-                title={notice.title}
-                description={notice.description}
-              />
+          <CardContent>
+            {searchParams?.error ? (
+              <p className="mb-3 text-sm text-red-600">
+                Invalid admin credentials.
+              </p>
             ) : null}
             <form className="space-y-4" action={loginAction}>
               <div>
@@ -293,12 +338,9 @@ export default async function AdminPage({
                   required
                 />
               </div>
-              <PendingSubmitButton
-                pendingLabel="Signing in..."
-                className="w-full rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white"
-              >
+              <button className="w-full rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white">
                 Sign in
-              </PendingSubmitButton>
+              </button>
             </form>
           </CardContent>
         </Card>
@@ -324,13 +366,11 @@ export default async function AdminPage({
 
   const statusFilter = searchParams?.status ?? "pending";
   const query = (searchParams?.q ?? "").trim();
-  const initialTab =
-    searchParams?.tab === "applications" ? "applications" : "overview";
 
   let applicationsQuery = admin
     .from("host_applications")
     .select(
-      "id,user_id,full_name,phone,region,city,id_type,id_number,id_front_path,id_back_path,note,experience,fleet_size,status,submitted_at,created_at,reviewed_at,rejection_reason,reviewed_by,profiles:profiles!host_applications_user_id_fkey(full_name,avatar_url,phone,city)",
+      "id,full_name,phone,region,city,id_type,id_number,id_front_path,id_back_path,note,experience,fleet_size,status,submitted_at,created_at,reviewed_at,rejection_reason, reviewed_by, profiles:profiles!host_applications_user_id_fkey(full_name,avatar_url,phone,city)",
     )
     .order("created_at", { ascending: false });
 
@@ -427,7 +467,7 @@ export default async function AdminPage({
     .limit(12);
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 px-6 py-10">
+    <div className="mx-auto max-w-6xl px-6 py-10">
       <div className="flex items-center justify-between">
         <div>
           <p className="text-sm font-semibold text-primary">Admin</p>
@@ -455,26 +495,14 @@ export default async function AdminPage({
             Platform controls
           </Link>
           <form action={logoutAction}>
-            <PendingSubmitButton
-              pendingLabel="Signing out..."
-              className="rounded-md border border-border px-3 py-2 text-sm font-semibold text-gray-700"
-            >
+            <button className="rounded-md border border-border px-3 py-2 text-sm font-semibold text-gray-700">
               Sign out
-            </PendingSubmitButton>
+            </button>
           </form>
         </div>
       </div>
 
-      {notice ? (
-        <AdminNotice
-          tone={notice.tone}
-          title={notice.title}
-          description={notice.description}
-        />
-      ) : null}
-
       <AdminTabs
-        initialTab={initialTab}
         overview={
           <div className="space-y-6">
             <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -502,24 +530,14 @@ export default async function AdminPage({
                   </p>
                 </CardContent>
               </Card>
-              <AdminLoadingLink
-                href={buildAdminHref({ tab: "applications", status: "pending" })}
-                indicator="overlay"
-                pendingLabel="Opening approvals..."
-                className="block transition-transform hover:-translate-y-0.5"
-              >
-                <Card className="border-brand/25">
-                  <CardContent className="py-5">
-                    <p className="text-sm text-gray-600">Pending applications</p>
-                    <p className="text-2xl font-semibold text-foreground">
-                      {pendingCount ?? 0}
-                    </p>
-                    <p className="mt-2 text-xs font-semibold text-brand">
-                      Open host approvals
-                    </p>
-                  </CardContent>
-                </Card>
-              </AdminLoadingLink>
+              <Card>
+                <CardContent className="py-5">
+                  <p className="text-sm text-gray-600">Pending applications</p>
+                  <p className="text-2xl font-semibold text-foreground">
+                    {pendingCount ?? 0}
+                  </p>
+                </CardContent>
+              </Card>
             </div>
 
             <Card>
@@ -640,12 +658,12 @@ export default async function AdminPage({
                       <p className="text-xs text-gray-700">
                         Select listings and delete them in one action.
                       </p>
-                      <PendingSubmitButton
+                      <button
+                        type="submit"
                         className="rounded-md border border-red-200 px-3 py-1 text-xs font-semibold text-red-700 hover:bg-red-50"
-                        pendingLabel="Deleting..."
                       >
                         Delete selected
-                      </PendingSubmitButton>
+                      </button>
                     </div>
                   ) : null}
                   <div className="space-y-3">
@@ -722,15 +740,15 @@ export default async function AdminPage({
                               >
                                 Edit
                               </Link>
-                              <PendingSubmitButton
+                              <button
+                                type="submit"
                                 formAction={deleteListingAction}
                                 name="carId"
                                 value={car.id}
                                 className="rounded-md border border-red-200 px-2 py-1 text-[11px] font-semibold text-red-700 hover:bg-red-50"
-                                pendingLabel="Deleting..."
                               >
                                 Delete
-                              </PendingSubmitButton>
+                              </button>
                             </div>
                           </div>
                           <div className="mt-2 text-xs text-gray-600">
@@ -887,356 +905,32 @@ export default async function AdminPage({
             <CardContent>
               <div className="mb-4 flex flex-wrap items-center gap-2">
                 {["pending", "approved", "rejected"].map((status) => (
-                  <AdminLoadingLink
+                  <a
                     key={status}
-                    indicator="inline"
-                    pendingLabel="Loading..."
                     className={`rounded-full border px-3 py-1 text-xs font-semibold ${
                       statusFilter === status
                         ? "border-brand bg-brand text-white"
                         : "border-border text-gray-700"
                     }`}
-                    href={buildAdminHref({
-                      tab: "applications",
-                      status,
-                      q: query || undefined,
-                    })}
+                    href={`/admin?status=${status}&q=${encodeURIComponent(query)}`}
                   >
                     {status}
-                  </AdminLoadingLink>
+                  </a>
                 ))}
                 <form
-                  className="flex flex-1 flex-wrap gap-2 sm:flex-none"
+                  className="flex-1 sm:flex-none"
                   action="/admin"
                   method="get"
                 >
-                  <input type="hidden" name="tab" value="applications" />
                   <input type="hidden" name="status" value={statusFilter} />
                   <input
                     name="q"
                     defaultValue={query}
                     placeholder="Search name or phone"
-                    className="min-w-0 flex-1 rounded-md border border-border px-3 py-1 text-xs text-gray-700 sm:w-64"
+                    className="w-full rounded-md border border-border px-3 py-1 text-xs text-gray-700 sm:w-64"
                   />
-                  <button
-                    type="submit"
-                    className="rounded-md border border-border px-3 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50"
-                  >
-                    Search
-                  </button>
                 </form>
               </div>
-
-              <div className="grid gap-4 xl:grid-cols-2">
-                {applications?.map((app: any) => {
-                  const profileHref = app.user_id
-                    ? `/admin/users/${app.user_id}#host-application`
-                    : null;
-                  const submittedLabel = app.submitted_at
-                    ? new Date(app.submitted_at).toLocaleDateString()
-                    : app.created_at
-                      ? new Date(app.created_at).toLocaleDateString()
-                      : "—";
-                  const reviewedLabel = app.reviewed_at
-                    ? new Date(app.reviewed_at).toLocaleDateString()
-                    : "Not reviewed yet";
-                  const statusClassName =
-                    app.status === "approved"
-                      ? "bg-emerald-100 text-emerald-700"
-                      : app.status === "rejected"
-                        ? "bg-red-100 text-red-700"
-                        : "bg-amber-100 text-amber-700";
-
-                  return (
-                    <article
-                      key={app.id}
-                      className="rounded-2xl border border-border bg-white p-5 shadow-sm"
-                    >
-                      <div className="flex flex-col gap-5">
-                        <div className="flex flex-wrap items-start justify-between gap-3">
-                          {profileHref ? (
-                            <AdminLoadingLink
-                              href={profileHref}
-                              indicator="overlay"
-                              pendingLabel="Opening profile..."
-                              className="flex min-w-0 flex-1 items-start gap-3 rounded-xl border border-transparent p-1 hover:border-border hover:bg-gray-50"
-                            >
-                              <ProfileAvatar
-                                src={app.profiles?.avatar_url}
-                                name={
-                                  app.profiles?.full_name ??
-                                  app.full_name ??
-                                  "User"
-                                }
-                                className="h-12 w-12"
-                              />
-                              <div className="min-w-0">
-                                <p className="truncate text-base font-semibold text-foreground">
-                                  {app.full_name ?? "User"}
-                                </p>
-                                <p className="truncate text-sm text-gray-600">
-                                  {app.profiles?.full_name ?? "Profile record"}
-                                </p>
-                                <p className="mt-1 text-xs text-gray-500">
-                                  {app.phone ?? app.profiles?.phone ?? "No phone"}
-                                  {" · "}
-                                  {app.city ?? app.profiles?.city ?? "No city"}
-                                </p>
-                              </div>
-                            </AdminLoadingLink>
-                          ) : (
-                            <div className="flex min-w-0 flex-1 items-start gap-3">
-                              <ProfileAvatar
-                                src={app.profiles?.avatar_url}
-                                name={
-                                  app.profiles?.full_name ??
-                                  app.full_name ??
-                                  "User"
-                                }
-                                className="h-12 w-12"
-                              />
-                              <div className="min-w-0">
-                                <p className="truncate text-base font-semibold text-foreground">
-                                  {app.full_name ?? "User"}
-                                </p>
-                                <p className="truncate text-sm text-gray-600">
-                                  {app.profiles?.full_name ?? "Profile record"}
-                                </p>
-                                <p className="mt-1 text-xs text-gray-500">
-                                  {app.phone ?? app.profiles?.phone ?? "No phone"}
-                                </p>
-                              </div>
-                            </div>
-                          )}
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span
-                              className={`rounded-full px-3 py-1 text-xs font-semibold ${statusClassName}`}
-                            >
-                              {app.status}
-                            </span>
-                            <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-600">
-                              Submitted {submittedLabel}
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="grid gap-3 sm:grid-cols-2">
-                          <div className="rounded-xl border border-border bg-gray-50 p-3">
-                            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-500">
-                              Location
-                            </p>
-                            <p className="mt-2 text-sm text-gray-800">
-                              {app.city ?? app.profiles?.city ?? "—"}
-                              {app.region ? `, ${app.region}` : ""}
-                            </p>
-                          </div>
-                          <div className="rounded-xl border border-border bg-gray-50 p-3">
-                            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-500">
-                              Contact
-                            </p>
-                            <p className="mt-2 text-sm text-gray-800">
-                              {app.phone ?? app.profiles?.phone ?? "—"}
-                            </p>
-                          </div>
-                          <div className="rounded-xl border border-border bg-gray-50 p-3">
-                            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-500">
-                              ID details
-                            </p>
-                            <p className="mt-2 text-sm text-gray-800">
-                              {app.id_type ?? "—"}{" "}
-                              {app.id_number ? `• ${app.id_number}` : ""}
-                            </p>
-                          </div>
-                          <div className="rounded-xl border border-border bg-gray-50 p-3">
-                            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-500">
-                              Fleet size
-                            </p>
-                            <p className="mt-2 text-sm text-gray-800">
-                              {typeof app.fleet_size === "number"
-                                ? app.fleet_size
-                                : "—"}
-                            </p>
-                          </div>
-                          <div className="rounded-xl border border-border bg-gray-50 p-3 sm:col-span-2">
-                            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-500">
-                              Experience
-                            </p>
-                            <p className="mt-2 whitespace-pre-line text-sm text-gray-800">
-                              {app.experience ?? "—"}
-                            </p>
-                          </div>
-                          <div className="rounded-xl border border-border bg-gray-50 p-3 sm:col-span-2">
-                            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-500">
-                              Notes
-                            </p>
-                            <p className="mt-2 whitespace-pre-line text-sm text-gray-800">
-                              {app.note ?? "—"}
-                            </p>
-                          </div>
-                          <div className="rounded-xl border border-border bg-gray-50 p-3">
-                            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-500">
-                              Reviewed by
-                            </p>
-                            <p className="mt-2 text-sm text-gray-800">
-                              {app.reviewed_by ?? "—"}
-                            </p>
-                          </div>
-                          <div className="rounded-xl border border-border bg-gray-50 p-3">
-                            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-500">
-                              Reviewed at
-                            </p>
-                            <p className="mt-2 text-sm text-gray-800">
-                              {reviewedLabel}
-                            </p>
-                          </div>
-                          <div className="rounded-xl border border-border bg-gray-50 p-3 sm:col-span-2">
-                            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-500">
-                              Rejection reason
-                            </p>
-                            <p className="mt-2 whitespace-pre-line text-sm text-gray-800">
-                              {app.rejection_reason ?? "—"}
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="grid gap-3 sm:grid-cols-2">
-                          <div className="rounded-xl border border-border p-3">
-                            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-500">
-                              ID front
-                            </p>
-                            <div className="mt-2">
-                              <a
-                                className="inline-flex rounded-md border border-border px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50"
-                                href={`/api/host-applications/${app.id}/files?type=front`}
-                                target="_blank"
-                                rel="noreferrer"
-                              >
-                                Open ID front
-                              </a>
-                            </div>
-                          </div>
-                          <div className="rounded-xl border border-border p-3">
-                            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-500">
-                              ID back
-                            </p>
-                            <div className="mt-2">
-                              <a
-                                className="inline-flex rounded-md border border-border px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50"
-                                href={`/api/host-applications/${app.id}/files?type=back`}
-                                target="_blank"
-                                rel="noreferrer"
-                              >
-                                Open ID back
-                              </a>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="border-t border-border pt-4">
-                          <div className="flex flex-wrap items-center gap-2">
-                            {profileHref ? (
-                              <AdminLoadingLink
-                                href={profileHref}
-                                indicator="inline"
-                                pendingLabel="Opening..."
-                                className="inline-flex rounded-md border border-border px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50"
-                              >
-                                Open profile
-                              </AdminLoadingLink>
-                            ) : null}
-                            {app.status !== "pending" ? (
-                              <span className="text-xs text-gray-500">
-                                This host application is already {app.status}.
-                              </span>
-                            ) : null}
-                          </div>
-
-                          {app.status === "pending" ? (
-                            <div className="mt-4 space-y-3">
-                              <form
-                                action={reviewAction}
-                                className="flex flex-wrap items-center gap-2"
-                              >
-                                <input
-                                  type="hidden"
-                                  name="applicationId"
-                                  value={app.id}
-                                />
-                                <input
-                                  type="hidden"
-                                  name="tab"
-                                  value="applications"
-                                />
-                                <input
-                                  type="hidden"
-                                  name="status"
-                                  value={statusFilter}
-                                />
-                                <input type="hidden" name="q" value={query} />
-                                <input
-                                  type="hidden"
-                                  name="action"
-                                  value="approve"
-                                />
-                                <PendingSubmitButton
-                                  pendingLabel="Approving host..."
-                                  className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white"
-                                >
-                                  Approve host
-                                </PendingSubmitButton>
-                              </form>
-
-                              <form
-                                action={reviewAction}
-                                className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_auto]"
-                              >
-                                <input
-                                  type="hidden"
-                                  name="applicationId"
-                                  value={app.id}
-                                />
-                                <input
-                                  type="hidden"
-                                  name="tab"
-                                  value="applications"
-                                />
-                                <input
-                                  type="hidden"
-                                  name="status"
-                                  value={statusFilter}
-                                />
-                                <input type="hidden" name="q" value={query} />
-                                <input
-                                  type="hidden"
-                                  name="action"
-                                  value="reject"
-                                />
-                                <Input
-                                  name="rejectionReason"
-                                  placeholder="Reason for rejection"
-                                />
-                                <PendingSubmitButton
-                                  pendingLabel="Rejecting host..."
-                                  className="rounded-md bg-red-600 px-4 py-2 text-sm font-semibold text-white"
-                                >
-                                  Reject host
-                                </PendingSubmitButton>
-                              </form>
-                            </div>
-                          ) : null}
-                        </div>
-                      </div>
-                    </article>
-                  );
-                })}
-                {applications?.length === 0 ? (
-                  <p className="rounded-xl border border-border bg-white p-4 text-center text-sm text-gray-600 xl:col-span-2">
-                    No host applications yet.
-                  </p>
-                ) : null}
-              </div>
-
-              <div className="hidden">
 
               <div className="space-y-3 md:hidden">
                 {applications?.map((app: any) => (
@@ -1266,16 +960,6 @@ export default async function AdminPage({
                         {app.status}
                       </span>
                     </div>
-                    {app.user_id ? (
-                      <div className="mt-3">
-                        <Link
-                          href={`/admin/users/${app.user_id}#host-application`}
-                          className="inline-flex rounded-md border border-border px-3 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50"
-                        >
-                          View details
-                        </Link>
-                      </div>
-                    ) : null}
                     <div className="mt-3 grid gap-2 text-xs text-gray-600">
                       <div>Region: {app.region ?? "—"}</div>
                       <div>City: {app.city ?? app.profiles?.city ?? "—"}</div>
@@ -1339,26 +1023,12 @@ export default async function AdminPage({
                             />
                             <input
                               type="hidden"
-                              name="tab"
-                              value="applications"
-                            />
-                            <input
-                              type="hidden"
-                              name="status"
-                              value={statusFilter}
-                            />
-                            <input type="hidden" name="q" value={query} />
-                            <input
-                              type="hidden"
                               name="action"
                               value="approve"
                             />
-                            <PendingSubmitButton
-                              pendingLabel="Approving..."
-                              className="rounded-md bg-emerald-600 px-3 py-1 text-xs font-semibold text-white"
-                            >
+                            <button className="rounded-md bg-emerald-600 px-3 py-1 text-xs font-semibold text-white">
                               Approve
-                            </PendingSubmitButton>
+                            </button>
                           </form>
                           <form action={reviewAction}>
                             <input
@@ -1366,24 +1036,10 @@ export default async function AdminPage({
                               name="applicationId"
                               value={app.id}
                             />
-                            <input
-                              type="hidden"
-                              name="tab"
-                              value="applications"
-                            />
-                            <input
-                              type="hidden"
-                              name="status"
-                              value={statusFilter}
-                            />
-                            <input type="hidden" name="q" value={query} />
                             <input type="hidden" name="action" value="reject" />
-                            <PendingSubmitButton
-                              pendingLabel="Rejecting..."
-                              className="rounded-md bg-red-600 px-3 py-1 text-xs font-semibold text-white"
-                            >
+                            <button className="rounded-md bg-red-600 px-3 py-1 text-xs font-semibold text-white">
                               Reject
-                            </PendingSubmitButton>
+                            </button>
                           </form>
                         </div>
                       ) : (
@@ -1402,26 +1058,25 @@ export default async function AdminPage({
               </div>
 
               <div className="hidden md:block">
-                <div className="overflow-x-auto rounded-xl border border-border">
-                  <Table className="min-w-[1180px]">
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Applicant</TableHead>
-                        <TableHead>Region</TableHead>
-                        <TableHead>City</TableHead>
-                        <TableHead>Phone</TableHead>
-                        <TableHead>Fleet</TableHead>
-                        <TableHead>Experience</TableHead>
-                        <TableHead>ID</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Submitted</TableHead>
-                        <TableHead>Notes</TableHead>
-                        <TableHead className="text-right">Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {applications?.map((app: any) => (
-                        <TableRow key={app.id}>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Applicant</TableHead>
+                      <TableHead>Region</TableHead>
+                      <TableHead>City</TableHead>
+                      <TableHead>Phone</TableHead>
+                      <TableHead>Fleet</TableHead>
+                      <TableHead>Experience</TableHead>
+                      <TableHead>ID</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Submitted</TableHead>
+                      <TableHead>Notes</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {applications?.map((app: any) => (
+                      <TableRow key={app.id}>
                         <TableCell>
                           <div className="flex min-w-0 items-center gap-3">
                             <ProfileAvatar
@@ -1455,10 +1110,10 @@ export default async function AdminPage({
                             ? app.fleet_size
                             : "—"}
                         </TableCell>
-                        <TableCell className="max-w-[16rem] text-xs text-gray-600">
+                        <TableCell className="text-xs text-gray-600">
                           {app.experience ?? "—"}
                         </TableCell>
-                        <TableCell className="whitespace-nowrap text-xs text-gray-600">
+                        <TableCell className="text-xs text-gray-600">
                           {app.id_type ?? "—"} {app.id_number ?? ""}
                           <div className="mt-1 flex gap-2">
                             <a
@@ -1478,14 +1133,14 @@ export default async function AdminPage({
                         <TableCell className="text-sm font-semibold">
                           {app.status}
                         </TableCell>
-                        <TableCell className="whitespace-nowrap text-xs text-gray-600">
+                        <TableCell className="text-xs text-gray-600">
                           {app.submitted_at
                             ? new Date(app.submitted_at).toLocaleDateString()
                             : app.created_at
                               ? new Date(app.created_at).toLocaleDateString()
                               : "—"}
                         </TableCell>
-                        <TableCell className="max-w-[18rem] text-xs text-gray-600">
+                        <TableCell className="text-xs text-gray-600">
                           {app.note ?? "—"}
                           <div className="text-[11px] text-gray-500">
                             Reviewed by: {app.reviewed_by ?? "—"}
@@ -1501,32 +1156,12 @@ export default async function AdminPage({
                           </div>
                         </TableCell>
                         <TableCell className="text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            {app.user_id ? (
-                              <Link
-                                href={`/admin/users/${app.user_id}#host-application`}
-                                className="rounded-md border border-border px-3 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+                          {app.status === "pending" ? (
+                            <div className="flex items-center justify-end gap-2">
+                              <form
+                                action={reviewAction}
+                                className="flex items-center gap-2"
                               >
-                                View details
-                              </Link>
-                            ) : null}
-                            {app.status === "pending" ? (
-                              <>
-                                <form
-                                  action={reviewAction}
-                                  className="flex items-center gap-2"
-                              >
-                                <input
-                                  type="hidden"
-                                  name="tab"
-                                  value="applications"
-                                />
-                                <input
-                                  type="hidden"
-                                  name="status"
-                                  value={statusFilter}
-                                />
-                                <input type="hidden" name="q" value={query} />
                                 <input
                                   type="hidden"
                                   name="applicationId"
@@ -1537,28 +1172,14 @@ export default async function AdminPage({
                                   name="action"
                                   value="approve"
                                 />
-                                <PendingSubmitButton
-                                  pendingLabel="Approving..."
-                                  className="rounded-md bg-emerald-600 px-3 py-1 text-xs font-semibold text-white"
-                                >
+                                <button className="rounded-md bg-emerald-600 px-3 py-1 text-xs font-semibold text-white">
                                   Approve
-                                </PendingSubmitButton>
+                                </button>
                               </form>
                               <form
                                 action={reviewAction}
                                 className="flex items-center gap-2"
                               >
-                                <input
-                                  type="hidden"
-                                  name="tab"
-                                  value="applications"
-                                />
-                                <input
-                                  type="hidden"
-                                  name="status"
-                                  value={statusFilter}
-                                />
-                                <input type="hidden" name="q" value={query} />
                                 <input
                                   type="hidden"
                                   name="applicationId"
@@ -1574,39 +1195,33 @@ export default async function AdminPage({
                                   placeholder="Reason"
                                   className="hidden w-28 rounded-md border border-border px-2 py-1 text-xs text-gray-700 sm:block"
                                 />
-                                <PendingSubmitButton
-                                  pendingLabel="Rejecting..."
-                                  className="rounded-md bg-red-600 px-3 py-1 text-xs font-semibold text-white"
-                                >
+                                <button className="rounded-md bg-red-600 px-3 py-1 text-xs font-semibold text-white">
                                   Reject
-                                </PendingSubmitButton>
+                                </button>
                               </form>
-                              </>
-                            ) : (
-                              <span className="text-xs text-gray-500">
-                                {app.status === "approved"
-                                  ? "Approved"
-                                  : "Rejected"}
-                              </span>
-                            )}
-                          </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                      {applications?.length === 0 ? (
-                        <TableRow>
-                          <TableCell
-                            colSpan={11}
-                            className="text-center text-sm text-gray-600"
-                          >
-                            No host applications yet.
-                          </TableCell>
-                        </TableRow>
-                      ) : null}
-                    </TableBody>
-                  </Table>
-                </div>
-              </div>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-gray-500">
+                              {app.status === "approved"
+                                ? "Approved"
+                                : "Rejected"}
+                            </span>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {applications?.length === 0 ? (
+                      <TableRow>
+                        <TableCell
+                          colSpan={11}
+                          className="text-center text-sm text-gray-600"
+                        >
+                          No host applications yet.
+                        </TableCell>
+                      </TableRow>
+                    ) : null}
+                  </TableBody>
+                </Table>
               </div>
             </CardContent>
           </Card>

@@ -34,9 +34,6 @@ export function MessageComposer({ onSend }: Props) {
             placeholder="Write a message..."
             className="min-h-[44px] w-full resize-none rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
           />
-          <p className="mt-1 text-[11px] text-gray-500">
-            Attachments coming soon.
-          </p>
         </div>
         <Button onClick={submit} disabled={sending}>
           {sending ? "Sending..." : "Send"}

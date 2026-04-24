@@ -148,6 +148,10 @@ create table if not exists bookings (
   start_date date not null,
   end_date date not null,
   status booking_status default 'pending'::booking_status,
+  delivery_address text,
+  delivery_time text,
+  contact_phone text,
+  delivery_notes text,
   trip_use_region text,
   trip_use_city text,
   trip_use_address text,
@@ -166,6 +170,10 @@ create table if not exists bookings (
   created_at timestamptz default now()
 );
 alter table bookings add column if not exists hold_expires_at timestamptz;
+alter table bookings add column if not exists delivery_address text;
+alter table bookings add column if not exists delivery_time text;
+alter table bookings add column if not exists contact_phone text;
+alter table bookings add column if not exists delivery_notes text;
 alter table bookings add column if not exists trip_use_region text;
 alter table bookings add column if not exists trip_use_city text;
 alter table bookings add column if not exists trip_use_address text;

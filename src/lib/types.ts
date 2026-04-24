@@ -27,6 +27,10 @@ export type Booking = {
   renter_id: string;
   start_date: string;
   end_date: string;
+  delivery_address?: string | null;
+  delivery_time?: string | null;
+  contact_phone?: string | null;
+  delivery_notes?: string | null;
   status:
     | "pending"
     | "awaiting_host"
