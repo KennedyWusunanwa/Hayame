@@ -30,12 +30,10 @@ struct AuthScaffold<Content: View>: View {
                             } label: {
                                 Text(tab.label)
                                     .font(.system(size: 14, weight: .semibold, design: .rounded))
-                                    .foregroundStyle(selectedTab == tab
-                                        ? Color(red: 0.039, green: 0.169, blue: 0.329)
-                                        : .white.opacity(0.70))
+                                    .foregroundStyle(selectedTab == tab ? HayameTheme.brandNavy : .white.opacity(0.70))
                                     .frame(maxWidth: .infinity)
                                     .padding(.vertical, 9)
-                                    .background(selectedTab == tab ? Color.white : Color.clear)
+                                    .background(selectedTab == tab ? HayameTheme.cardBackground : Color.clear)
                                     .clipShape(Capsule())
                             }
                             .buttonStyle(.plain)
@@ -49,29 +47,29 @@ struct AuthScaffold<Content: View>: View {
                 .padding(.top, 76)
                 .padding(.bottom, 26)
                 .frame(maxWidth: .infinity)
-                .background(Color(red: 0.078, green: 0.518, blue: 0.851))
+                .background(HayameTheme.brandBlue)
 
                 VStack(alignment: .leading, spacing: 20) {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(title)
                             .font(.system(size: 22, weight: .bold, design: .rounded))
-                            .foregroundStyle(Color(red: 0.039, green: 0.169, blue: 0.329))
+                            .foregroundStyle(HayameTheme.brandNavy)
                         Text(subtitle)
                             .font(.system(size: 13, weight: .medium, design: .rounded))
-                            .foregroundStyle(Color(red: 0.451, green: 0.490, blue: 0.569))
+                            .foregroundStyle(HayameTheme.mutedText)
                     }
 
                     content()
                 }
                 .padding(24)
-                .background(Color.white)
+                .background(HayameTheme.cardBackground)
             }
         }
         .scrollDismissesKeyboard(.interactively)
         .onTapGesture {
             UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
         }
-        .background(Color(red: 0.969, green: 0.980, blue: 1.000))
+        .background(HayameTheme.pageBackground)
         .ignoresSafeArea(edges: .top)
     }
 }
@@ -87,7 +85,7 @@ struct AuthField: View {
         VStack(alignment: .leading, spacing: 6) {
             Text(label)
                 .font(.system(size: 12, weight: .semibold, design: .rounded))
-                .foregroundStyle(Color(red: 0.039, green: 0.169, blue: 0.329))
+                .foregroundStyle(HayameTheme.brandNavy)
             TextField(placeholder, text: $text)
                 .keyboardType(keyboardType)
                 .autocorrectionDisabled()
@@ -95,13 +93,12 @@ struct AuthField: View {
                 .focused($focused)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 13)
-                .background(focused ? Color.white : Color(red: 0.969, green: 0.980, blue: 1.0))
+                .foregroundStyle(HayameTheme.brandNavy)
+                .background(focused ? HayameTheme.elevatedBackground : HayameTheme.fieldBackground)
                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .stroke(focused
-                            ? Color(red: 0.078, green: 0.518, blue: 0.851)
-                            : Color(red: 0.878, green: 0.918, blue: 0.973),
+                        .stroke(focused ? HayameTheme.brandBlue : HayameTheme.controlStroke,
                             lineWidth: 1.5)
                 )
         }
@@ -118,7 +115,7 @@ struct AuthSecureField: View {
         VStack(alignment: .leading, spacing: 6) {
             Text(label)
                 .font(.system(size: 12, weight: .semibold, design: .rounded))
-                .foregroundStyle(Color(red: 0.039, green: 0.169, blue: 0.329))
+                .foregroundStyle(HayameTheme.brandNavy)
             HStack {
                 Group {
                     if isVisible {
@@ -132,17 +129,16 @@ struct AuthSecureField: View {
                 .textInputAutocapitalization(.never)
                 Button(isVisible ? "Hide" : "Show") { isVisible.toggle() }
                     .font(.system(size: 12, weight: .semibold, design: .rounded))
-                    .foregroundStyle(Color(red: 0.078, green: 0.518, blue: 0.851))
+                    .foregroundStyle(HayameTheme.brandBlue)
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 13)
-            .background(focused ? Color.white : Color(red: 0.969, green: 0.980, blue: 1.0))
+            .foregroundStyle(HayameTheme.brandNavy)
+            .background(focused ? HayameTheme.elevatedBackground : HayameTheme.fieldBackground)
             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(focused
-                        ? Color(red: 0.078, green: 0.518, blue: 0.851)
-                        : Color(red: 0.878, green: 0.918, blue: 0.973),
+                    .stroke(focused ? HayameTheme.brandBlue : HayameTheme.controlStroke,
                         lineWidth: 1.5)
             )
         }
@@ -158,7 +154,7 @@ struct AuthSelectField: View {
         VStack(alignment: .leading, spacing: 6) {
             Text(label)
                 .font(.system(size: 12, weight: .semibold, design: .rounded))
-                .foregroundStyle(Color(red: 0.039, green: 0.169, blue: 0.329))
+                .foregroundStyle(HayameTheme.brandNavy)
             Menu {
                 ForEach(options, id: \.self) { opt in
                     Button(opt) { selected = opt }
@@ -168,21 +164,21 @@ struct AuthSelectField: View {
                     Text(selected.isEmpty ? "Select" : selected)
                         .font(.system(size: 13, design: .rounded))
                         .foregroundStyle(selected.isEmpty
-                            ? Color(red: 0.451, green: 0.490, blue: 0.569)
-                            : Color(red: 0.039, green: 0.169, blue: 0.329))
+                            ? HayameTheme.mutedText
+                            : HayameTheme.brandNavy)
                         .lineLimit(1)
                     Spacer()
                     Image(systemName: "chevron.down")
                         .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(Color(red: 0.451, green: 0.490, blue: 0.569))
+                        .foregroundStyle(HayameTheme.mutedText)
                 }
                 .padding(.horizontal, 14)
                 .padding(.vertical, 13)
-                .background(Color(red: 0.969, green: 0.980, blue: 1.0))
+                .background(HayameTheme.fieldBackground)
                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .stroke(Color(red: 0.878, green: 0.918, blue: 0.973), lineWidth: 1.5)
+                        .stroke(HayameTheme.controlStroke, lineWidth: 1.5)
                 )
             }
         }
@@ -207,7 +203,7 @@ struct AuthPrimaryButton: View {
             .foregroundStyle(.white)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 15)
-            .background(Color(red: 0.078, green: 0.518, blue: 0.851))
+            .background(HayameTheme.brandBlue)
             .clipShape(Capsule())
         }
         .buttonStyle(.plain)
@@ -222,17 +218,17 @@ struct AuthGuestButton: View {
         Button(action: action) {
             Text("Continue as guest")
                 .font(.system(size: 14, weight: .medium, design: .rounded))
-                .foregroundStyle(Color(red: 0.039, green: 0.169, blue: 0.329))
+                .foregroundStyle(HayameTheme.brandNavy)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 13)
-                .background(Color.white)
+                .background(HayameTheme.cardBackground)
                 .clipShape(Capsule())
-                .overlay(Capsule().stroke(Color(red: 0.816, green: 0.871, blue: 0.941), lineWidth: 1.5))
+                .overlay(Capsule().stroke(HayameTheme.controlStroke, lineWidth: 1.5))
         }
         .buttonStyle(.plain)
         .padding(.horizontal, 24)
         .padding(.vertical, 20)
-        .background(Color(red: 0.969, green: 0.980, blue: 1.0))
+        .background(HayameTheme.pageBackground)
     }
 }
 
@@ -247,12 +243,12 @@ struct AuthBiometricButton: View {
                 Text(title)
             }
             .font(.system(size: 14, weight: .semibold, design: .rounded))
-            .foregroundStyle(Color(red: 0.039, green: 0.169, blue: 0.329))
+            .foregroundStyle(HayameTheme.brandNavy)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 13)
-            .background(Color.white)
+            .background(HayameTheme.cardBackground)
             .clipShape(Capsule())
-            .overlay(Capsule().stroke(Color(red: 0.816, green: 0.871, blue: 0.941), lineWidth: 1.5))
+            .overlay(Capsule().stroke(HayameTheme.controlStroke, lineWidth: 1.5))
         }
         .buttonStyle(.plain)
     }

@@ -34,13 +34,13 @@ struct SplashScreen: View {
     var body: some View {
         GeometryReader { geo in
             ZStack {
-                Color.white.ignoresSafeArea()
+                HayameTheme.pageBackground.ignoresSafeArea()
 
                 VStack(spacing: 0) {
 
                     // -- TOP - Blue panel
                     ZStack {
-                        Color(red: 0.078, green: 0.518, blue: 0.851)
+                        HayameTheme.brandBlue
 
                         Group {
                             Capsule()
@@ -80,7 +80,7 @@ struct SplashScreen: View {
 
                             Text("Ghana's No.1 Car Rental Platform")
                                 .font(.system(size: 11, weight: .semibold, design: .rounded))
-                                .foregroundStyle(Color(red: 0.078, green: 0.518, blue: 0.851))
+                                .foregroundStyle(HayameTheme.brandBlue)
                                 .padding(.horizontal, 14)
                                 .padding(.vertical, 6)
                                 .background(Color.white)
@@ -96,12 +96,12 @@ struct SplashScreen: View {
 
                     // -- BOTTOM - White panel
                     ZStack {
-                        Color.white
+                        HayameTheme.pageBackground
 
                         VStack(spacing: 18) {
                             Text("Rent a car, anytime,\nanywhere in Ghana.")
                                 .font(.system(size: 16, weight: .medium, design: .rounded))
-                                .foregroundStyle(Color(red: 0.039, green: 0.169, blue: 0.329))
+                                .foregroundStyle(HayameTheme.brandNavy)
                                 .multilineTextAlignment(.center)
                                 .padding(.horizontal, 48)
                                 .opacity(taglineOpacity)
@@ -109,15 +109,15 @@ struct SplashScreen: View {
 
                             Text("Trusted by renters across Ghana")
                                 .font(.system(size: 12, weight: .medium, design: .rounded))
-                                .foregroundStyle(Color(red: 0.451, green: 0.490, blue: 0.569))
+                                .foregroundStyle(HayameTheme.mutedText)
                                 .opacity(sublineOpacity)
 
                             ZStack(alignment: .leading) {
                                 Capsule()
-                                    .fill(Color(red: 0.929, green: 0.969, blue: 1.0))
+                                    .fill(HayameTheme.brandLight)
                                     .frame(width: 180, height: 4)
                                 Capsule()
-                                    .fill(Color(red: 0.078, green: 0.518, blue: 0.851))
+                                    .fill(HayameTheme.brandBlue)
                                     .frame(width: 180 * progress, height: 4)
                                 Capsule()
                                     .fill(

@@ -21,7 +21,7 @@ struct AuthFlowScreen: View {
                     )
                 }
             }
-            .background(Color(red: 0.969, green: 0.980, blue: 1.0).ignoresSafeArea())
+            .background(HayameTheme.pageBackground.ignoresSafeArea())
             .toolbar(.hidden, for: .navigationBar)
         }
     }
@@ -72,14 +72,14 @@ private struct LoginScreenView: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Save login for \(biometricName)")
                                 .font(.system(size: 13, weight: .semibold, design: .rounded))
-                                .foregroundStyle(Color(red: 0.039, green: 0.169, blue: 0.329))
+                                .foregroundStyle(HayameTheme.brandNavy)
                             Text("Use it for quick login after signing out.")
                                 .font(.system(size: 11, weight: .medium, design: .rounded))
-                                .foregroundStyle(Color(red: 0.451, green: 0.490, blue: 0.569))
+                                .foregroundStyle(HayameTheme.mutedText)
                         }
                     }
                     .toggleStyle(.switch)
-                    .tint(Color(red: 0.078, green: 0.518, blue: 0.851))
+                    .tint(HayameTheme.brandBlue)
                 }
 
                 if hasSavedBiometricLogin {
@@ -93,7 +93,7 @@ private struct LoginScreenView: View {
                         appState.requestPasswordReset(email: email)
                     }
                     .font(.system(size: 13, weight: .semibold, design: .rounded))
-                    .foregroundStyle(Color(red: 0.078, green: 0.518, blue: 0.851))
+                    .foregroundStyle(HayameTheme.brandBlue)
                     .disabled(appState.isSyncingRemote)
 
                     if !email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -101,17 +101,17 @@ private struct LoginScreenView: View {
                             appState.resendSignupConfirmation(email: email)
                         }
                         .font(.system(size: 13, weight: .semibold, design: .rounded))
-                        .foregroundStyle(Color(red: 0.078, green: 0.518, blue: 0.851))
+                        .foregroundStyle(HayameTheme.brandBlue)
                         .disabled(appState.isSyncingRemote)
                     }
 
                     HStack(spacing: 4) {
                         Text("No account?")
                             .font(.system(size: 13, design: .rounded))
-                            .foregroundStyle(Color(red: 0.451, green: 0.490, blue: 0.569))
+                            .foregroundStyle(HayameTheme.mutedText)
                         Button("Sign up", action: goToSignup)
                             .font(.system(size: 13, weight: .semibold, design: .rounded))
-                            .foregroundStyle(Color(red: 0.078, green: 0.518, blue: 0.851))
+                            .foregroundStyle(HayameTheme.brandBlue)
                     }
                 }
                 .frame(maxWidth: .infinity)
@@ -230,10 +230,10 @@ private struct SignupScreenView: View {
                 HStack(spacing: 4) {
                     Text("Already registered?")
                         .font(.system(size: 13, design: .rounded))
-                        .foregroundStyle(Color(red: 0.451, green: 0.490, blue: 0.569))
+                        .foregroundStyle(HayameTheme.mutedText)
                     Button("Log in", action: goToLogin)
                         .font(.system(size: 13, weight: .semibold, design: .rounded))
-                        .foregroundStyle(Color(red: 0.078, green: 0.518, blue: 0.851))
+                        .foregroundStyle(HayameTheme.brandBlue)
                 }
                 .frame(maxWidth: .infinity)
 
@@ -244,7 +244,7 @@ private struct SignupScreenView: View {
                         appState.resendSignupConfirmation(email: email)
                     }
                     .font(.system(size: 13, weight: .semibold, design: .rounded))
-                    .foregroundStyle(Color(red: 0.078, green: 0.518, blue: 0.851))
+                    .foregroundStyle(HayameTheme.brandBlue)
                     .frame(maxWidth: .infinity)
                     .disabled(appState.isSyncingRemote)
                 }

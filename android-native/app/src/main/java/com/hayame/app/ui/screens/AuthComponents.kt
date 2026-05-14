@@ -58,6 +58,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hayame.app.R
+import com.hayame.app.ui.theme.LocalHayameColors
 
 enum class AuthTab(val label: String) {
     LOGIN("Log in"), SIGNUP("Sign up")
@@ -74,11 +75,12 @@ fun AuthScaffold(
 ) {
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
+    val colors = LocalHayameColors.current
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFFF7FAFF))
+            .background(colors.pageBackground)
             .pointerInput(Unit) {
                 detectTapGestures {
                     focusManager.clearFocus()
@@ -90,7 +92,7 @@ fun AuthScaffold(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Color(0xFF1484D9))
+                .background(colors.brandBlue)
                 .statusBarsPadding()
                 .padding(bottom = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -115,7 +117,7 @@ fun AuthScaffold(
                         modifier = Modifier
                             .weight(1f)
                             .clip(RoundedCornerShape(99.dp))
-                            .background(if (selectedTab == tab) Color.White else Color.Transparent)
+                            .background(if (selectedTab == tab) colors.cardBackground else Color.Transparent)
                             .clickable { onTabChange(tab) }
                             .padding(vertical = 9.dp),
                         contentAlignment = Alignment.Center,
@@ -124,7 +126,7 @@ fun AuthScaffold(
                             text = tab.label,
                             style = MaterialTheme.typography.labelLarge.copy(fontSize = 14.sp),
                             fontWeight = FontWeight.SemiBold,
-                            color = if (selectedTab == tab) Color(0xFF0A2B54) else Color.White.copy(alpha = 0.70f),
+                            color = if (selectedTab == tab) colors.brandNavy else Color.White.copy(alpha = 0.70f),
                         )
                     }
                 }
@@ -134,7 +136,7 @@ fun AuthScaffold(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Color.White)
+                .background(colors.cardBackground)
                 .padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(18.dp),
         ) {
@@ -143,12 +145,12 @@ fun AuthScaffold(
                     title,
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF0A2B54),
+                    color = colors.brandNavy,
                 )
                 Text(
                     subtitle,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = Color(0xFF737D91),
+                    color = colors.mutedText,
                 )
             }
             content()
@@ -158,19 +160,19 @@ fun AuthScaffold(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color(0xFFF7FAFF))
+                    .background(colors.pageBackground)
                     .padding(horizontal = 24.dp, vertical = 20.dp),
             ) {
                 OutlinedButton(
                     onClick = onContinueAsGuest,
                     modifier = Modifier.fillMaxWidth().height(48.dp),
                     shape = RoundedCornerShape(99.dp),
-                    border = BorderStroke(1.5.dp, Color(0xFFD0DEF0)),
-                    colors = ButtonDefaults.outlinedButtonColors(containerColor = Color.White),
+                    border = BorderStroke(1.5.dp, colors.border),
+                    colors = ButtonDefaults.outlinedButtonColors(containerColor = colors.cardBackground),
                 ) {
                     Text(
                         "Continue as guest",
-                        color = Color(0xFF0A2B54),
+                        color = colors.brandNavy,
                         fontWeight = FontWeight.Medium,
                         fontSize = 14.sp,
                     )
@@ -189,12 +191,13 @@ fun AuthTextField(
     keyboardType: KeyboardType = KeyboardType.Text,
 ) {
     var focused by remember { mutableStateOf(false) }
+    val colors = LocalHayameColors.current
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(
             label,
             style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.SemiBold,
-            color = Color(0xFF0A2B54),
+            color = colors.brandNavy,
         )
         BasicTextField(
             value = value,
@@ -202,19 +205,19 @@ fun AuthTextField(
             modifier = Modifier
                 .fillMaxWidth()
                 .onFocusChanged { focused = it.isFocused }
-                .background(if (focused) Color.White else Color(0xFFF7FAFF), RoundedCornerShape(12.dp))
+                .background(if (focused) colors.cardBackground else colors.pageBackground, RoundedCornerShape(12.dp))
                 .border(
                     1.5.dp,
-                    if (focused) Color(0xFF1484D9) else Color(0xFFE0EAF8),
+                    if (focused) colors.brandBlue else colors.border,
                     RoundedCornerShape(12.dp),
                 )
                 .padding(horizontal = 14.dp, vertical = 13.dp),
             keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
             singleLine = true,
-            textStyle = MaterialTheme.typography.bodyMedium.copy(color = Color(0xFF0A2B54)),
+            textStyle = MaterialTheme.typography.bodyMedium.copy(color = colors.brandNavy),
             decorationBox = { inner ->
                 if (value.isEmpty()) {
-                    Text(label, color = Color(0xFF737D91), style = MaterialTheme.typography.bodyMedium)
+                    Text(label, color = colors.mutedText, style = MaterialTheme.typography.bodyMedium)
                 }
                 inner()
             },
@@ -232,21 +235,22 @@ fun AuthPasswordField(
     modifier: Modifier = Modifier,
 ) {
     var focused by remember { mutableStateOf(false) }
+    val colors = LocalHayameColors.current
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(
             label,
             style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.SemiBold,
-            color = Color(0xFF0A2B54),
+            color = colors.brandNavy,
         )
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .onFocusChanged { focused = it.isFocused }
-                .background(if (focused) Color.White else Color(0xFFF7FAFF), RoundedCornerShape(12.dp))
+                .background(if (focused) colors.cardBackground else colors.pageBackground, RoundedCornerShape(12.dp))
                 .border(
                     1.5.dp,
-                    if (focused) Color(0xFF1484D9) else Color(0xFFE0EAF8),
+                    if (focused) colors.brandBlue else colors.border,
                     RoundedCornerShape(12.dp),
                 )
                 .padding(horizontal = 14.dp, vertical = 8.dp),
@@ -259,16 +263,16 @@ fun AuthPasswordField(
                 singleLine = true,
                 visualTransformation = if (visible) VisualTransformation.None else PasswordVisualTransformation(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                textStyle = MaterialTheme.typography.bodyMedium.copy(color = Color(0xFF0A2B54)),
+                textStyle = MaterialTheme.typography.bodyMedium.copy(color = colors.brandNavy),
                 decorationBox = { inner ->
-                    if (value.isEmpty()) Text("••••••••", color = Color(0xFF737D91))
+                    if (value.isEmpty()) Text("••••••••", color = colors.mutedText)
                     inner()
                 },
             )
             TextButton(onClick = onToggleVisibility, contentPadding = PaddingValues(horizontal = 4.dp)) {
                 Text(
                     if (visible) "Hide" else "Show",
-                    color = Color(0xFF1484D9),
+                    color = colors.brandBlue,
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 12.sp,
                 )
@@ -286,19 +290,20 @@ fun AuthSelectField(
     modifier: Modifier = Modifier,
 ) {
     var expanded by remember { mutableStateOf(false) }
+    val colors = LocalHayameColors.current
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(
             label,
             style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.SemiBold,
-            color = Color(0xFF0A2B54),
+            color = colors.brandNavy,
         )
         Box {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color(0xFFF7FAFF), RoundedCornerShape(12.dp))
-                    .border(1.5.dp, Color(0xFFE0EAF8), RoundedCornerShape(12.dp))
+                    .background(colors.pageBackground, RoundedCornerShape(12.dp))
+                    .border(1.5.dp, colors.border, RoundedCornerShape(12.dp))
                     .clickable { expanded = true }
                     .padding(horizontal = 14.dp, vertical = 13.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -306,7 +311,7 @@ fun AuthSelectField(
                 Text(
                     selected.ifBlank { "Select" },
                     modifier = Modifier.weight(1f),
-                    color = if (selected.isBlank()) Color(0xFF737D91) else Color(0xFF0A2B54),
+                    color = if (selected.isBlank()) colors.mutedText else colors.brandNavy,
                     style = MaterialTheme.typography.bodyMedium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -314,13 +319,20 @@ fun AuthSelectField(
                 Icon(
                     Icons.Outlined.ExpandMore,
                     contentDescription = null,
-                    tint = Color(0xFF737D91),
+                    tint = colors.mutedText,
                     modifier = Modifier.size(16.dp),
                 )
             }
-            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            DropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false },
+                containerColor = colors.cardBackground,
+            ) {
                 options.forEach { opt ->
-                    DropdownMenuItem(text = { Text(opt) }, onClick = { onSelected(opt); expanded = false })
+                    DropdownMenuItem(
+                        text = { Text(opt, color = colors.brandNavy) },
+                        onClick = { onSelected(opt); expanded = false },
+                    )
                 }
             }
         }
@@ -329,12 +341,13 @@ fun AuthSelectField(
 
 @Composable
 fun AuthPrimaryButton(text: String, enabled: Boolean = true, onClick: () -> Unit) {
+    val colors = LocalHayameColors.current
     Button(
         onClick = onClick,
         enabled = enabled,
         modifier = Modifier.fillMaxWidth().height(50.dp),
         shape = RoundedCornerShape(99.dp),
-        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1484D9)),
+        colors = ButtonDefaults.buttonColors(containerColor = colors.brandBlue),
     ) {
         Text(text, color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
     }
@@ -342,13 +355,14 @@ fun AuthPrimaryButton(text: String, enabled: Boolean = true, onClick: () -> Unit
 
 @Composable
 fun AuthBiometricButton(text: String, onClick: () -> Unit) {
+    val colors = LocalHayameColors.current
     OutlinedButton(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth().height(48.dp),
         shape = RoundedCornerShape(99.dp),
-        border = BorderStroke(1.5.dp, Color(0xFFD0DEF0)),
-        colors = ButtonDefaults.outlinedButtonColors(containerColor = Color.White),
+        border = BorderStroke(1.5.dp, colors.border),
+        colors = ButtonDefaults.outlinedButtonColors(containerColor = colors.cardBackground),
     ) {
-        Text(text, color = Color(0xFF0A2B54), fontWeight = FontWeight.Medium, fontSize = 14.sp)
+        Text(text, color = colors.brandNavy, fontWeight = FontWeight.Medium, fontSize = 14.sp)
     }
 }

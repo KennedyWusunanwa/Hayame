@@ -248,6 +248,7 @@ import kotlin.math.roundToInt
 
 @Composable
 fun SplashScreen() {
+    val colors = LocalHayameColors.current
     val progress = remember { Animatable(0f) }
     val logoScale = remember { Animatable(1f) }
     val splashMotion = rememberInfiniteTransition(label = "splash-motion")
@@ -407,7 +408,7 @@ fun SplashScreen() {
                 .fillMaxWidth()
                 .fillMaxHeight(0.55f)
                 .offset { IntOffset(x = 0, y = topPanelOffset.value.roundToInt()) }
-                .background(Color(0xFF1484D9))
+                .background(colors.brandBlue)
                 .clipToBounds(),
             contentAlignment = Alignment.Center,
         ) {
@@ -473,7 +474,7 @@ fun SplashScreen() {
                 ) {
                     Text(
                         text = "Ghana's No.1 Car Rental Platform",
-                        color = Color(0xFF1484D9),
+                        color = colors.brandBlue,
                         style = MaterialTheme.typography.labelMedium.copy(fontSize = 11.sp),
                         fontWeight = FontWeight.SemiBold,
                         modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
@@ -487,7 +488,7 @@ fun SplashScreen() {
                 .fillMaxWidth()
                 .fillMaxHeight()
                 .offset { IntOffset(x = 0, y = bottomPanelOffset.value.roundToInt()) }
-                .background(Color.White),
+                .background(colors.pageBackground),
             contentAlignment = Alignment.Center,
         ) {
             Column(
@@ -498,7 +499,7 @@ fun SplashScreen() {
                 Text(
                     text = "Rent a car, anytime, anywhere in Ghana.",
                     style = MaterialTheme.typography.bodyLarge.copy(fontSize = 16.sp),
-                    color = Color(0xFF0A2B54),
+                    color = colors.brandNavy,
                     fontWeight = FontWeight.Medium,
                     textAlign = TextAlign.Center,
                     lineHeight = 26.sp,
@@ -510,7 +511,7 @@ fun SplashScreen() {
                 Text(
                     text = "Trusted by renters across Ghana",
                     style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
-                    color = Color(0xFF737D91),
+                    color = colors.mutedText,
                     fontWeight = FontWeight.Medium,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.alpha(sublineAlpha.value),
@@ -526,14 +527,14 @@ fun SplashScreen() {
                         modifier = Modifier
                             .fillMaxSize()
                             .clip(RoundedCornerShape(99.dp))
-                            .background(Color(0xFFEDF7FF)),
+                            .background(colors.brandLight),
                     )
                     Box(
                         modifier = Modifier
                             .fillMaxHeight()
                             .fillMaxWidth(progress.value)
                             .clip(RoundedCornerShape(99.dp))
-                            .background(Color(0xFF1484D9)),
+                            .background(colors.brandBlue),
                     )
                     Box(
                         modifier = Modifier
@@ -564,6 +565,7 @@ fun LoginScreen(
     onContinueAsGuest: () -> Unit = {},
 ) {
     val context = LocalContext.current
+    val colors = LocalHayameColors.current
     var email by rememberSaveable { mutableStateOf("") }
     var password by rememberSaveable { mutableStateOf("") }
     var passwordVisible by rememberSaveable { mutableStateOf(false) }
@@ -608,8 +610,8 @@ fun LoginScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color(0xFFF7FAFF), RoundedCornerShape(14.dp))
-                    .border(1.dp, Color(0xFFE0EAF8), RoundedCornerShape(14.dp))
+                    .background(colors.pageBackground, RoundedCornerShape(14.dp))
+                    .border(1.dp, colors.border, RoundedCornerShape(14.dp))
                     .padding(horizontal = 14.dp, vertical = 10.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
@@ -620,13 +622,13 @@ fun LoginScreen(
                 ) {
                     Text(
                         "Save login for biometrics",
-                        color = Color(0xFF0A2B54),
+                        color = colors.brandNavy,
                         fontWeight = FontWeight.SemiBold,
                         fontSize = 13.sp,
                     )
                     Text(
                         "Use it for quick login after signing out.",
-                        color = Color(0xFF737D91),
+                        color = colors.mutedText,
                         fontWeight = FontWeight.Medium,
                         fontSize = 11.sp,
                     )
@@ -662,7 +664,7 @@ fun LoginScreen(
             },
             modifier = Modifier.align(Alignment.CenterHorizontally),
         ) {
-            Text("Forgot password?", color = Color(0xFF1484D9), fontWeight = FontWeight.SemiBold)
+            Text("Forgot password?", color = colors.brandBlue, fontWeight = FontWeight.SemiBold)
         }
 
         if (email.isNotBlank()) {
@@ -670,7 +672,7 @@ fun LoginScreen(
                 onClick = { viewModel.resendConfirmation(email) },
                 modifier = Modifier.align(Alignment.CenterHorizontally),
             ) {
-                Text("Resend verification email", color = Color(0xFF1484D9), fontWeight = FontWeight.SemiBold)
+                Text("Resend verification email", color = colors.brandBlue, fontWeight = FontWeight.SemiBold)
             }
         }
 
@@ -679,9 +681,9 @@ fun LoginScreen(
             horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("No account?", color = Color(0xFF737D91), fontSize = 13.sp)
+            Text("No account?", color = colors.mutedText, fontSize = 13.sp)
             TextButton(onClick = onSignup, contentPadding = PaddingValues(0.dp)) {
-                Text("Sign up", color = Color(0xFF1484D9), fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                Text("Sign up", color = colors.brandBlue, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
             }
         }
         },
@@ -693,6 +695,7 @@ fun SignupScreen(
     viewModel: AppViewModel,
     onBackToLogin: () -> Unit,
 ) {
+    val colors = LocalHayameColors.current
     var firstName by rememberSaveable { mutableStateOf("") }
     var lastName by rememberSaveable { mutableStateOf("") }
     var email by rememberSaveable { mutableStateOf("") }
@@ -752,9 +755,9 @@ fun SignupScreen(
             horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("Already registered?", color = Color(0xFF737D91), fontSize = 13.sp)
+            Text("Already registered?", color = colors.mutedText, fontSize = 13.sp)
             TextButton(onClick = onBackToLogin, contentPadding = PaddingValues(0.dp)) {
-                Text("Log in", color = Color(0xFF1484D9), fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                Text("Log in", color = colors.brandBlue, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
             }
         }
 
@@ -763,10 +766,10 @@ fun SignupScreen(
             onClick = { viewModel.continueAsGuest() },
             modifier = Modifier.fillMaxWidth().height(48.dp),
             shape = RoundedCornerShape(99.dp),
-            border = BorderStroke(1.5.dp, Color(0xFFD0DEF0)),
-            colors = ButtonDefaults.outlinedButtonColors(containerColor = Color.White),
+            border = BorderStroke(1.5.dp, colors.border),
+            colors = ButtonDefaults.outlinedButtonColors(containerColor = colors.cardBackground),
         ) {
-            Text("Continue as guest", color = Color(0xFF0A2B54), fontWeight = FontWeight.Medium)
+            Text("Continue as guest", color = colors.brandNavy, fontWeight = FontWeight.Medium)
         }
         },
     )
