@@ -604,7 +604,7 @@ fun LoginScreen(
         subtitle = "Log in to continue",
         selectedTab = AuthTab.LOGIN,
         onTabChange = { if (it == AuthTab.SIGNUP) onSignup() },
-        onContinueAsGuest = onContinueAsGuest,
+        onContinueAsGuest = null,
         content = {
         AuthTextField(
             label = "Email",
@@ -629,6 +629,16 @@ fun LoginScreen(
                     hasBiometricCredentials = true
                 }
             }
+        }
+
+        OutlinedButton(
+            onClick = onContinueAsGuest,
+            modifier = Modifier.fillMaxWidth().height(48.dp),
+            shape = RoundedCornerShape(99.dp),
+            border = BorderStroke(1.5.dp, colors.border),
+            colors = ButtonDefaults.outlinedButtonColors(containerColor = colors.cardBackground),
+        ) {
+            Text("Continue as guest", color = colors.brandNavy, fontWeight = FontWeight.Medium)
         }
 
         if (biometricsAvailable) {
