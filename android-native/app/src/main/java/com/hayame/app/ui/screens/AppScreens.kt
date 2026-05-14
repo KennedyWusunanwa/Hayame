@@ -8883,18 +8883,17 @@ fun HostEarningsScreen(viewModel: AppViewModel, onBack: () -> Unit) {
 @Composable
 fun HostReviewsScreen(viewModel: AppViewModel, onBack: () -> Unit) {
     val state by viewModel.hostReviewsListState.collectAsState()
+    val colors = LocalHayameColors.current
     LaunchedEffect(Unit) { viewModel.loadHostReviews() }
 
     Scaffold(
+        containerColor = colors.pageBackground,
         topBar = {
-            Row(modifier = Modifier.fillMaxWidth().background(Color.White).padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
-                Text("Host Reviews", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 8.dp))
-            }
+            PageTopBar(title = "Host Reviews", onBack = onBack)
         },
     ) { inner ->
         LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(inner).padding(16.dp),
+            modifier = Modifier.fillMaxSize().background(colors.pageBackground).padding(inner).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             when (val s = state) {
@@ -8903,11 +8902,15 @@ fun HostReviewsScreen(viewModel: AppViewModel, onBack: () -> Unit) {
                 UiState.Empty -> item { EmptyBlock("No reviews yet", "Reviews from completed trips will appear here.") }
                 is UiState.Success -> {
                     items(s.data, key = { it.id }) { review ->
-                        Card(shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                        Card(
+                            shape = RoundedCornerShape(14.dp),
+                            colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
+                            border = BorderStroke(1.dp, colors.border),
+                        ) {
                             Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Text("Rating: ${review.rating ?: 0}", color = BrandNavy, fontWeight = FontWeight.Bold)
-                                Text(review.comment ?: "No comment", color = MutedText)
-                                Text(review.created_at ?: "", style = MaterialTheme.typography.labelSmall, color = MutedText)
+                                Text("Rating: ${review.rating ?: 0}", color = colors.brandNavy, fontWeight = FontWeight.Bold)
+                                Text(review.comment ?: "No comment", color = colors.mutedText)
+                                Text(review.created_at ?: "", style = MaterialTheme.typography.labelSmall, color = colors.mutedText)
                             }
                         }
                     }
@@ -8926,6 +8929,18 @@ fun GuestProfileScreen(
     val me by viewModel.me.collectAsState()
     val locations by viewModel.locations.collectAsState()
     val context = LocalContext.current
+    val colors = LocalHayameColors.current
+    val textFieldColors = OutlinedTextFieldDefaults.colors(
+        focusedTextColor = colors.brandNavy,
+        unfocusedTextColor = colors.brandNavy,
+        focusedLabelColor = colors.brandBlue,
+        unfocusedLabelColor = colors.mutedText,
+        focusedBorderColor = colors.brandBlue,
+        unfocusedBorderColor = colors.border,
+        cursorColor = colors.brandBlue,
+        focusedContainerColor = colors.cardBackground,
+        unfocusedContainerColor = colors.cardBackground,
+    )
     val userId = me?.user?.id.orEmpty()
     var firstName by rememberSaveable(userId) { mutableStateOf(me.preferredFirstName().orEmpty()) }
     var lastName by rememberSaveable(userId) { mutableStateOf(me.preferredLastName().orEmpty()) }
@@ -8987,19 +9002,21 @@ fun GuestProfileScreen(
     }
 
     Scaffold(
+        containerColor = colors.pageBackground,
         topBar = {
-            Row(modifier = Modifier.fillMaxWidth().background(Color.White).padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
-                Text("Edit Profile", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 8.dp))
-            }
+            PageTopBar(title = "Edit Profile", onBack = onBack)
         },
     ) { inner ->
         LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(inner).padding(16.dp),
+            modifier = Modifier.fillMaxSize().background(colors.pageBackground).padding(inner).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             item {
-                Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                Card(
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
+                    border = BorderStroke(1.dp, colors.border),
+                ) {
                     Column(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         val displayAvatar = avatarFile?.let { Uri.fromFile(it).toString() } ?: resolveAppImage(me.preferredAvatarRaw())
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -9011,32 +9028,36 @@ fun GuestProfileScreen(
                                 textStyle = MaterialTheme.typography.headlineMedium,
                             )
                             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Text(me.preferredFullName() ?: "Guest User", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = BrandNavy)
-                                Text(me.preferredEmail() ?: me?.user?.email.orEmpty(), style = MaterialTheme.typography.bodyMedium, color = MutedText)
-                                Text("Upload a clear headshot (JPG/PNG).", style = MaterialTheme.typography.bodyMedium, color = MutedText)
+                                Text(me.preferredFullName() ?: "Guest User", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = colors.brandNavy)
+                                Text(me.preferredEmail() ?: me?.user?.email.orEmpty(), style = MaterialTheme.typography.bodyMedium, color = colors.mutedText)
+                                Text("Upload a clear headshot (JPG/PNG).", style = MaterialTheme.typography.bodyMedium, color = colors.mutedText)
                             }
                         }
                         Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
                             OutlinedButton(
                                 onClick = { pickAvatar.launch("image/*") },
                                 shape = RoundedCornerShape(16.dp),
-                                border = BorderStroke(1.dp, BrandBlue.copy(alpha = 0.24f)),
+                                border = BorderStroke(1.dp, colors.brandBlue.copy(alpha = 0.36f)),
                                 modifier = Modifier.height(48.dp),
                             ) {
-                                Text("Change photo", color = BrandBlue, fontWeight = FontWeight.Bold)
+                                Text("Change photo", color = colors.brandBlue, fontWeight = FontWeight.Bold)
                             }
                         }
                     }
                 }
             }
             item {
-                Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                Card(
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
+                    border = BorderStroke(1.dp, colors.border),
+                ) {
                     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-                            OutlinedTextField(value = firstName, onValueChange = { firstName = it }, label = { Text("First name") }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(16.dp))
-                            OutlinedTextField(value = lastName, onValueChange = { lastName = it }, label = { Text("Last name") }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(16.dp))
+                            OutlinedTextField(value = firstName, onValueChange = { firstName = it }, label = { Text("First name") }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(16.dp), colors = textFieldColors)
+                            OutlinedTextField(value = lastName, onValueChange = { lastName = it }, label = { Text("Last name") }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(16.dp), colors = textFieldColors)
                         }
-                        OutlinedTextField(value = phone, onValueChange = { phone = it }, label = { Text("Phone") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp))
+                        OutlinedTextField(value = phone, onValueChange = { phone = it }, label = { Text("Phone") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), colors = textFieldColors)
                         SelectionTextField(
                             label = "Region",
                             value = region,
@@ -10030,6 +10051,7 @@ private fun SelectionTextField(
     modifier: Modifier = Modifier,
 ) {
     var expanded by remember(value, options) { mutableStateOf(false) }
+    val colors = LocalHayameColors.current
 
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         OutlinedTextField(
@@ -10045,17 +10067,32 @@ private fun SelectionTextField(
             trailingIcon = {
                 if (options.isNotEmpty()) {
                     IconButton(onClick = { expanded = !expanded }) {
-                        Icon(Icons.Outlined.ExpandMore, contentDescription = "Options")
+                        Icon(Icons.Outlined.ExpandMore, contentDescription = "Options", tint = colors.brandBlue)
                     }
                 }
             },
             shape = RoundedCornerShape(16.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedTextColor = colors.brandNavy,
+                unfocusedTextColor = colors.brandNavy,
+                focusedLabelColor = colors.brandBlue,
+                unfocusedLabelColor = colors.mutedText,
+                focusedBorderColor = colors.brandBlue,
+                unfocusedBorderColor = colors.border,
+                cursorColor = colors.brandBlue,
+                focusedContainerColor = colors.cardBackground,
+                unfocusedContainerColor = colors.cardBackground,
+            ),
         )
         if (options.isNotEmpty()) {
-            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            DropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false },
+                containerColor = colors.cardBackground,
+            ) {
                 options.forEach { option ->
                     DropdownMenuItem(
-                        text = { Text(option) },
+                        text = { Text(option, color = colors.brandNavy) },
                         onClick = {
                             onValueChange(option)
                             expanded = false

@@ -5513,25 +5513,34 @@ private struct ProfileEditSheet: View {
                             .foregroundStyle(HayameTheme.danger)
                     }
                 }
+                .listRowBackground(HayameTheme.cardBackground)
 
                 Section("Personal details") {
                     TextField("Full name", text: $fullName)
+                        .foregroundStyle(HayameTheme.brandNavy)
                     TextField("Phone", text: $phone)
+                        .foregroundStyle(HayameTheme.brandNavy)
                     Picker("Region", selection: $region) {
                         ForEach(MockDataService.regionsIncluding(region), id: \.self) { item in
                             Text(item).tag(item)
                         }
                     }
+                    .tint(HayameTheme.brandBlue)
                     Picker("City", selection: $city) {
                         ForEach(MockDataService.cities(for: region, preferred: city), id: \.self) { item in
                             Text(item).tag(item)
                         }
                     }
+                    .tint(HayameTheme.brandBlue)
                 }
+                .listRowBackground(HayameTheme.cardBackground)
+                .foregroundStyle(HayameTheme.brandNavy)
             }
             .scrollContentBackground(.hidden)
             .background(HayameTheme.pageBackground)
             .navigationTitle("Edit Profile")
+            .toolbarBackground(HayameTheme.pageBackground, for: .navigationBar)
+            .tint(HayameTheme.brandBlue)
             .onChange(of: region) { _, newValue in
                 let options = MockDataService.cities(for: newValue, preferred: city)
                 if !options.contains(where: { $0.caseInsensitiveCompare(city) == .orderedSame }) {
