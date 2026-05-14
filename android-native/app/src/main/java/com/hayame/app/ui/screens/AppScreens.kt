@@ -1190,8 +1190,8 @@ private fun <T> HayameBottomTabBar(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .navigationBarsPadding()
-                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                    .height(62.dp)
+                    .padding(horizontal = 10.dp, vertical = 5.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -1204,9 +1204,9 @@ private fun <T> HayameBottomTabBar(
                             .clip(RoundedCornerShape(28.dp))
                             .background(if (isSelected) colors.brandLight else Color.Transparent)
                             .clickable { onSelect(item.id) }
-                            .padding(vertical = 8.dp, horizontal = 2.dp),
+                            .padding(vertical = 5.dp, horizontal = 2.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(3.dp),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
                     ) {
                         BadgedBox(
                             badge = {
@@ -1221,12 +1221,12 @@ private fun <T> HayameBottomTabBar(
                                 imageVector = item.icon,
                                 contentDescription = item.title,
                                 tint = tint,
-                                modifier = Modifier.size(26.dp),
+                                modifier = Modifier.size(24.dp),
                             )
                         }
                         Text(
                             text = item.title,
-                            style = MaterialTheme.typography.labelLarge,
+                            style = MaterialTheme.typography.labelLarge.copy(fontSize = 11.sp),
                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
                             color = tint,
                             maxLines = 1,
@@ -1235,6 +1235,7 @@ private fun <T> HayameBottomTabBar(
                     }
                 }
             }
+            Spacer(modifier = Modifier.navigationBarsPadding())
         }
     }
 }
