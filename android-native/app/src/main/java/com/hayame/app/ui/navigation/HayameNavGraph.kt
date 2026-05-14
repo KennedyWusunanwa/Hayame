@@ -13,8 +13,11 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.animation.fadeIn
@@ -55,6 +58,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -699,51 +703,68 @@ private fun AppearanceIntroPrompt(
 ) {
     val colors = LocalHayameColors.current
     Card(
-        shape = RoundedCornerShape(26.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .widthIn(max = 360.dp),
+        shape = RoundedCornerShape(28.dp),
         colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
         elevation = CardDefaults.cardElevation(defaultElevation = 16.dp),
     ) {
         Column(
-            modifier = Modifier.padding(22.dp),
-            verticalArrangement = Arrangement.spacedBy(18.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            androidx.compose.foundation.layout.Row(
-                horizontalArrangement = Arrangement.spacedBy(14.dp),
-                verticalAlignment = Alignment.Top,
+            Box(
+                modifier = Modifier
+                    .size(64.dp)
+                    .clip(CircleShape)
+                    .background(colors.brandBlue.copy(alpha = 0.14f)),
+                contentAlignment = Alignment.Center,
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(56.dp)
-                        .clip(CircleShape)
-                        .background(colors.brandBlue.copy(alpha = 0.14f)),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        imageVector = if (darkModeEnabled) Icons.Outlined.DarkMode else Icons.Outlined.LightMode,
-                        contentDescription = null,
-                        tint = colors.brandBlue,
-                        modifier = Modifier.size(28.dp),
-                    )
-                }
-                Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                    Text(
-                        text = "Choose your look",
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = colors.brandNavy,
-                    )
-                    Text(
-                        text = "Hayame now supports light and dark mode. You can change it anytime in Appearance.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = colors.mutedText,
-                    )
-                }
+                Icon(
+                    imageVector = if (darkModeEnabled) Icons.Outlined.DarkMode else Icons.Outlined.LightMode,
+                    contentDescription = null,
+                    tint = colors.brandBlue,
+                    modifier = Modifier.size(30.dp),
+                )
             }
 
-            Button(onClick = onOpenSettings, modifier = Modifier.padding(top = 2.dp)) {
+            Text(
+                text = "Choose your look",
+                modifier = Modifier.fillMaxWidth(),
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+                color = colors.brandNavy,
+                textAlign = TextAlign.Center,
+            )
+
+            Text(
+                text = "Hayame now supports light and dark mode. You can change it anytime in Appearance.",
+                modifier = Modifier.fillMaxWidth(),
+                style = MaterialTheme.typography.bodyMedium,
+                color = colors.mutedText,
+                textAlign = TextAlign.Center,
+            )
+
+            Button(
+                onClick = onOpenSettings,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(50.dp)
+                    .padding(top = 2.dp),
+            ) {
                 Text("Open Appearance settings")
             }
-            TextButton(onClick = onTryLater, modifier = Modifier.align(Alignment.CenterHorizontally)) {
+
+            TextButton(
+                onClick = onTryLater,
+                modifier = Modifier
+                    .height(44.dp)
+                    .padding(top = 2.dp),
+            ) {
                 Text("Try later", color = colors.brandBlue, fontWeight = FontWeight.SemiBold)
             }
         }
