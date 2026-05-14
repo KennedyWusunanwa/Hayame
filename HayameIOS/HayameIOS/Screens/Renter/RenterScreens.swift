@@ -1295,6 +1295,7 @@ private struct ExploreFilterSheet: View {
                     }
                 }
             }
+            .listRowBackground(HayameTheme.cardBackground)
 
             Section("Vehicle") {
                 Picker("Make", selection: $appState.exploreFilters.brand) {
@@ -1330,20 +1331,25 @@ private struct ExploreFilterSheet: View {
                     }
                 }
             }
+            .listRowBackground(HayameTheme.cardBackground)
 
             Section("Price") {
                 Stepper("Min price: GHS\(appState.exploreFilters.minPrice)", value: $appState.exploreFilters.minPrice, in: 50...5000, step: 50)
                 Stepper("Max price: GHS\(appState.exploreFilters.maxPrice)", value: $appState.exploreFilters.maxPrice, in: 100...8000, step: 50)
             }
+            .listRowBackground(HayameTheme.cardBackground)
 
             Section("Options") {
                 Toggle("Instant Book", isOn: $appState.exploreFilters.instantBookOnly)
                 Toggle("Delivery available", isOn: $appState.exploreFilters.deliveryOnly)
                 Toggle("Air conditioning", isOn: $appState.exploreFilters.acOnly)
             }
+            .listRowBackground(HayameTheme.cardBackground)
         }
         .scrollContentBackground(.hidden)
         .background(HayameTheme.pageBackground)
+        .foregroundStyle(HayameTheme.brandNavy)
+        .tint(HayameTheme.brandBlue)
         .navigationTitle("Filters")
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
