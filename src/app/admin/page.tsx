@@ -4,9 +4,11 @@ import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
 import {
   Bell,
+  BarChart3,
   Car,
   CheckCircle2,
   ClipboardCheck,
+  FileClock,
   Gauge,
   LayoutDashboard,
   LogOut,
@@ -21,7 +23,6 @@ import {
 } from "lucide-react";
 import { AdminLoadingLink } from "@/components/admin/admin-loading-link";
 import { AdminNotice } from "@/components/admin/admin-notice";
-import { AdminTabs } from "@/components/admin/admin-tabs";
 import { PendingSubmitButton } from "@/components/admin/pending-submit-button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -68,10 +69,7 @@ function redirectToAdmin(
   redirect(buildAdminHref(params));
 }
 
-function getAdminNotice(searchParams: {
-  notice?: string;
-  count?: string;
-}): {
+function getAdminNotice(searchParams: { notice?: string; count?: string }): {
   tone: "success" | "error" | "info";
   title: string;
   description?: string;
@@ -87,7 +85,8 @@ function getAdminNotice(searchParams: {
       return {
         tone: "success",
         title: "Host approved",
-        description: "The host application was approved and the user profile was updated.",
+        description:
+          "The host application was approved and the user profile was updated.",
       };
     case "host-rejected":
       return {
@@ -163,7 +162,9 @@ async function reviewAction(formData: FormData) {
       ? String(formData.get("status") ?? "")
       : "";
   const currentQuery =
-    typeof formData.get("q") === "string" ? String(formData.get("q") ?? "") : "";
+    typeof formData.get("q") === "string"
+      ? String(formData.get("q") ?? "")
+      : "";
 
   redirectToAdmin({
     notice: action === "approve" ? "host-approved" : "host-rejected",
@@ -224,7 +225,7 @@ async function bulkDeleteListingsAction(formData: FormData) {
 
 type AdminWorkspaceProps = {
   children: ReactNode;
-  initialTab: "overview" | "applications";
+  initialTab: AdminTab;
   pendingCount: number;
   usersCount: number;
   carsCount: number;
@@ -232,6 +233,27 @@ type AdminWorkspaceProps = {
   statusFilter: string;
   query: string;
 };
+
+type AdminTab =
+  | "overview"
+  | "applications"
+  | "hosts"
+  | "users"
+  | "vehicles"
+  | "audit";
+
+function resolveAdminTab(raw?: string): AdminTab {
+  if (
+    raw === "applications" ||
+    raw === "hosts" ||
+    raw === "users" ||
+    raw === "vehicles" ||
+    raw === "audit"
+  ) {
+    return raw;
+  }
+  return "overview";
+}
 
 function AdminWorkspace({
   children,
@@ -258,6 +280,30 @@ function AdminWorkspace({
       badge: pendingCount,
     },
     {
+      label: "Hosts",
+      href: buildAdminHref({ tab: "hosts" }),
+      icon: ShieldCheck,
+      active: initialTab === "hosts",
+    },
+    {
+      label: "Users",
+      href: buildAdminHref({ tab: "users" }),
+      icon: Users,
+      active: initialTab === "users",
+    },
+    {
+      label: "Vehicles",
+      href: buildAdminHref({ tab: "vehicles" }),
+      icon: Car,
+      active: initialTab === "vehicles",
+    },
+    {
+      label: "Audit log",
+      href: buildAdminHref({ tab: "audit" }),
+      icon: FileClock,
+      active: initialTab === "audit",
+    },
+    {
       label: "Messages",
       href: "/admin/messages",
       icon: MessageSquare,
@@ -273,16 +319,25 @@ function AdminWorkspace({
       icon: Settings2,
     },
   ];
+  const activeSectionLabel =
+    navItems.find((item) => item.active)?.label ?? "Overview";
 
   return (
     <div className="min-h-screen bg-[#f5f8fc]">
       <div className="mx-auto grid max-w-[1500px] gap-4 px-3 py-4 sm:gap-6 sm:px-6 lg:grid-cols-[260px_minmax(0,1fr)] lg:py-6">
         <aside className="hidden rounded-2xl border border-border/80 bg-white p-4 shadow-sm lg:block">
           <div className="rounded-2xl bg-primary px-4 py-5 text-white">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/70">
-              Hayame
-            </p>
-            <h2 className="mt-1 text-xl font-semibold">Admin console</h2>
+            <Image
+              src="/logo.png"
+              alt="Hayame"
+              width={128}
+              height={48}
+              className="h-9 w-auto brightness-0 invert"
+              priority
+            />
+            <div className="mt-4 text-xl font-semibold text-white">
+              Admin console
+            </div>
             <p className="mt-3 text-xs leading-5 text-white/70">
               Review hosts, manage listings, and keep platform operations in one
               workspace.
@@ -311,6 +366,35 @@ function AdminWorkspace({
         </aside>
 
         <main className="min-w-0 space-y-4 sm:space-y-6">
+          <details className="group rounded-2xl border border-border/80 bg-white p-3 shadow-sm lg:hidden">
+            <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 rounded-xl bg-primary px-4 text-white">
+              <span className="inline-flex min-w-0 items-center gap-3">
+                <Image
+                  src="/logo.png"
+                  alt="Hayame"
+                  width={104}
+                  height={38}
+                  className="h-7 w-auto shrink-0 brightness-0 invert"
+                  priority
+                />
+                <span className="truncate text-sm font-semibold text-white">
+                  Admin menu
+                </span>
+              </span>
+              <span className="text-xs font-semibold text-white/80 group-open:hidden">
+                Expand
+              </span>
+              <span className="hidden text-xs font-semibold text-white/80 group-open:inline">
+                Collapse
+              </span>
+            </summary>
+            <nav className="mt-3 grid gap-1">
+              {navItems.map((item) => (
+                <AdminNavLink key={item.label} {...item} />
+              ))}
+            </nav>
+          </details>
+
           <div className="rounded-2xl border border-border/80 bg-white p-3 shadow-sm sm:p-5">
             <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
               <div>
@@ -318,7 +402,7 @@ function AdminWorkspace({
                   Website admin
                 </p>
                 <h1 className="mt-1 text-xl font-semibold tracking-tight text-foreground sm:text-3xl">
-                  Platform overview
+                  {activeSectionLabel}
                 </h1>
               </div>
               <div className="grid gap-3 xl:flex xl:items-center">
@@ -347,7 +431,10 @@ function AdminWorkspace({
                   <TopAction href="/admin/platform" icon={Settings2}>
                     Controls
                   </TopAction>
-                  <form action={logoutAction} className="col-span-2 sm:col-span-1">
+                  <form
+                    action={logoutAction}
+                    className="col-span-2 sm:col-span-1"
+                  >
                     <PendingSubmitButton
                       pendingLabel="Signing out..."
                       className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl border border-border bg-white px-3 py-2 text-sm font-semibold text-gray-700 shadow-sm transition-colors hover:bg-gray-50 sm:w-auto sm:rounded-full"
@@ -388,7 +475,10 @@ function AdminWorkspace({
                 helper="Host applications pending"
                 icon={ShieldCheck}
                 tone="brand"
-                href={buildAdminHref({ tab: "applications", status: "pending" })}
+                href={buildAdminHref({
+                  tab: "applications",
+                  status: "pending",
+                })}
               />
             </div>
           </div>
@@ -634,8 +724,7 @@ export default async function AdminPage({
 
   const statusFilter = resolvedSearchParams?.status ?? "pending";
   const query = (resolvedSearchParams?.q ?? "").trim();
-  const initialTab =
-    resolvedSearchParams?.tab === "applications" ? "applications" : "overview";
+  const initialTab = resolveAdminTab(resolvedSearchParams?.tab);
 
   let applicationsQuery = admin
     .from("host_applications")
@@ -746,7 +835,6 @@ export default async function AdminPage({
       statusFilter={statusFilter}
       query={query}
     >
-
       {notice ? (
         <AdminNotice
           tone={notice.tone}
@@ -755,806 +843,841 @@ export default async function AdminPage({
         />
       ) : null}
 
-      <AdminTabs
-        initialTab={initialTab}
-        overview={
-          <div className="space-y-6">
-            <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
-              <Card className="border-border/80 shadow-sm">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-base">
-                    <Gauge className="h-5 w-5 text-brand" aria-hidden="true" />
-                    Work queue
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="grid gap-3 sm:grid-cols-3">
-                  <AdminLoadingLink
-                    href={buildAdminHref({
-                      tab: "applications",
-                      status: "pending",
-                    })}
-                    indicator="overlay"
-                    pendingLabel="Opening..."
-                    className="rounded-xl border border-brand/20 bg-brand/5 p-3"
-                  >
-                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-brand">
-                      Review hosts
-                    </p>
-                    <p className="mt-2 text-2xl font-semibold text-foreground">
-                      {pendingCount ?? 0}
-                    </p>
-                    <p className="text-xs text-gray-600">pending applications</p>
-                  </AdminLoadingLink>
-                  <div className="rounded-xl border border-border bg-gray-50 p-3">
-                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-500">
-                      Listings
-                    </p>
-                    <p className="mt-2 text-2xl font-semibold text-foreground">
-                      {cars?.length ?? 0}
-                    </p>
-                    <p className="text-xs text-gray-600">shown for review</p>
-                  </div>
-                  <div className="rounded-xl border border-border bg-gray-50 p-3">
-                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-500">
-                      Audit
-                    </p>
-                    <p className="mt-2 text-2xl font-semibold text-foreground">
-                      {auditRows?.length ?? 0}
-                    </p>
-                    <p className="text-xs text-gray-600">recent admin actions</p>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="border-border/80 shadow-sm">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-base">
-                    <CheckCircle2
-                      className="h-5 w-5 text-brand"
-                      aria-hidden="true"
-                    />
-                    Platform health
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3 text-sm">
-                  <div className="flex items-center justify-between rounded-xl bg-gray-50 px-3 py-2">
-                    <span className="text-gray-600">Approved hosts</span>
-                    <span className="font-semibold text-foreground">
-                      {hosts.length}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between rounded-xl bg-gray-50 px-3 py-2">
-                    <span className="text-gray-600">Loaded users</span>
-                    <span className="font-semibold text-foreground">
-                      {users?.length ?? 0}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between rounded-xl bg-gray-50 px-3 py-2">
-                    <span className="text-gray-600">Vehicle photo sets</span>
-                    <span className="font-semibold text-foreground">
-                      {photosByCar.size}
-                    </span>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            <Card>
+      {initialTab === "overview" ? (
+        <div className="space-y-6">
+          <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+            <Card className="border-border/80 shadow-sm">
               <CardHeader>
-                <CardTitle>Approved hosts</CardTitle>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Gauge className="h-5 w-5 text-brand" aria-hidden="true" />
+                  Work queue
+                </CardTitle>
               </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  {(hosts ?? []).map((host: any) => (
-                    <div
-                      key={host.user_id ?? host.id}
-                      className="flex items-center justify-between gap-3 text-sm"
-                    >
-                      <div className="flex items-center gap-3">
-                        <ProfileAvatar
-                          src={host.profiles?.avatar_url}
-                          name={
-                            host.profiles?.full_name ?? host.full_name ?? "Host"
-                          }
-                          className="h-10 w-10"
-                        />
-                        <div>
-                          <p className="font-semibold text-foreground">
-                            {host.profiles?.full_name ??
-                              host.full_name ??
-                              "Host"}
-                          </p>
-                          <p className="text-xs text-gray-600">
-                            {host.profiles?.phone ?? host.phone ?? "No phone"}
-                          </p>
-                          <p className="text-[11px] text-gray-500">
-                            Vehicles:{" "}
-                            {carsByOwner.get(host.user_id ?? host.id) ?? 0}
-                          </p>
-                        </div>
-                      </div>
-                      <span className="text-xs text-gray-500">
-                        {host.profiles?.city ?? host.city ?? "-"}
-                      </span>
-                    </div>
-                  ))}
-                  {(hosts ?? []).length === 0 ? (
-                    <p className="text-sm text-gray-600">
-                      No approved hosts yet.
-                    </p>
-                  ) : null}
+              <CardContent className="grid gap-3 sm:grid-cols-3">
+                <AdminLoadingLink
+                  href={buildAdminHref({
+                    tab: "applications",
+                    status: "pending",
+                  })}
+                  indicator="overlay"
+                  pendingLabel="Opening..."
+                  className="rounded-xl border border-brand/20 bg-brand/5 p-3"
+                >
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-brand">
+                    Review hosts
+                  </p>
+                  <p className="mt-2 text-2xl font-semibold text-foreground">
+                    {pendingCount ?? 0}
+                  </p>
+                  <p className="text-xs text-gray-600">pending applications</p>
+                </AdminLoadingLink>
+                <div className="rounded-xl border border-border bg-gray-50 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-500">
+                    Listings
+                  </p>
+                  <p className="mt-2 text-2xl font-semibold text-foreground">
+                    {cars?.length ?? 0}
+                  </p>
+                  <p className="text-xs text-gray-600">shown for review</p>
+                </div>
+                <div className="rounded-xl border border-border bg-gray-50 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-500">
+                    Audit
+                  </p>
+                  <p className="mt-2 text-2xl font-semibold text-foreground">
+                    {auditRows?.length ?? 0}
+                  </p>
+                  <p className="text-xs text-gray-600">recent admin actions</p>
                 </div>
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="border-border/80 shadow-sm">
               <CardHeader>
-                <CardTitle>Users</CardTitle>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <CheckCircle2
+                    className="h-5 w-5 text-brand"
+                    aria-hidden="true"
+                  />
+                  Platform health
+                </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-3">
-                <p className="text-xs text-gray-600">
-                  Showing profile photos for the latest {users?.length ?? 0}{" "}
-                  users.
-                </p>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  {(users ?? []).map((user: any) => (
-                    <div
-                      key={user.id}
-                      className="flex items-center justify-between gap-3 rounded-lg border border-border p-3 transition-colors hover:bg-gray-50"
-                    >
-                      <div className="flex min-w-0 items-center gap-3">
-                        <ProfileAvatar
-                          src={user.avatar_url}
-                          name={user.full_name ?? "User"}
-                          className="h-10 w-10"
-                        />
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-semibold text-foreground">
-                            {user.full_name ?? "User"}
-                          </p>
-                          <p className="truncate text-xs text-gray-600">
-                            {user.phone ?? "No phone"}
-                          </p>
-                          <p className="truncate text-[11px] text-gray-500">
-                            {user.city ?? "-"}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <span className="shrink-0 rounded-full bg-gray-100 px-2 py-1 text-[11px] font-semibold text-gray-700">
-                          {user.is_host ? "Host" : "Guest"}
-                        </span>
-                        <Link
-                          href={`/admin/messages?user=${user.id}`}
-                          className="text-[11px] font-semibold text-brand"
-                        >
-                          Message
-                        </Link>
-                        <Link
-                          href={`/admin/users/${user.id}`}
-                          className="text-[11px] font-semibold text-brand"
-                        >
-                          View
-                        </Link>
-                      </div>
-                    </div>
-                  ))}
+              <CardContent className="space-y-3 text-sm">
+                <div className="flex items-center justify-between rounded-xl bg-gray-50 px-3 py-2">
+                  <span className="text-gray-600">Approved hosts</span>
+                  <span className="font-semibold text-foreground">
+                    {hosts.length}
+                  </span>
                 </div>
-                {(users ?? []).length === 0 ? (
-                  <p className="text-sm text-gray-600">No users found.</p>
-                ) : null}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Vehicles & availability</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <form action={bulkDeleteListingsAction} className="space-y-3">
-                  {(cars ?? []).length > 0 ? (
-                    <div className="flex flex-col gap-2 rounded-lg border border-border bg-gray-50 p-3 sm:flex-row sm:items-center sm:justify-between">
-                      <p className="text-xs text-gray-700">
-                        Select listings and delete them in one action.
-                      </p>
-                      <PendingSubmitButton
-                        className="rounded-md border border-red-200 px-3 py-1 text-xs font-semibold text-red-700 hover:bg-red-50"
-                        pendingLabel="Deleting..."
-                      >
-                        Delete selected
-                      </PendingSubmitButton>
-                    </div>
-                  ) : null}
-                  <div className="space-y-3">
-                    {(cars ?? []).map((car: any) => {
-                      const bookings = bookingsByCar.get(car.id) ?? [];
-                      const blocks = (blocksByCar.get(car.id) ?? []).filter(
-                        (b: any) => b.available === false,
-                      );
-                      const listingPhotos = photosByCar.get(car.id) ?? [];
-                      const previewImage = resolveCarImage(listingPhotos[0], {
-                        id: car.id,
-                        title: car.title,
-                        city: car.city,
-                        region: car.region,
-                        carType: car.car_type,
-                      });
-                      return (
-                        <div
-                          key={car.id}
-                          className="rounded-lg border border-border p-3"
-                        >
-                          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                            <div className="flex min-w-0 items-start gap-3">
-                              <label className="mt-1 flex items-center gap-2 text-xs font-semibold text-gray-700">
-                                <input
-                                  type="checkbox"
-                                  name="carIds"
-                                  value={car.id}
-                                  className="h-4 w-4 rounded border-border"
-                                />
-                                Select
-                              </label>
-                              <div className="relative h-16 w-24 shrink-0 overflow-hidden rounded-md border border-border">
-                                <Image
-                                  src={previewImage}
-                                  alt={car.title ?? "Listing photo"}
-                                  fill
-                                  className="object-cover"
-                                  sizes="96px"
-                                />
-                              </div>
-                              <div className="min-w-0">
-                                <p className="truncate text-sm font-semibold text-foreground">
-                                  {car.title}
-                                </p>
-                                <div className="mt-1 flex items-center gap-2 text-[11px] text-gray-500">
-                                  <ProfileAvatar
-                                    src={car.owner?.avatar_url}
-                                    name={car.owner?.full_name ?? "Host"}
-                                    className="h-6 w-6"
-                                  />
-                                  <span className="truncate">
-                                    Host: {car.owner?.full_name ?? "Host"}{" "}
-                                    {car.owner?.phone
-                                      ? `| ${car.owner.phone}`
-                                      : ""}
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs text-gray-500">
-                                {car.city ?? "-"}
-                              </span>
-                              <Link
-                                href={`/admin/cars/${car.id}/preview`}
-                                className="rounded-md border border-border px-2 py-1 text-[11px] font-semibold text-gray-700 hover:bg-gray-50"
-                              >
-                                Preview
-                              </Link>
-                              <Link
-                                href={`/admin/cars/${car.id}/edit`}
-                                className="rounded-md border border-border px-2 py-1 text-[11px] font-semibold text-gray-700 hover:bg-gray-50"
-                              >
-                                Edit
-                              </Link>
-                              <PendingSubmitButton
-                                formAction={deleteListingAction}
-                                name="carId"
-                                value={car.id}
-                                className="rounded-md border border-red-200 px-2 py-1 text-[11px] font-semibold text-red-700 hover:bg-red-50"
-                                pendingLabel="Deleting..."
-                              >
-                                Delete
-                              </PendingSubmitButton>
-                            </div>
-                          </div>
-                          <div className="mt-2 text-xs text-gray-600">
-                            Bookings: {bookings.length} | Host blocks:{" "}
-                            {blocks.length}
-                          </div>
-                          <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
-                            {listingPhotos.length > 0 ? (
-                              listingPhotos.map(
-                                (photoUrl: string, index: number) => (
-                                  <div
-                                    key={`${car.id}-photo-${index}`}
-                                    className="relative h-12 w-16 shrink-0 overflow-hidden rounded border border-border"
-                                  >
-                                    <Image
-                                      src={photoUrl}
-                                      alt={`${car.title ?? "Listing"} photo ${index + 1}`}
-                                      fill
-                                      className="object-cover"
-                                      sizes="64px"
-                                    />
-                                  </div>
-                                ),
-                              )
-                            ) : (
-                              <p className="text-[11px] text-gray-500">
-                                No photos uploaded yet.
-                              </p>
-                            )}
-                          </div>
-                          {bookings.length > 0 ? (
-                            <div className="mt-2 text-[11px] text-gray-600">
-                              Upcoming bookings:{" "}
-                              {bookings
-                                .slice(0, 2)
-                                .map(
-                                  (b: any) =>
-                                    `${b.start_date} -> ${b.end_date}`,
-                                )
-                                .join(", ")}
-                            </div>
-                          ) : null}
-                          {blocks.length > 0 ? (
-                            <div className="mt-1 text-[11px] text-gray-600">
-                              Host blocks:{" "}
-                              {blocks
-                                .slice(0, 2)
-                                .map(
-                                  (b: any) =>
-                                    `${b.start_date} -> ${b.end_date}`,
-                                )
-                                .join(", ")}
-                            </div>
-                          ) : null}
-                        </div>
-                      );
-                    })}
-                    {(cars ?? []).length === 0 ? (
-                      <p className="text-sm text-gray-600">No vehicles yet.</p>
-                    ) : null}
-                  </div>
-                </form>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle>Admin audit log</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2 text-sm">
-                  {(auditRows ?? []).map((row: any) => (
-                    <div
-                      key={row.id}
-                      className="flex items-center justify-between"
-                    >
-                      <div>
-                        <p className="font-semibold text-foreground">
-                          {row.action}
-                        </p>
-                        <p className="text-xs text-gray-600">
-                          {row.performed_by ?? "admin"}
-                        </p>
-                      </div>
-                      <span className="text-xs text-gray-500">
-                        {row.created_at
-                          ? new Date(row.created_at).toLocaleString()
-                          : "—"}
-                      </span>
-                    </div>
-                  ))}
-                  {(auditRows ?? []).length === 0 ? (
-                    <p className="text-sm text-gray-600">
-                      No admin actions yet.
-                    </p>
-                  ) : null}
+                <div className="flex items-center justify-between rounded-xl bg-gray-50 px-3 py-2">
+                  <span className="text-gray-600">Loaded users</span>
+                  <span className="font-semibold text-foreground">
+                    {users?.length ?? 0}
+                  </span>
                 </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Platform controls</CardTitle>
-              </CardHeader>
-              <CardContent className="grid gap-3 sm:grid-cols-2">
-                {[
-                  {
-                    title: "Host approvals",
-                    note: "Implemented in Applications tab.",
-                  },
-                  {
-                    title: "Listing approvals",
-                    note: "Review pending listings and approve/reject from Platform controls.",
-                  },
-                  {
-                    title: "Refund control",
-                    note: "Process paid booking refunds and keep an audit trail.",
-                  },
-                  {
-                    title: "Review moderation",
-                    note: "Hide/unhide reviews with moderation reasons.",
-                  },
-                  {
-                    title: "Disputes",
-                    note: "Track open, under review, resolved, and closed disputes.",
-                  },
-                ].map((item) => (
-                  <div
-                    key={item.title}
-                    className="rounded-lg border border-border bg-gray-50 p-3"
-                  >
-                    <p className="text-sm font-semibold text-foreground">
-                      {item.title}
-                    </p>
-                    <p className="text-xs text-gray-700">{item.note}</p>
-                  </div>
-                ))}
-                <div className="sm:col-span-2">
-                  <Link
-                    href="/admin/platform"
-                    className="inline-flex rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white"
-                  >
-                    Open platform controls
-                  </Link>
+                <div className="flex items-center justify-between rounded-xl bg-gray-50 px-3 py-2">
+                  <span className="text-gray-600">Vehicle photo sets</span>
+                  <span className="font-semibold text-foreground">
+                    {photosByCar.size}
+                  </span>
                 </div>
               </CardContent>
             </Card>
           </div>
-        }
-        applications={
-          <Card className="mt-0">
-            <CardHeader>
-              <CardTitle>Host applications</CardTitle>
-            </CardHeader>
-            <CardContent className="px-3 sm:px-6">
-              <div className="mb-4 grid gap-2 sm:flex sm:flex-wrap sm:items-center">
-                {["pending", "approved", "rejected"].map((status) => (
-                  <AdminLoadingLink
-                    key={status}
-                    indicator="inline"
-                    pendingLabel="Loading..."
-                    className={`inline-flex min-h-9 items-center justify-center rounded-xl border px-3 py-1 text-xs font-semibold sm:rounded-full ${
-                      statusFilter === status
-                        ? "border-brand bg-brand text-white"
-                        : "border-border text-gray-700"
-                    }`}
-                    href={buildAdminHref({
-                      tab: "applications",
-                      status,
-                      q: query || undefined,
-                    })}
-                  >
-                    {status}
-                  </AdminLoadingLink>
-                ))}
-                <form
-                  className="grid gap-2 sm:ml-auto sm:flex sm:flex-none"
-                  action="/admin"
-                  method="get"
-                >
-                  <input type="hidden" name="tab" value="applications" />
-                  <input type="hidden" name="status" value={statusFilter} />
-                  <input
-                    name="q"
-                    defaultValue={query}
-                    placeholder="Search name or phone"
-                    className="min-h-9 min-w-0 rounded-md border border-border px-3 py-2 text-sm text-gray-800 placeholder:text-gray-500 sm:w-64 sm:py-1 sm:text-xs"
+
+          <div className="grid gap-4 xl:grid-cols-2">
+            <Card className="border-border/80 shadow-sm">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <BarChart3
+                    className="h-5 w-5 text-brand"
+                    aria-hidden="true"
                   />
-                  <button
-                    type="submit"
-                    className="min-h-9 rounded-md border border-border px-3 py-1 text-sm font-semibold text-gray-700 hover:bg-gray-50 sm:text-xs"
-                  >
-                    Search
-                  </button>
-                </form>
-              </div>
+                  Platform mix
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <AdminMetricBar
+                  label="Users"
+                  value={usersCount ?? 0}
+                  max={Math.max(
+                    usersCount ?? 0,
+                    carsCount ?? 0,
+                    bookingsCount ?? 0,
+                    1,
+                  )}
+                />
+                <AdminMetricBar
+                  label="Vehicles"
+                  value={carsCount ?? 0}
+                  max={Math.max(
+                    usersCount ?? 0,
+                    carsCount ?? 0,
+                    bookingsCount ?? 0,
+                    1,
+                  )}
+                />
+                <AdminMetricBar
+                  label="Bookings"
+                  value={bookingsCount ?? 0}
+                  max={Math.max(
+                    usersCount ?? 0,
+                    carsCount ?? 0,
+                    bookingsCount ?? 0,
+                    1,
+                  )}
+                />
+                <AdminMetricBar
+                  label="Pending approvals"
+                  value={pendingCount ?? 0}
+                  max={Math.max(
+                    usersCount ?? 0,
+                    carsCount ?? 0,
+                    bookingsCount ?? 0,
+                    1,
+                  )}
+                />
+              </CardContent>
+            </Card>
 
-              <div className="grid gap-3 sm:gap-4 xl:grid-cols-2">
-                {applications?.map((app: any) => {
-                  const profileHref = app.user_id
-                    ? `/admin/users/${app.user_id}#host-application`
-                    : null;
-                  const submittedLabel = app.submitted_at
-                    ? new Date(app.submitted_at).toLocaleDateString()
-                    : app.created_at
-                      ? new Date(app.created_at).toLocaleDateString()
-                      : "—";
-                  const reviewedLabel = app.reviewed_at
-                    ? new Date(app.reviewed_at).toLocaleDateString()
-                    : "Not reviewed yet";
-                  const statusClassName =
-                    app.status === "approved"
-                      ? "bg-brand/10 text-brandHover"
-                      : app.status === "rejected"
-                        ? "bg-red-100 text-red-700"
-                        : "bg-amber-100 text-amber-700";
+            <Card className="border-border/80 shadow-sm">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Gauge className="h-5 w-5 text-brand" aria-hidden="true" />
+                  Quick access
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="grid gap-3 sm:grid-cols-2">
+                <OverviewShortcut
+                  href={buildAdminHref({
+                    tab: "applications",
+                    status: "pending",
+                  })}
+                  icon={ClipboardCheck}
+                  title="Applications"
+                  value={pendingCount ?? 0}
+                />
+                <OverviewShortcut
+                  href={buildAdminHref({ tab: "hosts" })}
+                  icon={ShieldCheck}
+                  title="Approved hosts"
+                  value={hosts.length}
+                />
+                <OverviewShortcut
+                  href={buildAdminHref({ tab: "users" })}
+                  icon={Users}
+                  title="Users"
+                  value={usersCount ?? 0}
+                />
+                <OverviewShortcut
+                  href={buildAdminHref({ tab: "vehicles" })}
+                  icon={Car}
+                  title="Vehicles"
+                  value={carsCount ?? 0}
+                />
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      ) : null}
 
-                  return (
-                    <article
-                      key={app.id}
-                      className="rounded-2xl border border-border bg-white p-3 shadow-sm sm:p-5"
+      {initialTab === "hosts" ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Approved hosts</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {(hosts ?? []).map((host: any) => (
+                <div
+                  key={host.user_id ?? host.id}
+                  className="flex items-center justify-between gap-3 text-sm"
+                >
+                  <div className="flex items-center gap-3">
+                    <ProfileAvatar
+                      src={host.profiles?.avatar_url}
+                      name={
+                        host.profiles?.full_name ?? host.full_name ?? "Host"
+                      }
+                      className="h-10 w-10"
+                    />
+                    <div>
+                      <p className="font-semibold text-foreground">
+                        {host.profiles?.full_name ?? host.full_name ?? "Host"}
+                      </p>
+                      <p className="text-xs text-gray-600">
+                        {host.profiles?.phone ?? host.phone ?? "No phone"}
+                      </p>
+                      <p className="text-[11px] text-gray-500">
+                        Vehicles:{" "}
+                        {carsByOwner.get(host.user_id ?? host.id) ?? 0}
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-xs text-gray-500">
+                    {host.profiles?.city ?? host.city ?? "-"}
+                  </span>
+                </div>
+              ))}
+              {(hosts ?? []).length === 0 ? (
+                <p className="text-sm text-gray-600">No approved hosts yet.</p>
+              ) : null}
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {initialTab === "users" ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Users</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-xs text-gray-600">
+              Showing profile photos for the latest {users?.length ?? 0} users.
+            </p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {(users ?? []).map((user: any) => (
+                <div
+                  key={user.id}
+                  className="flex items-center justify-between gap-3 rounded-lg border border-border p-3 transition-colors hover:bg-gray-50"
+                >
+                  <div className="flex min-w-0 items-center gap-3">
+                    <ProfileAvatar
+                      src={user.avatar_url}
+                      name={user.full_name ?? "User"}
+                      className="h-10 w-10"
+                    />
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-foreground">
+                        {user.full_name ?? "User"}
+                      </p>
+                      <p className="truncate text-xs text-gray-600">
+                        {user.phone ?? "No phone"}
+                      </p>
+                      <p className="truncate text-[11px] text-gray-500">
+                        {user.city ?? "-"}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="shrink-0 rounded-full bg-gray-100 px-2 py-1 text-[11px] font-semibold text-gray-700">
+                      {user.is_host ? "Host" : "Guest"}
+                    </span>
+                    <Link
+                      href={`/admin/messages?user=${user.id}`}
+                      className="text-[11px] font-semibold text-brand"
                     >
-                      <div className="flex flex-col gap-4 sm:gap-5">
-                        <div className="grid gap-3 sm:flex sm:flex-wrap sm:items-start sm:justify-between">
+                      Message
+                    </Link>
+                    <Link
+                      href={`/admin/users/${user.id}`}
+                      className="text-[11px] font-semibold text-brand"
+                    >
+                      View
+                    </Link>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {(users ?? []).length === 0 ? (
+              <p className="text-sm text-gray-600">No users found.</p>
+            ) : null}
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {initialTab === "vehicles" ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Vehicles & availability</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form action={bulkDeleteListingsAction} className="space-y-3">
+              {(cars ?? []).length > 0 ? (
+                <div className="flex flex-col gap-2 rounded-lg border border-border bg-gray-50 p-3 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-xs text-gray-700">
+                    Select listings and delete them in one action.
+                  </p>
+                  <PendingSubmitButton
+                    className="rounded-md border border-red-200 px-3 py-1 text-xs font-semibold text-red-700 hover:bg-red-50"
+                    pendingLabel="Deleting..."
+                  >
+                    Delete selected
+                  </PendingSubmitButton>
+                </div>
+              ) : null}
+              <div className="space-y-3">
+                {(cars ?? []).map((car: any) => {
+                  const bookings = bookingsByCar.get(car.id) ?? [];
+                  const blocks = (blocksByCar.get(car.id) ?? []).filter(
+                    (b: any) => b.available === false,
+                  );
+                  const listingPhotos = photosByCar.get(car.id) ?? [];
+                  const previewImage = resolveCarImage(listingPhotos[0], {
+                    id: car.id,
+                    title: car.title,
+                    city: car.city,
+                    region: car.region,
+                    carType: car.car_type,
+                  });
+                  return (
+                    <div
+                      key={car.id}
+                      className="rounded-lg border border-border p-3"
+                    >
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="flex min-w-0 items-start gap-3">
+                          <label className="mt-1 flex items-center gap-2 text-xs font-semibold text-gray-700">
+                            <input
+                              type="checkbox"
+                              name="carIds"
+                              value={car.id}
+                              className="h-4 w-4 rounded border-border"
+                            />
+                            Select
+                          </label>
+                          <div className="relative h-16 w-24 shrink-0 overflow-hidden rounded-md border border-border">
+                            <Image
+                              src={previewImage}
+                              alt={car.title ?? "Listing photo"}
+                              fill
+                              className="object-cover"
+                              sizes="96px"
+                            />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-semibold text-foreground">
+                              {car.title}
+                            </p>
+                            <div className="mt-1 flex items-center gap-2 text-[11px] text-gray-500">
+                              <ProfileAvatar
+                                src={car.owner?.avatar_url}
+                                name={car.owner?.full_name ?? "Host"}
+                                className="h-6 w-6"
+                              />
+                              <span className="truncate">
+                                Host: {car.owner?.full_name ?? "Host"}{" "}
+                                {car.owner?.phone ? `| ${car.owner.phone}` : ""}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-gray-500">
+                            {car.city ?? "-"}
+                          </span>
+                          <Link
+                            href={`/admin/cars/${car.id}/preview`}
+                            className="rounded-md border border-border px-2 py-1 text-[11px] font-semibold text-gray-700 hover:bg-gray-50"
+                          >
+                            Preview
+                          </Link>
+                          <Link
+                            href={`/admin/cars/${car.id}/edit`}
+                            className="rounded-md border border-border px-2 py-1 text-[11px] font-semibold text-gray-700 hover:bg-gray-50"
+                          >
+                            Edit
+                          </Link>
+                          <PendingSubmitButton
+                            formAction={deleteListingAction}
+                            name="carId"
+                            value={car.id}
+                            className="rounded-md border border-red-200 px-2 py-1 text-[11px] font-semibold text-red-700 hover:bg-red-50"
+                            pendingLabel="Deleting..."
+                          >
+                            Delete
+                          </PendingSubmitButton>
+                        </div>
+                      </div>
+                      <div className="mt-2 text-xs text-gray-600">
+                        Bookings: {bookings.length} | Host blocks:{" "}
+                        {blocks.length}
+                      </div>
+                      <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
+                        {listingPhotos.length > 0 ? (
+                          listingPhotos.map(
+                            (photoUrl: string, index: number) => (
+                              <div
+                                key={`${car.id}-photo-${index}`}
+                                className="relative h-12 w-16 shrink-0 overflow-hidden rounded border border-border"
+                              >
+                                <Image
+                                  src={photoUrl}
+                                  alt={`${car.title ?? "Listing"} photo ${index + 1}`}
+                                  fill
+                                  className="object-cover"
+                                  sizes="64px"
+                                />
+                              </div>
+                            ),
+                          )
+                        ) : (
+                          <p className="text-[11px] text-gray-500">
+                            No photos uploaded yet.
+                          </p>
+                        )}
+                      </div>
+                      {bookings.length > 0 ? (
+                        <div className="mt-2 text-[11px] text-gray-600">
+                          Upcoming bookings:{" "}
+                          {bookings
+                            .slice(0, 2)
+                            .map((b: any) => `${b.start_date} -> ${b.end_date}`)
+                            .join(", ")}
+                        </div>
+                      ) : null}
+                      {blocks.length > 0 ? (
+                        <div className="mt-1 text-[11px] text-gray-600">
+                          Host blocks:{" "}
+                          {blocks
+                            .slice(0, 2)
+                            .map((b: any) => `${b.start_date} -> ${b.end_date}`)
+                            .join(", ")}
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })}
+                {(cars ?? []).length === 0 ? (
+                  <p className="text-sm text-gray-600">No vehicles yet.</p>
+                ) : null}
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {initialTab === "audit" ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Admin audit log</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2 text-sm">
+              {(auditRows ?? []).map((row: any) => (
+                <div key={row.id} className="flex items-center justify-between">
+                  <div>
+                    <p className="font-semibold text-foreground">
+                      {row.action}
+                    </p>
+                    <p className="text-xs text-gray-600">
+                      {row.performed_by ?? "admin"}
+                    </p>
+                  </div>
+                  <span className="text-xs text-gray-500">
+                    {row.created_at
+                      ? new Date(row.created_at).toLocaleString()
+                      : "—"}
+                  </span>
+                </div>
+              ))}
+              {(auditRows ?? []).length === 0 ? (
+                <p className="text-sm text-gray-600">No admin actions yet.</p>
+              ) : null}
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {initialTab === "applications" ? (
+        <Card className="mt-0">
+          <CardHeader>
+            <CardTitle>Host applications</CardTitle>
+          </CardHeader>
+          <CardContent className="px-3 sm:px-6">
+            <div className="mb-4 grid gap-2 sm:flex sm:flex-wrap sm:items-center">
+              {["pending", "approved", "rejected"].map((status) => (
+                <AdminLoadingLink
+                  key={status}
+                  indicator="inline"
+                  pendingLabel="Loading..."
+                  className={`inline-flex min-h-9 items-center justify-center rounded-xl border px-3 py-1 text-xs font-semibold sm:rounded-full ${
+                    statusFilter === status
+                      ? "border-brand bg-brand text-white"
+                      : "border-border text-gray-700"
+                  }`}
+                  href={buildAdminHref({
+                    tab: "applications",
+                    status,
+                    q: query || undefined,
+                  })}
+                >
+                  {status}
+                </AdminLoadingLink>
+              ))}
+              <form
+                className="grid gap-2 sm:ml-auto sm:flex sm:flex-none"
+                action="/admin"
+                method="get"
+              >
+                <input type="hidden" name="tab" value="applications" />
+                <input type="hidden" name="status" value={statusFilter} />
+                <input
+                  name="q"
+                  defaultValue={query}
+                  placeholder="Search name or phone"
+                  className="min-h-9 min-w-0 rounded-md border border-border px-3 py-2 text-sm text-gray-800 placeholder:text-gray-500 sm:w-64 sm:py-1 sm:text-xs"
+                />
+                <button
+                  type="submit"
+                  className="min-h-9 rounded-md border border-border px-3 py-1 text-sm font-semibold text-gray-700 hover:bg-gray-50 sm:text-xs"
+                >
+                  Search
+                </button>
+              </form>
+            </div>
+
+            <div className="grid gap-3 sm:gap-4 xl:grid-cols-2">
+              {applications?.map((app: any) => {
+                const profileHref = app.user_id
+                  ? `/admin/users/${app.user_id}#host-application`
+                  : null;
+                const submittedLabel = app.submitted_at
+                  ? new Date(app.submitted_at).toLocaleDateString()
+                  : app.created_at
+                    ? new Date(app.created_at).toLocaleDateString()
+                    : "—";
+                const reviewedLabel = app.reviewed_at
+                  ? new Date(app.reviewed_at).toLocaleDateString()
+                  : "Not reviewed yet";
+                const statusClassName =
+                  app.status === "approved"
+                    ? "bg-brand/10 text-brandHover"
+                    : app.status === "rejected"
+                      ? "bg-red-100 text-red-700"
+                      : "bg-amber-100 text-amber-700";
+
+                return (
+                  <article
+                    key={app.id}
+                    className="rounded-2xl border border-border bg-white p-3 shadow-sm sm:p-5"
+                  >
+                    <div className="flex flex-col gap-4 sm:gap-5">
+                      <div className="grid gap-3 sm:flex sm:flex-wrap sm:items-start sm:justify-between">
+                        {profileHref ? (
+                          <AdminLoadingLink
+                            href={profileHref}
+                            indicator="overlay"
+                            pendingLabel="Opening profile..."
+                            className="flex min-w-0 items-start gap-3 rounded-xl border border-transparent p-1 hover:border-border hover:bg-gray-50 sm:flex-1"
+                          >
+                            <ProfileAvatar
+                              src={app.profiles?.avatar_url}
+                              name={
+                                app.profiles?.full_name ??
+                                app.full_name ??
+                                "User"
+                              }
+                              className="h-10 w-10 sm:h-12 sm:w-12"
+                            />
+                            <div className="min-w-0">
+                              <p className="truncate text-base font-semibold text-foreground">
+                                {app.full_name ?? "User"}
+                              </p>
+                              <p className="truncate text-sm text-gray-600">
+                                {app.profiles?.full_name ?? "Profile record"}
+                              </p>
+                              <p className="mt-1 break-words text-xs text-gray-500">
+                                {app.phone ?? app.profiles?.phone ?? "No phone"}
+                                <span className="mx-1">·</span>
+                                {app.city ?? app.profiles?.city ?? "No city"}
+                              </p>
+                            </div>
+                          </AdminLoadingLink>
+                        ) : (
+                          <div className="flex min-w-0 items-start gap-3 sm:flex-1">
+                            <ProfileAvatar
+                              src={app.profiles?.avatar_url}
+                              name={
+                                app.profiles?.full_name ??
+                                app.full_name ??
+                                "User"
+                              }
+                              className="h-10 w-10 sm:h-12 sm:w-12"
+                            />
+                            <div className="min-w-0">
+                              <p className="truncate text-base font-semibold text-foreground">
+                                {app.full_name ?? "User"}
+                              </p>
+                              <p className="truncate text-sm text-gray-600">
+                                {app.profiles?.full_name ?? "Profile record"}
+                              </p>
+                              <p className="mt-1 text-xs text-gray-500">
+                                {app.phone ?? app.profiles?.phone ?? "No phone"}
+                              </p>
+                            </div>
+                          </div>
+                        )}
+                        <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                          <span
+                            className={`rounded-full px-3 py-1 text-xs font-semibold capitalize ${statusClassName}`}
+                          >
+                            {app.status}
+                          </span>
+                          <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-600">
+                            Submitted {submittedLabel}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="grid gap-2 sm:grid-cols-2 sm:gap-3">
+                        <div className="rounded-xl border border-border bg-gray-50 p-3">
+                          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-500">
+                            Location
+                          </p>
+                          <p className="mt-2 break-words text-sm text-gray-800">
+                            {app.city ?? app.profiles?.city ?? "—"}
+                            {app.region ? `, ${app.region}` : ""}
+                          </p>
+                        </div>
+                        <div className="rounded-xl border border-border bg-gray-50 p-3">
+                          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-500">
+                            Contact
+                          </p>
+                          <p className="mt-2 break-words text-sm text-gray-800">
+                            {app.phone ?? app.profiles?.phone ?? "—"}
+                          </p>
+                        </div>
+                        <div className="rounded-xl border border-border bg-gray-50 p-3">
+                          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-500">
+                            ID details
+                          </p>
+                          <p className="mt-2 break-words text-sm text-gray-800">
+                            {app.id_type ?? "—"}{" "}
+                            {app.id_number ? `• ${app.id_number}` : ""}
+                          </p>
+                        </div>
+                        <div className="rounded-xl border border-border bg-gray-50 p-3">
+                          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-500">
+                            Fleet size
+                          </p>
+                          <p className="mt-2 text-sm text-gray-800">
+                            {typeof app.fleet_size === "number"
+                              ? app.fleet_size
+                              : "—"}
+                          </p>
+                        </div>
+                        <div className="rounded-xl border border-border bg-gray-50 p-3 sm:col-span-2">
+                          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-500">
+                            Experience
+                          </p>
+                          <p className="mt-2 whitespace-pre-line break-words text-sm text-gray-800">
+                            {app.experience ?? "—"}
+                          </p>
+                        </div>
+                        <div className="rounded-xl border border-border bg-gray-50 p-3 sm:col-span-2">
+                          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-500">
+                            Notes
+                          </p>
+                          <p className="mt-2 whitespace-pre-line break-words text-sm text-gray-800">
+                            {app.note ?? "—"}
+                          </p>
+                        </div>
+                        <div className="rounded-xl border border-border bg-gray-50 p-3">
+                          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-500">
+                            Reviewed by
+                          </p>
+                          <p className="mt-2 text-sm text-gray-800">
+                            {app.reviewed_by ?? "—"}
+                          </p>
+                        </div>
+                        <div className="rounded-xl border border-border bg-gray-50 p-3">
+                          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-500">
+                            Reviewed at
+                          </p>
+                          <p className="mt-2 text-sm text-gray-800">
+                            {reviewedLabel}
+                          </p>
+                        </div>
+                        <div className="rounded-xl border border-border bg-gray-50 p-3 sm:col-span-2">
+                          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-500">
+                            Rejection reason
+                          </p>
+                          <p className="mt-2 whitespace-pre-line break-words text-sm text-gray-800">
+                            {app.rejection_reason ?? "—"}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="grid gap-2 sm:grid-cols-2 sm:gap-3">
+                        <div className="rounded-xl border border-border p-3">
+                          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-500">
+                            ID front
+                          </p>
+                          <div className="mt-2">
+                            <a
+                              className="inline-flex min-h-10 w-full items-center justify-center rounded-md border border-border px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 sm:w-auto"
+                              href={`/api/host-applications/${app.id}/files?type=front`}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              Open ID front
+                            </a>
+                          </div>
+                        </div>
+                        <div className="rounded-xl border border-border p-3">
+                          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-500">
+                            ID back
+                          </p>
+                          <div className="mt-2">
+                            <a
+                              className="inline-flex min-h-10 w-full items-center justify-center rounded-md border border-border px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 sm:w-auto"
+                              href={`/api/host-applications/${app.id}/files?type=back`}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              Open ID back
+                            </a>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="border-t border-border pt-4">
+                        <div className="flex flex-wrap items-center gap-2">
                           {profileHref ? (
                             <AdminLoadingLink
                               href={profileHref}
-                              indicator="overlay"
-                              pendingLabel="Opening profile..."
-                              className="flex min-w-0 items-start gap-3 rounded-xl border border-transparent p-1 hover:border-border hover:bg-gray-50 sm:flex-1"
+                              indicator="inline"
+                              pendingLabel="Opening..."
+                              className="inline-flex min-h-10 w-full items-center justify-center rounded-md border border-border px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 sm:w-auto"
                             >
-                              <ProfileAvatar
-                                src={app.profiles?.avatar_url}
-                                name={
-                                  app.profiles?.full_name ??
-                                  app.full_name ??
-                                  "User"
-                                }
-                                className="h-10 w-10 sm:h-12 sm:w-12"
-                              />
-                              <div className="min-w-0">
-                                <p className="truncate text-base font-semibold text-foreground">
-                                  {app.full_name ?? "User"}
-                                </p>
-                                <p className="truncate text-sm text-gray-600">
-                                  {app.profiles?.full_name ?? "Profile record"}
-                                </p>
-                                <p className="mt-1 break-words text-xs text-gray-500">
-                                  {app.phone ?? app.profiles?.phone ?? "No phone"}
-                                  <span className="mx-1">·</span>
-                                  {app.city ?? app.profiles?.city ?? "No city"}
-                                </p>
-                              </div>
+                              Open profile
                             </AdminLoadingLink>
-                          ) : (
-                            <div className="flex min-w-0 items-start gap-3 sm:flex-1">
-                              <ProfileAvatar
-                                src={app.profiles?.avatar_url}
-                                name={
-                                  app.profiles?.full_name ??
-                                  app.full_name ??
-                                  "User"
-                                }
-                                className="h-10 w-10 sm:h-12 sm:w-12"
-                              />
-                              <div className="min-w-0">
-                                <p className="truncate text-base font-semibold text-foreground">
-                                  {app.full_name ?? "User"}
-                                </p>
-                                <p className="truncate text-sm text-gray-600">
-                                  {app.profiles?.full_name ?? "Profile record"}
-                                </p>
-                                <p className="mt-1 text-xs text-gray-500">
-                                  {app.phone ?? app.profiles?.phone ?? "No phone"}
-                                </p>
-                              </div>
-                            </div>
-                          )}
-                          <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-                            <span
-                              className={`rounded-full px-3 py-1 text-xs font-semibold capitalize ${statusClassName}`}
-                            >
-                              {app.status}
+                          ) : null}
+                          {app.status !== "pending" ? (
+                            <span className="text-xs text-gray-500">
+                              This host application is already {app.status}.
                             </span>
-                            <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-600">
-                              Submitted {submittedLabel}
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="grid gap-2 sm:grid-cols-2 sm:gap-3">
-                          <div className="rounded-xl border border-border bg-gray-50 p-3">
-                            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-500">
-                              Location
-                            </p>
-                            <p className="mt-2 break-words text-sm text-gray-800">
-                              {app.city ?? app.profiles?.city ?? "—"}
-                              {app.region ? `, ${app.region}` : ""}
-                            </p>
-                          </div>
-                          <div className="rounded-xl border border-border bg-gray-50 p-3">
-                            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-500">
-                              Contact
-                            </p>
-                            <p className="mt-2 break-words text-sm text-gray-800">
-                              {app.phone ?? app.profiles?.phone ?? "—"}
-                            </p>
-                          </div>
-                          <div className="rounded-xl border border-border bg-gray-50 p-3">
-                            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-500">
-                              ID details
-                            </p>
-                            <p className="mt-2 break-words text-sm text-gray-800">
-                              {app.id_type ?? "—"}{" "}
-                              {app.id_number ? `• ${app.id_number}` : ""}
-                            </p>
-                          </div>
-                          <div className="rounded-xl border border-border bg-gray-50 p-3">
-                            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-500">
-                              Fleet size
-                            </p>
-                            <p className="mt-2 text-sm text-gray-800">
-                              {typeof app.fleet_size === "number"
-                                ? app.fleet_size
-                                : "—"}
-                            </p>
-                          </div>
-                          <div className="rounded-xl border border-border bg-gray-50 p-3 sm:col-span-2">
-                            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-500">
-                              Experience
-                            </p>
-                            <p className="mt-2 whitespace-pre-line break-words text-sm text-gray-800">
-                              {app.experience ?? "—"}
-                            </p>
-                          </div>
-                          <div className="rounded-xl border border-border bg-gray-50 p-3 sm:col-span-2">
-                            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-500">
-                              Notes
-                            </p>
-                            <p className="mt-2 whitespace-pre-line break-words text-sm text-gray-800">
-                              {app.note ?? "—"}
-                            </p>
-                          </div>
-                          <div className="rounded-xl border border-border bg-gray-50 p-3">
-                            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-500">
-                              Reviewed by
-                            </p>
-                            <p className="mt-2 text-sm text-gray-800">
-                              {app.reviewed_by ?? "—"}
-                            </p>
-                          </div>
-                          <div className="rounded-xl border border-border bg-gray-50 p-3">
-                            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-500">
-                              Reviewed at
-                            </p>
-                            <p className="mt-2 text-sm text-gray-800">
-                              {reviewedLabel}
-                            </p>
-                          </div>
-                          <div className="rounded-xl border border-border bg-gray-50 p-3 sm:col-span-2">
-                            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-500">
-                              Rejection reason
-                            </p>
-                            <p className="mt-2 whitespace-pre-line break-words text-sm text-gray-800">
-                              {app.rejection_reason ?? "—"}
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="grid gap-2 sm:grid-cols-2 sm:gap-3">
-                          <div className="rounded-xl border border-border p-3">
-                            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-500">
-                              ID front
-                            </p>
-                            <div className="mt-2">
-                              <a
-                                className="inline-flex min-h-10 w-full items-center justify-center rounded-md border border-border px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 sm:w-auto"
-                                href={`/api/host-applications/${app.id}/files?type=front`}
-                                target="_blank"
-                                rel="noreferrer"
-                              >
-                                Open ID front
-                              </a>
-                            </div>
-                          </div>
-                          <div className="rounded-xl border border-border p-3">
-                            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-500">
-                              ID back
-                            </p>
-                            <div className="mt-2">
-                              <a
-                                className="inline-flex min-h-10 w-full items-center justify-center rounded-md border border-border px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 sm:w-auto"
-                                href={`/api/host-applications/${app.id}/files?type=back`}
-                                target="_blank"
-                                rel="noreferrer"
-                              >
-                                Open ID back
-                              </a>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="border-t border-border pt-4">
-                          <div className="flex flex-wrap items-center gap-2">
-                            {profileHref ? (
-                              <AdminLoadingLink
-                                href={profileHref}
-                                indicator="inline"
-                                pendingLabel="Opening..."
-                                className="inline-flex min-h-10 w-full items-center justify-center rounded-md border border-border px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 sm:w-auto"
-                              >
-                                Open profile
-                              </AdminLoadingLink>
-                            ) : null}
-                            {app.status !== "pending" ? (
-                              <span className="text-xs text-gray-500">
-                                This host application is already {app.status}.
-                              </span>
-                            ) : null}
-                          </div>
-
-                          {app.status === "pending" ? (
-                            <div className="mt-4 space-y-3">
-                              <form
-                                action={reviewAction}
-                                className="grid gap-2 sm:flex sm:flex-wrap sm:items-center"
-                              >
-                                <input
-                                  type="hidden"
-                                  name="applicationId"
-                                  value={app.id}
-                                />
-                                <input
-                                  type="hidden"
-                                  name="tab"
-                                  value="applications"
-                                />
-                                <input
-                                  type="hidden"
-                                  name="status"
-                                  value={statusFilter}
-                                />
-                                <input type="hidden" name="q" value={query} />
-                                <input
-                                  type="hidden"
-                                  name="action"
-                                  value="approve"
-                                />
-                                <PendingSubmitButton
-                                  pendingLabel="Approving host..."
-                                  className="min-h-10 rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white"
-                                >
-                                  Approve host
-                                </PendingSubmitButton>
-                              </form>
-
-                              <form
-                                action={reviewAction}
-                                className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]"
-                              >
-                                <input
-                                  type="hidden"
-                                  name="applicationId"
-                                  value={app.id}
-                                />
-                                <input
-                                  type="hidden"
-                                  name="tab"
-                                  value="applications"
-                                />
-                                <input
-                                  type="hidden"
-                                  name="status"
-                                  value={statusFilter}
-                                />
-                                <input type="hidden" name="q" value={query} />
-                                <input
-                                  type="hidden"
-                                  name="action"
-                                  value="reject"
-                                />
-                                <Input
-                                  name="rejectionReason"
-                                  placeholder="Reason for rejection"
-                                />
-                                <PendingSubmitButton
-                                  pendingLabel="Rejecting host..."
-                                  className="min-h-10 rounded-md bg-red-600 px-4 py-2 text-sm font-semibold text-white"
-                                >
-                                  Reject host
-                                </PendingSubmitButton>
-                              </form>
-                            </div>
                           ) : null}
                         </div>
+
+                        {app.status === "pending" ? (
+                          <div className="mt-4 space-y-3">
+                            <form
+                              action={reviewAction}
+                              className="grid gap-2 sm:flex sm:flex-wrap sm:items-center"
+                            >
+                              <input
+                                type="hidden"
+                                name="applicationId"
+                                value={app.id}
+                              />
+                              <input
+                                type="hidden"
+                                name="tab"
+                                value="applications"
+                              />
+                              <input
+                                type="hidden"
+                                name="status"
+                                value={statusFilter}
+                              />
+                              <input type="hidden" name="q" value={query} />
+                              <input
+                                type="hidden"
+                                name="action"
+                                value="approve"
+                              />
+                              <PendingSubmitButton
+                                pendingLabel="Approving host..."
+                                className="min-h-10 rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white"
+                              >
+                                Approve host
+                              </PendingSubmitButton>
+                            </form>
+
+                            <form
+                              action={reviewAction}
+                              className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]"
+                            >
+                              <input
+                                type="hidden"
+                                name="applicationId"
+                                value={app.id}
+                              />
+                              <input
+                                type="hidden"
+                                name="tab"
+                                value="applications"
+                              />
+                              <input
+                                type="hidden"
+                                name="status"
+                                value={statusFilter}
+                              />
+                              <input type="hidden" name="q" value={query} />
+                              <input
+                                type="hidden"
+                                name="action"
+                                value="reject"
+                              />
+                              <Input
+                                name="rejectionReason"
+                                placeholder="Reason for rejection"
+                              />
+                              <PendingSubmitButton
+                                pendingLabel="Rejecting host..."
+                                className="min-h-10 rounded-md bg-red-600 px-4 py-2 text-sm font-semibold text-white"
+                              >
+                                Reject host
+                              </PendingSubmitButton>
+                            </form>
+                          </div>
+                        ) : null}
                       </div>
-                    </article>
-                  );
-                })}
-                {applications?.length === 0 ? (
-                  <p className="rounded-xl border border-border bg-white p-4 text-center text-sm text-gray-600 xl:col-span-2">
-                    No host applications yet.
-                  </p>
-                ) : null}
-              </div>
+                    </div>
+                  </article>
+                );
+              })}
+              {applications?.length === 0 ? (
+                <p className="rounded-xl border border-border bg-white p-4 text-center text-sm text-gray-600 xl:col-span-2">
+                  No host applications yet.
+                </p>
+              ) : null}
+            </div>
 
-              <div className="hidden">
-
+            <div className="hidden">
               <div className="space-y-3 md:hidden">
                 {applications?.map((app: any) => (
                   <div
@@ -1739,174 +1862,182 @@ export default async function AdminPage({
                     <TableBody>
                       {applications?.map((app: any) => (
                         <TableRow key={app.id}>
-                        <TableCell>
-                          <div className="flex min-w-0 items-center gap-3">
-                            <ProfileAvatar
-                              src={app.profiles?.avatar_url}
-                              name={
-                                app.profiles?.full_name ??
-                                app.full_name ??
-                                "User"
-                              }
-                              className="h-10 w-10"
-                            />
-                            <div className="min-w-0">
-                              <div className="truncate font-semibold">
-                                {app.full_name}
-                              </div>
-                              <div className="truncate text-xs text-gray-600">
-                                {app.profiles?.full_name ?? "User"}
+                          <TableCell>
+                            <div className="flex min-w-0 items-center gap-3">
+                              <ProfileAvatar
+                                src={app.profiles?.avatar_url}
+                                name={
+                                  app.profiles?.full_name ??
+                                  app.full_name ??
+                                  "User"
+                                }
+                                className="h-10 w-10"
+                              />
+                              <div className="min-w-0">
+                                <div className="truncate font-semibold">
+                                  {app.full_name}
+                                </div>
+                                <div className="truncate text-xs text-gray-600">
+                                  {app.profiles?.full_name ?? "User"}
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        </TableCell>
-                        <TableCell>{app.region ?? "—"}</TableCell>
-                        <TableCell>
-                          {app.city ?? app.profiles?.city ?? "—"}
-                        </TableCell>
-                        <TableCell>
-                          {app.phone ?? app.profiles?.phone ?? "—"}
-                        </TableCell>
-                        <TableCell>
-                          {typeof app.fleet_size === "number"
-                            ? app.fleet_size
-                            : "—"}
-                        </TableCell>
-                        <TableCell className="max-w-[16rem] text-xs text-gray-600">
-                          {app.experience ?? "—"}
-                        </TableCell>
-                        <TableCell className="whitespace-nowrap text-xs text-gray-600">
-                          {app.id_type ?? "—"} {app.id_number ?? ""}
-                          <div className="mt-1 flex gap-2">
-                            <a
-                              className="text-brand"
-                              href={`/api/host-applications/${app.id}/files?type=front`}
-                            >
-                              Front
-                            </a>
-                            <a
-                              className="text-brand"
-                              href={`/api/host-applications/${app.id}/files?type=back`}
-                            >
-                              Back
-                            </a>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-sm font-semibold">
-                          {app.status}
-                        </TableCell>
-                        <TableCell className="whitespace-nowrap text-xs text-gray-600">
-                          {app.submitted_at
-                            ? new Date(app.submitted_at).toLocaleDateString()
-                            : app.created_at
-                              ? new Date(app.created_at).toLocaleDateString()
+                          </TableCell>
+                          <TableCell>{app.region ?? "—"}</TableCell>
+                          <TableCell>
+                            {app.city ?? app.profiles?.city ?? "—"}
+                          </TableCell>
+                          <TableCell>
+                            {app.phone ?? app.profiles?.phone ?? "—"}
+                          </TableCell>
+                          <TableCell>
+                            {typeof app.fleet_size === "number"
+                              ? app.fleet_size
                               : "—"}
-                        </TableCell>
-                        <TableCell className="max-w-[18rem] text-xs text-gray-600">
-                          {app.note ?? "—"}
-                          <div className="text-[11px] text-gray-500">
-                            Reviewed by: {app.reviewed_by ?? "—"}
-                          </div>
-                          <div className="text-[11px] text-gray-500">
-                            Reject reason: {app.rejection_reason ?? "—"}
-                          </div>
-                          <div className="text-[11px] text-gray-500">
-                            Reviewed at:{" "}
-                            {app.reviewed_at
-                              ? new Date(app.reviewed_at).toLocaleDateString()
-                              : "—"}
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            {app.user_id ? (
-                              <Link
-                                href={`/admin/users/${app.user_id}#host-application`}
-                                className="rounded-md border border-border px-3 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+                          </TableCell>
+                          <TableCell className="max-w-[16rem] text-xs text-gray-600">
+                            {app.experience ?? "—"}
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap text-xs text-gray-600">
+                            {app.id_type ?? "—"} {app.id_number ?? ""}
+                            <div className="mt-1 flex gap-2">
+                              <a
+                                className="text-brand"
+                                href={`/api/host-applications/${app.id}/files?type=front`}
                               >
-                                View details
-                              </Link>
-                            ) : null}
-                            {app.status === "pending" ? (
-                              <>
-                                <form
-                                  action={reviewAction}
-                                  className="flex items-center gap-2"
+                                Front
+                              </a>
+                              <a
+                                className="text-brand"
+                                href={`/api/host-applications/${app.id}/files?type=back`}
                               >
-                                <input
-                                  type="hidden"
-                                  name="tab"
-                                  value="applications"
-                                />
-                                <input
-                                  type="hidden"
-                                  name="status"
-                                  value={statusFilter}
-                                />
-                                <input type="hidden" name="q" value={query} />
-                                <input
-                                  type="hidden"
-                                  name="applicationId"
-                                  value={app.id}
-                                />
-                                <input
-                                  type="hidden"
-                                  name="action"
-                                  value="approve"
-                                />
-                                <PendingSubmitButton
-                                  pendingLabel="Approving..."
-                                  className="rounded-md bg-brand px-3 py-1 text-xs font-semibold text-white"
+                                Back
+                              </a>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-sm font-semibold">
+                            {app.status}
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap text-xs text-gray-600">
+                            {app.submitted_at
+                              ? new Date(app.submitted_at).toLocaleDateString()
+                              : app.created_at
+                                ? new Date(app.created_at).toLocaleDateString()
+                                : "—"}
+                          </TableCell>
+                          <TableCell className="max-w-[18rem] text-xs text-gray-600">
+                            {app.note ?? "—"}
+                            <div className="text-[11px] text-gray-500">
+                              Reviewed by: {app.reviewed_by ?? "—"}
+                            </div>
+                            <div className="text-[11px] text-gray-500">
+                              Reject reason: {app.rejection_reason ?? "—"}
+                            </div>
+                            <div className="text-[11px] text-gray-500">
+                              Reviewed at:{" "}
+                              {app.reviewed_at
+                                ? new Date(app.reviewed_at).toLocaleDateString()
+                                : "—"}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              {app.user_id ? (
+                                <Link
+                                  href={`/admin/users/${app.user_id}#host-application`}
+                                  className="rounded-md border border-border px-3 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50"
                                 >
-                                  Approve
-                                </PendingSubmitButton>
-                              </form>
-                              <form
-                                action={reviewAction}
-                                className="flex items-center gap-2"
-                              >
-                                <input
-                                  type="hidden"
-                                  name="tab"
-                                  value="applications"
-                                />
-                                <input
-                                  type="hidden"
-                                  name="status"
-                                  value={statusFilter}
-                                />
-                                <input type="hidden" name="q" value={query} />
-                                <input
-                                  type="hidden"
-                                  name="applicationId"
-                                  value={app.id}
-                                />
-                                <input
-                                  type="hidden"
-                                  name="action"
-                                  value="reject"
-                                />
-                                <input
-                                  name="rejectionReason"
-                                  placeholder="Reason"
-                                  className="hidden w-28 rounded-md border border-border px-2 py-1 text-xs text-gray-700 sm:block"
-                                />
-                                <PendingSubmitButton
-                                  pendingLabel="Rejecting..."
-                                  className="rounded-md bg-red-600 px-3 py-1 text-xs font-semibold text-white"
-                                >
-                                  Reject
-                                </PendingSubmitButton>
-                              </form>
-                              </>
-                            ) : (
-                              <span className="text-xs text-gray-500">
-                                {app.status === "approved"
-                                  ? "Approved"
-                                  : "Rejected"}
-                              </span>
-                            )}
-                          </div>
+                                  View details
+                                </Link>
+                              ) : null}
+                              {app.status === "pending" ? (
+                                <>
+                                  <form
+                                    action={reviewAction}
+                                    className="flex items-center gap-2"
+                                  >
+                                    <input
+                                      type="hidden"
+                                      name="tab"
+                                      value="applications"
+                                    />
+                                    <input
+                                      type="hidden"
+                                      name="status"
+                                      value={statusFilter}
+                                    />
+                                    <input
+                                      type="hidden"
+                                      name="q"
+                                      value={query}
+                                    />
+                                    <input
+                                      type="hidden"
+                                      name="applicationId"
+                                      value={app.id}
+                                    />
+                                    <input
+                                      type="hidden"
+                                      name="action"
+                                      value="approve"
+                                    />
+                                    <PendingSubmitButton
+                                      pendingLabel="Approving..."
+                                      className="rounded-md bg-brand px-3 py-1 text-xs font-semibold text-white"
+                                    >
+                                      Approve
+                                    </PendingSubmitButton>
+                                  </form>
+                                  <form
+                                    action={reviewAction}
+                                    className="flex items-center gap-2"
+                                  >
+                                    <input
+                                      type="hidden"
+                                      name="tab"
+                                      value="applications"
+                                    />
+                                    <input
+                                      type="hidden"
+                                      name="status"
+                                      value={statusFilter}
+                                    />
+                                    <input
+                                      type="hidden"
+                                      name="q"
+                                      value={query}
+                                    />
+                                    <input
+                                      type="hidden"
+                                      name="applicationId"
+                                      value={app.id}
+                                    />
+                                    <input
+                                      type="hidden"
+                                      name="action"
+                                      value="reject"
+                                    />
+                                    <input
+                                      name="rejectionReason"
+                                      placeholder="Reason"
+                                      className="hidden w-28 rounded-md border border-border px-2 py-1 text-xs text-gray-700 sm:block"
+                                    />
+                                    <PendingSubmitButton
+                                      pendingLabel="Rejecting..."
+                                      className="rounded-md bg-red-600 px-3 py-1 text-xs font-semibold text-white"
+                                    >
+                                      Reject
+                                    </PendingSubmitButton>
+                                  </form>
+                                </>
+                              ) : (
+                                <span className="text-xs text-gray-500">
+                                  {app.status === "approved"
+                                    ? "Approved"
+                                    : "Rejected"}
+                                </span>
+                              )}
+                            </div>
                           </TableCell>
                         </TableRow>
                       ))}
@@ -1924,12 +2055,68 @@ export default async function AdminPage({
                   </Table>
                 </div>
               </div>
-              </div>
-            </CardContent>
-          </Card>
-        }
-      />
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
     </AdminWorkspace>
+  );
+}
+
+function AdminMetricBar({
+  label,
+  value,
+  max,
+}: {
+  label: string;
+  value: number;
+  max: number;
+}) {
+  const width = max > 0 ? Math.max(6, Math.round((value / max) * 100)) : 6;
+  return (
+    <div>
+      <div className="mb-2 flex items-center justify-between gap-3 text-sm">
+        <span className="font-medium text-gray-700">{label}</span>
+        <span className="font-semibold text-foreground">{value}</span>
+      </div>
+      <div className="h-3 overflow-hidden rounded-full bg-sky-100">
+        <div
+          className="h-full rounded-full bg-brand"
+          style={{ width: `${width}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function OverviewShortcut({
+  href,
+  icon: Icon,
+  title,
+  value,
+}: {
+  href: string;
+  icon: LucideIcon;
+  title: string;
+  value: number;
+}) {
+  return (
+    <AdminLoadingLink
+      href={href}
+      indicator="overlay"
+      pendingLabel="Opening..."
+      className="flex items-center justify-between gap-3 rounded-xl border border-border bg-gray-50 p-3 transition-colors hover:border-brand/30 hover:bg-sky-50"
+    >
+      <span className="inline-flex min-w-0 items-center gap-3">
+        <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand text-white">
+          <Icon className="h-5 w-5" aria-hidden="true" />
+        </span>
+        <span className="truncate text-sm font-semibold text-foreground">
+          {title}
+        </span>
+      </span>
+      <span className="text-lg font-semibold text-foreground">{value}</span>
+    </AdminLoadingLink>
   );
 }
 
