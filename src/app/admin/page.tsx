@@ -276,7 +276,7 @@ function AdminWorkspace({
 
   return (
     <div className="min-h-screen bg-[#f5f8fc]">
-      <div className="mx-auto grid max-w-[1500px] gap-6 px-4 py-5 sm:px-6 lg:grid-cols-[260px_minmax(0,1fr)] lg:py-6">
+      <div className="mx-auto grid max-w-[1500px] gap-4 px-3 py-4 sm:gap-6 sm:px-6 lg:grid-cols-[260px_minmax(0,1fr)] lg:py-6">
         <aside className="hidden rounded-2xl border border-border/80 bg-white p-4 shadow-sm lg:block">
           <div className="rounded-2xl bg-primary px-4 py-5 text-white">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/70">
@@ -310,22 +310,22 @@ function AdminWorkspace({
           </div>
         </aside>
 
-        <main className="min-w-0 space-y-6">
-          <div className="rounded-2xl border border-border/80 bg-white p-4 shadow-sm sm:p-5">
+        <main className="min-w-0 space-y-4 sm:space-y-6">
+          <div className="rounded-2xl border border-border/80 bg-white p-3 shadow-sm sm:p-5">
             <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
               <div>
                 <p className="text-sm font-semibold text-primary">
                   Website admin
                 </p>
-                <h1 className="mt-1 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
+                <h1 className="mt-1 text-xl font-semibold tracking-tight text-foreground sm:text-3xl">
                   Platform overview
                 </h1>
               </div>
-              <div className="flex flex-col gap-3 md:flex-row md:items-center">
+              <div className="grid gap-3 xl:flex xl:items-center">
                 <form
                   action="/admin"
                   method="get"
-                  className="flex min-w-0 items-center rounded-full border border-border bg-gray-50 px-3 py-2"
+                  className="flex min-w-0 items-center rounded-xl border border-border bg-gray-50 px-3 py-2 sm:rounded-full xl:w-72"
                 >
                   <Search className="h-4 w-4 shrink-0 text-gray-500" />
                   <input type="hidden" name="tab" value="applications" />
@@ -337,7 +337,7 @@ function AdminWorkspace({
                     className="min-w-0 bg-transparent px-2 text-sm text-gray-800 outline-none placeholder:text-gray-500"
                   />
                 </form>
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
                   <TopAction href="/admin/messages" icon={MessageSquare}>
                     Messages
                   </TopAction>
@@ -347,10 +347,10 @@ function AdminWorkspace({
                   <TopAction href="/admin/platform" icon={Settings2}>
                     Controls
                   </TopAction>
-                  <form action={logoutAction}>
+                  <form action={logoutAction} className="col-span-2 sm:col-span-1">
                     <PendingSubmitButton
                       pendingLabel="Signing out..."
-                      className="inline-flex items-center gap-2 rounded-full border border-border bg-white px-3 py-2 text-sm font-semibold text-gray-700 shadow-sm transition-colors hover:bg-gray-50"
+                      className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl border border-border bg-white px-3 py-2 text-sm font-semibold text-gray-700 shadow-sm transition-colors hover:bg-gray-50 sm:w-auto sm:rounded-full"
                     >
                       <LogOut className="h-4 w-4" aria-hidden="true" />
                       Sign out
@@ -360,7 +360,7 @@ function AdminWorkspace({
               </div>
             </div>
 
-            <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="mt-4 grid gap-3 sm:mt-5 sm:grid-cols-2 xl:grid-cols-4">
               <AdminStatCard
                 label="Users"
                 value={usersCount}
@@ -387,7 +387,7 @@ function AdminWorkspace({
                 value={pendingCount}
                 helper="Host applications pending"
                 icon={ShieldCheck}
-                tone="green"
+                tone="brand"
                 href={buildAdminHref({ tab: "applications", status: "pending" })}
               />
             </div>
@@ -455,7 +455,7 @@ function TopAction({
       href={href}
       indicator="inline"
       pendingLabel="Loading..."
-      className="inline-flex items-center gap-2 rounded-full border border-border bg-white px-3 py-2 text-sm font-semibold text-gray-700 shadow-sm transition-colors hover:bg-gray-50"
+      className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-border bg-white px-3 py-2 text-sm font-semibold text-gray-700 shadow-sm transition-colors hover:bg-gray-50 sm:rounded-full"
     >
       <Icon className="h-4 w-4" aria-hidden="true" />
       {children}
@@ -475,26 +475,25 @@ function AdminStatCard({
   value: number | null;
   helper: string;
   icon: LucideIcon;
-  tone: "brand" | "blue" | "green" | "slate";
+  tone: "brand" | "blue" | "slate";
   href?: string;
 }) {
   const toneClassName = {
     brand: "bg-primary text-white",
     blue: "bg-sky-500 text-white",
-    green: "bg-emerald-600 text-white",
     slate: "bg-slate-700 text-white",
   }[tone];
   const card = (
-    <div className="flex h-full items-start justify-between gap-4 rounded-2xl border border-border/80 bg-white p-4 shadow-sm transition-transform hover:-translate-y-0.5">
+    <div className="flex h-full items-start justify-between gap-3 rounded-2xl border border-border/80 bg-white p-3 shadow-sm transition-transform hover:-translate-y-0.5 sm:gap-4 sm:p-4">
       <div>
         <p className="text-sm font-medium text-gray-600">{label}</p>
-        <p className="mt-2 text-3xl font-semibold tracking-tight text-foreground">
+        <p className="mt-2 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
           {value ?? 0}
         </p>
         <p className="mt-1 text-xs text-gray-500">{helper}</p>
       </div>
       <span
-        className={`inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${toneClassName}`}
+        className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl sm:h-11 sm:w-11 sm:rounded-2xl ${toneClassName}`}
       >
         <Icon className="h-5 w-5" aria-hidden="true" />
       </span>
@@ -811,7 +810,7 @@ export default async function AdminPage({
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-base">
                     <CheckCircle2
-                      className="h-5 w-5 text-emerald-600"
+                      className="h-5 w-5 text-brand"
                       aria-hidden="true"
                     />
                     Platform health
@@ -1202,14 +1201,14 @@ export default async function AdminPage({
             <CardHeader>
               <CardTitle>Host applications</CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="mb-4 flex flex-wrap items-center gap-2">
+            <CardContent className="px-3 sm:px-6">
+              <div className="mb-4 grid gap-2 sm:flex sm:flex-wrap sm:items-center">
                 {["pending", "approved", "rejected"].map((status) => (
                   <AdminLoadingLink
                     key={status}
                     indicator="inline"
                     pendingLabel="Loading..."
-                    className={`rounded-full border px-3 py-1 text-xs font-semibold ${
+                    className={`inline-flex min-h-9 items-center justify-center rounded-xl border px-3 py-1 text-xs font-semibold sm:rounded-full ${
                       statusFilter === status
                         ? "border-brand bg-brand text-white"
                         : "border-border text-gray-700"
@@ -1224,7 +1223,7 @@ export default async function AdminPage({
                   </AdminLoadingLink>
                 ))}
                 <form
-                  className="flex flex-1 flex-wrap gap-2 sm:flex-none"
+                  className="grid gap-2 sm:ml-auto sm:flex sm:flex-none"
                   action="/admin"
                   method="get"
                 >
@@ -1234,18 +1233,18 @@ export default async function AdminPage({
                     name="q"
                     defaultValue={query}
                     placeholder="Search name or phone"
-                    className="min-w-0 flex-1 rounded-md border border-border px-3 py-1 text-xs text-gray-700 sm:w-64"
+                    className="min-h-9 min-w-0 rounded-md border border-border px-3 py-2 text-sm text-gray-800 placeholder:text-gray-500 sm:w-64 sm:py-1 sm:text-xs"
                   />
                   <button
                     type="submit"
-                    className="rounded-md border border-border px-3 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+                    className="min-h-9 rounded-md border border-border px-3 py-1 text-sm font-semibold text-gray-700 hover:bg-gray-50 sm:text-xs"
                   >
                     Search
                   </button>
                 </form>
               </div>
 
-              <div className="grid gap-4 xl:grid-cols-2">
+              <div className="grid gap-3 sm:gap-4 xl:grid-cols-2">
                 {applications?.map((app: any) => {
                   const profileHref = app.user_id
                     ? `/admin/users/${app.user_id}#host-application`
@@ -1260,7 +1259,7 @@ export default async function AdminPage({
                     : "Not reviewed yet";
                   const statusClassName =
                     app.status === "approved"
-                      ? "bg-emerald-100 text-emerald-700"
+                      ? "bg-brand/10 text-brandHover"
                       : app.status === "rejected"
                         ? "bg-red-100 text-red-700"
                         : "bg-amber-100 text-amber-700";
@@ -1268,16 +1267,16 @@ export default async function AdminPage({
                   return (
                     <article
                       key={app.id}
-                      className="rounded-2xl border border-border bg-white p-5 shadow-sm"
+                      className="rounded-2xl border border-border bg-white p-3 shadow-sm sm:p-5"
                     >
-                      <div className="flex flex-col gap-5">
-                        <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="flex flex-col gap-4 sm:gap-5">
+                        <div className="grid gap-3 sm:flex sm:flex-wrap sm:items-start sm:justify-between">
                           {profileHref ? (
                             <AdminLoadingLink
                               href={profileHref}
                               indicator="overlay"
                               pendingLabel="Opening profile..."
-                              className="flex min-w-0 flex-1 items-start gap-3 rounded-xl border border-transparent p-1 hover:border-border hover:bg-gray-50"
+                              className="flex min-w-0 items-start gap-3 rounded-xl border border-transparent p-1 hover:border-border hover:bg-gray-50 sm:flex-1"
                             >
                               <ProfileAvatar
                                 src={app.profiles?.avatar_url}
@@ -1286,7 +1285,7 @@ export default async function AdminPage({
                                   app.full_name ??
                                   "User"
                                 }
-                                className="h-12 w-12"
+                                className="h-10 w-10 sm:h-12 sm:w-12"
                               />
                               <div className="min-w-0">
                                 <p className="truncate text-base font-semibold text-foreground">
@@ -1295,15 +1294,15 @@ export default async function AdminPage({
                                 <p className="truncate text-sm text-gray-600">
                                   {app.profiles?.full_name ?? "Profile record"}
                                 </p>
-                                <p className="mt-1 text-xs text-gray-500">
+                                <p className="mt-1 break-words text-xs text-gray-500">
                                   {app.phone ?? app.profiles?.phone ?? "No phone"}
-                                  {" · "}
+                                  <span className="mx-1">·</span>
                                   {app.city ?? app.profiles?.city ?? "No city"}
                                 </p>
                               </div>
                             </AdminLoadingLink>
                           ) : (
-                            <div className="flex min-w-0 flex-1 items-start gap-3">
+                            <div className="flex min-w-0 items-start gap-3 sm:flex-1">
                               <ProfileAvatar
                                 src={app.profiles?.avatar_url}
                                 name={
@@ -1311,7 +1310,7 @@ export default async function AdminPage({
                                   app.full_name ??
                                   "User"
                                 }
-                                className="h-12 w-12"
+                                className="h-10 w-10 sm:h-12 sm:w-12"
                               />
                               <div className="min-w-0">
                                 <p className="truncate text-base font-semibold text-foreground">
@@ -1326,9 +1325,9 @@ export default async function AdminPage({
                               </div>
                             </div>
                           )}
-                          <div className="flex flex-wrap items-center gap-2">
+                          <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                             <span
-                              className={`rounded-full px-3 py-1 text-xs font-semibold ${statusClassName}`}
+                              className={`rounded-full px-3 py-1 text-xs font-semibold capitalize ${statusClassName}`}
                             >
                               {app.status}
                             </span>
@@ -1338,12 +1337,12 @@ export default async function AdminPage({
                           </div>
                         </div>
 
-                        <div className="grid gap-3 sm:grid-cols-2">
+                        <div className="grid gap-2 sm:grid-cols-2 sm:gap-3">
                           <div className="rounded-xl border border-border bg-gray-50 p-3">
                             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-500">
                               Location
                             </p>
-                            <p className="mt-2 text-sm text-gray-800">
+                            <p className="mt-2 break-words text-sm text-gray-800">
                               {app.city ?? app.profiles?.city ?? "—"}
                               {app.region ? `, ${app.region}` : ""}
                             </p>
@@ -1352,7 +1351,7 @@ export default async function AdminPage({
                             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-500">
                               Contact
                             </p>
-                            <p className="mt-2 text-sm text-gray-800">
+                            <p className="mt-2 break-words text-sm text-gray-800">
                               {app.phone ?? app.profiles?.phone ?? "—"}
                             </p>
                           </div>
@@ -1360,7 +1359,7 @@ export default async function AdminPage({
                             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-500">
                               ID details
                             </p>
-                            <p className="mt-2 text-sm text-gray-800">
+                            <p className="mt-2 break-words text-sm text-gray-800">
                               {app.id_type ?? "—"}{" "}
                               {app.id_number ? `• ${app.id_number}` : ""}
                             </p>
@@ -1379,7 +1378,7 @@ export default async function AdminPage({
                             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-500">
                               Experience
                             </p>
-                            <p className="mt-2 whitespace-pre-line text-sm text-gray-800">
+                            <p className="mt-2 whitespace-pre-line break-words text-sm text-gray-800">
                               {app.experience ?? "—"}
                             </p>
                           </div>
@@ -1387,7 +1386,7 @@ export default async function AdminPage({
                             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-500">
                               Notes
                             </p>
-                            <p className="mt-2 whitespace-pre-line text-sm text-gray-800">
+                            <p className="mt-2 whitespace-pre-line break-words text-sm text-gray-800">
                               {app.note ?? "—"}
                             </p>
                           </div>
@@ -1411,20 +1410,20 @@ export default async function AdminPage({
                             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-500">
                               Rejection reason
                             </p>
-                            <p className="mt-2 whitespace-pre-line text-sm text-gray-800">
+                            <p className="mt-2 whitespace-pre-line break-words text-sm text-gray-800">
                               {app.rejection_reason ?? "—"}
                             </p>
                           </div>
                         </div>
 
-                        <div className="grid gap-3 sm:grid-cols-2">
+                        <div className="grid gap-2 sm:grid-cols-2 sm:gap-3">
                           <div className="rounded-xl border border-border p-3">
                             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-500">
                               ID front
                             </p>
                             <div className="mt-2">
                               <a
-                                className="inline-flex rounded-md border border-border px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+                                className="inline-flex min-h-10 w-full items-center justify-center rounded-md border border-border px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 sm:w-auto"
                                 href={`/api/host-applications/${app.id}/files?type=front`}
                                 target="_blank"
                                 rel="noreferrer"
@@ -1439,7 +1438,7 @@ export default async function AdminPage({
                             </p>
                             <div className="mt-2">
                               <a
-                                className="inline-flex rounded-md border border-border px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+                                className="inline-flex min-h-10 w-full items-center justify-center rounded-md border border-border px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 sm:w-auto"
                                 href={`/api/host-applications/${app.id}/files?type=back`}
                                 target="_blank"
                                 rel="noreferrer"
@@ -1457,7 +1456,7 @@ export default async function AdminPage({
                                 href={profileHref}
                                 indicator="inline"
                                 pendingLabel="Opening..."
-                                className="inline-flex rounded-md border border-border px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+                                className="inline-flex min-h-10 w-full items-center justify-center rounded-md border border-border px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 sm:w-auto"
                               >
                                 Open profile
                               </AdminLoadingLink>
@@ -1473,7 +1472,7 @@ export default async function AdminPage({
                             <div className="mt-4 space-y-3">
                               <form
                                 action={reviewAction}
-                                className="flex flex-wrap items-center gap-2"
+                                className="grid gap-2 sm:flex sm:flex-wrap sm:items-center"
                               >
                                 <input
                                   type="hidden"
@@ -1498,7 +1497,7 @@ export default async function AdminPage({
                                 />
                                 <PendingSubmitButton
                                   pendingLabel="Approving host..."
-                                  className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white"
+                                  className="min-h-10 rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white"
                                 >
                                   Approve host
                                 </PendingSubmitButton>
@@ -1506,7 +1505,7 @@ export default async function AdminPage({
 
                               <form
                                 action={reviewAction}
-                                className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_auto]"
+                                className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]"
                               >
                                 <input
                                   type="hidden"
@@ -1535,7 +1534,7 @@ export default async function AdminPage({
                                 />
                                 <PendingSubmitButton
                                   pendingLabel="Rejecting host..."
-                                  className="rounded-md bg-red-600 px-4 py-2 text-sm font-semibold text-white"
+                                  className="min-h-10 rounded-md bg-red-600 px-4 py-2 text-sm font-semibold text-white"
                                 >
                                   Reject host
                                 </PendingSubmitButton>
@@ -1673,7 +1672,7 @@ export default async function AdminPage({
                             />
                             <PendingSubmitButton
                               pendingLabel="Approving..."
-                              className="rounded-md bg-emerald-600 px-3 py-1 text-xs font-semibold text-white"
+                              className="rounded-md bg-brand px-3 py-1 text-xs font-semibold text-white"
                             >
                               Approve
                             </PendingSubmitButton>
@@ -1857,7 +1856,7 @@ export default async function AdminPage({
                                 />
                                 <PendingSubmitButton
                                   pendingLabel="Approving..."
-                                  className="rounded-md bg-emerald-600 px-3 py-1 text-xs font-semibold text-white"
+                                  className="rounded-md bg-brand px-3 py-1 text-xs font-semibold text-white"
                                 >
                                   Approve
                                 </PendingSubmitButton>

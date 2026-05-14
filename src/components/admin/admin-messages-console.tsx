@@ -240,9 +240,9 @@ export function AdminMessagesConsole({ initialUserId }: Props) {
   }, [activeConversationId]); // eslint-disable-line react-hooks/exhaustive-deps -- poll by active conversation id only
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[340px,1fr]">
-      <aside className="h-[72vh] overflow-hidden rounded-2xl border border-border bg-white">
-        <div className="border-b border-border p-4">
+    <div className="grid gap-4 lg:grid-cols-[340px,1fr] lg:gap-6">
+      <aside className="max-h-[44vh] overflow-hidden rounded-2xl border border-border bg-white lg:h-[72vh] lg:max-h-none">
+        <div className="border-b border-border p-3 sm:p-4">
           <p className="text-lg font-semibold text-foreground">Admin inbox</p>
           <p className="text-xs text-gray-600">Official Hayame messages</p>
           <div className="mt-3">
@@ -254,7 +254,7 @@ export function AdminMessagesConsole({ initialUserId }: Props) {
           </div>
         </div>
 
-        <div className="h-[calc(72vh-90px)] overflow-y-auto p-3">
+        <div className="max-h-[calc(44vh-86px)] overflow-y-auto p-3 lg:h-[calc(72vh-90px)] lg:max-h-none">
           <div>
             <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.15em] text-gray-500">
               Start chat
@@ -414,11 +414,11 @@ export function AdminMessagesConsole({ initialUserId }: Props) {
         </div>
       </aside>
 
-      <section className="flex h-[72vh] flex-col overflow-hidden rounded-2xl border border-border bg-white">
+      <section className="flex h-[68vh] min-h-[520px] flex-col overflow-hidden rounded-2xl border border-border bg-white lg:h-[72vh]">
         {activeConversation ? (
           <>
-            <div className="border-b border-border px-4 py-4">
-              <div className="flex items-center justify-between">
+            <div className="border-b border-border px-3 py-3 sm:px-4 sm:py-4">
+              <div className="grid gap-3 sm:flex sm:items-center sm:justify-between">
                 <div>
                   <p className="text-sm font-semibold text-foreground">
                     {activeConversation.participant.full_name ?? "User"}
@@ -429,8 +429,8 @@ export function AdminMessagesConsole({ initialUserId }: Props) {
                       "User conversation"}
                   </p>
                 </div>
-                <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
-                  <div className="relative h-4 w-4 overflow-hidden rounded-full border border-emerald-200 bg-white">
+                <div className="inline-flex w-fit items-center gap-2 rounded-full border border-brand/25 bg-brand/10 px-3 py-1 text-xs font-semibold text-brandHover">
+                  <div className="relative h-4 w-4 overflow-hidden rounded-full border border-brand/25 bg-white">
                     <img
                       src={ADMIN_OFFICE_AVATAR}
                       alt={ADMIN_OFFICE_NAME}
@@ -444,7 +444,7 @@ export function AdminMessagesConsole({ initialUserId }: Props) {
               </div>
             </div>
 
-            <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
+            <div className="flex-1 space-y-3 overflow-y-auto px-3 py-3 sm:px-4 sm:py-4">
               {messagesLoading ? (
                 <p className="text-sm text-gray-500">Loading messages...</p>
               ) : null}
@@ -469,7 +469,7 @@ export function AdminMessagesConsole({ initialUserId }: Props) {
                       >
                         <div
                           className={cn(
-                            "max-w-[78%] rounded-2xl border px-4 py-3 text-sm shadow-sm",
+                            "max-w-[88%] rounded-2xl border px-3 py-3 text-sm shadow-sm sm:max-w-[78%] sm:px-4",
                             isOffice
                               ? "border-brand/30 bg-brand/10 text-foreground"
                               : "border-border bg-gray-50 text-foreground",
@@ -488,7 +488,7 @@ export function AdminMessagesConsole({ initialUserId }: Props) {
                                 <span className="text-[11px] font-semibold text-brand">
                                   {ADMIN_OFFICE_NAME}
                                 </span>
-                                <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                                <CheckCircle2 className="h-3 w-3 text-brand" />
                               </>
                             ) : (
                               <>
@@ -536,7 +536,7 @@ export function AdminMessagesConsole({ initialUserId }: Props) {
             </div>
 
             <form
-              className="flex items-center gap-2 border-t border-border px-4 py-3"
+              className="grid gap-2 border-t border-border px-3 py-3 sm:flex sm:items-center sm:px-4"
               onSubmit={(event) => {
                 event.preventDefault();
                 void sendMessage();

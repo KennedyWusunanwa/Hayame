@@ -638,9 +638,9 @@ export default async function AdminPlatformPage({
         <CardHeader>
           <CardTitle>Listing approvals</CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <Table>
+        <CardContent className="px-3 sm:px-6">
+          <div className="overflow-x-auto rounded-xl border border-border">
+            <Table className="min-w-[760px]">
               <TableHeader>
                 <TableRow>
                   <TableHead>Listing</TableHead>
@@ -744,7 +744,7 @@ export default async function AdminPlatformPage({
                             />
                             <PendingSubmitButton
                               pendingLabel="Approving..."
-                              className="rounded-md bg-emerald-600 px-3 py-1 text-xs font-semibold text-white"
+                              className="rounded-md bg-brand px-3 py-1 text-xs font-semibold text-white"
                             >
                               Approve
                             </PendingSubmitButton>
@@ -801,9 +801,9 @@ export default async function AdminPlatformPage({
         <CardHeader>
           <CardTitle>Refund control</CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <Table>
+        <CardContent className="px-3 sm:px-6">
+          <div className="overflow-x-auto rounded-xl border border-border">
+            <Table className="min-w-[760px]">
               <TableHeader>
                 <TableRow>
                   <TableHead>Booking</TableHead>
@@ -872,9 +872,9 @@ export default async function AdminPlatformPage({
         <CardHeader>
           <CardTitle>Review moderation</CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <Table>
+        <CardContent className="px-3 sm:px-6">
+          <div className="overflow-x-auto rounded-xl border border-border">
+            <Table className="min-w-[760px]">
               <TableHeader>
                 <TableRow>
                   <TableHead>Review</TableHead>
@@ -953,9 +953,9 @@ export default async function AdminPlatformPage({
         <CardHeader>
           <CardTitle>Disputes</CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <Table>
+        <CardContent className="px-3 sm:px-6">
+          <div className="overflow-x-auto rounded-xl border border-border">
+            <Table className="min-w-[760px]">
               <TableHeader>
                 <TableRow>
                   <TableHead>Booking</TableHead>
@@ -1067,7 +1067,7 @@ export default async function AdminPlatformPage({
             </div>
           </div>
 
-          <form action={createAnnouncementAction} className="space-y-4 rounded-2xl border border-border p-4">
+          <form action={createAnnouncementAction} className="space-y-4 rounded-2xl border border-border p-3 sm:p-4">
             <div className="grid gap-4 md:grid-cols-2">
               <label className="space-y-2">
                 <span className="text-sm font-semibold text-foreground">
@@ -1179,7 +1179,7 @@ export default async function AdminPlatformPage({
               </p>
               <PendingSubmitButton
                 pendingLabel="Publishing..."
-                className="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white"
+                className="min-h-10 rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white"
               >
                 Publish announcement
               </PendingSubmitButton>
@@ -1187,7 +1187,7 @@ export default async function AdminPlatformPage({
           </form>
 
           <div className="overflow-x-auto">
-            <Table>
+            <Table className="min-w-[760px]">
               <TableHeader>
                 <TableRow>
                   <TableHead>Announcement</TableHead>

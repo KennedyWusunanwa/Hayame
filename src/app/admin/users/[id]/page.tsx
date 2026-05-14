@@ -342,11 +342,11 @@ export default async function AdminUserDetailsPage({
   const faceUrl = profile.avatar_url ?? null;
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 px-6 py-10">
+    <div className="mx-auto max-w-6xl space-y-4 px-3 py-4 sm:space-y-6 sm:px-6 sm:py-10">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-sm font-semibold text-primary">Admin</p>
-          <h1 className="text-2xl font-semibold text-foreground">
+          <h1 className="text-xl font-semibold sm:text-2xl text-foreground">
             User details
           </h1>
         </div>
@@ -359,12 +359,12 @@ export default async function AdminUserDetailsPage({
       </div>
 
       {resolvedSearch?.saved ? (
-        <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+        <div className="rounded-md border border-brand/25 bg-brand/10 px-3 py-2 text-sm font-medium text-foreground">
           User profile updated successfully.
         </div>
       ) : null}
       {resolvedSearch?.notice === "host-approved" ? (
-        <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+        <div className="rounded-md border border-brand/25 bg-brand/10 px-3 py-2 text-sm font-medium text-foreground">
           Host application approved.
         </div>
       ) : null}
@@ -383,7 +383,7 @@ export default async function AdminUserDetailsPage({
         <CardHeader>
           <CardTitle>Account summary</CardTitle>
         </CardHeader>
-        <CardContent className="grid gap-4 md:grid-cols-[auto,1fr]">
+        <CardContent className="grid gap-4 px-3 sm:px-6 md:grid-cols-[auto,1fr]">
           <div className="relative h-24 w-24 overflow-hidden rounded-full border border-border bg-gray-100">
             {profile.avatar_url ? (
               <Image
@@ -456,20 +456,20 @@ export default async function AdminUserDetailsPage({
         <CardHeader>
           <CardTitle>Verification evidence</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-3">
+        <CardContent className="space-y-3 px-3 sm:px-6">
           <div className="flex flex-wrap items-center gap-2 text-xs">
             <span
-              className={`rounded-full px-2 py-1 font-semibold ${profile.id_verified ? "bg-emerald-100 text-emerald-700" : "bg-gray-100 text-gray-700"}`}
+              className={`rounded-full px-2 py-1 font-semibold ${profile.id_verified ? "bg-brand/10 text-brandHover" : "bg-gray-100 text-gray-700"}`}
             >
               ID verified: {profile.id_verified ? "Yes" : "No"}
             </span>
             <span
-              className={`rounded-full px-2 py-1 font-semibold ${profile.phone_verified ? "bg-emerald-100 text-emerald-700" : "bg-gray-100 text-gray-700"}`}
+              className={`rounded-full px-2 py-1 font-semibold ${profile.phone_verified ? "bg-brand/10 text-brandHover" : "bg-gray-100 text-gray-700"}`}
             >
               Phone verified: {profile.phone_verified ? "Yes" : "No"}
             </span>
             <span
-              className={`rounded-full px-2 py-1 font-semibold ${profile.email_verified ? "bg-emerald-100 text-emerald-700" : "bg-gray-100 text-gray-700"}`}
+              className={`rounded-full px-2 py-1 font-semibold ${profile.email_verified ? "bg-brand/10 text-brandHover" : "bg-gray-100 text-gray-700"}`}
             >
               Email verified: {profile.email_verified ? "Yes" : "No"}
             </span>
@@ -562,12 +562,12 @@ export default async function AdminUserDetailsPage({
           <CardHeader>
             <CardTitle>Host review actions</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-4 px-3 sm:px-6">
             <div className="flex flex-wrap items-center gap-2 text-xs">
               <span
                 className={`rounded-full px-2 py-1 font-semibold ${
                   latestApplication.status === "approved"
-                    ? "bg-emerald-100 text-emerald-700"
+                    ? "bg-brand/10 text-brandHover"
                     : latestApplication.status === "rejected"
                       ? "bg-red-100 text-red-700"
                       : "bg-amber-100 text-amber-700"
@@ -594,7 +594,7 @@ export default async function AdminUserDetailsPage({
                 <input type="hidden" name="action" value="approve" />
                 <PendingSubmitButton
                   pendingLabel="Approving host..."
-                  className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white"
+                  className="min-h-10 rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white"
                 >
                   Approve host
                 </PendingSubmitButton>
@@ -618,7 +618,7 @@ export default async function AdminUserDetailsPage({
                 />
                 <PendingSubmitButton
                   pendingLabel="Rejecting host..."
-                  className="rounded-md bg-red-600 px-4 py-2 text-sm font-semibold text-white"
+                  className="min-h-10 rounded-md bg-red-600 px-4 py-2 text-sm font-semibold text-white"
                 >
                   Reject host
                 </PendingSubmitButton>
@@ -856,7 +856,7 @@ export default async function AdminUserDetailsPage({
         <div className="flex justify-end">
           <PendingSubmitButton
             pendingLabel="Saving user..."
-            className="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white"
+            className="min-h-10 rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white"
           >
             Save user changes
           </PendingSubmitButton>

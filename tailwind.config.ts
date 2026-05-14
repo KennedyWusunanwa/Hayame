@@ -20,8 +20,8 @@ const config: Config = {
         background: "#ffffff",
         foreground: "#0b1220",
         primary: {
-          DEFAULT: "#0f766e",
-          foreground: "#ecfeff",
+          DEFAULT: "#0e86d4",
+          foreground: "#ffffff",
         },
         secondary: {
           DEFAULT: "#0e86d4",

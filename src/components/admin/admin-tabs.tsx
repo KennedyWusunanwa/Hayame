@@ -28,7 +28,7 @@ export function AdminTabs({
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <div className="rounded-2xl border border-border/80 bg-white p-2 shadow-sm">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="px-2">
@@ -47,7 +47,7 @@ export function AdminTabs({
               type="button"
               onClick={() => handleTabChange("overview")}
               className={cn(
-                "rounded-xl border px-4 py-2 text-sm font-semibold transition-colors",
+                "min-h-10 rounded-xl border px-4 py-2 text-sm font-semibold transition-colors",
                 tab === "overview"
                   ? "border-brand bg-brand text-white shadow-sm"
                   : "border-border bg-white text-gray-700 hover:bg-gray-50",
@@ -59,7 +59,7 @@ export function AdminTabs({
               type="button"
               onClick={() => handleTabChange("applications")}
               className={cn(
-                "rounded-xl border px-4 py-2 text-sm font-semibold transition-colors",
+                "min-h-10 rounded-xl border px-4 py-2 text-sm font-semibold transition-colors",
                 tab === "applications"
                   ? "border-brand bg-brand text-white shadow-sm"
                   : "border-border bg-white text-gray-700 hover:bg-gray-50",
