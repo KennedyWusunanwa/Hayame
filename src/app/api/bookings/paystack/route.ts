@@ -177,15 +177,29 @@ export async function POST(req: Request) {
       const expectedReference = String(booking.payment_reference ?? "").trim();
       const expectedProvider = String(booking.payment_provider ?? "").trim();
       if (!expectedReference) {
-        return NextResponse.json(
-          {
-            message:
-              "Payment session was not initialized. Open secure checkout again before verifying.",
-          },
-          { status: 400 },
-        );
-      }
-      if (expectedReference !== reference.trim()) {
+        const { error: bindReferenceError } = await supa
+          .from("bookings")
+          .update({
+            payment_reference: reference.trim(),
+            payment_provider: "paystack",
+            payment_status: "pending",
+          })
+          .eq("id", bookingId)
+          .eq("status", "pending")
+          .is("payment_reference", null)
+          .select("id")
+          .single();
+
+        if (bindReferenceError) {
+          return NextResponse.json(
+            {
+              message:
+                "Payment session was not initialized. Open secure checkout again before verifying.",
+            },
+            { status: 400 },
+          );
+        }
+      } else if (expectedReference !== reference.trim()) {
         return NextResponse.json(
           {
             message:
@@ -501,6 +515,23 @@ export async function POST(req: Request) {
       }
     })();
 
+    const markBookingDatesUnavailable = async () => {
+      const availabilityClient = maybeAdmin ?? supa;
+      try {
+        await availabilityClient.from("car_availability").insert({
+          car_id: carId,
+          start_date: startDate,
+          end_date: endDate,
+          available: false,
+        });
+      } catch (availabilityError) {
+        console.error(
+          "[bookings/paystack] failed to mark booking dates unavailable",
+          availabilityError,
+        );
+      }
+    };
+
     const sendBookingEmails = async (
       booking: any,
       conversationId: string | null,
@@ -761,6 +792,7 @@ export async function POST(req: Request) {
         .select()
         .single();
       if (error) throw error;
+      await markBookingDatesUnavailable();
       const conversationId = await ensureBookingConversation({
         primaryClient: supa,
         fallbackClient: maybeAdmin,
@@ -824,6 +856,7 @@ export async function POST(req: Request) {
       .single();
 
     if (error) throw error;
+    await markBookingDatesUnavailable();
     const conversationId = await ensureBookingConversation({
       primaryClient: supa,
       fallbackClient: maybeAdmin,
