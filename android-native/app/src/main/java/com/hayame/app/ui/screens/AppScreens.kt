@@ -2071,13 +2071,14 @@ private fun HomeNearYouCard(
                         style = MaterialTheme.typography.bodySmall,
                         color = colors.mutedText,
                     )
-                    val hasReviews = (car.reviews_count ?: 0.0) > 0
-                    Text(
-                        "★ ${if (hasReviews) String.format("%.1f", car.avg_rating ?: 0.0) else "New"}",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = Warning,
-                        fontWeight = FontWeight.SemiBold,
-                    )
+                    car.listingBadgeText()?.let { badgeText ->
+                        Text(
+                            "★ $badgeText",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = Warning,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
                 }
                 Text(
                     "GHS ${(car.daily_price ?: 0.0).roundToInt()} / day",
@@ -2209,13 +2210,14 @@ private fun HomeFeaturedCarRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    val hasReviews = (car.reviews_count ?: 0.0) > 0
-                    Text(
-                        text = "★ ${if (hasReviews) String.format("%.1f", car.avg_rating ?: 0.0) else "New"}",
-                        style = MaterialTheme.typography.labelLarge.copy(fontSize = 12.sp),
-                        color = Warning,
-                        fontWeight = FontWeight.Bold,
-                    )
+                    car.listingBadgeText()?.let { badgeText ->
+                        Text(
+                            text = "★ $badgeText",
+                            style = MaterialTheme.typography.labelLarge.copy(fontSize = 12.sp),
+                            color = Warning,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
                     if (car.instant_book == true) {
                         Surface(
                             shape = RoundedCornerShape(999.dp),
@@ -7006,6 +7008,22 @@ private fun formatAddedDateLabel(createdAt: String?): String {
             .format(DateTimeFormatter.ofPattern("MMM d, yyyy"))
     } catch (_: DateTimeParseException) {
         candidate
+    }
+}
+
+private fun CarDto.listingBadgeText(): String? {
+    val hasReviews = (reviews_count ?: 0.0) > 0
+    if (hasReviews) return String.format(Locale.US, "%.1f", avg_rating ?: 0.0)
+    return if (isNewListing(created_at)) "New" else null
+}
+
+private fun isNewListing(createdAt: String?): Boolean {
+    if (createdAt.isNullOrBlank()) return false
+    return try {
+        val createdDate = LocalDate.parse(createdAt.take(10), DateTimeFormatter.ISO_LOCAL_DATE)
+        ChronoUnit.DAYS.between(createdDate, LocalDate.now()) in 0..7
+    } catch (_: DateTimeParseException) {
+        false
     }
 }
 @Composable

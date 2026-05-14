@@ -327,6 +327,12 @@ struct Car: Identifiable, Hashable {
 }
 
 extension Car {
+    var isNewListing: Bool {
+        let sevenDays: TimeInterval = 7 * 24 * 60 * 60
+        let age = Date().timeIntervalSince(createdAt)
+        return age >= 0 && age <= sevenDays
+    }
+
     var displayTitle: String {
         let normalizedTitle = Self.normalizeDisplayTitle(title)
         let yearString = String(year)

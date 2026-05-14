@@ -569,9 +569,11 @@ private struct HomeNearYouCard: View {
                             .font(.system(size: 12, design: .rounded))
                             .foregroundStyle(HayameTheme.mutedText)
                         Spacer()
-                        Label(car.reviewsCount == 0 ? "New" : String(format: "%.1f", car.rating), systemImage: "star.fill")
-                            .font(.system(size: 12, weight: .semibold, design: .rounded))
-                            .foregroundStyle(.orange)
+                        if car.reviewsCount > 0 || car.isNewListing {
+                            Label(car.reviewsCount > 0 ? String(format: "%.1f", car.rating) : "New", systemImage: "star.fill")
+                                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                .foregroundStyle(.orange)
+                        }
                     }
                     Text("GHS \(car.dailyPrice)/day")
                         .font(.system(size: 15, weight: .semibold, design: .rounded))
@@ -615,9 +617,11 @@ private struct HomeFeaturedCarRow: View {
                     .lineLimit(1)
 
                 HStack(spacing: 8) {
-                    Label(car.reviewsCount == 0 ? "New" : String(format: "%.1f", car.rating), systemImage: "star.fill")
-                        .font(.system(size: 11, weight: .semibold, design: .rounded))
-                        .foregroundStyle(.orange)
+                    if car.reviewsCount > 0 || car.isNewListing {
+                        Label(car.reviewsCount > 0 ? String(format: "%.1f", car.rating) : "New", systemImage: "star.fill")
+                            .font(.system(size: 11, weight: .semibold, design: .rounded))
+                            .foregroundStyle(.orange)
+                    }
 
                     if car.instantBook {
                         Text("Instant")
