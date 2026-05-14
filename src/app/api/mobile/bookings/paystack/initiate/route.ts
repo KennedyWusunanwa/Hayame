@@ -38,7 +38,10 @@ function sanitizeCallbackUrl(raw?: string) {
         /^\/+/,
         "",
       );
-      const bridge = new URL("/api/mobile/bookings/paystack/callback", SITE_URL);
+      const bridge = new URL(
+        "/api/mobile/bookings/paystack/callback",
+        SITE_URL,
+      );
       bridge.searchParams.set("target", targetScheme);
       if (targetPath) bridge.searchParams.set("path", targetPath);
       return bridge.toString();
@@ -216,6 +219,22 @@ export async function POST(req: Request) {
         tripOutsideListingRegion,
       },
     });
+
+    const { error: referenceError } = await db
+      .from("bookings")
+      .update({
+        payment_reference: reference,
+        payment_provider: "paystack",
+        payment_status: "pending",
+      })
+      .eq("id", booking.id)
+      .eq("status", "pending")
+      .select("id")
+      .single();
+
+    if (referenceError) {
+      throw referenceError;
+    }
 
     return NextResponse.json({
       data: {

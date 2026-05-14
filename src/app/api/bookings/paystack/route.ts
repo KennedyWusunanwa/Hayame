@@ -138,7 +138,7 @@ export async function POST(req: Request) {
       const { data: booking, error: bookingError } = await supa
         .from("bookings")
         .select(
-          "id,car_id,renter_id,start_date,end_date,status,hold_expires_at,trip_use_region,trip_use_city,trip_use_address,trip_outside_accra,trip_outside_listing_region,outside_accra_surcharge",
+          "id,car_id,renter_id,start_date,end_date,status,hold_expires_at,trip_use_region,trip_use_city,trip_use_address,trip_outside_accra,trip_outside_listing_region,outside_accra_surcharge,payment_reference,payment_provider",
         )
         .eq("id", bookingId)
         .single();
@@ -172,6 +172,32 @@ export async function POST(req: Request) {
         return NextResponse.json(
           { message: "Booking hold expired" },
           { status: 409 },
+        );
+      }
+      const expectedReference = String(booking.payment_reference ?? "").trim();
+      const expectedProvider = String(booking.payment_provider ?? "").trim();
+      if (!expectedReference) {
+        return NextResponse.json(
+          {
+            message:
+              "Payment session was not initialized. Open secure checkout again before verifying.",
+          },
+          { status: 400 },
+        );
+      }
+      if (expectedReference !== reference.trim()) {
+        return NextResponse.json(
+          {
+            message:
+              "This payment session is no longer current. Open secure checkout again before verifying.",
+          },
+          { status: 400 },
+        );
+      }
+      if (expectedProvider && expectedProvider !== "paystack") {
+        return NextResponse.json(
+          { message: "This booking is not waiting for a Paystack payment." },
+          { status: 400 },
         );
       }
       heldBooking = booking;
@@ -379,7 +405,18 @@ export async function POST(req: Request) {
       depositAmount;
     const expectedAmount = Math.round(total * 100);
 
-    const tx = await verifyPaystackTransaction(reference);
+    let tx: any;
+    try {
+      tx = await verifyPaystackTransaction(reference);
+    } catch {
+      return NextResponse.json(
+        {
+          message:
+            "Payment not completed yet. Finish payment in secure checkout before verifying.",
+        },
+        { status: 400 },
+      );
+    }
     if (String(tx.reference ?? "") !== reference) {
       if (bookingId) {
         await supa
@@ -397,7 +434,11 @@ export async function POST(req: Request) {
       );
     }
     const txBookingId = metadataValue(tx.metadata, "bookingId");
-    if (bookingId && reference.startsWith("hym-") && txBookingId !== bookingId) {
+    if (
+      bookingId &&
+      reference.startsWith("hym-") &&
+      txBookingId !== bookingId
+    ) {
       await supa
         .from("bookings")
         .update({
@@ -407,7 +448,10 @@ export async function POST(req: Request) {
         })
         .eq("id", bookingId);
       return NextResponse.json(
-        { message: "Payment does not match this booking. Please try checkout again." },
+        {
+          message:
+            "Payment does not match this booking. Please try checkout again.",
+        },
         { status: 400 },
       );
     }
@@ -713,6 +757,7 @@ export async function POST(req: Request) {
           hold_expires_at: null,
         })
         .eq("id", bookingId)
+        .eq("payment_reference", reference)
         .select()
         .single();
       if (error) throw error;
