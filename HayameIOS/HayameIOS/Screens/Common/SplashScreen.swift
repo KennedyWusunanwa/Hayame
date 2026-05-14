@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct SplashScreen: View {
+    @Environment(\.colorScheme) private var colorScheme
+
     @State private var progress: CGFloat = 0
     @State private var logoScale: CGFloat = 1
     @State private var logoFloat: CGFloat = 5
@@ -31,30 +33,35 @@ struct SplashScreen: View {
     @State private var badgeScale: CGFloat = 0.88
     @State private var sublineOpacity: Double = 0
 
+    private var isDarkMode: Bool {
+        colorScheme == .dark
+    }
+
     var body: some View {
         GeometryReader { geo in
             ZStack {
-                HayameTheme.pageBackground.ignoresSafeArea()
+                splashBackground
+                    .ignoresSafeArea()
 
                 VStack(spacing: 0) {
 
                     // -- TOP - Blue panel
                     ZStack {
-                        HayameTheme.brandBlue
+                        isDarkMode ? Color.clear : HayameTheme.brandBlue
 
                         Group {
                             Capsule()
-                                .fill(Color.white.opacity(0.18))
+                                .fill(Color.white.opacity(isDarkMode ? 0.14 : 0.18))
                                 .frame(width: 90, height: 2.5)
                                 .offset(x: streak1X, y: 20)
 
                             Capsule()
-                                .fill(Color.white.opacity(0.12))
+                                .fill(Color.white.opacity(isDarkMode ? 0.10 : 0.12))
                                 .frame(width: 60, height: 1.5)
                                 .offset(x: streak2X, y: 36)
 
                             Capsule()
-                                .fill(Color.white.opacity(0.10))
+                                .fill(Color.white.opacity(isDarkMode ? 0.08 : 0.10))
                                 .frame(width: 44, height: 1.5)
                                 .offset(x: streak3X, y: 8)
                         }
@@ -62,12 +69,27 @@ struct SplashScreen: View {
 
                         Circle()
                             .stroke(Color.white.opacity(pulseOpacity), lineWidth: 2)
-                            .frame(width: geo.size.width * 0.68, height: geo.size.width * 0.68)
+                            .frame(width: geo.size.width * 0.66, height: geo.size.width * 0.66)
                             .scaleEffect(pulseScale)
 
                         Circle()
-                            .fill(Color.white.opacity(0.08))
-                            .frame(width: geo.size.width * 0.70, height: geo.size.width * 0.70)
+                            .fill(Color.white.opacity(isDarkMode ? 0.10 : 0.08))
+                            .background(
+                                Circle()
+                                    .fill(Color.white.opacity(isDarkMode ? 0.05 : 0))
+                                    .blur(radius: isDarkMode ? 18 : 0)
+                            )
+                            .overlay(
+                                Circle()
+                                    .stroke(Color.white.opacity(isDarkMode ? 0.18 : 0), lineWidth: 1)
+                            )
+                            .shadow(
+                                color: isDarkMode ? Color(red: 0.30, green: 0.70, blue: 1.0).opacity(0.26) : .clear,
+                                radius: isDarkMode ? 34 : 0,
+                                x: 0,
+                                y: isDarkMode ? 18 : 0
+                            )
+                            .frame(width: geo.size.width * 0.68, height: geo.size.width * 0.68)
 
                         VStack(spacing: 0) {
                             Image("hayame_logo_white")
@@ -80,14 +102,18 @@ struct SplashScreen: View {
 
                             Text("Ghana's No.1 Car Rental Platform")
                                 .font(.system(size: 11, weight: .semibold, design: .rounded))
-                                .foregroundStyle(HayameTheme.brandBlue)
-                                .padding(.horizontal, 14)
-                                .padding(.vertical, 6)
-                                .background(Color.white)
+                                .foregroundStyle(isDarkMode ? Color(red: 0.91, green: 0.97, blue: 1.0) : HayameTheme.brandBlue)
+                                .padding(.horizontal, 15)
+                                .padding(.vertical, 7)
+                                .background(isDarkMode ? Color.white.opacity(0.14) : Color.white)
                                 .clipShape(Capsule())
+                                .overlay(
+                                    Capsule()
+                                        .stroke(Color.white.opacity(isDarkMode ? 0.18 : 0), lineWidth: 1)
+                                )
                                 .opacity(badgeOpacity)
                                 .scaleEffect(badgeScale)
-                                .padding(.top, 14)
+                                .padding(.top, isDarkMode ? 18 : 14)
                         }
                     }
                     .frame(height: geo.size.height * 0.55)
@@ -96,12 +122,12 @@ struct SplashScreen: View {
 
                     // -- BOTTOM - White panel
                     ZStack {
-                        HayameTheme.pageBackground
+                        isDarkMode ? Color.clear : HayameTheme.pageBackground
 
-                        VStack(spacing: 18) {
+                        VStack(spacing: isDarkMode ? 16 : 18) {
                             Text("Rent a car, anytime,\nanywhere in Ghana.")
-                                .font(.system(size: 16, weight: .medium, design: .rounded))
-                                .foregroundStyle(HayameTheme.brandNavy)
+                                .font(.system(size: isDarkMode ? 17 : 16, weight: .semibold, design: .rounded))
+                                .foregroundStyle(isDarkMode ? Color(red: 0.92, green: 0.97, blue: 1.0) : HayameTheme.brandNavy)
                                 .multilineTextAlignment(.center)
                                 .padding(.horizontal, 48)
                                 .opacity(taglineOpacity)
@@ -109,31 +135,34 @@ struct SplashScreen: View {
 
                             Text("Trusted by renters across Ghana")
                                 .font(.system(size: 12, weight: .medium, design: .rounded))
-                                .foregroundStyle(HayameTheme.mutedText)
+                                .foregroundStyle(isDarkMode ? Color(red: 0.68, green: 0.78, blue: 0.90) : HayameTheme.mutedText)
                                 .opacity(sublineOpacity)
+                                .padding(.top, isDarkMode ? 2 : 0)
 
                             ZStack(alignment: .leading) {
                                 Capsule()
-                                    .fill(HayameTheme.brandLight)
-                                    .frame(width: 180, height: 4)
+                                    .fill(isDarkMode ? Color.white.opacity(0.16) : HayameTheme.brandLight)
+                                    .frame(width: isDarkMode ? 192 : 180, height: isDarkMode ? 5 : 4)
                                 Capsule()
-                                    .fill(HayameTheme.brandBlue)
-                                    .frame(width: 180 * progress, height: 4)
+                                    .fill(isDarkMode ? Color(red: 0.30, green: 0.70, blue: 1.0) : HayameTheme.brandBlue)
+                                    .frame(width: (isDarkMode ? 192 : 180) * progress, height: isDarkMode ? 5 : 4)
                                 Capsule()
                                     .fill(
                                         LinearGradient(
-                                            colors: [.clear, .white.opacity(0.75), .clear],
+                                            colors: [.clear, .white.opacity(isDarkMode ? 0.55 : 0.75), .clear],
                                             startPoint: .leading,
                                             endPoint: .trailing
                                         )
                                     )
-                                    .frame(width: 60, height: 4)
+                                    .frame(width: 60, height: isDarkMode ? 5 : 4)
                                     .offset(x: shimmerShift - 30)
                                     .clipped()
-                                    .frame(width: 180, alignment: .leading)
+                                    .frame(width: isDarkMode ? 192 : 180, alignment: .leading)
                             }
                             .opacity(barOpacity)
+                            .padding(.top, isDarkMode ? 12 : 0)
                         }
+                        .padding(.bottom, isDarkMode ? 22 : 0)
                     }
                     .frame(height: geo.size.height * 0.45)
                     .offset(y: bottomPanelOffset)
@@ -225,6 +254,23 @@ struct SplashScreen: View {
             withAnimation(.easeInOut(duration: 4.65)) {
                 progress = 1
             }
+        }
+    }
+
+    @ViewBuilder
+    private var splashBackground: some View {
+        if isDarkMode {
+            LinearGradient(
+                colors: [
+                    Color(red: 0.078, green: 0.518, blue: 0.851),
+                    Color(red: 0.045, green: 0.286, blue: 0.490),
+                    Color(red: 0.027, green: 0.102, blue: 0.184)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        } else {
+            HayameTheme.pageBackground
         }
     }
 }
