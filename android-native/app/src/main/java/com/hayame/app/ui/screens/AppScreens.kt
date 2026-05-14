@@ -2270,6 +2270,9 @@ private enum class ExploreLayoutMode {
     GRID,
 }
 
+private const val ExploreLayoutPrefsName = "hayame_explore_layout"
+private const val ExploreLayoutPrefsKey = "layout_mode"
+
 @Composable
 private fun ExploreTab(
     viewModel: AppViewModel,
@@ -2286,6 +2289,10 @@ private fun ExploreTab(
     val carsState by viewModel.carsState.collectAsState()
     val favoritesState by viewModel.favoritesState.collectAsState()
     val favoriteIds = (favoritesState as? UiState.Success<Set<String>>)?.data ?: emptySet()
+    val context = LocalContext.current
+    val exploreLayoutPrefs = remember(context) {
+        context.getSharedPreferences(ExploreLayoutPrefsName, Context.MODE_PRIVATE)
+    }
     var query by rememberSaveable { mutableStateOf("") }
     var sort by rememberSaveable { mutableStateOf("new_listings") }
     var appliedCarType by rememberSaveable { mutableStateOf("") }
@@ -2294,7 +2301,9 @@ private fun ExploreTab(
     var appliedCity by rememberSaveable { mutableStateOf("") }
     var appliedMaxPrice by rememberSaveable { mutableStateOf(8000f) }
     var appliedInstantOnly by rememberSaveable { mutableStateOf(false) }
-    var layoutMode by rememberSaveable { mutableStateOf(ExploreLayoutMode.LIST.name) }
+    var layoutMode by rememberSaveable {
+        mutableStateOf(exploreLayoutPrefs.getString(ExploreLayoutPrefsKey, ExploreLayoutMode.LIST.name) ?: ExploreLayoutMode.LIST.name)
+    }
     val selectedLayout = remember(layoutMode) {
         runCatching { ExploreLayoutMode.valueOf(layoutMode) }.getOrElse { ExploreLayoutMode.LIST }
     }
@@ -2435,7 +2444,10 @@ private fun ExploreTab(
             }
             ExploreLayoutToggle(
                 selectedLayout = selectedLayout,
-                onSelect = { layoutMode = it.name },
+                onSelect = {
+                    layoutMode = it.name
+                    exploreLayoutPrefs.edit().putString(ExploreLayoutPrefsKey, it.name).apply()
+                },
             )
         }
 

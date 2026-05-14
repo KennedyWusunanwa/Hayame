@@ -48,7 +48,7 @@ final class AppState: ObservableObject {
     @Published var exploreSearchText = ""
     @Published var exploreFilters = ExploreFilterState()
     @Published var exploreSortOption: ExploreSortOption = .recommended
-    @Published var exploreLayoutMode: ExploreLayoutMode = .list
+    @Published private(set) var exploreLayoutMode: ExploreLayoutMode = .list
 
     @Published var hostApplication: HostApplication?
     @Published var hostAccessState: HostAccessState = .unknown
@@ -82,6 +82,7 @@ final class AppState: ObservableObject {
     private let cachedUserAvatarKey = "hayame.cached_user_avatar"
     private let seenAnnouncementIDsKey = "hayame.seen_announcement_ids"
     private let darkModeKey = "hayame.dark_mode_enabled"
+    private let exploreLayoutModeKey = "hayame.explore_layout_mode"
 
     private var authToken: String?
     private var refreshToken: String?
@@ -137,6 +138,10 @@ final class AppState: ObservableObject {
             }
         }
         darkModeEnabled = defaults.bool(forKey: darkModeKey)
+        if let rawLayout = defaults.string(forKey: exploreLayoutModeKey),
+           let persistedLayout = ExploreLayoutMode(rawValue: rawLayout) {
+            exploreLayoutMode = persistedLayout
+        }
         migrateLoopbackBaseURLIfNeeded()
         restorePersistedSession()
         pushTokenObserver = NotificationCenter.default.addObserver(
@@ -545,6 +550,11 @@ final class AppState: ObservableObject {
     func setDarkMode(_ enabled: Bool) {
         darkModeEnabled = enabled
         defaults.set(enabled, forKey: darkModeKey)
+    }
+
+    func setExploreLayoutMode(_ mode: ExploreLayoutMode) {
+        exploreLayoutMode = mode
+        defaults.set(mode.rawValue, forKey: exploreLayoutModeKey)
     }
 
     func openAppearanceSettings() {

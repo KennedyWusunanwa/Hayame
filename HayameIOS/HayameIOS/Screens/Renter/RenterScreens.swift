@@ -850,7 +850,7 @@ struct ExploreScreen: View {
                     }
 
                     ExploreLayoutToggle(selectedLayout: appState.exploreLayoutMode) { layout in
-                        appState.exploreLayoutMode = layout
+                        appState.setExploreLayoutMode(layout)
                     }
 
                     Button {
