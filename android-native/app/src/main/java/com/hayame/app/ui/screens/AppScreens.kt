@@ -5422,6 +5422,7 @@ fun BookingScreen(
     var isLoadingBookingAvailability by rememberSaveable(carId) { mutableStateOf(false) }
     var initialized by rememberSaveable(carId) { mutableStateOf(false) }
     var awaitingPaymentReturn by rememberSaveable(carId) { mutableStateOf(false) }
+    var returnedFromPaymentWithoutCallback by rememberSaveable(carId) { mutableStateOf(false) }
     var currentStep by rememberSaveable(carId) { mutableStateOf(CheckoutStep.TRIP_DETAILS) }
 
     LaunchedEffect(carId) {
@@ -5560,7 +5561,7 @@ fun BookingScreen(
                 pendingPaystackCallbackUri.isNullOrBlank()
             ) {
                 awaitingPaymentReturn = false
-                paymentMessage = "Payment was not completed. Open secure checkout and finish payment before verifying."
+                returnedFromPaymentWithoutCallback = true
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -5651,6 +5652,7 @@ fun BookingScreen(
                     paymentMessage = "Payment was not completed. Open secure checkout and finish payment before verifying."
                     return
                 }
+                returnedFromPaymentWithoutCallback = false
                 awaitingPaymentReturn = false
                 isProcessingPayment = true
                 paymentMessage = null
@@ -5669,10 +5671,12 @@ fun BookingScreen(
                     onSuccess = {
                         isProcessingPayment = false
                         viewModel.showMessage("Payment successful. Your booking is now in Trips.")
+                        returnedFromPaymentWithoutCallback = false
                         onBookingCompleted()
                     },
                     onError = {
                         isProcessingPayment = false
+                        returnedFromPaymentWithoutCallback = false
                         paymentMessage = it
                     },
                 )
@@ -5789,6 +5793,14 @@ fun BookingScreen(
                     } else {
                         finalizePendingPayment(callbackResult.reference)
                     }
+                }
+            }
+
+            LaunchedEffect(returnedFromPaymentWithoutCallback, pendingCheckout?.reference, isProcessingPayment) {
+                val checkout = pendingCheckout
+                if (returnedFromPaymentWithoutCallback && checkout != null && !isProcessingPayment) {
+                    paymentMessage = "Checking payment status..."
+                    finalizePendingPayment(checkout.reference)
                 }
             }
 

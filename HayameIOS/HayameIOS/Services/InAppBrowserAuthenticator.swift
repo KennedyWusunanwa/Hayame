@@ -22,9 +22,9 @@ enum InAppBrowserAuthenticatorError: LocalizedError {
 
     var shouldAttemptPaymentVerificationFallback: Bool {
         switch self {
-        case .missingCallback:
+        case .cancelled, .missingCallback:
             return true
-        case .cancelled, .unableToOpen, .message:
+        case .unableToOpen, .message:
             return false
         }
     }

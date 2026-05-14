@@ -25,14 +25,23 @@ function sanitizeCallbackUrl(raw?: string) {
   try {
     const parsed = new URL(trimmed);
     const protocol = parsed.protocol.toLowerCase();
+    if (protocol === "https:" || protocol === "http:") {
+      return parsed.toString();
+    }
     if (
-      protocol === "https:" ||
-      protocol === "http:" ||
       protocol === "hayameios:" ||
       protocol === "hayameandroid:" ||
       protocol === "hayame:"
     ) {
-      return parsed.toString();
+      const targetScheme = protocol.replace(":", "");
+      const targetPath = `${parsed.hostname}${parsed.pathname}`.replace(
+        /^\/+/,
+        "",
+      );
+      const bridge = new URL("/api/mobile/bookings/paystack/callback", SITE_URL);
+      bridge.searchParams.set("target", targetScheme);
+      if (targetPath) bridge.searchParams.set("path", targetPath);
+      return bridge.toString();
     }
     return fallback;
   } catch {
