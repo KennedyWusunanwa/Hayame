@@ -248,7 +248,6 @@ import kotlin.math.roundToInt
 
 @Composable
 fun SplashScreen() {
-    val colors = LocalHayameColors.current
     val progress = remember { Animatable(0f) }
     val logoScale = remember { Animatable(1f) }
     val splashMotion = rememberInfiniteTransition(label = "splash-motion")
@@ -402,156 +401,182 @@ fun SplashScreen() {
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .fillMaxHeight(0.55f)
-                .offset { IntOffset(x = 0, y = topPanelOffset.value.roundToInt()) }
-                .background(colors.brandBlue)
-                .clipToBounds(),
-            contentAlignment = Alignment.Center,
-        ) {
-            Box(
-                modifier = Modifier
-                    .width(90.dp)
-                    .height(2.5.dp)
-                    .offset(x = streak1X.value.dp, y = 20.dp)
-                    .background(Color.White.copy(alpha = 0.18f), RoundedCornerShape(99.dp)),
-            )
-            Box(
-                modifier = Modifier
-                    .width(60.dp)
-                    .height(1.5.dp)
-                    .offset(x = streak2X.value.dp, y = 36.dp)
-                    .background(Color.White.copy(alpha = 0.12f), RoundedCornerShape(99.dp)),
-            )
-            Box(
-                modifier = Modifier
-                    .width(44.dp)
-                    .height(1.5.dp)
-                    .offset(x = streak3X.value.dp, y = 8.dp)
-                    .background(Color.White.copy(alpha = 0.10f), RoundedCornerShape(99.dp)),
-            )
-
-            Box(
-                modifier = Modifier
-                    .size(280.dp)
-                    .scale(pulseScale)
-                    .border(
-                        width = 2.dp,
-                        color = Color.White.copy(alpha = pulseAlpha),
-                        shape = CircleShape,
-                    ),
-            )
-
-            Box(
-                modifier = Modifier
-                    .size(300.dp)
-                    .background(Color.White.copy(alpha = 0.08f), CircleShape),
-            )
-
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(14.dp),
-            ) {
-                Image(
-                    painter = painterResource(id = R.drawable.hayame_logo_white),
-                    contentDescription = "Hayame",
-                    modifier = Modifier
-                        .width(210.dp)
-                        .scale(logoEntryScale.value * logoScale.value)
-                        .offset(y = logoFloat.dp)
-                        .alpha(logoAlpha.value),
-                    contentScale = ContentScale.Fit,
-                )
-                Surface(
-                    color = Color.White,
-                    shape = RoundedCornerShape(99.dp),
-                    modifier = Modifier
-                        .alpha(badgeAlpha.value)
-                        .scale(badgeScale.value),
-                ) {
-                    Text(
-                        text = "Ghana's No.1 Car Rental Platform",
-                        color = colors.brandBlue,
-                        style = MaterialTheme.typography.labelMedium.copy(fontSize = 11.sp),
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(
+                        Color(0xFF1484D9),
+                        Color(0xFF0C497D),
+                        Color(0xFF071A2F),
                     )
-                }
-            }
-        }
-
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .fillMaxHeight()
-                .offset { IntOffset(x = 0, y = bottomPanelOffset.value.roundToInt()) }
-                .background(colors.pageBackground),
-            contentAlignment = Alignment.Center,
-        ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(18.dp),
-                modifier = Modifier.padding(horizontal = 48.dp),
-            ) {
-                Text(
-                    text = "Rent a car, anytime, anywhere in Ghana.",
-                    style = MaterialTheme.typography.bodyLarge.copy(fontSize = 16.sp),
-                    color = colors.brandNavy,
-                    fontWeight = FontWeight.Medium,
-                    textAlign = TextAlign.Center,
-                    lineHeight = 26.sp,
-                    modifier = Modifier
-                        .alpha(taglineAlpha.value)
-                        .offset(y = taglineOffset.value.dp),
                 )
-
-                Text(
-                    text = "Trusted by renters across Ghana",
-                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
-                    color = colors.mutedText,
-                    fontWeight = FontWeight.Medium,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.alpha(sublineAlpha.value),
+            ),
+    ) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .fillMaxHeight(0.55f)
+                    .offset { IntOffset(x = 0, y = topPanelOffset.value.roundToInt()) }
+                    .clipToBounds(),
+                contentAlignment = Alignment.Center,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .width(90.dp)
+                        .height(2.5.dp)
+                        .offset(x = streak1X.value.dp, y = 20.dp)
+                        .background(Color.White.copy(alpha = 0.14f), RoundedCornerShape(99.dp)),
+                )
+                Box(
+                    modifier = Modifier
+                        .width(60.dp)
+                        .height(1.5.dp)
+                        .offset(x = streak2X.value.dp, y = 36.dp)
+                        .background(Color.White.copy(alpha = 0.10f), RoundedCornerShape(99.dp)),
+                )
+                Box(
+                    modifier = Modifier
+                        .width(44.dp)
+                        .height(1.5.dp)
+                        .offset(x = streak3X.value.dp, y = 8.dp)
+                        .background(Color.White.copy(alpha = 0.08f), RoundedCornerShape(99.dp)),
                 )
 
                 Box(
                     modifier = Modifier
-                        .width(180.dp)
-                        .height(4.dp)
-                        .alpha(barAlpha.value),
+                        .size(280.dp)
+                        .scale(pulseScale)
+                        .border(
+                            width = 2.dp,
+                            color = Color.White.copy(alpha = pulseAlpha),
+                            shape = CircleShape,
+                        ),
+                )
+
+                Box(
+                    modifier = Modifier
+                        .size(318.dp)
+                        .background(Color.White.copy(alpha = 0.05f), CircleShape)
+                        .blur(18.dp),
+                )
+
+                Box(
+                    modifier = Modifier
+                        .size(300.dp)
+                        .background(Color.White.copy(alpha = 0.10f), CircleShape)
+                        .border(1.dp, Color.White.copy(alpha = 0.18f), CircleShape),
+                )
+
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(18.dp),
                 ) {
-                    Box(
+                    Image(
+                        painter = painterResource(id = R.drawable.hayame_logo_white),
+                        contentDescription = "Hayame",
                         modifier = Modifier
-                            .fillMaxSize()
-                            .clip(RoundedCornerShape(99.dp))
-                            .background(colors.brandLight),
+                            .width(210.dp)
+                            .scale(logoEntryScale.value * logoScale.value)
+                            .offset(y = logoFloat.dp)
+                            .alpha(logoAlpha.value),
+                        contentScale = ContentScale.Fit,
                     )
-                    Box(
+                    Surface(
+                        color = Color.White.copy(alpha = 0.14f),
+                        contentColor = Color(0xFFE8F7FF),
+                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.18f)),
+                        shape = RoundedCornerShape(99.dp),
                         modifier = Modifier
-                            .fillMaxHeight()
-                            .fillMaxWidth(progress.value)
-                            .clip(RoundedCornerShape(99.dp))
-                            .background(colors.brandBlue),
+                            .alpha(badgeAlpha.value)
+                            .scale(badgeScale.value),
+                    ) {
+                        Text(
+                            text = "Ghana's No.1 Car Rental Platform",
+                            color = Color(0xFFE8F7FF),
+                            style = MaterialTheme.typography.labelMedium.copy(fontSize = 11.sp),
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.padding(horizontal = 15.dp, vertical = 7.dp),
+                        )
+                    }
+                }
+            }
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .fillMaxHeight()
+                    .offset { IntOffset(x = 0, y = bottomPanelOffset.value.roundToInt()) },
+                contentAlignment = Alignment.Center,
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    modifier = Modifier
+                        .padding(horizontal = 48.dp)
+                        .padding(bottom = 22.dp),
+                ) {
+                    Text(
+                        text = "Rent a car, anytime, anywhere in Ghana.",
+                        style = MaterialTheme.typography.bodyLarge.copy(fontSize = 17.sp),
+                        color = Color(0xFFEBF8FF),
+                        fontWeight = FontWeight.SemiBold,
+                        textAlign = TextAlign.Center,
+                        lineHeight = 26.sp,
+                        modifier = Modifier
+                            .alpha(taglineAlpha.value)
+                            .offset(y = taglineOffset.value.dp),
                     )
+
+                    Text(
+                        text = "Trusted by renters across Ghana",
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
+                        color = Color(0xFFADC7E6),
+                        fontWeight = FontWeight.Medium,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier
+                            .alpha(sublineAlpha.value)
+                            .padding(top = 2.dp),
+                    )
+
                     Box(
                         modifier = Modifier
-                            .width(60.dp)
-                            .fillMaxHeight()
-                            .offset(x = shimmerShift.dp)
-                            .clip(RoundedCornerShape(99.dp))
-                            .background(
-                                Brush.horizontalGradient(
-                                    colors = listOf(
-                                        Color.White.copy(alpha = 0f),
-                                        Color.White.copy(alpha = 0.8f),
-                                        Color.White.copy(alpha = 0f),
+                            .width(192.dp)
+                            .height(5.dp)
+                            .alpha(barAlpha.value),
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .clip(RoundedCornerShape(99.dp))
+                                .background(Color.White.copy(alpha = 0.16f)),
+                        )
+                        Box(
+                            modifier = Modifier
+                                .fillMaxHeight()
+                                .fillMaxWidth(progress.value)
+                                .clip(RoundedCornerShape(99.dp))
+                                .background(Color(0xFF4DB3FF)),
+                        )
+                        Box(
+                            modifier = Modifier
+                                .width(60.dp)
+                                .fillMaxHeight()
+                                .offset(x = shimmerShift.dp)
+                                .clip(RoundedCornerShape(99.dp))
+                                .background(
+                                    Brush.horizontalGradient(
+                                        colors = listOf(
+                                            Color.White.copy(alpha = 0f),
+                                            Color.White.copy(alpha = 0.55f),
+                                            Color.White.copy(alpha = 0f),
+                                        )
                                     )
-                                )
-                            ),
-                    )
+                                ),
+                        )
+                    }
                 }
             }
         }
