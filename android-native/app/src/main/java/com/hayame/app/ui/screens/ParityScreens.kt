@@ -6,6 +6,7 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.browser.customtabs.CustomTabsIntent
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -75,6 +76,7 @@ import com.hayame.app.ui.state.UiState
 import com.hayame.app.ui.theme.BrandBlue
 import com.hayame.app.ui.theme.BrandLight
 import com.hayame.app.ui.theme.BrandNavy
+import com.hayame.app.ui.theme.LocalHayameColors
 import com.hayame.app.ui.theme.MutedText
 import com.hayame.app.ui.viewmodel.AppViewModel
 import java.io.File
@@ -88,6 +90,7 @@ fun RenterDashboardScreen(
     onOpenMessages: () -> Unit,
     onOpenBecomeHost: () -> Unit,
     onOpenHostDashboard: () -> Unit,
+    onOpenHostVehicles: () -> Unit,
 ) {
     val isAuthenticated by viewModel.isAuthenticated.collectAsState()
     val bookingsState by viewModel.bookingsState.collectAsState()
@@ -114,9 +117,10 @@ fun RenterDashboardScreen(
 
     val hostStatus = (me?.host_application_status ?: me?.host_status ?: "").lowercase()
     val isHost = me?.is_host == true || hostStatus == "approved"
+    val colors = LocalHayameColors.current
 
     Scaffold(
-        containerColor = Color(0xFFF8FAFF),
+        containerColor = colors.pageBackground,
         topBar = {
             ParityTopBar(title = "Dashboard", onBack = onBack)
         },
@@ -130,10 +134,14 @@ fun RenterDashboardScreen(
             contentPadding = PaddingValues(vertical = 12.dp),
         ) {
             item {
-                Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                Card(
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
+                    border = BorderStroke(1.dp, colors.border),
+                ) {
                     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text("Welcome back", style = androidx.compose.material3.MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.ExtraBold, color = BrandNavy)
-                        Text("Manage bookings, favorites, chats, and hosting access.", color = MutedText)
+                        Text("Welcome back", style = androidx.compose.material3.MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.ExtraBold, color = colors.brandNavy)
+                        Text("Manage bookings, favorites, chats, and hosting access.", color = colors.mutedText)
                     }
                 }
             }
@@ -141,7 +149,18 @@ fun RenterDashboardScreen(
             item {
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
                     HostStatCard("Upcoming trips", "$upcomingTrips", modifier = Modifier.weight(1f))
-                    HostStatCard("Past trips", "$pastTrips", modifier = Modifier.weight(1f))
+                    HostStatCard(
+                        title = "Past trips",
+                        value = "$pastTrips",
+                        modifier = Modifier.weight(1f),
+                        onClick = {
+                            if (isHost) {
+                                onOpenHostVehicles()
+                            } else {
+                                onOpenBecomeHost()
+                            }
+                        },
+                    )
                 }
             }
             item {
@@ -158,20 +177,28 @@ fun RenterDashboardScreen(
 
             if (isHost) {
                 item {
-                    Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                    Card(
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
+                        border = BorderStroke(1.dp, colors.border),
+                    ) {
                         Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text("Host mode is active.", color = BrandNavy, fontWeight = FontWeight.Bold)
-                            Text("Open host dashboard to manage listings, bookings, earnings, and reviews.", color = MutedText)
+                            Text("Host mode is active.", color = colors.brandNavy, fontWeight = FontWeight.Bold)
+                            Text("Open host dashboard to manage listings, bookings, earnings, and reviews.", color = colors.mutedText)
                             OutlinedButton(onClick = onOpenHostDashboard) { Text("Open host dashboard") }
                         }
                     }
                 }
             } else {
                 item {
-                    Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                    Card(
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
+                        border = BorderStroke(1.dp, colors.border),
+                    ) {
                         Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text("Become a host", color = BrandNavy, fontWeight = FontWeight.Bold)
-                            Text("Apply to list your cars. Review usually takes 1-2 business days.", color = MutedText)
+                            Text("Become a host", color = colors.brandNavy, fontWeight = FontWeight.Bold)
+                            Text("Apply to list your cars. Review usually takes 1-2 business days.", color = colors.mutedText)
                             OutlinedButton(onClick = onOpenBecomeHost) { Text("Host application") }
                         }
                     }
@@ -192,12 +219,15 @@ fun RenterDashboardScreen(
 
 @Composable
 private fun ParityNavRow(title: String, subtitle: String, onClick: () -> Unit) {
+    val colors = LocalHayameColors.current
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
+        border = BorderStroke(1.dp, colors.border),
     ) {
         Row(
             modifier = Modifier.padding(14.dp),
@@ -206,10 +236,10 @@ private fun ParityNavRow(title: String, subtitle: String, onClick: () -> Unit) {
         ) {
             Icon(Icons.Outlined.Info, contentDescription = null, tint = BrandBlue)
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(title, color = BrandNavy, fontWeight = FontWeight.Bold)
-                Text(subtitle, color = MutedText, style = androidx.compose.material3.MaterialTheme.typography.bodySmall)
+                Text(title, color = colors.brandNavy, fontWeight = FontWeight.Bold)
+                Text(subtitle, color = colors.mutedText, style = androidx.compose.material3.MaterialTheme.typography.bodySmall)
             }
-            Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = Color.LightGray)
+            Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = colors.mutedText)
         }
     }
 }
@@ -693,31 +723,46 @@ fun HostAvailabilityEditorScreen(viewModel: AppViewModel, carId: String, onBack:
 
 @Composable
 private fun ParityTopBar(title: String, onBack: () -> Unit) {
+    val colors = LocalHayameColors.current
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Color.White)
+            .background(colors.cardBackground)
             .padding(horizontal = 8.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         IconButton(onClick = onBack) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = colors.brandNavy)
         }
-        Text(title, style = androidx.compose.material3.MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = BrandNavy)
+        Text(title, style = androidx.compose.material3.MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = colors.brandNavy)
     }
 }
 
 @Composable
-private fun HostStatCard(title: String, value: String, modifier: Modifier = Modifier) {
+private fun HostStatCard(
+    title: String,
+    value: String,
+    modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
+) {
+    val colors = LocalHayameColors.current
+    val cardModifier = if (onClick == null) {
+        modifier
+    } else {
+        modifier.clickable(onClick = onClick)
+    }
+
     Card(
-        modifier = modifier,
+        modifier = cardModifier,
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
+        border = BorderStroke(1.dp, colors.border),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
     ) {
         Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(title, style = androidx.compose.material3.MaterialTheme.typography.labelLarge, color = MutedText)
-            Text(value, style = androidx.compose.material3.MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.ExtraBold, color = BrandNavy)
+            Text(title, style = androidx.compose.material3.MaterialTheme.typography.labelLarge, color = colors.mutedText)
+            Text(value, style = androidx.compose.material3.MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.ExtraBold, color = colors.brandNavy)
         }
     }
 }

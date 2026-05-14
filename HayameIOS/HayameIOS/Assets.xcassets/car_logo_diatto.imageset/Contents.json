@@ -1,0 +1,13 @@
+{
+  "images": [
+    {
+      "filename": "car_logo_diatto.png",
+      "idiom": "universal",
+      "scale": "1x"
+    }
+  ],
+  "info": {
+    "author": "xcode",
+    "version": 1
+  }
+}

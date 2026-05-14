@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import UIKit
 
 enum ExploreSortOption: String, CaseIterable, Identifiable {
     case recommended = "Recommended"
@@ -26,6 +27,7 @@ final class AppState: ObservableObject {
 
     @Published var renterTab: RenterTab = .home
     @Published var hostTab: HostTab = .dashboard
+    @Published var appearanceSettingsHighlightToken = 0
 
     @Published var cars: [Car] = []
     @Published var ownedCars: [Car] = []
@@ -67,6 +69,8 @@ final class AppState: ObservableObject {
     @Published var paymentFlowNoticeIsError = false
     @Published var notificationPreferences = NotificationPreferences.defaults
     @Published var activeAnnouncement: AppAnnouncement?
+    @Published var darkModeEnabled = false
+    @Published var listingEditorActive = false
 
     private let api = APIClient.shared
     private let defaults = UserDefaults.standard
@@ -77,6 +81,7 @@ final class AppState: ObservableObject {
     private let cachedUserNameKey = "hayame.cached_user_name"
     private let cachedUserAvatarKey = "hayame.cached_user_avatar"
     private let seenAnnouncementIDsKey = "hayame.seen_announcement_ids"
+    private let darkModeKey = "hayame.dark_mode_enabled"
 
     private var authToken: String?
     private var refreshToken: String?
@@ -85,6 +90,7 @@ final class AppState: ObservableObject {
     private var pushTokenObserver: NSObjectProtocol?
     private var pushRegistrationFailureObserver: NSObjectProtocol?
     private var pushNotificationRouteObserver: NSObjectProtocol?
+    private var appDidBecomeActiveObserver: NSObjectProtocol?
     private var hasSyncedOwnedCarsOnce = false
     private var hasSyncedBookingsOnce = false
     private var hasSyncedConversationsOnce = false
@@ -130,6 +136,7 @@ final class AppState: ObservableObject {
                 }
             }
         }
+        darkModeEnabled = defaults.bool(forKey: darkModeKey)
         migrateLoopbackBaseURLIfNeeded()
         restorePersistedSession()
         pushTokenObserver = NotificationCenter.default.addObserver(
@@ -173,6 +180,16 @@ final class AppState: ObservableObject {
             guard let self else { return }
             Task { @MainActor in
                 self.routePendingPushNotificationIfNeeded()
+            }
+        }
+        appDidBecomeActiveObserver = NotificationCenter.default.addObserver(
+            forName: UIApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self else { return }
+            Task { @MainActor in
+                await self.refreshActiveAnnouncements()
             }
         }
         routePendingPushNotificationIfNeeded()
@@ -286,9 +303,9 @@ final class AppState: ObservableObject {
         return result
     }
 
-    func signIn(email: String, password: String) {
+    func signIn(email: String, password: String, onSuccess: @escaping () -> Void = {}) {
         guard !email.isEmpty, !password.isEmpty else { return }
-        Task { await signInRemote(email: email, password: password) }
+        Task { await signInRemote(email: email, password: password, onSuccess: onSuccess) }
     }
 
     func signUp(firstName: String, lastName: String, email: String, city: String, region: String, password: String) {
@@ -523,6 +540,20 @@ final class AppState: ObservableObject {
                 syncErrorMessage = errorMessage(error, fallback: "Unable to save notification settings.")
             }
         }
+    }
+
+    func setDarkMode(_ enabled: Bool) {
+        darkModeEnabled = enabled
+        defaults.set(enabled, forKey: darkModeKey)
+    }
+
+    func openAppearanceSettings() {
+        if !hasAppAccess {
+            continueAsGuest()
+        }
+        hostModeEnabled = false
+        renterTab = .more
+        appearanceSettingsHighlightToken += 1
     }
 
     func dismissActiveAnnouncement() {
@@ -869,6 +900,20 @@ final class AppState: ObservableObject {
         )
     }
 
+    func addMessageIfMissing(conversationID: String, body: String) async {
+        let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        await loadMessages(for: conversationID, markRead: false, incremental: false)
+        let alreadySent = messagesByConversation[conversationID, default: []].contains(where: { message in
+            message.isMine &&
+                message.body.trimmingCharacters(in: .whitespacesAndNewlines) == trimmed
+        })
+        guard !alreadySent else { return }
+
+        addMessage(conversationID: conversationID, body: trimmed, mine: true)
+    }
+
     func openConversationInInbox(
         conversationID: String,
         participantName: String,
@@ -918,6 +963,22 @@ final class AppState: ObservableObject {
         }
 
         deferredPushNotificationRoute = nil
+
+        if let announcement = route.appAnnouncement {
+            activeAnnouncement = announcement
+            if announcement.showOnce,
+               let token = authToken?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !token.isEmpty {
+                Task { @MainActor in
+                    _ = try? await api.markAnnouncementSeen(
+                        baseURL: apiBaseURL,
+                        token: token,
+                        announcementID: announcement.id
+                    )
+                }
+            }
+            return
+        }
 
         if let conversationID = route.conversationID {
             openConversationInInbox(
@@ -1475,7 +1536,7 @@ final class AppState: ObservableObject {
 
     // MARK: - Session
 
-    private func signInRemote(email: String, password: String) async {
+    private func signInRemote(email: String, password: String, onSuccess: @escaping () -> Void = {}) async {
         isSyncingRemote = true
         syncErrorMessage = nil
         authInfoMessage = nil
@@ -1488,6 +1549,7 @@ final class AppState: ObservableObject {
                 from: session,
                 missingSessionMessage: "Login succeeded without an active session."
             )
+            onSuccess()
         } catch {
             if shouldAutoSwitchToProductionBaseURL(after: error) {
                 switchToProductionBaseURL()
@@ -1497,6 +1559,7 @@ final class AppState: ObservableObject {
                         from: session,
                         missingSessionMessage: "Login succeeded without an active session."
                     )
+                    onSuccess()
                     return
                 } catch {
                     syncErrorMessage = errorMessage(error, fallback: "Unable to sign in.")
@@ -2009,6 +2072,9 @@ final class AppState: ObservableObject {
             let locallySeen = seenAnnouncementIDs()
             pendingAnnouncements = response.data.compactMap(AppAnnouncement.init).filter { announcement in
                 announcement.shouldDisplay(locallySeen: locallySeen)
+            }
+            if activeAnnouncement?.delivery == "push" {
+                return
             }
             activeAnnouncement = pendingAnnouncements.first
         } catch {
@@ -2662,6 +2728,8 @@ final class AppState: ObservableObject {
             model: dto.model ?? "",
             city: dto.city ?? "Accra",
             region: MockDataService.normalizedRegion(dto.region ?? MockDataService.defaultRegion),
+            latitude: dto.latitude?.doubleValue ?? dto.lat?.doubleValue,
+            longitude: dto.longitude?.doubleValue ?? dto.lng?.doubleValue,
             dailyPrice: max(dto.daily_price?.intValue ?? 0, 0),
             rating: max(dto.avg_rating?.doubleValue ?? 0, 0),
             reviewsCount: max(dto.reviews_count?.intValue ?? 0, 0),
@@ -2708,6 +2776,9 @@ final class AppState: ObservableObject {
             hostID: dto.cars?.owner_id ?? "",
             conversationID: dto.conversation_id,
             carTitle: dto.cars?.title ?? "Car",
+            carBrand: dto.cars?.brand?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
+            carImageNames: ([dto.cars?.image_url].compactMap { $0 } + (dto.cars?.car_photos ?? []).compactMap(\.url))
+                .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty },
             renterName: dto.renter?.full_name ?? (dto.renter_id == currentUser.id ? currentUser.fullName : "Guest"),
             hostName: dto.cars?.owner?.full_name ?? "Host",
             startDate: parseDate(dto.start_date),
@@ -2715,6 +2786,10 @@ final class AppState: ObservableObject {
             status: status,
             paymentStatus: paymentStatus,
             totalPrice: max(dto.total_price?.intValue ?? 0, 0),
+            deliveryAddress: dto.delivery_address ?? "",
+            deliveryTime: dto.delivery_time ?? "",
+            contactPhone: dto.contact_phone ?? "",
+            deliveryNotes: dto.delivery_notes ?? "",
             tripUseRegion: normalizedTripRegion,
             tripUseCity: normalizedTripCity,
             tripUseAddress: dto.trip_use_address ?? "",
@@ -2973,10 +3048,10 @@ final class AppState: ObservableObject {
                 token: deviceToken,
                 deliveryEnabled: registration.registered != false && (warning == nil || warning?.isEmpty == true)
             )
-            if let warning = registration.warning?.trimmingCharacters(in: .whitespacesAndNewlines), !warning.isEmpty {
-                syncErrorMessage = warning
-            } else if registration.registered == false {
-                syncErrorMessage = registration.message ?? "Push token registration failed."
+            if registration.registered == false {
+                syncErrorMessage = warning.flatMap { $0.isEmpty ? nil : $0 }
+                    ?? registration.message
+                    ?? "Push token registration failed."
                 NotificationManager.shared.markRemotePushDeliveryUnavailable()
             }
         } catch let apiError as APIError {
@@ -3130,6 +3205,9 @@ final class AppState: ObservableObject {
         if let pushNotificationRouteObserver {
             NotificationCenter.default.removeObserver(pushNotificationRouteObserver)
         }
+        if let appDidBecomeActiveObserver {
+            NotificationCenter.default.removeObserver(appDidBecomeActiveObserver)
+        }
     }
 
     private static func defaultAPIBaseURL() -> String {
@@ -3209,5 +3287,40 @@ final class AppState: ObservableObject {
             return raw.contains("localhost")
         }
         return host == "localhost" || host == "127.0.0.1" || host == "::1"
+    }
+}
+
+private extension PushNotificationRoute {
+    var appAnnouncement: AppAnnouncement? {
+        guard let announcementID = announcementID.nilIfBlank else { return nil }
+        guard let title = announcementTitle.nilIfBlank,
+              let body = announcementBody.nilIfBlank
+        else { return nil }
+
+        let ctaURL = announcementCTAURL.nilIfBlank
+        return AppAnnouncement(
+            id: announcementID,
+            title: title,
+            body: body,
+            category: announcementCategory.nilIfBlank ?? "news",
+            delivery: "push",
+            audience: "all",
+            showOnce: true,
+            ctaLabel: ctaURL == nil ? nil : "Open",
+            ctaURL: ctaURL,
+            startsAt: nil,
+            endsAt: nil,
+            publishedAt: nil,
+            seen: false
+        )
+    }
+}
+
+private extension Optional where Wrapped == String {
+    var nilIfBlank: String? {
+        guard let value = self?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else {
+            return nil
+        }
+        return value
     }
 }

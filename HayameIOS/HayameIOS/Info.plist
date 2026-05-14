@@ -48,6 +48,10 @@
 	<string>https://osvjxsbsuixfsgadzxzo.supabase.co</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Hayame needs camera access to capture profile and listing photos.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Hayame uses Face ID to unlock saved login credentials on this device.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Hayame uses your location to show nearby cars.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Hayame needs photo library access for profile and listing images.</string>
 	<key>UIApplicationSceneManifest</key>
@@ -62,7 +66,5 @@
 	</array>
 	<key>UILaunchScreen</key>
 	<dict/>
-	<key>UIUserInterfaceStyle</key>
-	<string>Light</string>
 </dict>
 </plist>

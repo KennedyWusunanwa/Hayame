@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronRight, Trash } from "lucide-react";
+import { Pencil, Trash } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 type Props = {
@@ -24,17 +24,12 @@ export function CarActions({ carId }: Props) {
 
   return (
     <div className="flex items-center gap-2">
-      <Button variant="ghost" size="sm" asChild aria-label="Edit listing">
+      <Button variant="ghost" size="sm" asChild>
         <Link href={`/host/cars/${carId}/edit`}>
-          <ChevronRight className="h-4 w-4" />
+          <Pencil className="h-4 w-4" />
         </Link>
       </Button>
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={remove}
-        aria-label="Delete listing"
-      >
+      <Button variant="ghost" size="sm" onClick={remove}>
         <Trash className="h-4 w-4 text-red-600" />
       </Button>
     </div>

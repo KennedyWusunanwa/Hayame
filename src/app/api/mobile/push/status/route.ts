@@ -2,25 +2,31 @@ import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getRequestUser } from "@/lib/supabase/request-auth";
-import { getPushConfigurationStatus } from "@/lib/push";
 
-function isMissingPushTableError(message: string) {
-  const lowered = message.toLowerCase();
-  return (
-    lowered.includes("does not exist") ||
-    lowered.includes("relation") ||
-    lowered.includes("could not find") ||
-    lowered.includes("schema cache")
-  );
+function isPlaceholderValue(value: string) {
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) return true;
+  if (normalized === "your_apple_team_id" || normalized === "your_apns_key_id")
+    return true;
+  if (normalized.includes("your_apns_p8_key")) return true;
+  if (normalized.includes("replace_me") || normalized.includes("placeholder"))
+    return true;
+  return false;
+}
+
+function hasValue(value: string | undefined | null) {
+  if (!value) return false;
+  const normalized = value.trim();
+  if (!normalized) return false;
+  return !isPlaceholderValue(normalized);
 }
 
 export async function GET(req: Request) {
   try {
     const supabase = await createSupabaseServerClient();
     const user = await getRequestUser(supabase as any, req);
-    if (!user) {
+    if (!user)
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
-    }
 
     const admin = (() => {
       try {
@@ -43,33 +49,41 @@ export async function GET(req: Request) {
       .select("id,platform,device_token,updated_at")
       .eq("user_id", user.id)
       .order("updated_at", { ascending: false });
-
     if (error) {
-      const message = String(error.message ?? "");
-      if (isMissingPushTableError(message)) {
-        return NextResponse.json({
-          push: {
-            ...getPushConfigurationStatus(),
-            reason: "mobile_push_tokens table is not set up yet.",
-            tokens: {
-              total: 0,
-              ios: 0,
-              android: 0,
-              latestUpdatedAt: null,
-            },
-          },
-        });
-      }
       return NextResponse.json(
         { message: error.message ?? "Failed to load push status" },
         { status: 400 },
       );
     }
 
-    const config = getPushConfigurationStatus();
+    const apnsConfigured =
+      hasValue(process.env.APNS_TEAM_ID) &&
+      hasValue(process.env.APNS_KEY_ID) &&
+      hasValue(process.env.APNS_PRIVATE_KEY);
+    const fcmConfigured =
+      hasValue(process.env.FCM_SERVER_KEY) ||
+      hasValue(process.env.FIREBASE_SERVER_KEY);
+    const topic =
+      process.env.APNS_TOPIC?.trim() ||
+      process.env.IOS_BUNDLE_IDENTIFIER?.trim() ||
+      "com.hayame.app";
+    const useSandbox = ["1", "true", "yes", "on"].includes(
+      (process.env.APNS_USE_SANDBOX ?? "").trim().toLowerCase(),
+    );
+
     return NextResponse.json({
       push: {
-        ...config,
+        configured: apnsConfigured || fcmConfigured,
+        apns: {
+          teamIdConfigured: hasValue(process.env.APNS_TEAM_ID),
+          keyIdConfigured: hasValue(process.env.APNS_KEY_ID),
+          privateKeyConfigured: hasValue(process.env.APNS_PRIVATE_KEY),
+          topic,
+          useSandbox,
+        },
+        fcm: {
+          serverKeyConfigured: fcmConfigured,
+        },
         tokens: {
           total: (data ?? []).length,
           ios: (data ?? []).filter(

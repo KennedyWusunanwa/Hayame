@@ -1,11 +1,17 @@
 package com.hayame.app.ui.screens
 
+import android.Manifest
+import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.graphics.BitmapFactory
+import android.hardware.biometrics.BiometricPrompt
 import android.net.Uri
+import android.os.Build
+import android.os.CancellationSignal
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.DrawableRes
 import androidx.browser.customtabs.CustomTabsIntent
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
@@ -23,6 +29,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -33,6 +40,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -53,6 +61,7 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -68,11 +77,13 @@ import androidx.compose.material.icons.outlined.ChatBubble
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.CreditCard
+import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.DirectionsCar
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.LightMode
 import androidx.compose.material.icons.outlined.LocationOn
 import androidx.compose.material.icons.outlined.MailOutline
 import androidx.compose.material.icons.outlined.MoreHoriz
@@ -81,6 +92,7 @@ import androidx.compose.material.icons.outlined.PhoneIphone
 import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Shield
+import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.Badge
@@ -93,10 +105,12 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
@@ -111,6 +125,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -132,17 +147,25 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -165,6 +188,7 @@ import com.hayame.app.BuildConfig
 import com.hayame.app.core.network.BookingDto
 import com.hayame.app.core.network.CarDto
 import com.hayame.app.core.network.HostApplicationRequest
+import com.hayame.app.core.network.MobileMeDto
 import com.hayame.app.core.network.NotificationPreferencesDto
 import com.hayame.app.core.network.PaystackFinalizeRequest
 import com.hayame.app.core.network.ReviewDto
@@ -191,6 +215,7 @@ import com.hayame.app.ui.theme.BrandLight
 import com.hayame.app.ui.theme.BrandNavy
 import com.hayame.app.ui.theme.CardBackground
 import com.hayame.app.ui.theme.Danger
+import com.hayame.app.ui.theme.LocalHayameColors
 import com.hayame.app.ui.theme.MutedText
 import com.hayame.app.ui.theme.PageBackground
 import com.hayame.app.ui.theme.Success
@@ -199,6 +224,7 @@ import com.hayame.app.ui.viewmodel.BookingDraft
 import com.hayame.app.ui.viewmodel.AppViewModel
 import com.hayame.app.ui.viewmodel.ListingSubmissionResult
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -210,10 +236,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.text.Normalizer
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
 import java.time.temporal.ChronoUnit
+import java.util.Locale
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -221,7 +249,7 @@ import kotlin.math.roundToInt
 @Composable
 fun SplashScreen() {
     val progress = remember { Animatable(0f) }
-    val logoScale = remember { Animatable(0.82f) }
+    val logoScale = remember { Animatable(1f) }
     val splashMotion = rememberInfiniteTransition(label = "splash-motion")
     val logoFloat by splashMotion.animateFloat(
         initialValue = 5f,
@@ -241,7 +269,41 @@ fun SplashScreen() {
         ),
         label = "bar-shimmer",
     )
-    val barWidth = 248.dp
+    val topPanelOffset = remember { Animatable(-600f) }
+    val bottomPanelOffset = remember { Animatable(600f) }
+    val logoAlpha = remember { Animatable(0f) }
+    val logoEntryScale = remember { Animatable(0.82f) }
+    val taglineAlpha = remember { Animatable(0f) }
+    val taglineOffset = remember { Animatable(12f) }
+    val badgeAlpha = remember { Animatable(0f) }
+    val barAlpha = remember { Animatable(0f) }
+
+    val streak1X = remember { Animatable(-400f) }
+    val streak2X = remember { Animatable(-400f) }
+    val streak3X = remember { Animatable(-400f) }
+
+    val pulseTransition = rememberInfiniteTransition(label = "pulse")
+    val pulseScale by pulseTransition.animateFloat(
+        initialValue = 0.85f,
+        targetValue = 1.08f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1600, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "pulse-scale",
+    )
+    val pulseAlpha by pulseTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 0.18f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1600, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "pulse-alpha",
+    )
+
+    val badgeScale = remember { Animatable(0.88f) }
+    val sublineAlpha = remember { Animatable(0f) }
 
     LaunchedEffect(Unit) {
         launch {
@@ -253,107 +315,244 @@ fun SplashScreen() {
         launch {
             progress.animateTo(
                 targetValue = 1f,
-                animationSpec = tween(durationMillis = 1450, easing = FastOutSlowInEasing),
+                animationSpec = tween(durationMillis = 4650, easing = FastOutSlowInEasing),
             )
         }
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(
-                brush = Brush.linearGradient(
-                    colors = listOf(
-                        Color(0xFFE8F1FB),
-                        Color.White,
-                        BrandLight.copy(alpha = 0.45f),
-                    )
-                )
-            ),
-    ) {
-        Box(
-            modifier = Modifier
-                .align(Alignment.Center)
-                .size(220.dp)
-                .offset(x = (-120).dp, y = (-250).dp)
-                .background(BrandBlue.copy(alpha = 0.12f), CircleShape)
-                .blur(18.dp),
-        )
-        Box(
-            modifier = Modifier
-                .align(Alignment.Center)
-                .size(260.dp)
-                .offset(x = 130.dp, y = 250.dp)
-                .background(BrandNavy.copy(alpha = 0.08f), CircleShape)
-                .blur(24.dp),
-        )
-
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(18.dp),
-        ) {
-            Spacer(modifier = Modifier.weight(1f))
-            Image(
-                painter = painterResource(id = R.drawable.hayame_logo),
-                contentDescription = "Hayame",
-                modifier = Modifier
-                    .width(214.dp)
-                    .scale(logoScale.value)
-                    .offset(y = logoFloat.dp),
-                contentScale = ContentScale.Fit,
+    LaunchedEffect(Unit) {
+        // Stage 1 - panels slide in (T+0ms)
+        launch {
+            topPanelOffset.animateTo(
+                targetValue = 0f,
+                animationSpec = spring(dampingRatio = 0.78f, stiffness = 200f),
             )
-            Text(
-                text = "Rent a car, anytime, anywhere in Ghana.",
-                style = MaterialTheme.typography.bodyLarge,
-                fontSize = 15.sp,
-                color = MutedText.copy(alpha = 0.92f),
-                fontWeight = FontWeight.Medium,
+        }
+        launch {
+            bottomPanelOffset.animateTo(
+                targetValue = 0f,
+                animationSpec = spring(dampingRatio = 0.78f, stiffness = 200f),
+            )
+        }
+
+        // Stage 2 - logo entrance (T+300ms)
+        delay(300)
+        launch {
+            logoAlpha.animateTo(1f, animationSpec = tween(durationMillis = 300))
+        }
+        launch {
+            logoEntryScale.animateTo(
+                targetValue = 1f,
+                animationSpec = spring(dampingRatio = 0.72f, stiffness = 220f),
+            )
+        }
+
+        // Stage 3 - tagline slides up (T+500ms)
+        delay(200)
+        launch {
+            taglineAlpha.animateTo(1f, animationSpec = tween(durationMillis = 380, easing = FastOutSlowInEasing))
+        }
+        launch {
+            taglineOffset.animateTo(0f, animationSpec = tween(durationMillis = 380, easing = FastOutSlowInEasing))
+        }
+
+        // Stage 4 - progress bar fades in (T+750ms)
+        delay(250)
+        barAlpha.animateTo(1f, animationSpec = tween(durationMillis = 280))
+    }
+
+    LaunchedEffect(Unit) {
+        delay(380)
+
+        fun CoroutineScope.loopStreak(
+            anim: Animatable<Float, AnimationVector1D>,
+            initialDelay: Long,
+            duration: Int,
+        ) = launch {
+            delay(initialDelay)
+            while (true) {
+                anim.snapTo(-400f)
+                anim.animateTo(
+                    targetValue = 500f,
+                    animationSpec = tween(durationMillis = duration, easing = LinearEasing),
+                )
+            }
+        }
+
+        loopStreak(streak1X, initialDelay = 0L, duration = 1100)
+        loopStreak(streak2X, initialDelay = 280L, duration = 1200)
+        loopStreak(streak3X, initialDelay = 550L, duration = 1000)
+
+        launch {
+            delay(240)
+            sublineAlpha.animateTo(1f, animationSpec = tween(durationMillis = 350))
+        }
+        launch {
+            delay(320)
+            launch {
+                badgeAlpha.animateTo(1f, animationSpec = tween(durationMillis = 280))
+            }
+            launch {
+                badgeScale.animateTo(
+                    targetValue = 1f,
+                    animationSpec = spring(dampingRatio = 0.72f, stiffness = 220f),
+                )
+            }
+        }
+    }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(0.55f)
+                .offset { IntOffset(x = 0, y = topPanelOffset.value.roundToInt()) }
+                .background(Color(0xFF1484D9))
+                .clipToBounds(),
+            contentAlignment = Alignment.Center,
+        ) {
+            Box(
+                modifier = Modifier
+                    .width(90.dp)
+                    .height(2.5.dp)
+                    .offset(x = streak1X.value.dp, y = 20.dp)
+                    .background(Color.White.copy(alpha = 0.18f), RoundedCornerShape(99.dp)),
             )
             Box(
                 modifier = Modifier
-                    .width(barWidth)
-                    .height(4.dp)
+                    .width(60.dp)
+                    .height(1.5.dp)
+                    .offset(x = streak2X.value.dp, y = 36.dp)
+                    .background(Color.White.copy(alpha = 0.12f), RoundedCornerShape(99.dp)),
+            )
+            Box(
+                modifier = Modifier
+                    .width(44.dp)
+                    .height(1.5.dp)
+                    .offset(x = streak3X.value.dp, y = 8.dp)
+                    .background(Color.White.copy(alpha = 0.10f), RoundedCornerShape(99.dp)),
+            )
+
+            Box(
+                modifier = Modifier
+                    .size(280.dp)
+                    .scale(pulseScale)
+                    .border(
+                        width = 2.dp,
+                        color = Color.White.copy(alpha = pulseAlpha),
+                        shape = CircleShape,
+                    ),
+            )
+
+            Box(
+                modifier = Modifier
+                    .size(300.dp)
+                    .background(Color.White.copy(alpha = 0.08f), CircleShape),
+            )
+
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                Box(
+                Image(
+                    painter = painterResource(id = R.drawable.hayame_logo_white),
+                    contentDescription = "Hayame",
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .height(4.dp)
-                        .clip(RoundedCornerShape(99.dp))
-                        .background(BrandLight)
+                        .width(210.dp)
+                        .scale(logoEntryScale.value * logoScale.value)
+                        .offset(y = logoFloat.dp)
+                        .alpha(logoAlpha.value),
+                    contentScale = ContentScale.Fit,
                 )
-                Box(
+                Surface(
+                    color = Color.White,
+                    shape = RoundedCornerShape(99.dp),
                     modifier = Modifier
-                        .fillMaxWidth(progress.value)
-                        .height(4.dp)
-                        .clip(RoundedCornerShape(99.dp))
-                        .background(
-                            brush = Brush.horizontalGradient(
-                                colors = listOf(BrandBlue, BrandNavy),
-                            )
-                        )
-                )
-                Box(
-                    modifier = Modifier
-                        .offset(x = shimmerShift.dp)
-                        .width(76.dp)
-                        .height(4.dp)
-                        .background(
-                            brush = Brush.horizontalGradient(
-                                colors = listOf(
-                                    Color.White.copy(alpha = 0f),
-                                    Color.White.copy(alpha = 0.85f),
-                                    Color.White.copy(alpha = 0f),
-                                ),
-                            ),
-                            shape = RoundedCornerShape(99.dp),
-                        )
-                        .clip(RoundedCornerShape(99.dp))
-                )
+                        .alpha(badgeAlpha.value)
+                        .scale(badgeScale.value),
+                ) {
+                    Text(
+                        text = "Ghana's No.1 Car Rental Platform",
+                        color = Color(0xFF1484D9),
+                        style = MaterialTheme.typography.labelMedium.copy(fontSize = 11.sp),
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                    )
+                }
             }
-            Spacer(modifier = Modifier.weight(1f))
+        }
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight()
+                .offset { IntOffset(x = 0, y = bottomPanelOffset.value.roundToInt()) }
+                .background(Color.White),
+            contentAlignment = Alignment.Center,
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(18.dp),
+                modifier = Modifier.padding(horizontal = 48.dp),
+            ) {
+                Text(
+                    text = "Rent a car, anytime, anywhere in Ghana.",
+                    style = MaterialTheme.typography.bodyLarge.copy(fontSize = 16.sp),
+                    color = Color(0xFF0A2B54),
+                    fontWeight = FontWeight.Medium,
+                    textAlign = TextAlign.Center,
+                    lineHeight = 26.sp,
+                    modifier = Modifier
+                        .alpha(taglineAlpha.value)
+                        .offset(y = taglineOffset.value.dp),
+                )
+
+                Text(
+                    text = "Trusted by renters across Ghana",
+                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
+                    color = Color(0xFF737D91),
+                    fontWeight = FontWeight.Medium,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.alpha(sublineAlpha.value),
+                )
+
+                Box(
+                    modifier = Modifier
+                        .width(180.dp)
+                        .height(4.dp)
+                        .alpha(barAlpha.value),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(RoundedCornerShape(99.dp))
+                            .background(Color(0xFFEDF7FF)),
+                    )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .fillMaxWidth(progress.value)
+                            .clip(RoundedCornerShape(99.dp))
+                            .background(Color(0xFF1484D9)),
+                    )
+                    Box(
+                        modifier = Modifier
+                            .width(60.dp)
+                            .fillMaxHeight()
+                            .offset(x = shimmerShift.dp)
+                            .clip(RoundedCornerShape(99.dp))
+                            .background(
+                                Brush.horizontalGradient(
+                                    colors = listOf(
+                                        Color.White.copy(alpha = 0f),
+                                        Color.White.copy(alpha = 0.8f),
+                                        Color.White.copy(alpha = 0f),
+                                    )
+                                )
+                            ),
+                    )
+                }
+            }
         }
     }
 }
@@ -364,78 +563,129 @@ fun LoginScreen(
     onSignup: () -> Unit,
     onContinueAsGuest: () -> Unit = {},
 ) {
+    val context = LocalContext.current
     var email by rememberSaveable { mutableStateOf("") }
     var password by rememberSaveable { mutableStateOf("") }
     var passwordVisible by rememberSaveable { mutableStateOf(false) }
+    var saveLoginWithBiometrics by rememberSaveable { mutableStateOf(true) }
+    var hasBiometricCredentials by remember { mutableStateOf(hasStoredBiometricCredentials(context)) }
+    val biometricsAvailable = Build.VERSION.SDK_INT >= Build.VERSION_CODES.P
     val bootstrapping by viewModel.bootstrapping.collectAsState()
 
     AuthScaffold(
-        title = "Welcome back",
-        subtitle = "Log in to continue renting and hosting on Hayame.",
-    ) {
-        OutlinedTextField(
+        title = "Welcome back.",
+        subtitle = "Log in to continue",
+        selectedTab = AuthTab.LOGIN,
+        onTabChange = { if (it == AuthTab.SIGNUP) onSignup() },
+        onContinueAsGuest = onContinueAsGuest,
+        content = {
+        AuthTextField(
+            label = "Email",
             value = email,
             onValueChange = { email = it },
-            label = { Text("Email") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp)
+            keyboardType = KeyboardType.Email,
         )
-        OutlinedTextField(
+        AuthPasswordField(
+            label = "Password",
             value = password,
             onValueChange = { password = it },
-            label = { Text("Password") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-            visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-            trailingIcon = {
-                IconButton(onClick = { passwordVisible = !passwordVisible }) {
-                    Icon(
-                        imageVector = if (passwordVisible) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
-                        contentDescription = if (passwordVisible) "Hide password" else "Show password",
-                        tint = MutedText,
-                    )
-                }
-            },
+            visible = passwordVisible,
+            onToggleVisibility = { passwordVisible = !passwordVisible },
         )
-        Button(
-            onClick = { viewModel.login(email, password) },
-            modifier = Modifier.fillMaxWidth().height(52.dp),
-            shape = RoundedCornerShape(12.dp),
+        AuthPrimaryButton(
+            text = if (bootstrapping) "Please wait..." else "Log in",
             enabled = !bootstrapping,
         ) {
-            Text(if (bootstrapping) "Please wait..." else "Log in", fontWeight = FontWeight.Bold)
-        }
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            TextButton(
-                onClick = {
-                    if (email.isNotBlank()) {
-                        viewModel.forgotPassword(email)
-                    }
-                },
-            ) {
-                Text("Forgot password", color = BrandBlue)
-            }
-            TextButton(
-                onClick = {
-                    if (email.isNotBlank()) {
-                        viewModel.resendConfirmation(email)
-                    }
-                },
-            ) {
-                Text("Resend confirmation", color = BrandBlue)
+            viewModel.login(email, password) {
+                if (saveLoginWithBiometrics && biometricsAvailable) {
+                    saveBiometricCredentials(context, email, password)
+                    hasBiometricCredentials = true
+                }
             }
         }
-        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = Color.LightGray.copy(alpha = 0.3f))
-        TextButton(onClick = onSignup, modifier = Modifier.align(Alignment.CenterHorizontally)) {
-            Text("Don't have an account? Sign up", color = BrandNavy)
+
+        if (biometricsAvailable) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color(0xFFF7FAFF), RoundedCornerShape(14.dp))
+                    .border(1.dp, Color(0xFFE0EAF8), RoundedCornerShape(14.dp))
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    Text(
+                        "Save login for biometrics",
+                        color = Color(0xFF0A2B54),
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 13.sp,
+                    )
+                    Text(
+                        "Use it for quick login after signing out.",
+                        color = Color(0xFF737D91),
+                        fontWeight = FontWeight.Medium,
+                        fontSize = 11.sp,
+                    )
+                }
+                Switch(
+                    checked = saveLoginWithBiometrics,
+                    onCheckedChange = { saveLoginWithBiometrics = it },
+                )
+            }
         }
-        TextButton(onClick = onContinueAsGuest, modifier = Modifier.align(Alignment.CenterHorizontally)) {
-            Text("Continue as guest", color = MutedText)
+
+        if (hasBiometricCredentials) {
+            AuthBiometricButton(text = "Log in with biometrics") {
+                launchBiometricLogin(
+                    context = context,
+                    onCredentials = { savedEmail, savedPassword ->
+                        email = savedEmail
+                        password = savedPassword
+                        viewModel.login(savedEmail, savedPassword)
+                    },
+                    onUnavailable = {
+                        hasBiometricCredentials = hasStoredBiometricCredentials(context)
+                    },
+                )
+            }
         }
-    }
+
+        TextButton(
+            onClick = {
+                if (email.isNotBlank()) {
+                    viewModel.forgotPassword(email)
+                }
+            },
+            modifier = Modifier.align(Alignment.CenterHorizontally),
+        ) {
+            Text("Forgot password?", color = Color(0xFF1484D9), fontWeight = FontWeight.SemiBold)
+        }
+
+        if (email.isNotBlank()) {
+            TextButton(
+                onClick = { viewModel.resendConfirmation(email) },
+                modifier = Modifier.align(Alignment.CenterHorizontally),
+            ) {
+                Text("Resend verification email", color = Color(0xFF1484D9), fontWeight = FontWeight.SemiBold)
+            }
+        }
+
+        Row(
+            modifier = Modifier.align(Alignment.CenterHorizontally),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("No account?", color = Color(0xFF737D91), fontSize = 13.sp)
+            TextButton(onClick = onSignup, contentPadding = PaddingValues(0.dp)) {
+                Text("Sign up", color = Color(0xFF1484D9), fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+            }
+        }
+        },
+    )
 }
 
 @Composable
@@ -451,253 +701,329 @@ fun SignupScreen(
     var region by rememberSaveable { mutableStateOf("") }
     var city by rememberSaveable { mutableStateOf("") }
     val bootstrapping by viewModel.bootstrapping.collectAsState()
+    val cityOptions = remember(region, city) { authCitiesFor(region, city) }
 
     AuthScaffold(
-        title = "Create account",
-        subtitle = "Sign up to book cars, message hosts, and track trips.",
-    ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(value = firstName, onValueChange = { firstName = it }, label = { Text("First") }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(12.dp))
-            OutlinedTextField(value = lastName, onValueChange = { lastName = it }, label = { Text("Last") }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(12.dp))
+        title = "Create your account.",
+        subtitle = "Start renting in minutes",
+        selectedTab = AuthTab.SIGNUP,
+        onTabChange = { if (it == AuthTab.LOGIN) onBackToLogin() },
+        onContinueAsGuest = null,
+        content = {
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            AuthTextField("First name", firstName, { firstName = it }, modifier = Modifier.weight(1f))
+            AuthTextField("Last name", lastName, { lastName = it }, modifier = Modifier.weight(1f))
         }
-        OutlinedTextField(value = email, onValueChange = { email = it }, label = { Text("Email") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp))
-        OutlinedTextField(
+        AuthTextField("Email", email, { email = it }, keyboardType = KeyboardType.Email)
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            AuthSelectField("Region", region, AuthReferenceData.regions, { selection ->
+                region = selection
+                val options = authCitiesFor(selection, city)
+                if (options.none { it.equals(city, ignoreCase = true) }) {
+                    city = options.firstOrNull().orEmpty()
+                }
+            }, modifier = Modifier.weight(1f))
+            AuthSelectField("City", city, cityOptions, { city = it }, modifier = Modifier.weight(1f))
+        }
+        AuthPasswordField(
+            label = "Password",
             value = password,
             onValueChange = { password = it },
-            label = { Text("Password") },
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-            visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-            trailingIcon = {
-                IconButton(onClick = { passwordVisible = !passwordVisible }) {
-                    Icon(
-                        imageVector = if (passwordVisible) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
-                        contentDescription = if (passwordVisible) "Hide password" else "Show password",
-                        tint = MutedText,
-                    )
-                }
-            },
+            visible = passwordVisible,
+            onToggleVisibility = { passwordVisible = !passwordVisible },
         )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(value = region, onValueChange = { region = it }, label = { Text("Region") }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(12.dp))
-            OutlinedTextField(value = city, onValueChange = { city = it }, label = { Text("City") }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(12.dp))
-        }
-        Button(
-            onClick = {
-                viewModel.signup(
-                    firstName = firstName,
-                    lastName = lastName,
-                    email = email,
-                    password = password,
-                    city = city,
-                    region = region,
-                )
-            },
-            modifier = Modifier.fillMaxWidth().height(52.dp),
-            shape = RoundedCornerShape(12.dp),
+
+        AuthPrimaryButton(
+            text = if (bootstrapping) "Please wait..." else "Create account",
             enabled = !bootstrapping,
         ) {
-            Text(if (bootstrapping) "Please wait..." else "Sign up", fontWeight = FontWeight.Bold)
+            viewModel.signup(
+                firstName = firstName,
+                lastName = lastName,
+                email = email,
+                password = password,
+                city = city,
+                region = region,
+            )
         }
-        TextButton(onClick = onBackToLogin, modifier = Modifier.align(Alignment.CenterHorizontally)) {
-            Text("Already have an account? Log in", color = BrandNavy)
+
+        Row(
+            modifier = Modifier.align(Alignment.CenterHorizontally),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("Already registered?", color = Color(0xFF737D91), fontSize = 13.sp)
+            TextButton(onClick = onBackToLogin, contentPadding = PaddingValues(0.dp)) {
+                Text("Log in", color = Color(0xFF1484D9), fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+            }
         }
+
+        Spacer(modifier = Modifier.height(8.dp))
+        OutlinedButton(
+            onClick = { viewModel.continueAsGuest() },
+            modifier = Modifier.fillMaxWidth().height(48.dp),
+            shape = RoundedCornerShape(99.dp),
+            border = BorderStroke(1.5.dp, Color(0xFFD0DEF0)),
+            colors = ButtonDefaults.outlinedButtonColors(containerColor = Color.White),
+        ) {
+            Text("Continue as guest", color = Color(0xFF0A2B54), fontWeight = FontWeight.Medium)
+        }
+        },
+    )
+}
+
+private object AuthReferenceData {
+    val regions = listOf(
+        "Greater Accra Region",
+        "Ashanti Region",
+        "Western Region",
+        "Central Region",
+        "Eastern Region",
+        "Volta Region",
+        "Northern Region",
+        "Upper East Region",
+        "Upper West Region",
+        "Bono Region",
+        "Bono East Region",
+        "Ahafo Region",
+        "Western North Region",
+        "Oti Region",
+        "North East Region",
+        "Savannah Region",
+    )
+
+    val citiesByRegion = mapOf(
+        "Greater Accra Region" to listOf("Accra", "Tema", "Madina", "East Legon", "Adenta"),
+        "Ashanti Region" to listOf("Kumasi", "Obuasi", "Ejisu"),
+        "Western Region" to listOf("Takoradi", "Sekondi", "Tarkwa"),
+        "Central Region" to listOf("Cape Coast", "Kasoa", "Winneba"),
+        "Eastern Region" to listOf("Koforidua", "Akosombo", "Nsawam"),
+        "Volta Region" to listOf("Ho", "Hohoe", "Keta"),
+        "Northern Region" to listOf("Tamale", "Yendi"),
+    )
+}
+
+private fun authCitiesFor(region: String, preferred: String): List<String> {
+    val defaults = AuthReferenceData.citiesByRegion[region].orEmpty().ifEmpty { listOf("Accra") }
+    return if (preferred.isNotBlank() && defaults.none { it.equals(preferred, ignoreCase = true) }) {
+        listOf(preferred) + defaults
+    } else {
+        defaults
     }
 }
 
-@Composable
-private fun AuthScaffold(
-    title: String,
-    subtitle: String,
-    content: @Composable ColumnScope.() -> Unit,
-) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(
-                brush = Brush.linearGradient(
-                    colors = listOf(
-                        Color(0xFFE8F1FB),
-                        Color(0xFFF7F9FC),
-                        Color.White,
-                    )
-                )
-            ),
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(24.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Spacer(modifier = Modifier.height(20.dp))
-            Image(
-                painter = painterResource(id = R.drawable.hayame_logo),
-                contentDescription = "Hayame",
-                modifier = Modifier.fillMaxWidth(0.48f),
-                contentScale = ContentScale.Fit,
-            )
-            Card(
-                shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.98f)),
-                elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Column(
-                    modifier = Modifier.padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                    horizontalAlignment = Alignment.Start,
-                ) {
-                    Text(title, style = MaterialTheme.typography.headlineLarge, color = BrandNavy, fontWeight = FontWeight.ExtraBold)
-                    Text(
-                        subtitle,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MutedText,
-                        modifier = Modifier.padding(top = 2.dp, bottom = 8.dp),
-                    )
-                    content()
-                }
-            }
-            Spacer(modifier = Modifier.height(24.dp))
-        }
+private data class StoredBiometricCredentials(val email: String, val password: String)
+
+private fun saveBiometricCredentials(context: Context, email: String, password: String) {
+    val cleanEmail = email.trim()
+    if (cleanEmail.isBlank() || password.isBlank()) return
+    context.getSharedPreferences("hayame_biometric_login", Context.MODE_PRIVATE)
+        .edit()
+        .putString("email", cleanEmail)
+        .putString("password", password)
+        .apply()
+}
+
+private fun loadBiometricCredentials(context: Context): StoredBiometricCredentials? {
+    val prefs = context.getSharedPreferences("hayame_biometric_login", Context.MODE_PRIVATE)
+    val email = prefs.getString("email", null).orEmpty()
+    val password = prefs.getString("password", null).orEmpty()
+    return if (email.isNotBlank() && password.isNotBlank()) {
+        StoredBiometricCredentials(email, password)
+    } else {
+        null
     }
+}
+
+private fun hasStoredBiometricCredentials(context: Context): Boolean {
+    return loadBiometricCredentials(context) != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P
+}
+
+private fun launchBiometricLogin(
+    context: Context,
+    onCredentials: (String, String) -> Unit,
+    onUnavailable: () -> Unit,
+) {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) {
+        onUnavailable()
+        return
+    }
+    val credentials = loadBiometricCredentials(context) ?: run {
+        onUnavailable()
+        return
+    }
+    val activity = context as? Activity ?: run {
+        onUnavailable()
+        return
+    }
+    val prompt = BiometricPrompt.Builder(context)
+        .setTitle("Log in to Hayame")
+        .setSubtitle("Use biometrics to unlock your saved login")
+        .setNegativeButton("Cancel", activity.mainExecutor) { _, _ -> }
+        .build()
+    prompt.authenticate(
+        CancellationSignal(),
+        activity.mainExecutor,
+        object : BiometricPrompt.AuthenticationCallback() {
+            override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult?) {
+                onCredentials(credentials.email, credentials.password)
+            }
+
+            override fun onAuthenticationError(errorCode: Int, errString: CharSequence?) {
+                onUnavailable()
+            }
+        },
+    )
 }
 
 @Composable
 fun MainShell(
     viewModel: AppViewModel,
     initialTab: MainTab = MainTab.HOME,
+    appearanceHighlightNonce: Int = 0,
     onOpenCarDetail: (String) -> Unit,
+    onOpenConversation: (String) -> Unit,
     onOpenMessages: () -> Unit,
     onOpenDashboard: () -> Unit,
     onOpenBecomeHost: () -> Unit,
     onOpenHostDashboard: () -> Unit,
+    onOpenHostVehicles: () -> Unit,
     onOpenTrips: () -> Unit,
     onOpenProfile: () -> Unit,
     onOpenContact: () -> Unit,
     onOpenProtection: () -> Unit,
     onOpenCancellation: () -> Unit,
     onOpenPrivacy: () -> Unit,
+    onOpenAuth: () -> Unit,
 ) {
     var tab by rememberSaveable(initialTab) { mutableStateOf(initialTab) }
+    var homeSearchToken by rememberSaveable { mutableStateOf(0) }
+    var homeSearchQuery by rememberSaveable { mutableStateOf("") }
+    var homeSearchCarType by rememberSaveable { mutableStateOf("") }
+    var homeSearchRegion by rememberSaveable { mutableStateOf("") }
+    var homeSearchCity by rememberSaveable { mutableStateOf("") }
+    var homeSearchMaxPrice by rememberSaveable { mutableStateOf(8000f) }
+    var homeSearchInstantOnly by rememberSaveable { mutableStateOf(false) }
     val tabs = remember { MainTab.entries }
     val isAuthenticated by viewModel.isAuthenticated.collectAsState()
+    val focusManager = LocalFocusManager.current
+    val colors = LocalHayameColors.current
 
     LaunchedEffect(initialTab) {
         tab = initialTab
     }
 
     Scaffold(
-        containerColor = PageBackground,
+        modifier = Modifier.pointerInput(Unit) {
+            detectTapGestures(onTap = { focusManager.clearFocus() })
+        },
+        containerColor = colors.pageBackground,
         bottomBar = {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 14.dp, vertical = 10.dp),
-            ) {
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(34.dp),
-                    color = Color.White.copy(alpha = 0.94f),
-                    shadowElevation = 10.dp,
-                    tonalElevation = 4.dp,
-                    border = BorderStroke(1.dp, Color(0xFFE8ECF4)),
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 8.dp, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        tabs.forEach { item ->
-                            val selected = tab == item
-                            val icon = when (item) {
-                                MainTab.HOME -> Icons.Outlined.Home
-                                MainTab.EXPLORE -> Icons.Outlined.Search
-                                MainTab.TRIPS -> Icons.Outlined.CalendarMonth
-                                MainTab.SAVED -> Icons.Outlined.FavoriteBorder
-                                MainTab.MORE -> Icons.Outlined.MoreHoriz
-                            }
-                            val tint = if (selected) BrandBlue else Color(0xFF21212D)
-                            Column(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .clip(RoundedCornerShape(24.dp))
-                                    .background(if (selected) Color(0xFFD5DEE5) else Color.Transparent)
-                                    .clickable {
-                                        when {
-                                            item == MainTab.TRIPS && !isAuthenticated -> {
-                                                viewModel.requireAuthentication(
-                                                    message = "Sign in or sign up to view your trips.",
-                                                    destination = NavRoutes.main(MainTab.TRIPS),
-                                                )
-                                            }
-                                            item == MainTab.SAVED && !isAuthenticated -> {
-                                                viewModel.requireAuthentication(
-                                                    message = "Sign in or sign up to open your saved listings.",
-                                                    destination = NavRoutes.main(MainTab.SAVED),
-                                                )
-                                            }
-                                            else -> {
-                                                tab = item
-                                            }
-                                        }
-                                    }
-                                    .padding(vertical = 8.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(2.dp),
-                            ) {
-                                Icon(icon, contentDescription = item.title, tint = tint)
-                                Text(
-                                    item.title,
-                                    style = MaterialTheme.typography.labelLarge,
-                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                                    color = tint,
-                                )
-                            }
+            HayameBottomTabBar(
+                items = tabs.map { item ->
+                    HayameBottomNavItem(
+                        id = item,
+                        title = item.title,
+                        icon = when (item) {
+                            MainTab.HOME -> Icons.Outlined.Home
+                            MainTab.EXPLORE -> Icons.Outlined.Search
+                            MainTab.TRIPS -> Icons.Outlined.CalendarMonth
+                            MainTab.SAVED -> Icons.Outlined.FavoriteBorder
+                            MainTab.MORE -> Icons.Outlined.MoreHoriz
+                        },
+                    )
+                },
+                selected = tab,
+                onSelect = { item ->
+                    when {
+                        item == MainTab.TRIPS && !isAuthenticated -> {
+                            viewModel.requireAuthentication(
+                                message = "Sign in or sign up to view your trips.",
+                                destination = NavRoutes.main(MainTab.TRIPS),
+                            )
+                        }
+                        item == MainTab.SAVED && !isAuthenticated -> {
+                            viewModel.requireAuthentication(
+                                message = "Sign in or sign up to open your saved listings.",
+                                destination = NavRoutes.main(MainTab.SAVED),
+                            )
+                        }
+                        else -> {
+                            tab = item
                         }
                     }
-                }
-            }
+                },
+            )
         },
     ) { innerPadding ->
-        when (tab) {
-            MainTab.HOME -> HomeTab(
-                viewModel = viewModel,
-                paddingValues = innerPadding,
-                onOpenCarDetail = onOpenCarDetail,
-                onOpenMessages = onOpenMessages,
-                onOpenExplore = { tab = MainTab.EXPLORE },
-                onOpenMore = { tab = MainTab.MORE },
-            )
-            MainTab.EXPLORE -> ExploreTab(
-                viewModel = viewModel,
-                paddingValues = innerPadding,
-                onOpenCarDetail = onOpenCarDetail,
-            )
-            MainTab.TRIPS -> TripsTab(viewModel = viewModel, paddingValues = innerPadding)
-            MainTab.SAVED -> SavedTab(
-                viewModel = viewModel,
-                paddingValues = innerPadding,
-                onOpenCarDetail = onOpenCarDetail,
-            )
-            MainTab.MORE -> MoreTab(
-                viewModel = viewModel,
-                paddingValues = innerPadding,
-                onOpenMessages = onOpenMessages,
-                onOpenDashboard = onOpenDashboard,
-                onOpenBecomeHost = onOpenBecomeHost,
-                onOpenHostDashboard = onOpenHostDashboard,
-                onOpenTrips = onOpenTrips,
-                onOpenProfile = onOpenProfile,
-                onOpenContact = onOpenContact,
-                onOpenProtection = onOpenProtection,
-                onOpenCancellation = onOpenCancellation,
-                onOpenPrivacy = onOpenPrivacy,
-            )
+        AnimatedContent(
+            targetState = tab,
+            transitionSpec = {
+                (fadeIn(tween(180)) + slideInHorizontally { it / 14 })
+                    .togetherWith(fadeOut(tween(120)) + slideOutHorizontally { -it / 18 })
+            },
+            label = "main-tab-transition",
+        ) { selectedTab ->
+            when (selectedTab) {
+                MainTab.HOME -> HomeTab(
+                    viewModel = viewModel,
+                    paddingValues = innerPadding,
+                    onOpenCarDetail = onOpenCarDetail,
+                    onOpenMessages = onOpenMessages,
+                    onOpenExplore = { tab = MainTab.EXPLORE },
+                    onOpenMore = { tab = MainTab.MORE },
+                    onOpenAuth = onOpenAuth,
+                    onApplySearchToExplore = { search, carType, region, city, maxPrice, instantOnly ->
+                        homeSearchQuery = search
+                        homeSearchCarType = carType
+                        homeSearchRegion = region
+                        homeSearchCity = city
+                        homeSearchMaxPrice = maxPrice
+                        homeSearchInstantOnly = instantOnly
+                        homeSearchToken += 1
+                        tab = MainTab.EXPLORE
+                    },
+                )
+                MainTab.EXPLORE -> ExploreTab(
+                    viewModel = viewModel,
+                    paddingValues = innerPadding,
+                    onOpenCarDetail = onOpenCarDetail,
+                    homeSearchToken = homeSearchToken,
+                    homeSearchQuery = homeSearchQuery,
+                    homeSearchCarType = homeSearchCarType,
+                    homeSearchRegion = homeSearchRegion,
+                    homeSearchCity = homeSearchCity,
+                    homeSearchMaxPrice = homeSearchMaxPrice,
+                    homeSearchInstantOnly = homeSearchInstantOnly,
+                )
+                MainTab.TRIPS -> TripsTab(
+                    viewModel = viewModel,
+                    paddingValues = innerPadding,
+                    onOpenHostVehicles = onOpenHostVehicles,
+                    onOpenCarDetail = onOpenCarDetail,
+                    onOpenConversation = onOpenConversation,
+                )
+                MainTab.SAVED -> SavedTab(
+                    viewModel = viewModel,
+                    paddingValues = innerPadding,
+                    onOpenCarDetail = onOpenCarDetail,
+                )
+                MainTab.MORE -> MoreTab(
+                    viewModel = viewModel,
+                    paddingValues = innerPadding,
+                    appearanceHighlightNonce = appearanceHighlightNonce,
+                    onOpenMessages = onOpenMessages,
+                    onOpenDashboard = onOpenDashboard,
+                    onOpenBecomeHost = onOpenBecomeHost,
+                    onOpenHostDashboard = onOpenHostDashboard,
+                    onOpenTrips = onOpenTrips,
+                    onOpenProfile = onOpenProfile,
+                    onOpenContact = onOpenContact,
+                    onOpenProtection = onOpenProtection,
+                    onOpenCancellation = onOpenCancellation,
+                    onOpenPrivacy = onOpenPrivacy,
+                )
+            }
         }
     }
 }
@@ -733,6 +1059,7 @@ fun HostShell(
         ?.data
         ?.sumOf { it.unread_count ?: 0 }
         ?: 0
+    val colors = LocalHayameColors.current
 
     LaunchedEffect(pendingHostTab) {
         val requestedTab = pendingHostTab ?: return@LaunchedEffect
@@ -741,105 +1068,151 @@ fun HostShell(
     }
 
     Scaffold(
-        containerColor = Color(0xFFF2F5FA),
+        containerColor = colors.pageBackground,
         bottomBar = {
-            Surface(
-                color = Color.White,
-                shadowElevation = 8.dp,
-            ) {
-                Column {
-                    HorizontalDivider(color = Color(0x14000000))
-                    NavigationBar(
-                        containerColor = Color.White,
-                        tonalElevation = 0.dp,
-                    ) {
-                        navigationItems.forEach { (item, icon) ->
-                            NavigationBarItem(
-                                selected = tab == item,
-                                onClick = { tab = item },
-                                icon = {
-                                    if (item == HostMainTab.INBOX && unreadCount > 0) {
-                                        BadgedBox(
-                                            badge = {
-                                                Badge(containerColor = BrandBlue, contentColor = Color.White) {
-                                                    Text(if (unreadCount > 99) "99+" else unreadCount.toString())
-                                                }
-                                            },
-                                        ) {
-                                            Icon(icon, contentDescription = item.title)
-                                        }
-                                    } else {
-                                        Icon(icon, contentDescription = item.title)
-                                    }
-                                },
-                                label = {
-                                    Text(
-                                        item.title,
-                                        maxLines = 1,
-                                    )
-                                },
-                                alwaysShowLabel = true,
-                                colors = NavigationBarItemDefaults.colors(
-                                    selectedIconColor = BrandBlue,
-                                    selectedTextColor = BrandBlue,
-                                    unselectedIconColor = MutedText,
-                                    unselectedTextColor = MutedText,
-                                    indicatorColor = BrandLight,
-                                ),
-                            )
-                        }
-                    }
-                }
-            }
+            HayameBottomTabBar(
+                items = navigationItems.map { (item, icon) ->
+                    HayameBottomNavItem(
+                        id = item,
+                        title = if (item == HostMainTab.DASHBOARD) "Home" else item.title,
+                        icon = icon,
+                        badgeCount = if (item == HostMainTab.INBOX) unreadCount else 0,
+                    )
+                },
+                selected = tab,
+                onSelect = { tab = it },
+            )
         },
     ) { inner ->
         Box(modifier = Modifier.fillMaxSize().padding(inner)) {
-            when (tab) {
-                HostMainTab.DASHBOARD -> HostDashboardScreen(
-                    viewModel = viewModel,
-                    onBack = onExitHostMode,
-                    onOpenCars = { tab = HostMainTab.CARS },
-                    onOpenCreateCar = { tab = HostMainTab.CARS },
-                    onOpenBookings = { tab = HostMainTab.BOOKINGS },
-                    onOpenEarnings = { tab = HostMainTab.EARNINGS },
-                    onOpenMessages = { tab = HostMainTab.INBOX },
-                    onOpenFavorites = { tab = HostMainTab.PROFILE },
-                    onOpenReviews = { tab = HostMainTab.PROFILE },
-                    onOpenProfile = { tab = HostMainTab.PROFILE },
-                )
-                HostMainTab.CARS -> HostCarsScreen(
-                    viewModel = viewModel,
-                    onBack = onExitHostMode,
-                    onCreate = { onOpenCarEditor(null) },
-                    onEdit = onOpenCarEditor,
-                    onOpenPhotos = onOpenListingPhotos,
-                    onOpenAvailability = onOpenAvailability,
-                )
-                HostMainTab.BOOKINGS -> HostBookingsScreen(viewModel = viewModel, onBack = onExitHostMode, onOpenConversation = onOpenConversation)
-                HostMainTab.EARNINGS -> HostEarningsScreen(viewModel = viewModel, onBack = onExitHostMode)
-                HostMainTab.INBOX -> MessagesScreen(
-                    viewModel = viewModel,
-                    onBack = onExitHostMode,
-                    onOpenConversation = onOpenConversation,
-                    title = "Inbox",
-                    showBackButton = false,
-                )
-                HostMainTab.PROFILE -> HostProfileScreen(
-                    viewModel = viewModel,
-                    onBack = onExitHostMode,
-                    onOpenReviews = onOpenReviews,
-                    onOpenFavorites = onOpenFavorites,
-                    onOpenContact = onOpenContact,
-                    onOpenProtection = onOpenProtection,
-                    onOpenCancellation = onOpenCancellation,
-                    onTurnOffHostMode = onExitHostMode,
-                )
+            AnimatedContent(
+                targetState = tab,
+                transitionSpec = {
+                    (fadeIn(tween(180)) + slideInHorizontally { it / 14 })
+                        .togetherWith(fadeOut(tween(120)) + slideOutHorizontally { -it / 18 })
+                },
+                label = "host-tab-transition",
+            ) { selectedTab ->
+                when (selectedTab) {
+                    HostMainTab.DASHBOARD -> HostDashboardScreen(
+                        viewModel = viewModel,
+                        onBack = onExitHostMode,
+                        onOpenCars = { tab = HostMainTab.CARS },
+                        onOpenCreateCar = { tab = HostMainTab.CARS },
+                        onOpenBookings = { tab = HostMainTab.BOOKINGS },
+                        onOpenEarnings = { tab = HostMainTab.EARNINGS },
+                        onOpenMessages = { tab = HostMainTab.INBOX },
+                        onOpenFavorites = { tab = HostMainTab.PROFILE },
+                        onOpenReviews = { tab = HostMainTab.PROFILE },
+                        onOpenProfile = { tab = HostMainTab.PROFILE },
+                    )
+                    HostMainTab.CARS -> HostCarsScreen(
+                        viewModel = viewModel,
+                        onBack = onExitHostMode,
+                        onCreate = { onOpenCarEditor(null) },
+                        onEdit = onOpenCarEditor,
+                        onOpenPhotos = onOpenListingPhotos,
+                        onOpenAvailability = onOpenAvailability,
+                    )
+                    HostMainTab.BOOKINGS -> HostBookingsScreen(viewModel = viewModel, onBack = onExitHostMode, onOpenConversation = onOpenConversation)
+                    HostMainTab.EARNINGS -> HostEarningsScreen(viewModel = viewModel, onBack = onExitHostMode)
+                    HostMainTab.INBOX -> MessagesScreen(
+                        viewModel = viewModel,
+                        onBack = onExitHostMode,
+                        onOpenConversation = onOpenConversation,
+                        title = "Inbox",
+                        showBackButton = false,
+                    )
+                    HostMainTab.PROFILE -> HostProfileScreen(
+                        viewModel = viewModel,
+                        onBack = onExitHostMode,
+                        onOpenReviews = onOpenReviews,
+                        onOpenFavorites = onOpenFavorites,
+                        onOpenContact = onOpenContact,
+                        onOpenProtection = onOpenProtection,
+                        onOpenCancellation = onOpenCancellation,
+                        onTurnOffHostMode = onExitHostMode,
+                    )
+                }
+            }
+        }
+    }
+}
+
+private data class HayameBottomNavItem<T>(
+    val id: T,
+    val title: String,
+    val icon: ImageVector,
+    val badgeCount: Int = 0,
+)
+
+@Composable
+private fun <T> HayameBottomTabBar(
+    items: List<HayameBottomNavItem<T>>,
+    selected: T,
+    onSelect: (T) -> Unit,
+) {
+    val colors = LocalHayameColors.current
+    Surface(
+        color = colors.cardBackground,
+        shadowElevation = 8.dp,
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            HorizontalDivider(color = colors.border)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                items.forEach { item ->
+                    val isSelected = item.id == selected
+                    val tint = if (isSelected) colors.brandBlue else colors.mutedText
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(28.dp))
+                            .background(if (isSelected) colors.brandLight else Color.Transparent)
+                            .clickable { onSelect(item.id) }
+                            .padding(vertical = 8.dp, horizontal = 2.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(3.dp),
+                    ) {
+                        BadgedBox(
+                            badge = {
+                                if (item.badgeCount > 0) {
+                                    Badge(containerColor = colors.danger, contentColor = Color.White) {
+                                        Text(if (item.badgeCount > 99) "99+" else item.badgeCount.toString())
+                                    }
+                                }
+                            },
+                        ) {
+                            Icon(
+                                imageVector = item.icon,
+                                contentDescription = item.title,
+                                tint = tint,
+                                modifier = Modifier.size(26.dp),
+                            )
+                        }
+                        Text(
+                            text = item.title,
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
+                            color = tint,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
             }
         }
     }
 }
 
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
 private fun HomeTab(
     viewModel: AppViewModel,
     paddingValues: PaddingValues,
@@ -847,6 +1220,8 @@ private fun HomeTab(
     onOpenMessages: () -> Unit,
     onOpenExplore: () -> Unit,
     onOpenMore: () -> Unit,
+    onOpenAuth: () -> Unit,
+    onApplySearchToExplore: (String, String, String, String, Float, Boolean) -> Unit,
 ) {
     val carsState by viewModel.carsState.collectAsState()
     val favoritesState by viewModel.favoritesState.collectAsState()
@@ -855,11 +1230,33 @@ private fun HomeTab(
     val locations by viewModel.locations.collectAsState()
     val conversationsState by viewModel.conversationsState.collectAsState()
     val favoriteIds = (favoritesState as? UiState.Success<Set<String>>)?.data ?: emptySet()
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var query by rememberSaveable { mutableStateOf("") }
     var selectedRegion by rememberSaveable { mutableStateOf("Any region") }
     var selectedCity by rememberSaveable { mutableStateOf("Any city") }
     var selectedType by rememberSaveable { mutableStateOf("Any type") }
     var maxPrice by rememberSaveable { mutableStateOf(5000f) }
+    var selectedCat by rememberSaveable { mutableStateOf("All") }
+    var homeSearchText by rememberSaveable { mutableStateOf("") }
+    var showHomeFilterSheet by rememberSaveable { mutableStateOf(false) }
+    var homeRegion by rememberSaveable { mutableStateOf("") }
+    var homeCity by rememberSaveable { mutableStateOf("") }
+    var homeMaxPrice by rememberSaveable { mutableStateOf(8000f) }
+    var homeInstantOnly by rememberSaveable { mutableStateOf(false) }
+    var homeLocation by remember { mutableStateOf<HomeLocation?>(null) }
+    var detectedCityName by remember { mutableStateOf<String?>(null) }
+    val colors = LocalHayameColors.current
+    val locationPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        if (granted) {
+            scope.launch {
+                homeLocation = fetchHomeLocation(context)
+                detectedCityName = homeLocation?.cityName
+            }
+        }
+    }
 
     val regionOptions = remember(locations) {
         listOf("Any region") + locations.keys.filter { it.isNotBlank() }.sorted()
@@ -877,6 +1274,40 @@ private fun HomeTab(
             .orEmpty()
             .sorted()
         listOf("Any type") + types
+    }
+    val availableCategories = remember(carsState) {
+        val defaultTypes = listOf("SUV", "Sedan", "Electric", "Luxury", "Pickup", "Van", "Compact", "Convertible", "Minivan", "Crossover")
+        val types = (carsState as? UiState.Success<List<CarDto>>)
+            ?.data
+            ?.mapNotNull { it.car_type?.trim()?.takeIf { type -> type.isNotBlank() } }
+            ?: emptyList()
+        listOf("All") + (defaultTypes + types).distinct().sorted()
+    }
+    val homeCars = remember(carsState) {
+        (carsState as? UiState.Success<List<CarDto>>)?.data ?: emptyList()
+    }
+    val nearYouCars = remember(homeCars, homeLocation) {
+        val loc = homeLocation
+        if (loc == null) {
+            homeCars.take(5)
+        } else {
+            homeCars
+                .map { car ->
+                    val lat = car.latitude ?: car.lat
+                    val lng = car.longitude ?: car.lng
+                    val dist = if (lat != null && lng != null) {
+                        distanceKm(loc.lat, loc.lng, lat, lng)
+                    } else if (car.city.orEmpty().equals(loc.cityName.orEmpty(), ignoreCase = true)) {
+                        0.0
+                    } else {
+                        999.0
+                    }
+                    car to dist
+                }
+                .sortedBy { it.second }
+                .take(5)
+                .map { it.first }
+        }
     }
     val carsListed = (carsState as? UiState.Success<List<CarDto>>)?.data?.size ?: 0
     val approvedHosts = remember(carsState) {
@@ -908,20 +1339,41 @@ private fun HomeTab(
         viewModel.loadCars(params)
     }
 
+    fun applyHomeSearchToExplore() {
+        onApplySearchToExplore(
+            homeSearchText.trim(),
+            if (selectedCat == "All") "" else selectedCat,
+            homeRegion,
+            homeCity,
+            homeMaxPrice,
+            homeInstantOnly,
+        )
+    }
+
     LaunchedEffect(Unit) {
+        locationPermission.launch(Manifest.permission.ACCESS_COARSE_LOCATION)
+        homeLocation = fetchHomeLocation(context)
+        detectedCityName = homeLocation?.cityName
         viewModel.loadReferenceData()
         viewModel.loadCars(mapOf("sort" to "new_listings", "limit" to "48"))
         viewModel.loadFavorites()
         viewModel.loadConversations()
     }
 
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(paddingValues)
-            .padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
+    LaunchedEffect(availableCategories) {
+        if (!availableCategories.contains(selectedCat)) {
+            selectedCat = "All"
+        }
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
         item {
             Spacer(modifier = Modifier.height(6.dp))
             Row(
@@ -929,34 +1381,72 @@ private fun HomeTab(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Row(
-                    modifier = Modifier
-                        .weight(1f)
-                        .clickable(onClick = onOpenMore),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    RemoteAvatar(
-                        imageUrl = resolveAppImage(me.preferredAvatarRaw()),
+	                Row(
+	                    modifier = Modifier
+	                        .weight(1f)
+	                        .clickable {
+	                            if (isAuthenticated) {
+	                                onOpenMore()
+	                            } else {
+	                                onOpenAuth()
+	                            }
+	                        },
+	                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+	                    verticalAlignment = Alignment.CenterVertically,
+	                ) {
+	                    RemoteAvatar(
+	                        imageUrl = resolveAppImage(me.preferredAvatarRaw()),
                         name = me.preferredFullName() ?: me?.user?.email,
                         fallback = "U",
                         size = 42.dp,
                         textStyle = MaterialTheme.typography.labelLarge,
-                    )
-                    Column {
-                        val displayName = me.preferredFullName()?.trim().takeUnless { it.isNullOrBlank() } ?: "Guest User"
-                        Text(
-                            displayName,
-                            style = MaterialTheme.typography.titleMedium.copy(fontSize = 15.sp),
-                            color = BrandNavy,
-                            fontWeight = FontWeight.ExtraBold,
-                        )
-                        Text("Open profile", style = MaterialTheme.typography.labelLarge.copy(fontSize = 11.sp), color = MutedText)
-                    }
-                }
+	                    )
+	                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+	                        val displayName = if (isAuthenticated) {
+	                            me.preferredFullName()?.trim()
+	                                .takeUnless { it.isNullOrBlank() } ?: "Guest"
+	                        } else {
+	                            "Sign in or sign up"
+	                        }
+	                        val locationText = listOfNotNull(
+	                            me?.profile?.city?.trim()?.takeIf { it.isNotBlank() },
+	                            me?.profile?.region?.trim()?.takeIf { it.isNotBlank() },
+                        ).firstOrNull() ?: detectedCityName ?: "Ghana"
+	                        Text(
+                            text = displayName,
+                            style = MaterialTheme.typography.titleMedium.copy(fontSize = 16.sp),
+	                            color = colors.brandNavy,
+	                            fontWeight = FontWeight.Bold,
+	                        )
+	                        if (isAuthenticated) {
+	                            Row(
+	                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+	                                verticalAlignment = Alignment.CenterVertically,
+	                            ) {
+	                                Icon(
+	                                    Icons.Outlined.LocationOn,
+	                                    contentDescription = null,
+	                                    tint = colors.mutedText,
+	                                    modifier = Modifier.size(12.dp),
+	                                )
+	                                Text(
+	                                    text = locationText,
+	                                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
+	                                    color = colors.mutedText,
+	                                )
+	                                Icon(
+	                                    Icons.Outlined.ExpandMore,
+	                                    contentDescription = null,
+	                                    tint = BrandBlue,
+	                                    modifier = Modifier.size(12.dp),
+	                                )
+	                            }
+	                        }
+	                    }
+	                }
                 Surface(
                     shape = CircleShape,
-                    color = Color.White,
+                    color = colors.cardBackground,
                     tonalElevation = 0.dp,
                     shadowElevation = 0.dp,
                     border = BorderStroke(1.dp, Color.Black.copy(alpha = 0.06f)),
@@ -972,7 +1462,7 @@ private fun HomeTab(
                     },
                 ) {
                     Box(contentAlignment = Alignment.Center) {
-                        Icon(Icons.Outlined.ChatBubble, contentDescription = "Messages", tint = BrandNavy)
+                        Icon(Icons.Outlined.ChatBubble, contentDescription = "Messages", tint = colors.brandNavy)
                         if (unreadCount > 0) {
                             Box(
                                 modifier = Modifier
@@ -987,228 +1477,137 @@ private fun HomeTab(
             }
         }
         item {
-            Card(
-                shape = RoundedCornerShape(28.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth(),
-                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
             ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(
-                            brush = Brush.linearGradient(
-                                colors = listOf(BrandNavy, BrandBlue),
-                            ),
-                            shape = RoundedCornerShape(20.dp),
-                        )
-                        .padding(18.dp),
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .size(220.dp)
-                            .background(Color.White.copy(alpha = 0.08f), CircleShape)
-                    )
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Image(
-                                painter = painterResource(id = R.drawable.hayame_logo),
-                                contentDescription = "Hayame",
-                                modifier = Modifier.size(width = 34.dp, height = 34.dp),
-                                contentScale = ContentScale.Fit,
-                            )
-                            Text(
-                                "Ghana Car Sharing",
-                                color = Color.White.copy(alpha = 0.82f),
-                                style = MaterialTheme.typography.labelLarge.copy(fontSize = 10.sp),
-                                fontWeight = FontWeight.Medium,
-                            )
+                OutlinedTextField(
+                    value = homeSearchText,
+                    onValueChange = { homeSearchText = it },
+                    modifier = Modifier.weight(1f),
+	                    singleLine = true,
+	                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+	                    keyboardActions = KeyboardActions(onSearch = { applyHomeSearchToExplore() }),
+	                    shape = RoundedCornerShape(14.dp),
+                    placeholder = { Text("Car, city, or host...", color = colors.mutedText) },
+                    leadingIcon = {
+                        Icon(Icons.Outlined.Search, contentDescription = null, tint = colors.mutedText)
+                    },
+                    trailingIcon = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (homeSearchText.isNotEmpty()) {
+                                    IconButton(onClick = { homeSearchText = "" }) {
+                                    Icon(Icons.Outlined.Close, contentDescription = "Clear", tint = colors.mutedText)
+                                }
+                            }
+                            IconButton(onClick = { showHomeFilterSheet = true }) {
+                                Box(
+                                    modifier = Modifier
+                                        .background(BrandBlue, RoundedCornerShape(10.dp))
+                                        .padding(8.dp),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Icon(
+                                        Icons.Outlined.Tune,
+                                        contentDescription = "Filters",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(16.dp),
+                                    )
+                                }
+                            }
                         }
-                        Text(
-                            "RENT CAR ACROSS GHANA",
-                            style = MaterialTheme.typography.labelLarge.copy(fontSize = 10.sp),
-                            color = Color.White.copy(alpha = 0.78f),
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                        Text(
-                            "Rent a Car, Anytime,\nAnywhere in Ghana.",
-                            style = MaterialTheme.typography.headlineLarge.copy(fontSize = 32.sp),
-                            color = Color.White,
-                            fontWeight = FontWeight.ExtraBold,
-                        )
-                        GradientPillButton(
-                            text = "Book Now",
-                            modifier = Modifier.widthIn(max = 220.dp),
-                            onClick = onOpenExplore,
-                        )
-                    }
+                    },
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = BrandBlue,
+                        unfocusedBorderColor = colors.border,
+                        focusedContainerColor = colors.cardBackground,
+                        unfocusedContainerColor = colors.cardBackground,
+                        focusedTextColor = colors.brandNavy,
+                        unfocusedTextColor = colors.brandNavy,
+                    ),
+                )
+	                Button(
+	                    onClick = { applyHomeSearchToExplore() },
+	                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = BrandBlue),
+                    modifier = Modifier.height(56.dp),
+                ) {
+                    Text("Search", color = Color.White, fontWeight = FontWeight.SemiBold)
                 }
             }
         }
-
         item {
-            Card(
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
-                modifier = Modifier.fillMaxWidth(),
-                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+            LazyRow(
+                contentPadding = PaddingValues(horizontal = 0.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(
-                        "Search with filters",
-                        style = MaterialTheme.typography.titleMedium.copy(fontSize = 14.sp),
-                        color = BrandNavy,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    OutlinedTextField(
-                        value = query,
-                        onValueChange = { query = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        shape = RoundedCornerShape(12.dp),
-                        placeholder = { Text("Car, city, host") },
-                        leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null, tint = MutedText) },
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = Color.Black.copy(alpha = 0.06f),
-                            unfocusedBorderColor = Color.Black.copy(alpha = 0.06f),
-                            focusedContainerColor = Color.White,
-                            unfocusedContainerColor = Color.White,
-                        ),
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                        HomeFilterChip(
-                            label = selectedRegion,
-                            options = regionOptions,
-                            modifier = Modifier.weight(1f),
-                            onSelected = {
-                                selectedRegion = it
-                                selectedCity = "Any city"
-                            },
-                        )
-                        HomeFilterChip(
-                            label = selectedCity,
-                            options = cityOptions,
-                            modifier = Modifier.weight(1f),
-                            onSelected = { selectedCity = it },
-                        )
-                        HomeFilterChip(
-                            label = selectedType,
-                            options = carTypeOptions,
-                            modifier = Modifier.weight(1f),
-                            onSelected = { selectedType = it },
-                        )
-                    }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
+                items(availableCategories) { cat ->
+                    Surface(
+                        onClick = { selectedCat = cat },
+                        shape = RoundedCornerShape(20.dp),
+                        color = if (selectedCat == cat) colors.brandBlue else colors.cardBackground,
+                        border = if (selectedCat == cat) null else BorderStroke(1.dp, colors.border),
                     ) {
                         Text(
-                            "Max GHS ${maxPrice.toInt()}",
-                            style = MaterialTheme.typography.labelLarge.copy(fontSize = 12.sp),
-                            color = MutedText,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                        Slider(
-                            value = maxPrice,
-                            onValueChange = { maxPrice = it },
-                            valueRange = 100f..8000f,
-                            steps = 157,
-                            modifier = Modifier.weight(1f),
-                            colors = SliderDefaults.colors(
-                                activeTrackColor = BrandBlue,
-                                inactiveTrackColor = Color(0xFFE4E8EF),
-                                thumbColor = Color.White,
-                                activeTickColor = Color.Transparent,
-                                inactiveTickColor = Color.Transparent,
-                            ),
+                            text = cat,
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                            style = MaterialTheme.typography.labelLarge.copy(fontSize = 13.sp),
+                            color = if (selectedCat == cat) Color.White else colors.brandNavy,
+                            fontWeight = FontWeight.Medium,
                         )
                     }
-                    GradientPillButton(
-                        text = "Apply filters and search",
-                        modifier = Modifier.fillMaxWidth(),
-                        onClick = {
-                            applyFilters()
-                            onOpenExplore()
-                        },
-                    )
                 }
             }
         }
-
-        if (profileCity.isNotEmpty() || profileRegion.isNotEmpty() || selectedCarType.isNotEmpty()) {
-            item {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                    if (profileCity.isNotEmpty()) {
-                        HomeLocationTag(profileCity, Icons.Outlined.LocationOn)
-                    }
-                    if (profileRegion.isNotEmpty()) {
-                        HomeLocationTag(profileRegion, Icons.Outlined.Public)
-                    }
-                    if (selectedCarType.isNotEmpty()) {
-                        HomeLocationTag(selectedCarType, Icons.Outlined.DirectionsCar)
-                    }
-                }
-            }
-        }
-
-        item {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Card(
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
-                    modifier = Modifier.weight(1f),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-                ) {
-                    Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("CARS LISTED", style = MaterialTheme.typography.labelLarge.copy(fontSize = 10.sp), color = MutedText, fontWeight = FontWeight.SemiBold)
-                        Text("$carsListed", style = MaterialTheme.typography.headlineMedium.copy(fontSize = 20.sp), color = BrandNavy, fontWeight = FontWeight.ExtraBold)
-                    }
-                }
-                Card(
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
-                    modifier = Modifier.weight(1f),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-                ) {
-                    Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("APPROVED HOSTS", style = MaterialTheme.typography.labelLarge.copy(fontSize = 10.sp), color = MutedText, fontWeight = FontWeight.SemiBold)
-                        Text("$approvedHosts", style = MaterialTheme.typography.headlineMedium.copy(fontSize = 20.sp), color = BrandNavy, fontWeight = FontWeight.ExtraBold)
-                    }
-                }
-            }
-        }
-
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Start,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text("Featured cars", style = MaterialTheme.typography.headlineLarge, color = BrandNavy, fontWeight = FontWeight.ExtraBold)
-            }
-        }
-
         when (val state = carsState) {
-            UiState.Loading -> item { LoadingBlock("Loading cars...") }
-            is UiState.Error -> item { ErrorBlock(state.message, onRetry = { viewModel.loadCars(mapOf("sort" to "new_listings", "limit" to "48")) }) }
-            UiState.Empty -> item { EmptyBlock("No cars yet", "No listings are available right now.") }
-            is UiState.Success -> items(state.data.take(7), key = { it.id }) { car ->
-                HomeFeaturedCarRow(
-                    car = car,
-                    isFavorite = favoriteIds.contains(car.id),
-                    onOpen = { onOpenCarDetail(car.id) },
-                    onToggleFavorite = {
-                        viewModel.toggleFavorite(
-                            carId = car.id,
-                            currentlyFavorite = favoriteIds.contains(car.id),
-                            authDestination = NavRoutes.main(MainTab.HOME),
-                        )
-                    },
+            UiState.Loading,
+            UiState.Idle -> item { HomeLoadingPlaceholder() }
+            is UiState.Error -> item {
+                ErrorBlock(
+                    state.message,
+                    onRetry = { viewModel.loadCars(mapOf("sort" to "new_listings", "limit" to "48")) },
                 )
             }
-            UiState.Idle -> item { LoadingBlock() }
+            UiState.Empty -> item { EmptyBlock("No cars yet", "No listings are available right now.") }
+            is UiState.Success -> {
+                item {
+                    HomeNearYouSection(
+                        cars = nearYouCars,
+                        favoriteIds = favoriteIds,
+                        onOpen = onOpenCarDetail,
+                        onFavorite = { car ->
+                            viewModel.toggleFavorite(
+                                carId = car.id,
+                                currentlyFavorite = favoriteIds.contains(car.id),
+                                authDestination = NavRoutes.main(MainTab.HOME),
+                            )
+                        },
+                        onSeeAll = onOpenExplore,
+                    )
+                }
+                item {
+                    HomeSectionTitlePlaceholderAware(title = "Popular picks", onSeeAll = onOpenExplore)
+                }
+                if (homeCars.isEmpty()) {
+                    item { EmptyBlock("No cars yet", "No listings are available right now.") }
+                } else {
+                    items(homeCars.take(3), key = { it.id }) { car ->
+                        HomeFeaturedCarRow(
+                            car = car,
+                            isFavorite = favoriteIds.contains(car.id),
+                            onOpen = { onOpenCarDetail(car.id) },
+                            onToggleFavorite = {
+                                viewModel.toggleFavorite(
+                                    carId = car.id,
+                                    currentlyFavorite = favoriteIds.contains(car.id),
+                                    authDestination = NavRoutes.main(MainTab.HOME),
+                                )
+                            },
+                        )
+                    }
+                }
+            }
         }
         item {
             GradientPillButton(
@@ -1217,13 +1616,477 @@ private fun HomeTab(
                 onClick = onOpenExplore,
             )
         }
-        item {
-            SecondaryPillButton(
-                text = "View protection details",
-                onClick = onOpenMore,
+        item { Spacer(modifier = Modifier.height(24.dp)) }
+        }
+
+        if (showHomeFilterSheet) {
+            ModalBottomSheet(onDismissRequest = { showHomeFilterSheet = false }) {
+                ExploreFilterContent(
+                    locations = locations,
+                    selectedRegion = homeRegion,
+                    selectedCity = homeCity,
+                    maxPrice = homeMaxPrice,
+                    instantOnly = homeInstantOnly,
+                    onRegionChange = {
+                        homeRegion = it
+                        homeCity = ""
+                    },
+                    onCityChange = { homeCity = it },
+                    onMaxPriceChange = { homeMaxPrice = it },
+                    onInstantOnlyChange = { homeInstantOnly = it },
+                    onDismiss = { showHomeFilterSheet = false },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ExploreFilterContent(
+    locations: Map<String, List<String>>,
+    selectedRegion: String,
+    selectedCity: String,
+    maxPrice: Float,
+    instantOnly: Boolean,
+    onRegionChange: (String) -> Unit,
+    onCityChange: (String) -> Unit,
+    onMaxPriceChange: (Float) -> Unit,
+    onInstantOnlyChange: (Boolean) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val regionOptions = remember(locations) {
+        listOf("") + locations.keys.filter { it.isNotBlank() }.sorted()
+    }
+    val cityOptions = remember(locations, selectedRegion) {
+        val cities = if (selectedRegion.isBlank()) {
+            locations.values.flatten()
+        } else {
+            locations[selectedRegion].orEmpty()
+        }
+        listOf("") + cities.filter { it.isNotBlank() }.distinct().sorted()
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 16.dp)
+            .navigationBarsPadding(),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("Filters", style = MaterialTheme.typography.titleLarge, color = BrandNavy, fontWeight = FontWeight.Bold)
+            TextButton(onClick = onDismiss) {
+                Text("Done", color = BrandBlue, fontWeight = FontWeight.SemiBold)
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+            HomeFilterChip(
+                label = selectedRegion.ifBlank { "Any region" },
+                options = regionOptions.map { it.ifBlank { "Any region" } },
+                modifier = Modifier.weight(1f),
+                onSelected = { onRegionChange(if (it == "Any region") "" else it) },
+            )
+            HomeFilterChip(
+                label = selectedCity.ifBlank { "Any city" },
+                options = cityOptions.map { it.ifBlank { "Any city" } },
+                modifier = Modifier.weight(1f),
+                onSelected = { onCityChange(if (it == "Any city") "" else it) },
             )
         }
-        item { Spacer(modifier = Modifier.height(24.dp)) }
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                "Max GHS ${maxPrice.roundToInt()}",
+                style = MaterialTheme.typography.labelLarge,
+                color = MutedText,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Slider(
+                value = maxPrice,
+                onValueChange = onMaxPriceChange,
+                valueRange = 100f..8000f,
+                steps = 157,
+                colors = SliderDefaults.colors(
+                    activeTrackColor = BrandBlue,
+                    inactiveTrackColor = Color(0xFFE4E8EF),
+                    thumbColor = Color.White,
+                    activeTickColor = Color.Transparent,
+                    inactiveTickColor = Color.Transparent,
+                ),
+            )
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("Instant Book only", color = BrandNavy, fontWeight = FontWeight.SemiBold)
+            Switch(checked = instantOnly, onCheckedChange = onInstantOnlyChange)
+        }
+    }
+}
+
+@Composable
+private fun HomeSectionTitlePlaceholderAware(title: String, onSeeAll: () -> Unit) {
+    val colors = LocalHayameColors.current
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            title,
+            style = MaterialTheme.typography.titleLarge,
+            color = colors.brandNavy,
+            fontWeight = FontWeight.SemiBold,
+        )
+        TextButton(onClick = onSeeAll) {
+            Text("See all", color = BrandBlue, fontWeight = FontWeight.Medium)
+        }
+    }
+}
+
+@Composable
+private fun HomeLoadingPlaceholder() {
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        HomeNearYouPlaceholderSection()
+        HomePopularPicksPlaceholderSection()
+    }
+}
+
+@Composable
+private fun HomeNearYouPlaceholderSection() {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        HomeSkeletonBlock(
+            modifier = Modifier
+                .width(88.dp)
+                .height(20.dp),
+            cornerRadius = 7,
+        )
+        HomeSkeletonBlock(
+            modifier = Modifier
+                .width(48.dp)
+                .height(14.dp),
+            cornerRadius = 6,
+        )
+    }
+    Spacer(modifier = Modifier.height(10.dp))
+    LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        items(2) {
+            HomeNearYouPlaceholderCard()
+        }
+    }
+}
+
+@Composable
+private fun HomeNearYouPlaceholderCard() {
+    val colors = LocalHayameColors.current
+    Card(
+        modifier = Modifier.width(238.dp),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
+        border = BorderStroke(1.dp, colors.border),
+    ) {
+        Column {
+            HomeSkeletonBlock(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(154.dp),
+                cornerRadius = 18,
+            )
+            Column(
+                modifier = Modifier.padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(7.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    HomeSkeletonBlock(
+                        modifier = Modifier
+                            .width(128.dp)
+                            .height(15.dp),
+                        cornerRadius = 6,
+                    )
+                    HomeSkeletonBlock(
+                        modifier = Modifier
+                            .width(42.dp)
+                            .height(18.dp),
+                        cornerRadius = 9,
+                    )
+                }
+                HomeSkeletonBlock(
+                    modifier = Modifier
+                        .width(92.dp)
+                        .height(12.dp),
+                    cornerRadius = 6,
+                )
+                HomeSkeletonBlock(
+                    modifier = Modifier
+                        .width(104.dp)
+                        .height(17.dp),
+                    cornerRadius = 6,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun HomePopularPicksPlaceholderSection() {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        HomeSkeletonBlock(
+            modifier = Modifier
+                .width(132.dp)
+                .height(22.dp),
+            cornerRadius = 7,
+        )
+        HomeSkeletonBlock(
+            modifier = Modifier
+                .width(48.dp)
+                .height(14.dp),
+            cornerRadius = 6,
+        )
+    }
+    Spacer(modifier = Modifier.height(12.dp))
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        repeat(3) {
+            HomeFeaturedRowPlaceholderCard()
+        }
+    }
+}
+
+@Composable
+private fun HomeFeaturedRowPlaceholderCard() {
+    val colors = LocalHayameColors.current
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
+        border = BorderStroke(1.dp, colors.border),
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            HomeSkeletonBlock(
+                modifier = Modifier
+                    .width(136.dp)
+                    .height(104.dp),
+                cornerRadius = 14,
+            )
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                HomeSkeletonBlock(
+                    modifier = Modifier
+                        .fillMaxWidth(0.82f)
+                        .height(17.dp),
+                    cornerRadius = 6,
+                )
+                HomeSkeletonBlock(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(13.dp),
+                    cornerRadius = 6,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    HomeSkeletonBlock(
+                        modifier = Modifier
+                            .width(46.dp)
+                            .height(18.dp),
+                        cornerRadius = 9,
+                    )
+                    HomeSkeletonBlock(
+                        modifier = Modifier
+                            .width(66.dp)
+                            .height(18.dp),
+                        cornerRadius = 9,
+                    )
+                }
+                HomeSkeletonBlock(
+                    modifier = Modifier
+                        .width(112.dp)
+                        .height(18.dp),
+                    cornerRadius = 6,
+                )
+            }
+            HomeSkeletonBlock(
+                modifier = Modifier.size(42.dp),
+                cornerRadius = 21,
+            )
+        }
+    }
+}
+
+@Composable
+private fun HomeSkeletonBlock(modifier: Modifier, cornerRadius: Int) {
+    val colors = LocalHayameColors.current
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(cornerRadius.dp))
+            .background(colors.mutedText.copy(alpha = 0.14f)),
+    )
+}
+
+@Composable
+private fun HomeNearYouSection(
+    cars: List<CarDto>,
+    favoriteIds: Set<String>,
+    onOpen: (String) -> Unit,
+    onFavorite: (CarDto) -> Unit,
+    onSeeAll: () -> Unit,
+) {
+    val colors = LocalHayameColors.current
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                "Near you",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = colors.brandNavy,
+            )
+            TextButton(onClick = onSeeAll) {
+                Text("See all", color = BrandBlue, fontWeight = FontWeight.Medium)
+            }
+        }
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = 0.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            items(cars.take(5), key = { it.id }) { car ->
+                HomeNearYouCard(
+                    car = car,
+                    isFavorite = favoriteIds.contains(car.id),
+                    onClick = { onOpen(car.id) },
+                    onFavoriteClick = { onFavorite(car) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun HomeNearYouCard(
+    car: CarDto,
+    isFavorite: Boolean,
+    onClick: () -> Unit,
+    onFavoriteClick: () -> Unit,
+) {
+    val colors = LocalHayameColors.current
+    val imageUrl = remember(car.id, car.image_url, car.car_photos) {
+        resolveAppImage(car.image_url) ?: car.car_photos.orEmpty()
+            .firstNotNullOfOrNull { resolveAppImage(it.url) }
+    }
+    Card(
+        modifier = Modifier.width(260.dp).clickable(onClick = onClick),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
+        border = BorderStroke(1.dp, colors.border),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+    ) {
+        Column {
+            Box(modifier = Modifier.fillMaxWidth().height(160.dp)) {
+                AsyncImage(
+                    model = imageUrl,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)),
+                    contentScale = ContentScale.Crop,
+                )
+                if (car.instant_book == true) {
+                    Surface(
+                        modifier = Modifier
+                            .padding(10.dp)
+                            .align(Alignment.TopStart),
+                        color = Color.White.copy(alpha = 0.92f),
+                        shape = RoundedCornerShape(8.dp),
+                    ) {
+                        Text(
+                            "⚡ Instant",
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Success,
+                        )
+                    }
+                }
+                Surface(
+                    modifier = Modifier
+                        .padding(10.dp)
+                        .size(30.dp)
+                        .align(Alignment.TopEnd)
+                        .clickable(onClick = onFavoriteClick),
+                    color = colors.cardBackground.copy(alpha = 0.92f),
+                    shape = CircleShape,
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                            contentDescription = null,
+                            tint = if (isFavorite) Color.Red else colors.brandNavy,
+                            modifier = Modifier.size(14.dp),
+                        )
+                    }
+                }
+            }
+            Column(
+                modifier = Modifier.padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    car.title.orEmpty(),
+                    style = MaterialTheme.typography.titleMedium.copy(fontSize = 15.sp),
+                    fontWeight = FontWeight.SemiBold,
+                    color = colors.brandNavy,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        "📍 ${car.city.orEmpty()}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.mutedText,
+                    )
+                    val hasReviews = (car.reviews_count ?: 0.0) > 0
+                    Text(
+                        "★ ${if (hasReviews) String.format("%.1f", car.avg_rating ?: 0.0) else "New"}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Warning,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+                Text(
+                    "GHS ${(car.daily_price ?: 0.0).roundToInt()} / day",
+                    style = MaterialTheme.typography.titleMedium.copy(fontSize = 15.sp),
+                    fontWeight = FontWeight.SemiBold,
+                    color = BrandBlue,
+                )
+            }
+        }
     }
 }
 
@@ -1304,13 +2167,14 @@ private fun HomeFeaturedCarRow(
     onOpen: () -> Unit,
     onToggleFavorite: () -> Unit,
 ) {
+    val colors = LocalHayameColors.current
     Box {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(18.dp))
-                .background(Color.White)
-                .border(BorderStroke(1.dp, Color.Black.copy(alpha = 0.06f)), RoundedCornerShape(18.dp))
+                .background(colors.cardBackground)
+                .border(BorderStroke(1.dp, colors.border), RoundedCornerShape(18.dp))
                 .clickable(onClick = onOpen)
                 .padding(12.dp),
             horizontalArrangement = Arrangement.spacedBy(14.dp),
@@ -1322,14 +2186,14 @@ private fun HomeFeaturedCarRow(
                 modifier = Modifier
                     .size(width = 136.dp, height = 104.dp)
                     .clip(RoundedCornerShape(14.dp))
-                    .background(BrandLight),
+                    .background(colors.brandLight),
                 contentScale = ContentScale.Crop,
             )
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(
                     car.title.orEmpty(),
                     style = MaterialTheme.typography.titleMedium.copy(fontSize = 17.sp),
-                    color = BrandNavy,
+                    color = colors.brandNavy,
                     fontWeight = FontWeight.Bold,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
@@ -1337,7 +2201,7 @@ private fun HomeFeaturedCarRow(
                 Text(
                     listOfNotNull(car.city, car.region).joinToString(", "),
                     style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
-                    color = MutedText,
+                    color = colors.mutedText,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -1345,8 +2209,9 @@ private fun HomeFeaturedCarRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
+                    val hasReviews = (car.reviews_count ?: 0.0) > 0
                     Text(
-                        text = "★ ${String.format("%.1f", car.avg_rating ?: 0.0)}",
+                        text = "★ ${if (hasReviews) String.format("%.1f", car.avg_rating ?: 0.0) else "New"}",
                         style = MaterialTheme.typography.labelLarge.copy(fontSize = 12.sp),
                         color = Warning,
                         fontWeight = FontWeight.Bold,
@@ -1378,8 +2243,8 @@ private fun HomeFeaturedCarRow(
 
         Surface(
             shape = CircleShape,
-            color = Color.White.copy(alpha = 0.96f),
-            border = BorderStroke(1.dp, Color.Black.copy(alpha = 0.08f)),
+            color = colors.cardBackground.copy(alpha = 0.96f),
+            border = BorderStroke(1.dp, colors.border),
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .padding(8.dp)
@@ -1390,7 +2255,7 @@ private fun HomeFeaturedCarRow(
                 Icon(
                     imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
                     contentDescription = "Favorite",
-                    tint = if (isFavorite) Color.Red else BrandNavy,
+                    tint = if (isFavorite) Color.Red else colors.brandNavy,
                     modifier = Modifier.size(16.dp),
                 )
             }
@@ -1408,20 +2273,89 @@ private fun ExploreTab(
     viewModel: AppViewModel,
     paddingValues: PaddingValues,
     onOpenCarDetail: (String) -> Unit,
+    homeSearchToken: Int = 0,
+    homeSearchQuery: String = "",
+    homeSearchCarType: String = "",
+    homeSearchRegion: String = "",
+    homeSearchCity: String = "",
+    homeSearchMaxPrice: Float = 8000f,
+    homeSearchInstantOnly: Boolean = false,
 ) {
     val carsState by viewModel.carsState.collectAsState()
     val favoritesState by viewModel.favoritesState.collectAsState()
     val favoriteIds = (favoritesState as? UiState.Success<Set<String>>)?.data ?: emptySet()
     var query by rememberSaveable { mutableStateOf("") }
     var sort by rememberSaveable { mutableStateOf("new_listings") }
+    var appliedCarType by rememberSaveable { mutableStateOf("") }
+    var selectedBrand by rememberSaveable { mutableStateOf("") }
+    var appliedRegion by rememberSaveable { mutableStateOf("") }
+    var appliedCity by rememberSaveable { mutableStateOf("") }
+    var appliedMaxPrice by rememberSaveable { mutableStateOf(8000f) }
+    var appliedInstantOnly by rememberSaveable { mutableStateOf(false) }
     var layoutMode by rememberSaveable { mutableStateOf(ExploreLayoutMode.LIST.name) }
     val selectedLayout = remember(layoutMode) {
         runCatching { ExploreLayoutMode.valueOf(layoutMode) }.getOrElse { ExploreLayoutMode.LIST }
     }
+    val vehicleBrandOptions = remember(carsState) {
+        val popular = listOf(
+            "Toyota",
+            "Honda",
+            "Kia",
+            "Hyundai",
+            "Range Rover",
+            "Mercedes-Benz",
+            "BMW",
+            "Nissan",
+            "Ford",
+            "Mitsubishi",
+        )
+        val liveBrands = (carsState as? UiState.Success<List<CarDto>>)
+            ?.data
+            ?.mapNotNull { it.brand?.trim()?.takeIf { brand -> brand.isNotBlank() } }
+            ?: emptyList()
+        (popular + liveBrands)
+            .distinctBy { it.lowercase() }
+    }
+
+    fun exploreParams(): Map<String, String> {
+        val params = mutableMapOf<String, String>()
+        params["sort"] = sort
+        if (query.trim().isNotEmpty()) params["q"] = query.trim()
+        if (appliedCarType.isNotEmpty()) params["carType"] = appliedCarType
+        if (selectedBrand.isNotEmpty()) params["brand"] = selectedBrand
+        if (appliedRegion.isNotEmpty()) params["region"] = appliedRegion
+        if (appliedCity.isNotEmpty()) params["city"] = appliedCity
+        if (appliedMaxPrice < 8000f) params["maxPrice"] = appliedMaxPrice.toInt().toString()
+        if (appliedInstantOnly) params["instantBook"] = "true"
+        return params
+    }
 
     LaunchedEffect(Unit) {
-        viewModel.loadCars()
+        if (homeSearchToken == 0) {
+            viewModel.loadCars()
+        }
         viewModel.loadFavorites()
+    }
+
+    LaunchedEffect(homeSearchToken) {
+        if (homeSearchToken > 0) {
+            query = homeSearchQuery
+            appliedCarType = homeSearchCarType
+            selectedBrand = ""
+            appliedRegion = homeSearchRegion
+            appliedCity = homeSearchCity
+            appliedMaxPrice = homeSearchMaxPrice
+            appliedInstantOnly = homeSearchInstantOnly
+            val params = mutableMapOf<String, String>()
+            params["sort"] = sort
+            if (homeSearchQuery.trim().isNotEmpty()) params["q"] = homeSearchQuery.trim()
+            if (homeSearchCarType.isNotEmpty()) params["carType"] = homeSearchCarType
+            if (homeSearchRegion.isNotEmpty()) params["region"] = homeSearchRegion
+            if (homeSearchCity.isNotEmpty()) params["city"] = homeSearchCity
+            if (homeSearchMaxPrice < 8000f) params["maxPrice"] = homeSearchMaxPrice.toInt().toString()
+            if (homeSearchInstantOnly) params["instantBook"] = "true"
+            viewModel.loadCars(params)
+        }
     }
 
     Column(
@@ -1431,27 +2365,41 @@ private fun ExploreTab(
             .padding(horizontal = 16.dp),
     ) {
         Spacer(modifier = Modifier.height(16.dp))
-        OutlinedTextField(
-            value = query,
-            onValueChange = { query = it },
+	        OutlinedTextField(
+	            value = query,
+	            onValueChange = { query = it },
             placeholder = { Text("Search by car, city or region") },
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
             leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
-            singleLine = true,
-            trailingIcon = {
-                if (query.isNotEmpty()) {
-                    TextButton(onClick = {
-                        val params = mutableMapOf<String, String>()
-                        params["q"] = query.trim()
-                        params["sort"] = sort
-                        viewModel.loadCars(params)
-                    }) { Text("Search", fontWeight = FontWeight.Bold) }
-                }
-            }
-        )
-        
-        Row(
+	            singleLine = true,
+	            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+	            keyboardActions = KeyboardActions(onSearch = { viewModel.loadCars(exploreParams()) }),
+	            trailingIcon = {
+	                if (query.isNotEmpty()) {
+	                    TextButton(onClick = {
+	                        viewModel.loadCars(exploreParams())
+	                    }) { Text("Search", fontWeight = FontWeight.Bold) }
+	                }
+	            }
+	        )
+
+	        VehicleBrandCarousel(
+	            brands = vehicleBrandOptions,
+	            selectedBrand = selectedBrand,
+	            onSelect = { brand ->
+	                selectedBrand = brand
+	                val params = exploreParams().toMutableMap()
+	                if (brand.isBlank()) {
+	                    params.remove("brand")
+	                } else {
+	                    params["brand"] = brand
+	                }
+	                viewModel.loadCars(params)
+	            },
+	        )
+
+	        Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(vertical = 12.dp),
@@ -1467,10 +2415,10 @@ private fun ExploreTab(
                     items(filters) { filter ->
                         val selected = sort == filter.second
                         Surface(
-                            onClick = {
-                                sort = filter.second
-                                viewModel.loadCars(mapOf("sort" to sort, "q" to query.trim()))
-                            },
+	                            onClick = {
+	                                sort = filter.second
+	                                viewModel.loadCars(exploreParams() + ("sort" to filter.second))
+	                            },
                             shape = RoundedCornerShape(20.dp),
                             color = if (selected) BrandBlue else Color.White,
                             border = if (selected) null else BorderStroke(1.dp, Color.LightGray.copy(alpha = 0.5f)),
@@ -1492,18 +2440,25 @@ private fun ExploreTab(
         when (val state = carsState) {
             UiState.Loading -> LoadingBlock("Searching...")
             is UiState.Error -> ErrorBlock(state.message, onRetry = { viewModel.loadCars() })
-            UiState.Empty -> EmptyBlock("No matching listings", "Try changing filters or search terms.")
-            is UiState.Success -> {
-                if (selectedLayout == ExploreLayoutMode.GRID) {
-                    LazyVerticalGrid(
+	            UiState.Empty -> EmptyBlock("No matching listings", "Try changing filters or search terms.")
+	            is UiState.Success -> {
+	                val visibleCars = if (selectedBrand.isBlank()) {
+	                    state.data
+	                } else {
+	                    state.data.filter { it.brand.orEmpty().equals(selectedBrand, ignoreCase = true) }
+	                }
+	                if (visibleCars.isEmpty()) {
+	                    EmptyBlock("No matching listings", "Try another vehicle make or search term.")
+	                } else if (selectedLayout == ExploreLayoutMode.GRID) {
+	                    LazyVerticalGrid(
                         columns = GridCells.Fixed(2),
                         modifier = Modifier.weight(1f),
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp),
-                        contentPadding = PaddingValues(bottom = 16.dp),
-                    ) {
-                        gridItems(state.data, key = { it.id }) { car ->
-                            ExploreGridCard(
+	                        verticalArrangement = Arrangement.spacedBy(16.dp),
+	                        contentPadding = PaddingValues(bottom = 16.dp),
+	                    ) {
+	                        gridItems(visibleCars, key = { it.id }) { car ->
+	                            ExploreGridCard(
                                 car = car,
                                 isFavorite = favoriteIds.contains(car.id),
                                 onClick = { onOpenCarDetail(car.id) },
@@ -1518,13 +2473,13 @@ private fun ExploreTab(
                         }
                     }
                 } else {
-                    LazyColumn(
+	                    LazyColumn(
                         modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(16.dp),
-                        contentPadding = PaddingValues(bottom = 16.dp)
-                    ) {
-                        items(state.data, key = { it.id }) { car ->
-                            CarCard(
+	                        verticalArrangement = Arrangement.spacedBy(16.dp),
+	                        contentPadding = PaddingValues(bottom = 16.dp)
+	                    ) {
+	                        items(visibleCars, key = { it.id }) { car ->
+	                            CarCard(
                                 car = car,
                                 isFavorite = favoriteIds.contains(car.id),
                                 imageHeight = 220.dp,
@@ -1544,6 +2499,184 @@ private fun ExploreTab(
             UiState.Idle -> LoadingBlock()
         }
     }
+}
+
+@Composable
+private fun VehicleBrandCarousel(
+    brands: List<String>,
+    selectedBrand: String,
+    onSelect: (String) -> Unit,
+) {
+    LazyRow(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        contentPadding = PaddingValues(vertical = 2.dp),
+    ) {
+        item {
+            VehicleBrandPill(
+                title = "All",
+                selected = selectedBrand.isBlank(),
+                onClick = { onSelect("") },
+            )
+        }
+        items(brands, key = { it }) { brand ->
+            VehicleBrandPill(
+                title = brand,
+                selected = selectedBrand.equals(brand, ignoreCase = true),
+                onClick = { onSelect(brand) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun VehicleBrandPill(
+    title: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    val colors = LocalHayameColors.current
+
+    Column(
+        modifier = Modifier
+            .size(width = 82.dp, height = 74.dp)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 6.dp, vertical = 4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        VehicleBrandLogo(
+            title = title,
+            selected = selected,
+            modifier = Modifier.size(width = 54.dp, height = 38.dp),
+        )
+        Text(
+            text = title,
+            style = MaterialTheme.typography.labelSmall,
+            color = if (selected) colors.brandBlue else colors.brandNavy,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Box(
+            modifier = Modifier
+                .size(width = 22.dp, height = 3.dp)
+                .background(if (selected) BrandBlue else Color.Transparent, CircleShape),
+        )
+    }
+}
+
+@Composable
+private fun VehicleBrandLogo(
+    title: String,
+    selected: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val context = LocalContext.current
+    val colors = LocalHayameColors.current
+    val darkMode = colors.pageBackground.luminance() < 0.5f
+    val logoRes = vehicleBrandLogoRes(context, title)
+    Box(modifier = modifier, contentAlignment = Alignment.Center) {
+        if (logoRes != null) {
+            Image(
+                painter = painterResource(id = logoRes),
+                contentDescription = "$title logo",
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Fit,
+                colorFilter = if (darkMode && !selected) ColorFilter.tint(Color.White) else null,
+            )
+        } else if (title == "All") {
+            Icon(
+                Icons.Outlined.DirectionsCar,
+                contentDescription = null,
+                tint = if (selected) colors.brandBlue else colors.mutedText,
+                modifier = Modifier.size(26.dp),
+            )
+        } else {
+            Text(
+                text = brandMonogram(title),
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 14.sp),
+                color = if (selected) colors.brandBlue else colors.mutedText,
+                fontWeight = FontWeight.Black,
+                maxLines = 1,
+            )
+        }
+    }
+}
+
+@DrawableRes
+private fun vehicleBrandLogoRes(context: Context, title: String): Int? {
+    return vehicleBrandLogoCandidates(title)
+        .firstNotNullOfOrNull { assetName ->
+            context.resources
+                .getIdentifier(assetName, "drawable", context.packageName)
+                .takeIf { it != 0 }
+        }
+}
+
+private fun vehicleBrandLogoCandidates(title: String): List<String> {
+    val normalizedTitle = Normalizer
+        .normalize(title.trim().lowercase(Locale.US), Normalizer.Form.NFD)
+        .replace("\\p{Mn}+".toRegex(), "")
+
+    val withoutParentheses = normalizedTitle
+        .replace("\\s*\\([^)]*\\)".toRegex(), "")
+        .trim()
+
+    val aliases = mapOf(
+        "baic" to listOf("baic_motor"),
+        "gac" to listOf("gac_group"),
+        "range rover" to listOf("land_rover"),
+        "mercedes" to listOf("mercedes_benz"),
+        "mercedes benz" to listOf("mercedes_benz"),
+        "mercedes-benz" to listOf("mercedes_benz"),
+        "mg" to listOf("mg"),
+        "mini" to listOf("mini"),
+        "ram" to listOf("ram"),
+        "rolls royce" to listOf("rolls_royce"),
+        "rolls-royce" to listOf("rolls_royce"),
+        "samsung" to listOf("renault_samsung"),
+        "samsung older badge" to listOf("renault_samsung"),
+        "zx auto" to listOf("zx_auto"),
+    )
+
+    val parentheticalSlugs = "\\(([^)]+)\\)"
+        .toRegex()
+        .findAll(normalizedTitle)
+        .map { vehicleBrandLogoSlug(it.groupValues[1]) }
+        .toList()
+
+    val slugs = aliases[normalizedTitle].orEmpty() +
+        aliases[withoutParentheses].orEmpty() +
+        listOf(vehicleBrandLogoSlug(normalizedTitle), vehicleBrandLogoSlug(withoutParentheses)) +
+        parentheticalSlugs
+
+    return slugs
+        .filter { it.isNotBlank() }
+        .distinct()
+        .map { "car_logo_$it" }
+}
+
+private fun vehicleBrandLogoSlug(value: String): String {
+    return value
+        .replace("&", " and ")
+        .replace("[^a-z0-9]+".toRegex(), "_")
+        .trim('_')
+}
+
+private fun brandMonogram(title: String): String {
+    if (title == "All") return "ALL"
+    return title
+        .split(" ")
+        .filter { it.isNotBlank() }
+        .take(2)
+        .mapNotNull { it.firstOrNull()?.uppercaseChar()?.toString() }
+        .joinToString("")
+        .ifBlank { title.take(2).uppercase() }
 }
 
 @Composable
@@ -1609,6 +2742,7 @@ private fun ExploreGridCard(
     onClick: () -> Unit,
     onFavoriteClick: () -> Unit,
 ) {
+    val colors = LocalHayameColors.current
     val imageUrl = remember(car.id, car.image_url, car.car_photos) {
         resolveAppImage(car.image_url) ?: car.car_photos.orEmpty().firstNotNullOfOrNull { resolveAppImage(it.url) }
     }
@@ -1623,8 +2757,8 @@ private fun ExploreGridCard(
             .fillMaxWidth()
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        border = BorderStroke(1.dp, Color.Black.copy(alpha = 0.06f)),
+        colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
+        border = BorderStroke(1.dp, colors.border),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -1644,17 +2778,17 @@ private fun ExploreGridCard(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(184.dp)
-                            .background(BrandLight),
+                            .background(colors.brandLight),
                         contentAlignment = Alignment.Center,
                     ) {
-                        Text("No image", color = MutedText)
+                        Text("No image", color = colors.mutedText)
                     }
                 }
 
                 Surface(
                     shape = CircleShape,
-                    color = Color.White.copy(alpha = 0.96f),
-                    border = BorderStroke(1.dp, Color.Black.copy(alpha = 0.08f)),
+                    color = colors.cardBackground.copy(alpha = 0.96f),
+                    border = BorderStroke(1.dp, colors.border),
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .padding(10.dp)
@@ -1665,7 +2799,7 @@ private fun ExploreGridCard(
                         Icon(
                             imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
                             contentDescription = "Favorite",
-                            tint = if (isFavorite) Color.Red else BrandNavy,
+                            tint = if (isFavorite) Color.Red else colors.brandNavy,
                             modifier = Modifier.size(18.dp),
                         )
                     }
@@ -1731,9 +2865,13 @@ private fun ExploreGridCard(
 private fun TripsTab(
     viewModel: AppViewModel,
     paddingValues: PaddingValues,
+    onOpenHostVehicles: () -> Unit,
+    onOpenCarDetail: (String) -> Unit,
+    onOpenConversation: (String) -> Unit,
 ) {
     val bookingsState by viewModel.bookingsState.collectAsState()
     val pendingBookingFocus by viewModel.pendingBookingFocus.collectAsState()
+    val me by viewModel.me.collectAsState()
     val listState = rememberLazyListState()
     val guestTrips = (bookingsState as? UiState.Success<List<BookingDto>>)
         ?.data
@@ -1742,6 +2880,11 @@ private fun TripsTab(
             !it.role.orEmpty().contains("owner", ignoreCase = true) &&
                 it.payment_status.equals("paid", ignoreCase = true)
         }
+    val today = LocalDate.now()
+    val upcomingTrips = guestTrips.filter { (parseApiDate(it.end_date) ?: today) >= today }
+    val pastTrips = guestTrips.filter { (parseApiDate(it.end_date) ?: today) < today }
+    val hostStatus = (me?.host_application_status ?: me?.host_status ?: "").trim().lowercase()
+    val isHost = me?.is_host == true || hostStatus == "approved"
 
     LaunchedEffect(Unit) { viewModel.loadBookings() }
 
@@ -1770,14 +2913,50 @@ private fun TripsTab(
                 if (guestTrips.isEmpty()) {
                     item { EmptyBlock("No trips yet", "Your bookings will appear here after payment.") }
                 } else {
-                    items(guestTrips, key = { it.id }) { booking ->
+                    item { SectionHeader("Upcoming bookings") }
+                    if (upcomingTrips.isEmpty()) {
+                        item { EmptyBlock("No upcoming trips", "Book your next ride from Explore.") }
+                    } else {
+                        items(upcomingTrips, key = { it.id }) { booking ->
+                            BookingCard(
+                                booking = booking,
+                                onOpenCarDetail = onOpenCarDetail,
+                                onMessageHost = { messageHostForTrip(viewModel, booking, me, onOpenConversation) },
+                                onApprove = { viewModel.approveBooking(it) },
+                                onReject = { id, r -> viewModel.rejectBooking(id, r) },
+                                onDispute = { id, r -> viewModel.createDispute(id, r) },
+                                isHighlighted = pendingBookingFocus == booking.id,
+                            )
+                        }
+                    }
+
+                    item {
+                        SectionHeader(
+                            title = "Past trips",
+                            action = "Vehicles",
+                            onAction = {
+                                if (isHost) {
+                                    onOpenHostVehicles()
+                                } else {
+                                    viewModel.showMessage("Host access is required to open vehicles.")
+                                }
+                            },
+                        )
+                    }
+                    if (pastTrips.isEmpty()) {
+                        item { EmptyBlock("No past trips", "Completed trips appear here.") }
+                    } else {
+                        items(pastTrips, key = { it.id }) { booking ->
                         BookingCard(
                             booking = booking,
+                            onOpenCarDetail = onOpenCarDetail,
+                            onMessageHost = { messageHostForTrip(viewModel, booking, me, onOpenConversation) },
                             onApprove = { viewModel.approveBooking(it) },
                             onReject = { id, r -> viewModel.rejectBooking(id, r) },
                             onDispute = { id, r -> viewModel.createDispute(id, r) },
                             isHighlighted = pendingBookingFocus == booking.id,
                         )
+                        }
                     }
                 }
             }
@@ -1790,6 +2969,8 @@ private fun TripsTab(
 @Composable
 private fun BookingCard(
     booking: com.hayame.app.core.network.BookingDto,
+    onOpenCarDetail: (String) -> Unit,
+    onMessageHost: () -> Unit,
     onApprove: (String) -> Unit,
     onReject: (String, String) -> Unit,
     onDispute: (String, String) -> Unit,
@@ -1807,7 +2988,16 @@ private fun BookingCard(
         paymentStatus = booking.payment_status,
     )
     val showPaidBadge = shouldShowCompletedPaidBadge(displayStatus, booking.payment_status)
+    val carId = booking.car_id.orEmpty()
+    val vehicleImageUrl = resolveAppImage(booking.cars?.image_url)
+        ?: booking.cars?.car_photos.orEmpty().firstNotNullOfOrNull { resolveAppImage(it.url) }
+    val brandTitle = booking.cars?.brand?.takeIf { it.isNotBlank() }
+        ?: booking.cars?.title
+        ?: "All"
     Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = carId.isNotBlank()) { onOpenCarDetail(carId) },
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
         elevation = CardDefaults.cardElevation(defaultElevation = if (isHighlighted) 6.dp else 2.dp),
@@ -1817,20 +3007,51 @@ private fun BookingCard(
         ),
     ) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+                if (!vehicleImageUrl.isNullOrBlank()) {
+                    AsyncImage(
+                        model = vehicleImageUrl,
+                        contentDescription = null,
+                        modifier = Modifier
+                            .size(width = 86.dp, height = 70.dp)
+                            .clip(RoundedCornerShape(14.dp)),
+                        contentScale = ContentScale.Crop,
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .size(width = 86.dp, height = 70.dp)
+                            .background(BrandLight, RoundedCornerShape(14.dp)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(Icons.Outlined.DirectionsCar, contentDescription = null, tint = BrandBlue)
+                    }
+                }
+
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = booking.cars?.title ?: "Trip with Hayame",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = BrandNavy,
-                    )
-                    Text(
-                        text = helperText,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MutedText,
-                        modifier = Modifier.padding(top = 4.dp),
-                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = booking.cars?.title ?: "Trip with Hayame",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = BrandNavy,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                text = helperText,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MutedText,
+                                modifier = Modifier.padding(top = 4.dp),
+                            )
+                        }
+                        VehicleBrandLogo(
+                            title = brandTitle,
+                            selected = false,
+                            modifier = Modifier.size(width = 38.dp, height = 28.dp),
+                        )
+                    }
                 }
                 BookingStatusBadgeStack(
                     status = displayStatus,
@@ -1862,9 +3083,22 @@ private fun BookingCard(
                     OutlinedButton(onClick = { onReject(booking.id, "Rejected by host") }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(8.dp)) { Text("Reject") }
                 }
             } else if (booking.status == "completed" || booking.status == "cancelled") {
-                // Actions for completed
+                OutlinedButton(
+                    onClick = onMessageHost,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                ) {
+                    Icon(Icons.Outlined.ChatBubble, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Message host")
+                }
             } else {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(
+                        onClick = onMessageHost,
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp),
+                    ) { Text("Message host", style = MaterialTheme.typography.labelLarge) }
                     OutlinedTextField(
                         value = disputeReason,
                         onValueChange = { disputeReason = it },
@@ -1882,6 +3116,86 @@ private fun BookingCard(
                 }
             }
         }
+    }
+}
+
+private fun messageHostForTrip(
+    viewModel: AppViewModel,
+    booking: BookingDto,
+    me: MobileMeDto?,
+    onOpenConversation: (String) -> Unit,
+) {
+    val existingConversationId = booking.conversation_id?.trim().orEmpty()
+    val summary = tripMessageSummary(booking, me)
+    if (existingConversationId.isNotBlank()) {
+        viewModel.sendMessageIfMissing(existingConversationId, summary)
+        onOpenConversation(existingConversationId)
+        return
+    }
+
+    val hostId = booking.cars?.owner_id?.trim().orEmpty()
+    if (hostId.isBlank()) {
+        viewModel.showMessage("Host details are not available for this booking.")
+        return
+    }
+
+    viewModel.createConversation(
+        hostId = hostId,
+        participantId = null,
+        carId = booking.car_id?.trim().orEmpty().takeIf { it.isNotBlank() },
+    ) { conversationId ->
+        viewModel.sendMessageIfMissing(conversationId, summary)
+        onOpenConversation(conversationId)
+    }
+}
+
+private fun tripMessageSummary(booking: BookingDto, me: MobileMeDto?): String {
+    val mode = if ((booking.delivery_fee ?: 0.0) > 0.0) "Delivery" else "Pickup"
+    val location = listOf(
+        booking.trip_use_address,
+        booking.trip_use_city,
+        booking.trip_use_region,
+    ).mapNotNull { it?.trim()?.takeIf(String::isNotBlank) }
+        .joinToString(", ")
+        .ifBlank { "Not provided" }
+    val deliveryAddress = booking.delivery_address?.trim().orEmpty()
+    val deliveryTime = booking.delivery_time?.trim().orEmpty()
+    val contactPhone = booking.contact_phone?.trim().orEmpty()
+    val deliveryNotes = booking.delivery_notes?.trim().orEmpty()
+    val start = booking.start_date?.trim().orEmpty().ifBlank { "-" }
+    val end = booking.end_date?.trim().orEmpty().ifBlank { "-" }
+    val days = parsedTripDays(start, end)
+    val lines = mutableListOf(
+        "Trip details",
+        "Car: ${booking.cars?.title ?: "Trip with Hayame"}",
+        "Guest: ${me.preferredFullName() ?: booking.renter?.full_name ?: "Guest"}",
+        "Dates: $start - $end",
+        "Duration: $days day${if (days == 1) "" else "s"}",
+        "Time: ${deliveryTime.ifBlank { "Not set" }}",
+        "$mode: ${deliveryAddress.ifBlank { location }}",
+        "Trip use area: $location",
+        "Price: GHS ${(booking.total_price ?: 0.0).roundToInt()}",
+        "Daily rate: GHS ${(booking.daily_rate ?: 0.0).roundToInt()}",
+        "Subtotal: GHS ${(booking.subtotal ?: 0.0).roundToInt()}",
+        "Insurance: GHS ${(booking.insurance_fee ?: 0.0).roundToInt()}",
+        "Delivery fee: GHS ${(booking.delivery_fee ?: 0.0).roundToInt()}",
+        "Outside region fee: GHS ${(booking.outside_accra_surcharge ?: 0.0).roundToInt()}",
+        "Deposit: GHS ${(booking.deposit_amount ?: 0.0).roundToInt()}",
+        "Payment ref: ${booking.payment_reference?.trim()?.takeIf(String::isNotBlank) ?: "N/A"}",
+        "Booking ID: ${booking.id}",
+    )
+    if (contactPhone.isNotBlank()) lines += "Contact phone: $contactPhone"
+    if (deliveryNotes.isNotBlank()) lines += "Notes: $deliveryNotes"
+    return lines.joinToString("\n")
+}
+
+private fun parsedTripDays(startDate: String?, endDate: String?): Int {
+    val start = parseApiDate(startDate)
+    val end = parseApiDate(endDate)
+    return if (start != null && end != null && end.isAfter(start)) {
+        max(1, ChronoUnit.DAYS.between(start, end).toInt())
+    } else {
+        1
     }
 }
 
@@ -1960,6 +3274,7 @@ private fun SavedTab(
 private fun MoreTab(
     viewModel: AppViewModel,
     paddingValues: PaddingValues,
+    appearanceHighlightNonce: Int = 0,
     onOpenMessages: () -> Unit,
     onOpenDashboard: () -> Unit,
     onOpenBecomeHost: () -> Unit,
@@ -1975,6 +3290,8 @@ private fun MoreTab(
     val me by viewModel.me.collectAsState()
     val notificationPreferences by viewModel.notificationPreferences.collectAsState()
     var hostModeEnabled by remember { mutableStateOf(false) }
+    var glowAppearanceSettings by remember { mutableStateOf(false) }
+    val listState = rememberLazyListState()
 
     val displayName = me.preferredFullName() ?: "Guest User"
     val displayEmail = when {
@@ -1989,8 +3306,18 @@ private fun MoreTab(
     val hostStatus = (me?.host_application_status ?: me?.host_status ?: "").trim().lowercase()
     val isHost = me?.is_host == true || hostStatus == "approved"
     val isPending = hostStatus == "pending"
+    val colors = LocalHayameColors.current
+
+    LaunchedEffect(appearanceHighlightNonce) {
+        if (appearanceHighlightNonce <= 0) return@LaunchedEffect
+        listState.animateScrollToItem(6)
+        glowAppearanceSettings = true
+        kotlinx.coroutines.delay(2_800)
+        glowAppearanceSettings = false
+    }
 
     LazyColumn(
+        state = listState,
         modifier = Modifier
             .fillMaxSize()
             .padding(paddingValues)
@@ -2001,7 +3328,7 @@ private fun MoreTab(
             Spacer(modifier = Modifier.height(16.dp))
             Card(
                 shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
+                colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
                 elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
             ) {
                 Column(
@@ -2025,12 +3352,12 @@ private fun MoreTab(
                                 displayName,
                                 style = MaterialTheme.typography.titleLarge,
                                 fontWeight = FontWeight.Bold,
-                                color = BrandNavy,
+                                color = colors.brandNavy,
                             )
                             Text(
                                 displayEmail,
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = MutedText,
+                                color = colors.mutedText,
                             )
                         }
                     }
@@ -2060,7 +3387,7 @@ private fun MoreTab(
         item {
             Card(
                 shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
+                colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
                 elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
             ) {
                 Column(modifier = Modifier.padding(8.dp)) {
@@ -2153,13 +3480,73 @@ private fun MoreTab(
         }
 
         item {
+            SectionHeader("Appearance")
+        }
+
+        item {
+            val darkModeEnabled by viewModel.darkModeEnabled.collectAsState()
+            Card(
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
+                border = BorderStroke(
+                    width = if (glowAppearanceSettings) 2.dp else 1.dp,
+                    color = if (glowAppearanceSettings) colors.brandBlue else Color.Transparent,
+                ),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                modifier = Modifier.then(
+                    if (glowAppearanceSettings) {
+                        Modifier.border(
+                            width = 1.dp,
+                            color = colors.brandBlue.copy(alpha = 0.25f),
+                            shape = RoundedCornerShape(20.dp),
+                        )
+                    } else {
+                        Modifier
+                    },
+                ),
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Icon(
+                        imageVector = if (darkModeEnabled) Icons.Outlined.DarkMode else Icons.Outlined.LightMode,
+                        contentDescription = null,
+                        tint = colors.brandBlue,
+                        modifier = Modifier.size(24.dp),
+                    )
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            if (darkModeEnabled) "Dark mode" else "Light mode",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = colors.brandNavy,
+                        )
+                        Text(
+                            "Switch between light and dark appearance.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = colors.mutedText,
+                        )
+                    }
+                    Switch(
+                        checked = darkModeEnabled,
+                        onCheckedChange = { viewModel.setDarkMode(it) },
+                    )
+                }
+            }
+        }
+
+        item {
             SectionHeader("Hosting")
         }
 
         item {
             Card(
                 shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
+                colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
                 elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
             ) {
                 when {
@@ -2178,12 +3565,12 @@ private fun MoreTab(
                                         "Host mode",
                                         style = MaterialTheme.typography.titleMedium,
                                         fontWeight = FontWeight.SemiBold,
-                                        color = BrandNavy,
+                                        color = colors.brandNavy,
                                     )
                                     Text(
                                         "Turn on Host mode to access host dashboard, listings, bookings, and earnings.",
                                         style = MaterialTheme.typography.bodyMedium,
-                                        color = MutedText,
+                                        color = colors.mutedText,
                                     )
                                 }
                                 Switch(
@@ -2244,7 +3631,7 @@ private fun MoreTab(
                             Text(
                                 "Start hosting to unlock listings, approvals, earnings, and host support tools.",
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = MutedText,
+                                color = colors.mutedText,
                             )
                             SecondaryPillButton(
                                 text = "Become a Host",
@@ -2273,7 +3660,7 @@ private fun MoreTab(
         item {
             Card(
                 shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
+                colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
                 elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
             ) {
                 Column(modifier = Modifier.padding(8.dp)) {
@@ -2297,7 +3684,7 @@ private fun MoreTab(
                         .height(44.dp),
                     shape = RoundedCornerShape(999.dp),
                     border = BorderStroke(1.dp, Danger.copy(alpha = 0.28f)),
-                    colors = ButtonDefaults.outlinedButtonColors(containerColor = Color.White),
+                    colors = ButtonDefaults.outlinedButtonColors(containerColor = MaterialTheme.colorScheme.surface),
                 ) {
                     Text(
                         text = "Sign out",
@@ -2320,7 +3707,10 @@ private fun MoreTab(
 }
 
 @Composable
-private fun ActionRow(title: String, icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit, color: Color = BrandNavy) {
+private fun ActionRow(title: String, icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit, color: Color? = null) {
+    val colors = LocalHayameColors.current
+    val contentColor = color ?: colors.brandNavy
+    val iconColor = color ?: colors.mutedText
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -2329,10 +3719,10 @@ private fun ActionRow(title: String, icon: androidx.compose.ui.graphics.vector.I
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Icon(icon, contentDescription = null, tint = if (color == BrandNavy) MutedText else color, modifier = Modifier.size(24.dp))
-        Text(title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium, color = color)
+        Icon(icon, contentDescription = null, tint = iconColor, modifier = Modifier.size(24.dp))
+        Text(title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium, color = contentColor)
         Spacer(modifier = Modifier.weight(1f))
-        Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = Color.LightGray, modifier = Modifier.size(20.dp))
+        Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = colors.mutedText.copy(alpha = 0.7f), modifier = Modifier.size(20.dp))
     }
 }
 
@@ -2343,9 +3733,10 @@ private fun NotificationPreferencesCard(
     onPreferenceChange: (key: String, enabled: Boolean) -> Unit,
     onRequireSignIn: (() -> Unit)? = null,
 ) {
+    val colors = LocalHayameColors.current
     Card(
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
     ) {
         Column(
@@ -2355,14 +3746,14 @@ private fun NotificationPreferencesCard(
             Text(
                 "Control which updates can reach your device. News and press releases stay optional.",
                 style = MaterialTheme.typography.bodySmall,
-                color = MutedText,
+                color = colors.mutedText,
             )
 
             if (!isAuthenticated) {
                 Text(
                     "Sign in to save notification preferences across your devices.",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = BrandNavy,
+                    color = colors.brandNavy,
                 )
                 if (onRequireSignIn != null) {
                     SecondaryPillButton(
@@ -2409,6 +3800,7 @@ private fun NotificationPreferenceRow(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
 ) {
+    val colors = LocalHayameColors.current
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -2422,12 +3814,12 @@ private fun NotificationPreferenceRow(
                 title,
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.SemiBold,
-                color = BrandNavy,
+                color = colors.brandNavy,
             )
             Text(
                 subtitle,
                 style = MaterialTheme.typography.bodySmall,
-                color = MutedText,
+                color = colors.mutedText,
             )
         }
         Switch(checked = checked, onCheckedChange = onCheckedChange)
@@ -2440,6 +3832,8 @@ private fun GradientPillButton(
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
+    val colors = LocalHayameColors.current
+    val darkMode = colors.pageBackground.luminance() < 0.5f
     Button(
         onClick = onClick,
         modifier = modifier.height(48.dp),
@@ -2452,7 +3846,11 @@ private fun GradientPillButton(
                 .fillMaxSize()
                 .background(
                     Brush.horizontalGradient(
-                        colors = listOf(BrandBlue, BrandNavy),
+                        colors = if (darkMode) {
+                            listOf(colors.brandBlue, Color(0xFF1484D9))
+                        } else {
+                            listOf(colors.brandBlue, colors.brandNavy)
+                        },
                     )
                 )
                 .clip(RoundedCornerShape(999.dp)),
@@ -2511,6 +3909,7 @@ fun CarDetailScreen(
     val bookingDraft by viewModel.bookingDraft.collectAsState()
     val isAuthenticated by viewModel.isAuthenticated.collectAsState()
     val locations by viewModel.locations.collectAsState()
+    val colors = LocalHayameColors.current
     val favoriteIds = (favoritesState as? UiState.Success<Set<String>>)?.data ?: emptySet()
 
     LaunchedEffect(carId) {
@@ -2527,22 +3926,22 @@ fun CarDetailScreen(
     }
 
     Scaffold(
-        containerColor = PageBackground,
+        containerColor = colors.pageBackground,
         topBar = {
-            Surface(color = Color.White, shadowElevation = 2.dp) {
+            Surface(color = colors.cardBackground, shadowElevation = 2.dp) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 8.dp, vertical = 10.dp),
                 ) {
                     IconButton(onClick = onBack, modifier = Modifier.align(Alignment.CenterStart)) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = BrandNavy)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = colors.brandNavy)
                     }
                     Text(
                         text = "Car Detail",
                         style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.ExtraBold,
-                        color = BrandNavy,
+                        color = colors.brandNavy,
                         modifier = Modifier.align(Alignment.Center),
                     )
                 }
@@ -3565,18 +4964,20 @@ private fun CarDetailLine(label: String, value: String) {
 
 @Composable
 private fun InfoLine(label: String, value: String) {
+    val colors = LocalHayameColors.current
+
     Row(verticalAlignment = Alignment.Top) {
         Text(
             text = label,
             style = MaterialTheme.typography.bodyLarge,
-            color = MutedText,
+            color = colors.mutedText,
         )
         Spacer(modifier = Modifier.weight(1f))
         Text(
             text = value,
             style = MaterialTheme.typography.bodyLarge,
             fontWeight = FontWeight.SemiBold,
-            color = BrandNavy,
+            color = colors.brandNavy,
             textAlign = TextAlign.End,
         )
     }
@@ -4021,7 +5422,6 @@ fun BookingScreen(
     var isLoadingBookingAvailability by rememberSaveable(carId) { mutableStateOf(false) }
     var initialized by rememberSaveable(carId) { mutableStateOf(false) }
     var awaitingPaymentReturn by rememberSaveable(carId) { mutableStateOf(false) }
-    var shouldVerifyAfterManualReturn by rememberSaveable(carId) { mutableStateOf(false) }
     var currentStep by rememberSaveable(carId) { mutableStateOf(CheckoutStep.TRIP_DETAILS) }
 
     LaunchedEffect(carId) {
@@ -4160,7 +5560,7 @@ fun BookingScreen(
                 pendingPaystackCallbackUri.isNullOrBlank()
             ) {
                 awaitingPaymentReturn = false
-                shouldVerifyAfterManualReturn = true
+                paymentMessage = "Payment was not completed. Open secure checkout and finish payment before verifying."
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -4247,7 +5647,10 @@ fun BookingScreen(
                 val resolvedReference = referenceOverride
                     ?.trim()
                     ?.takeIf { it.isNotBlank() }
-                    ?: checkout.reference
+                if (resolvedReference.isNullOrBlank()) {
+                    paymentMessage = "Payment was not completed. Open secure checkout and finish payment before verifying."
+                    return
+                }
                 awaitingPaymentReturn = false
                 isProcessingPayment = true
                 paymentMessage = null
@@ -4263,15 +5666,10 @@ fun BookingScreen(
                         reference = resolvedReference,
                         amount = (checkout.amount ?: 0.0).roundToInt(),
                     ),
-                    onSuccess = { conversationId ->
+                    onSuccess = {
                         isProcessingPayment = false
-                        if (!conversationId.isNullOrBlank()) {
-                            viewModel.showMessage("Payment successful.")
-                            onOpenConversation(conversationId)
-                        } else {
-                            viewModel.showMessage("Payment successful. Your booking is now in Trips.")
-                            onBookingCompleted()
-                        }
+                        viewModel.showMessage("Payment successful. Your booking is now in Trips.")
+                        onBookingCompleted()
                     },
                     onError = {
                         isProcessingPayment = false
@@ -4371,7 +5769,6 @@ fun BookingScreen(
                     onReady = {
                         isProcessingPayment = false
                         awaitingPaymentReturn = true
-                        shouldVerifyAfterManualReturn = false
                         openExternalUrl(context, it.payment_url ?: it.authorization_url)
                     },
                     onError = {
@@ -4386,20 +5783,12 @@ fun BookingScreen(
                 if (!pendingPaystackCallbackUri.isNullOrBlank() && pendingCheckout != null && !isProcessingPayment) {
                     val callbackResult = parsePaystackCallback(pendingPaystackCallbackUri)
                     awaitingPaymentReturn = false
-                    shouldVerifyAfterManualReturn = false
                     onPaystackCallbackConsumed()
                     if (callbackResult.isCancelled || callbackResult.reference.isNullOrBlank()) {
                         paymentMessage = "Payment was cancelled or not completed."
                     } else {
                         finalizePendingPayment(callbackResult.reference)
                     }
-                }
-            }
-
-            LaunchedEffect(shouldVerifyAfterManualReturn, pendingCheckout?.reference) {
-                if (shouldVerifyAfterManualReturn && pendingCheckout != null && !isProcessingPayment) {
-                    shouldVerifyAfterManualReturn = false
-                    finalizePendingPayment()
                 }
             }
 
@@ -4502,6 +5891,28 @@ fun BookingScreen(
                             when (step) {
                                 CheckoutStep.TRIP_DETAILS -> {
                                     CheckoutStepCard {
+                                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            Text(
+                                                text = "Your trip",
+                                                style = MaterialTheme.typography.bodyLarge,
+                                                fontWeight = FontWeight.Bold,
+                                                color = BrandNavy,
+                                            )
+                                            Text(
+                                                text = "$nights day${if (nights == 1) "" else "s"}",
+                                                style = MaterialTheme.typography.headlineMedium,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                color = BrandBlue,
+                                            )
+                                            Text(
+                                                text = "Choose dates below. Unavailable and booked days are blocked automatically.",
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = MutedText,
+                                            )
+                                        }
+                                    }
+
+                                    CheckoutStepCard {
                                         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                                             DateSelectionRow(
                                                 label = "Start date",
@@ -4550,28 +5961,7 @@ fun BookingScreen(
                                         }
                                     }
 
-                                    CheckoutStepCard {
-                                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                            Text(
-                                                text = "Your trip",
-                                                style = MaterialTheme.typography.bodyLarge,
-                                                fontWeight = FontWeight.Bold,
-                                                color = BrandNavy,
-                                            )
-                                            Text(
-                                                text = "$nights day${if (nights == 1) "" else "s"}",
-                                                style = MaterialTheme.typography.headlineMedium,
-                                                fontWeight = FontWeight.ExtraBold,
-                                                color = BrandBlue,
-                                            )
-                                            Text(
-                                                text = "Adjust your dates now. You'll review pricing before payment.",
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                color = MutedText,
-                                            )
-                                        }
-                                    }
-                                }
+	                                }
 
                                 CheckoutStep.LOCATION -> {
                                     CheckoutStepCard {
@@ -4958,9 +6348,16 @@ fun BookingScreen(
                                                 )
                                                 InfoLine(label = "Reference", value = pendingCheckout!!.reference)
                                                 GradientPillButton(
-                                                    text = "Verify payment",
+                                                    text = "Open checkout",
                                                     modifier = Modifier.fillMaxWidth(),
-                                                    onClick = { finalizePendingPayment() },
+                                                    onClick = {
+                                                        awaitingPaymentReturn = true
+                                                        paymentMessage = null
+                                                        openExternalUrl(
+                                                            context,
+                                                            pendingCheckout!!.payment_url ?: pendingCheckout!!.authorization_url,
+                                                        )
+                                                    },
                                                 )
                                             }
                                         }
@@ -5141,20 +6538,21 @@ private fun CheckoutTopBar(
     backLabel: String,
     onBack: () -> Unit,
 ) {
-    Surface(color = Color.White, shadowElevation = 2.dp) {
+    val colors = LocalHayameColors.current
+    Surface(color = colors.cardBackground, shadowElevation = 2.dp) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 8.dp, vertical = 10.dp),
         ) {
             TextButton(onClick = onBack, modifier = Modifier.align(Alignment.CenterStart)) {
-                Text(backLabel, color = BrandBlue, fontWeight = FontWeight.Bold)
+                Text(backLabel, color = colors.brandBlue, fontWeight = FontWeight.Bold)
             }
             Text(
                 text = title,
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.ExtraBold,
-                color = BrandNavy,
+                color = colors.brandNavy,
                 modifier = Modifier.align(Alignment.Center),
             )
         }
@@ -5299,7 +6697,14 @@ private fun CheckoutBottomBar(
     isLoading: Boolean,
     onClick: () -> Unit,
 ) {
-    Surface(color = Color.White.copy(alpha = 0.96f), shadowElevation = 10.dp) {
+    val colors = LocalHayameColors.current
+    val darkMode = colors.pageBackground.luminance() < 0.5f
+    val primaryGradient = if (darkMode) {
+        listOf(colors.brandBlue, Color(0xFF1484D9))
+    } else {
+        listOf(colors.brandBlue, colors.brandNavy)
+    }
+    Surface(color = colors.cardBackground.copy(alpha = 0.96f), shadowElevation = 10.dp) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -5330,7 +6735,7 @@ private fun CheckoutBottomBar(
                     modifier = Modifier
                         .fillMaxSize()
                         .background(
-                            Brush.horizontalGradient(colors = listOf(BrandBlue, BrandNavy)),
+                            Brush.horizontalGradient(colors = primaryGradient),
                             RoundedCornerShape(18.dp),
                         ),
                     contentAlignment = Alignment.Center,
@@ -5359,7 +6764,7 @@ private fun CheckoutBottomBar(
             Text(
                 text = note,
                 style = MaterialTheme.typography.bodyMedium,
-                color = MutedText,
+                color = colors.mutedText,
             )
         }
     }
@@ -5485,7 +6890,7 @@ private fun isContinuousBookingRangeAvailable(
 ): Boolean {
     if (!endDate.isAfter(startDate)) return false
     var current = startDate
-    while (!current.isAfter(endDate)) {
+    while (current.isBefore(endDate)) {
         if (current in blockedDates) return false
         current = current.plusDays(1)
     }
@@ -5558,7 +6963,7 @@ private fun parsePaystackCallback(callbackUri: String?): PaystackCallbackResult 
             parsed.getQueryParameter(key)?.trim()?.takeIf { it.isNotBlank() }
         }
     val status = parsed.getQueryParameter("status")?.trim()?.lowercase()
-    val cancelled = reference == null && (
+    val cancelled = (
         status == "cancelled" ||
             status == "canceled" ||
             status == "failed" ||
@@ -5825,8 +7230,10 @@ fun HostDashboardScreen(
     val averageRating = if (reviewList.isEmpty()) 0.0 else reviewList.map { it.rating ?: 0.0 }.average()
     val fullName = me.preferredFullName()?.takeIf { it.isNotBlank() } ?: me?.user?.email ?: "Host"
     val avatarUrl = resolveAppImage(me.preferredAvatarRaw())
+    val colors = LocalHayameColors.current
 
     Scaffold(
+        containerColor = colors.pageBackground,
         topBar = {
             PageTopBar(title = "Dashboard")
         },
@@ -5836,19 +7243,19 @@ fun HostDashboardScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             item {
-                Text("Host Dashboard", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.ExtraBold, color = BrandNavy)
+                Text("Host Dashboard", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.ExtraBold, color = colors.brandNavy)
             }
             item {
                 Card(
                     shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Text("Host mode", style = MaterialTheme.typography.titleMedium, color = BrandNavy, fontWeight = FontWeight.Bold)
-                                Text("Turn off Host mode to move back to User mode.", color = MutedText, style = MaterialTheme.typography.bodyMedium)
+                                Text("Host mode", style = MaterialTheme.typography.titleMedium, color = colors.brandNavy, fontWeight = FontWeight.Bold)
+                                Text("Turn off Host mode to move back to User mode.", color = colors.mutedText, style = MaterialTheme.typography.bodyMedium)
                             }
                             Switch(
                                 checked = hostModeEnabled,
@@ -5866,7 +7273,7 @@ fun HostDashboardScreen(
             item {
                 Card(
                     shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Row(
@@ -5883,8 +7290,8 @@ fun HostDashboardScreen(
                             borderColor = Color.Black.copy(alpha = 0.08f),
                         )
                         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            Text(fullName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = BrandNavy)
-                            Text("Manage host settings", color = MutedText, style = MaterialTheme.typography.bodyMedium)
+                            Text(fullName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = colors.brandNavy)
+                            Text("Manage host settings", color = colors.mutedText, style = MaterialTheme.typography.bodyMedium)
                         }
                         SecondaryPillButton(text = "Open", onClick = onOpenProfile)
                     }
@@ -5894,12 +7301,12 @@ fun HostDashboardScreen(
                 item {
                     Card(
                         shape = RoundedCornerShape(18.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text("Urgent booking requests", color = Danger, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-                            Text("You have ${urgentBookings.size} request(s) waiting for approval.", color = MutedText, style = MaterialTheme.typography.bodyMedium)
+                            Text("You have ${urgentBookings.size} request(s) waiting for approval.", color = colors.mutedText, style = MaterialTheme.typography.bodyMedium)
                             SecondaryPillButton(text = "Review now", onClick = onOpenBookings)
                         }
                     }
@@ -5917,7 +7324,7 @@ fun HostDashboardScreen(
                     HostMetricCard(title = "Reviews", value = String.format("%.1f/5", averageRating), modifier = Modifier.weight(1f))
                 }
             }
-            item { Text("Quick nav", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.ExtraBold, color = BrandNavy) }
+            item { Text("Quick nav", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.ExtraBold, color = colors.brandNavy) }
             item { HostQuickActionCard("Overview", "Snapshot of host performance", Icons.Outlined.Home, onClick = {}) }
             item { HostQuickActionCard("Vehicles", "Create and manage car listings", Icons.Outlined.DirectionsCar, onOpenCars) }
             item { HostQuickActionCard("Add car", "Create a new listing", Icons.Outlined.AddCircleOutline, onOpenCreateCar) }
@@ -5950,10 +7357,12 @@ fun HostCarsScreen(
     onOpenAvailability: (String) -> Unit = {},
 ) {
     val state by viewModel.myCarsState.collectAsState()
+    val colors = LocalHayameColors.current
 
     LaunchedEffect(Unit) { viewModel.loadMyCars() }
 
     Scaffold(
+        containerColor = colors.pageBackground,
         topBar = {
             PageTopBar(title = "My Cars")
         },
@@ -5968,7 +7377,8 @@ fun HostCarsScreen(
                         .fillMaxWidth()
                         .clickable(onClick = onCreate),
                     shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
+                    border = BorderStroke(1.dp, colors.border),
                 ) {
                     Row(
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 18.dp),
@@ -5976,12 +7386,12 @@ fun HostCarsScreen(
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         Icon(Icons.Outlined.AddCircleOutline, contentDescription = null, tint = BrandBlue)
-                        Text("Create Listing", color = BrandNavy, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                        Text("Create Listing", color = colors.brandNavy, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
                     }
                 }
             }
             item {
-                Text("My car listing", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = BrandNavy)
+                Text("My car listing", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = colors.brandNavy)
             }
             when (val s = state) {
                 UiState.Loading -> item { LoadingBlock("Loading host listings...") }
@@ -5996,7 +7406,8 @@ fun HostCarsScreen(
                                 .fillMaxWidth()
                                 .clickable { onEdit(car.id) },
                             shape = RoundedCornerShape(14.dp),
-                            colors = CardDefaults.cardColors(containerColor = Color.White),
+                            colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
+                            border = BorderStroke(1.dp, colors.border),
                         ) {
                             Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                 Row(
@@ -6019,14 +7430,14 @@ fun HostCarsScreen(
                                                 car.title ?: listOfNotNull(car.brand, car.model).joinToString(" "),
                                                 style = MaterialTheme.typography.titleMedium,
                                                 fontWeight = FontWeight.Bold,
-                                                color = BrandNavy,
+                                                color = colors.brandNavy,
                                                 modifier = Modifier.weight(1f),
                                             )
                                             StatusBadge(status = if (car.approval_status.equals("approved", ignoreCase = true)) "approved" else "pending")
                                         }
                                         Text(
                                             listOfNotNull(car.city, car.region).joinToString(", "),
-                                            color = MutedText,
+                                            color = colors.mutedText,
                                             style = MaterialTheme.typography.bodyMedium,
                                         )
                                         Text(
@@ -6066,6 +7477,7 @@ fun HostCarEditorScreen(
     val locations by viewModel.locations.collectAsState()
     val catalog by viewModel.catalog.collectAsState()
     val context = LocalContext.current
+    val colors = LocalHayameColors.current
     val scope = rememberCoroutineScope()
     val prefs = remember(context) {
         context.getSharedPreferences("hayame_listing_editor", Context.MODE_PRIVATE)
@@ -6620,9 +8032,9 @@ fun HostCarEditorScreen(
     }
 
     Scaffold(
-        containerColor = PageBackground,
+        containerColor = colors.pageBackground,
         topBar = {
-            Surface(color = Color.White, tonalElevation = 2.dp) {
+            Surface(color = colors.cardBackground, tonalElevation = 2.dp) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -6630,13 +8042,13 @@ fun HostCarEditorScreen(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = colors.brandNavy)
                     }
                     Text(
                         if (isCreate) "Create Listing" else "Edit Listing",
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
-                        color = BrandNavy,
+                        color = colors.brandNavy,
                         modifier = Modifier.weight(1f),
                     )
                     if (isCreate) {
@@ -7358,8 +8770,16 @@ fun HostEarningsScreen(viewModel: AppViewModel, onBack: () -> Unit) {
     val completedTrips = hostBookings.count { it.status.equals("completed", ignoreCase = true) }
     val monthlySeries = remember(hostBookings) { buildHostMonthlySeries(hostBookings) }
     val maxSeriesAmount = monthlySeries.maxOfOrNull { it.amount }?.coerceAtLeast(1) ?: 1
+    val colors = LocalHayameColors.current
+    val darkMode = colors.pageBackground.luminance() < 0.5f
+    val chartGradient = if (darkMode) {
+        listOf(colors.brandBlue, Color(0xFF1484D9))
+    } else {
+        listOf(colors.brandBlue, colors.brandNavy)
+    }
 
     Scaffold(
+        containerColor = colors.pageBackground,
         topBar = {
             PageTopBar(title = "Earnings")
         },
@@ -7369,7 +8789,7 @@ fun HostEarningsScreen(viewModel: AppViewModel, onBack: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             item {
-                Text("Payouts overview", style = MaterialTheme.typography.headlineSmall, color = BrandNavy, fontWeight = FontWeight.ExtraBold)
+                Text("Payouts overview", style = MaterialTheme.typography.headlineSmall, color = colors.brandNavy, fontWeight = FontWeight.ExtraBold)
             }
             item {
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
@@ -7378,9 +8798,9 @@ fun HostEarningsScreen(viewModel: AppViewModel, onBack: () -> Unit) {
                 }
             }
             item {
-                Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = colors.cardBackground)) {
                     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text("Revenue trend", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = BrandNavy)
+                        Text("Revenue trend", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = colors.brandNavy)
                         if (monthlySeries.all { it.amount == 0 }) {
                             EmptyBlock("No payouts yet", "Completed or confirmed bookings will appear as earnings here.")
                         } else {
@@ -7403,11 +8823,11 @@ fun HostEarningsScreen(viewModel: AppViewModel, onBack: () -> Unit) {
                                                 .clip(RoundedCornerShape(10.dp))
                                                 .background(
                                                     Brush.verticalGradient(
-                                                        colors = listOf(BrandBlue, BrandNavy),
+                                                        colors = chartGradient,
                                                     )
                                                 )
                                         )
-                                        Text(bucket.month, style = MaterialTheme.typography.labelMedium, color = MutedText)
+                                        Text(bucket.month, style = MaterialTheme.typography.labelMedium, color = colors.mutedText)
                                     }
                                 }
                             }
@@ -7416,7 +8836,7 @@ fun HostEarningsScreen(viewModel: AppViewModel, onBack: () -> Unit) {
                 }
             }
             item {
-                Text("Payout history", style = MaterialTheme.typography.headlineSmall, color = BrandNavy, fontWeight = FontWeight.ExtraBold)
+                Text("Payout history", style = MaterialTheme.typography.headlineSmall, color = colors.brandNavy, fontWeight = FontWeight.ExtraBold)
             }
             item {
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
@@ -7425,9 +8845,9 @@ fun HostEarningsScreen(viewModel: AppViewModel, onBack: () -> Unit) {
                 }
             }
             items(monthlySeries, key = { it.month }) { bucket ->
-                Card(shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                Card(shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = colors.cardBackground)) {
                     Row(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text(bucket.month, color = BrandNavy, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                        Text(bucket.month, color = colors.brandNavy, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                         Surface(
                             shape = RoundedCornerShape(999.dp),
                             color = if (bucket.isPending) Warning.copy(alpha = 0.14f) else Success.copy(alpha = 0.14f),
@@ -7672,8 +9092,10 @@ fun HostProfileScreen(
         .joinToString(", ")
         .ifBlank { "Location not set" }
     val hostLevel = profile?.host_level?.takeIf { !it.isNullOrBlank() } ?: "Verified Host"
+    val colors = LocalHayameColors.current
 
     Scaffold(
+        containerColor = colors.pageBackground,
         topBar = {
             PageTopBar(title = "Profile")
         },
@@ -7683,7 +9105,11 @@ fun HostProfileScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             item {
-                Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                Card(
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
+                    border = BorderStroke(1.dp, colors.border),
+                ) {
                     Column(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                             RemoteAvatar(
@@ -7694,14 +9120,14 @@ fun HostProfileScreen(
                                 textStyle = MaterialTheme.typography.titleMedium,
                             )
                             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Text(fullName, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = BrandNavy)
-                                Text(email, style = MaterialTheme.typography.bodyMedium, color = MutedText)
+                                Text(fullName, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = colors.brandNavy)
+                                Text(email, style = MaterialTheme.typography.bodyMedium, color = colors.mutedText)
                             }
                         }
-                        HorizontalDivider(color = Color.LightGray.copy(alpha = 0.2f))
+                        HorizontalDivider(color = colors.border)
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            Icon(Icons.Outlined.LocationOn, contentDescription = null, tint = MutedText)
-                            Text(location, style = MaterialTheme.typography.bodyMedium, color = BrandNavy)
+                            Icon(Icons.Outlined.LocationOn, contentDescription = null, tint = colors.mutedText)
+                            Text(location, style = MaterialTheme.typography.bodyMedium, color = colors.brandNavy)
                         }
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             Icon(Icons.Outlined.Shield, contentDescription = null, tint = BrandBlue)
@@ -7711,7 +9137,7 @@ fun HostProfileScreen(
                 }
             }
             item {
-                Text("Notifications", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = BrandNavy)
+                Text("Notifications", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = colors.brandNavy)
             }
             item {
                 NotificationPreferencesCard(
@@ -7728,28 +9154,36 @@ fun HostProfileScreen(
                 )
             }
             item {
-                Text("Host", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = BrandNavy)
+                Text("Host", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = colors.brandNavy)
             }
             item {
-                Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                Card(
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
+                    border = BorderStroke(1.dp, colors.border),
+                ) {
                     Column(modifier = Modifier.padding(8.dp)) {
                         ActionRow("Guest feedback", Icons.Outlined.FavoriteBorder, onOpenReviews)
-                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = Color.LightGray.copy(alpha = 0.2f))
+                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = colors.border)
                         ActionRow("Favorites analytics", Icons.Outlined.FavoriteBorder, onOpenFavorites)
-                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = Color.LightGray.copy(alpha = 0.2f))
+                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = colors.border)
                         ActionRow("Contact", Icons.Outlined.MailOutline, onOpenContact)
-                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = Color.LightGray.copy(alpha = 0.2f))
+                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = colors.border)
                         ActionRow("Protection", Icons.Outlined.Shield, onOpenProtection)
-                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = Color.LightGray.copy(alpha = 0.2f))
+                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = colors.border)
                         ActionRow("Cancellation", Icons.Outlined.CalendarMonth, onOpenCancellation)
                     }
                 }
             }
             item {
-                Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                Card(
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
+                    border = BorderStroke(1.dp, colors.border),
+                ) {
                     Column(modifier = Modifier.padding(8.dp)) {
                         ActionRow("Turn off Host mode", Icons.Outlined.Home, onTurnOffHostMode)
-                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = Color.LightGray.copy(alpha = 0.2f))
+                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = colors.border)
                         ActionRow("Sign out", Icons.AutoMirrored.Outlined.ExitToApp, onClick = { viewModel.logout() }, color = Danger)
                     }
                 }
@@ -7800,22 +9234,24 @@ fun SupportLegalScreen(
 
 @Composable
 private fun HostMetricCard(title: String, value: String, modifier: Modifier = Modifier) {
+    val colors = LocalHayameColors.current
     Card(
         modifier = modifier,
         shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
     ) {
         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(title, style = MaterialTheme.typography.labelMedium, color = MutedText)
-            Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.ExtraBold, color = BrandNavy)
+            Text(title, style = MaterialTheme.typography.labelMedium, color = colors.mutedText)
+            Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.ExtraBold, color = colors.brandNavy)
         }
     }
 }
 
 @Composable
 private fun PageTopBar(title: String, onBack: (() -> Unit)? = null) {
-    Surface(color = Color.White, tonalElevation = 2.dp) {
+    val colors = LocalHayameColors.current
+    Surface(color = colors.cardBackground, tonalElevation = 2.dp) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -7824,12 +9260,13 @@ private fun PageTopBar(title: String, onBack: (() -> Unit)? = null) {
         ) {
             if (onBack != null) {
                 IconButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = colors.brandNavy)
                 }
                 Text(
                     title,
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
+                    color = colors.brandNavy,
                     modifier = Modifier.padding(start = 8.dp),
                 )
             } else {
@@ -7837,7 +9274,7 @@ private fun PageTopBar(title: String, onBack: (() -> Unit)? = null) {
                     title,
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
-                    color = BrandNavy,
+                    color = colors.brandNavy,
                     modifier = Modifier.padding(horizontal = 8.dp),
                 )
             }
@@ -8145,12 +9582,13 @@ private fun HostQuickActionCard(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     onClick: () -> Unit,
 ) {
+    val colors = LocalHayameColors.current
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 18.dp),
@@ -8161,16 +9599,16 @@ private fun HostQuickActionCard(
                 modifier = Modifier
                     .size(56.dp)
                     .clip(RoundedCornerShape(16.dp))
-                    .background(BrandLight),
+                    .background(colors.brandLight),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(icon, contentDescription = null, tint = BrandBlue, modifier = Modifier.size(28.dp))
+                Icon(icon, contentDescription = null, tint = colors.brandBlue, modifier = Modifier.size(28.dp))
             }
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text(title, style = MaterialTheme.typography.headlineMedium, color = BrandNavy, fontWeight = FontWeight.Bold)
-                Text(subtitle, style = MaterialTheme.typography.titleLarge, color = MutedText, fontWeight = FontWeight.Medium)
+                Text(title, style = MaterialTheme.typography.headlineMedium, color = colors.brandNavy, fontWeight = FontWeight.Bold)
+                Text(subtitle, style = MaterialTheme.typography.titleLarge, color = colors.mutedText, fontWeight = FontWeight.Medium)
             }
-            Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = Color.LightGray, modifier = Modifier.size(28.dp))
+            Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = colors.mutedText.copy(alpha = 0.7f), modifier = Modifier.size(28.dp))
         }
     }
 }
@@ -8437,7 +9875,14 @@ private fun HostListingBottomBar(
     onBack: () -> Unit,
     onPrimary: () -> Unit,
 ) {
-    Surface(color = Color.White.copy(alpha = 0.96f), tonalElevation = 6.dp) {
+    val colors = LocalHayameColors.current
+    val darkMode = colors.pageBackground.luminance() < 0.5f
+    val primaryGradient = if (darkMode) {
+        listOf(colors.brandBlue, Color(0xFF1484D9))
+    } else {
+        listOf(colors.brandBlue, colors.brandNavy)
+    }
+    Surface(color = colors.cardBackground.copy(alpha = 0.96f), tonalElevation = 6.dp) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -8459,7 +9904,7 @@ private fun HostListingBottomBar(
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(
-                            brush = Brush.horizontalGradient(colors = listOf(BrandBlue, BrandNavy)),
+                            brush = Brush.horizontalGradient(colors = primaryGradient),
                             shape = RoundedCornerShape(18.dp),
                         )
                         .padding(vertical = 16.dp),

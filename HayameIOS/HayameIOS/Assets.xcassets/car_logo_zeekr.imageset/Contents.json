@@ -1,0 +1,13 @@
+{
+  "images": [
+    {
+      "filename": "car_logo_zeekr.png",
+      "idiom": "universal",
+      "scale": "1x"
+    }
+  ],
+  "info": {
+    "author": "xcode",
+    "version": 1
+  }
+}

@@ -1,50 +1,27 @@
 import SwiftUI
+import LocalAuthentication
+import Security
 
 struct AuthFlowScreen: View {
     @EnvironmentObject private var appState: AppState
-    @State private var isLogin = true
+    @State private var selectedTab: AuthTab = .login
 
     var body: some View {
         NavigationStack {
-            ScrollView(showsIndicators: false) {
-                VStack(spacing: 20) {
-                    VStack(spacing: 12) {
-                        Image("Logo")
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 86, height: 86)
-
-                        Text("Rent a car, anytime, anywhere in Ghana.")
-                            .font(.system(size: 14, weight: .medium, design: .rounded))
-                            .foregroundStyle(HayameTheme.mutedText)
-                    }
-                    .padding(.top, 30)
-
-                    Picker("Auth Mode", selection: $isLogin) {
-                        Text("Log in").tag(true)
-                        Text("Sign up").tag(false)
-                    }
-                    .pickerStyle(.segmented)
-
-                    if isLogin {
-                        LoginScreenView {
-                            isLogin = false
-                        }
-                    } else {
-                        SignupScreenView {
-                            isLogin = true
-                        }
-                    }
-
-                    Button("Continue as guest") {
-                        appState.continueAsGuest()
-                    }
-                    .buttonStyle(SecondaryPillButtonStyle())
-                    .padding(.bottom, 30)
+            VStack(spacing: 0) {
+                if selectedTab == .login {
+                    LoginScreenView(
+                        goToSignup: { selectedTab = .signup },
+                        onContinueAsGuest: { appState.continueAsGuest() }
+                    )
+                } else {
+                    SignupScreenView(
+                        goToLogin: { selectedTab = .login },
+                        onContinueAsGuest: { appState.continueAsGuest() }
+                    )
                 }
-                .padding(.horizontal, 20)
             }
-            .background(HayameTheme.pageBackground.ignoresSafeArea())
+            .background(Color(red: 0.969, green: 0.980, blue: 1.0).ignoresSafeArea())
             .toolbar(.hidden, for: .navigationBar)
         }
     }
@@ -55,107 +32,143 @@ private struct LoginScreenView: View {
 
     @State private var email = ""
     @State private var password = ""
-    @State private var showPassword = false
+    @State private var passwordVisible = false
+    @State private var biometricTitle = "Log in with Face ID"
+    @State private var biometricsAvailable = false
+    @State private var hasSavedBiometricLogin = false
+    @State private var saveLoginWithBiometrics = true
+    @State private var biometricMessage: String?
 
     let goToSignup: () -> Void
+    let onContinueAsGuest: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("Welcome back.")
-                .font(.system(size: 15, weight: .medium, design: .rounded))
-                .foregroundStyle(HayameTheme.mutedText)
-
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Email")
-                    .font(.system(size: 13, weight: .semibold, design: .rounded))
-                TextField("you@example.com", text: $email)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .keyboardType(.emailAddress)
+        VStack(spacing: 0) {
+            AuthScaffold(
+                title: "Welcome back.",
+                subtitle: "Log in to continue",
+                selectedTab: .login,
+                onTabChange: { if $0 == .signup { goToSignup() } }
+            ) {
+                AuthField(label: "Email", placeholder: "you@example.com", text: $email, keyboardType: .emailAddress)
                     .textContentType(.username)
-                    .padding(12)
-                    .background(Color.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.black.opacity(0.08), lineWidth: 1))
-            }
 
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Password")
-                    .font(.system(size: 13, weight: .semibold, design: .rounded))
-                HStack {
-                    Group {
-                        if showPassword {
-                            TextField("••••••••", text: $password)
-                        } else {
-                            SecureField("••••••••", text: $password)
-                        }
-                    }
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
+                AuthSecureField(label: "Password", text: $password, isVisible: $passwordVisible)
                     .textContentType(.password)
 
-                    Button(showPassword ? "Hide" : "Show") {
-                        showPassword.toggle()
+                AuthPrimaryButton(
+                    title: appState.isSyncingRemote ? "Logging in..." : "Log in",
+                    action: {
+                        appState.signIn(email: email, password: password) {
+                            saveCurrentLoginForBiometricsIfNeeded()
+                        }
+                    },
+                    isLoading: appState.isSyncingRemote,
+                    isDisabled: appState.isSyncingRemote
+                )
+
+                if biometricsAvailable {
+                    Toggle(isOn: $saveLoginWithBiometrics) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Save login for \(biometricName)")
+                                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                                .foregroundStyle(Color(red: 0.039, green: 0.169, blue: 0.329))
+                            Text("Use it for quick login after signing out.")
+                                .font(.system(size: 11, weight: .medium, design: .rounded))
+                                .foregroundStyle(Color(red: 0.451, green: 0.490, blue: 0.569))
+                        }
                     }
-                    .font(.system(size: 12, weight: .semibold, design: .rounded))
-                    .foregroundStyle(HayameTheme.brandBlue)
+                    .toggleStyle(.switch)
+                    .tint(Color(red: 0.078, green: 0.518, blue: 0.851))
                 }
-                .padding(12)
-                .background(Color.white)
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.black.opacity(0.08), lineWidth: 1))
-            }
 
-            Button {
-                appState.signIn(email: email, password: password)
-            } label: {
-                HStack(spacing: 8) {
-                    if appState.isSyncingRemote {
-                        ProgressView().tint(.white)
+                if hasSavedBiometricLogin {
+                    AuthBiometricButton(title: biometricTitle) {
+                        authenticateWithBiometrics()
                     }
-                    Text(appState.isSyncingRemote ? "Logging in..." : "Log in")
                 }
-            }
-            .buttonStyle(PrimaryPillButtonStyle())
-            .disabled(appState.isSyncingRemote)
 
-            Button("Forgot password?") {
-                appState.requestPasswordReset(email: email)
-            }
-            .font(.system(size: 13, weight: .semibold, design: .rounded))
-            .foregroundStyle(HayameTheme.brandBlue)
-            .disabled(appState.isSyncingRemote)
+                VStack(spacing: 10) {
+                    Button("Forgot password?") {
+                        appState.requestPasswordReset(email: email)
+                    }
+                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    .foregroundStyle(Color(red: 0.078, green: 0.518, blue: 0.851))
+                    .disabled(appState.isSyncingRemote)
 
-            if let message = appState.syncErrorMessage {
-                Text(message)
-                    .font(.system(size: 12, weight: .semibold, design: .rounded))
-                    .foregroundStyle(HayameTheme.danger)
-            }
-            if let info = appState.authInfoMessage {
-                Text(info)
-                    .font(.system(size: 12, weight: .semibold, design: .rounded))
-                    .foregroundStyle(HayameTheme.success)
-            }
+                    if !email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Button("Resend verification email") {
+                            appState.resendSignupConfirmation(email: email)
+                        }
+                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+                        .foregroundStyle(Color(red: 0.078, green: 0.518, blue: 0.851))
+                        .disabled(appState.isSyncingRemote)
+                    }
 
-            if !email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                Button("Resend verification email") {
-                    appState.resendSignupConfirmation(email: email)
+                    HStack(spacing: 4) {
+                        Text("No account?")
+                            .font(.system(size: 13, design: .rounded))
+                            .foregroundStyle(Color(red: 0.451, green: 0.490, blue: 0.569))
+                        Button("Sign up", action: goToSignup)
+                            .font(.system(size: 13, weight: .semibold, design: .rounded))
+                            .foregroundStyle(Color(red: 0.078, green: 0.518, blue: 0.851))
+                    }
                 }
-                .buttonStyle(SecondaryPillButtonStyle())
-                .disabled(appState.isSyncingRemote)
+                .frame(maxWidth: .infinity)
+
+                AuthMessages(error: appState.syncErrorMessage, info: appState.authInfoMessage ?? biometricMessage)
             }
 
-            HStack(spacing: 4) {
-                Text("No account?")
-                    .font(.system(size: 13, weight: .medium, design: .rounded))
-                    .foregroundStyle(HayameTheme.mutedText)
-                Button("Sign up", action: goToSignup)
-                    .font(.system(size: 13, weight: .bold, design: .rounded))
-                    .foregroundStyle(HayameTheme.brandBlue)
+            AuthGuestButton(action: onContinueAsGuest)
+        }
+        .onAppear(perform: refreshBiometricState)
+    }
+
+    private var biometricName: String {
+        biometricTitle.replacingOccurrences(of: "Log in with ", with: "")
+    }
+
+    private func refreshBiometricState() {
+        let context = LAContext()
+        var error: NSError?
+        let canEvaluate = context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error)
+        biometricsAvailable = canEvaluate
+        hasSavedBiometricLogin = canEvaluate && BiometricCredentialStore.hasCredentials
+        biometricTitle = context.biometryType == .touchID ? "Log in with Touch ID" : "Log in with Face ID"
+    }
+
+    private func saveCurrentLoginForBiometricsIfNeeded() {
+        guard saveLoginWithBiometrics, biometricsAvailable else { return }
+        BiometricCredentialStore.save(email: email, password: password)
+        biometricMessage = "\(biometricName) login saved for next time."
+        refreshBiometricState()
+    }
+
+    private func authenticateWithBiometrics() {
+        let context = LAContext()
+        var error: NSError?
+        guard context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error) else {
+            biometricMessage = "Biometric login is not available on this device."
+            return
+        }
+
+        let reason = "Use biometrics to log in to Hayame."
+        context.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, localizedReason: reason) { success, authError in
+            DispatchQueue.main.async {
+                guard success else {
+                    biometricMessage = authError?.localizedDescription ?? "Biometric login was cancelled."
+                    return
+                }
+                guard let credentials = BiometricCredentialStore.load() else {
+                    biometricMessage = "Log in once with email and password to enable biometric login."
+                    refreshBiometricState()
+                    return
+                }
+                email = credentials.email
+                password = credentials.password
+                appState.signIn(email: credentials.email, password: credentials.password)
             }
         }
-        .padding(16)
-        .hayameCard()
     }
 }
 
@@ -165,121 +178,80 @@ private struct SignupScreenView: View {
     @State private var firstName = ""
     @State private var lastName = ""
     @State private var email = ""
+    @State private var password = ""
+    @State private var passwordVisible = false
     @State private var region = MockDataService.defaultRegion
     @State private var city = "Accra"
-    @State private var password = ""
-    @State private var showPassword = false
     @State private var showSignupConfirmationAlert = false
 
     let goToLogin: () -> Void
+    let onContinueAsGuest: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("Create your account")
-                .font(.system(size: 15, weight: .medium, design: .rounded))
-                .foregroundStyle(HayameTheme.mutedText)
+        VStack(spacing: 0) {
+            AuthScaffold(
+                title: "Create your account.",
+                subtitle: "Start renting in minutes",
+                selectedTab: .signup,
+                onTabChange: { if $0 == .login { goToLogin() } }
+            ) {
+                HStack(spacing: 12) {
+                    AuthField(label: "First name", placeholder: "Ama", text: $firstName)
+                    AuthField(label: "Last name", placeholder: "Owusu", text: $lastName)
+                }
 
-            HStack(spacing: 10) {
-                inputField(title: "First name", placeholder: "Ama", text: $firstName)
-                inputField(title: "Last name", placeholder: "Owusu", text: $lastName)
-            }
-
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Email")
-                    .font(.system(size: 13, weight: .semibold, design: .rounded))
-                TextField("you@example.com", text: $email)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .keyboardType(.emailAddress)
+                AuthField(label: "Email", placeholder: "you@example.com", text: $email, keyboardType: .emailAddress)
                     .textContentType(.username)
-                    .padding(12)
-                    .background(Color.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.black.opacity(0.08), lineWidth: 1))
-            }
 
-            HStack(spacing: 10) {
-                menuField(title: "Region", selection: $region, items: MockDataService.regionsIncluding(region))
-                menuField(title: "City", selection: $city, items: MockDataService.cities(for: region, preferred: city))
-            }
+                HStack(spacing: 12) {
+                    AuthSelectField(label: "Region", selected: $region, options: MockDataService.regionsIncluding(region))
+                    AuthSelectField(label: "City", selected: $city, options: MockDataService.cities(for: region, preferred: city))
+                }
 
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Password")
-                    .font(.system(size: 13, weight: .semibold, design: .rounded))
-                HStack {
-                    Group {
-                        if showPassword {
-                            TextField("••••••••", text: $password)
-                        } else {
-                            SecureField("••••••••", text: $password)
-                        }
-                    }
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
+                AuthSecureField(label: "Password", text: $password, isVisible: $passwordVisible)
                     .textContentType(.newPassword)
 
-                    Button(showPassword ? "Hide" : "Show") {
-                        showPassword.toggle()
-                    }
-                    .font(.system(size: 12, weight: .semibold, design: .rounded))
-                    .foregroundStyle(HayameTheme.brandBlue)
-                }
-                .padding(12)
-                .background(Color.white)
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.black.opacity(0.08), lineWidth: 1))
-            }
-
-            Button {
-                appState.signUp(
-                    firstName: firstName,
-                    lastName: lastName,
-                    email: email,
-                    city: city,
-                    region: region,
-                    password: password
+                AuthPrimaryButton(
+                    title: appState.isSyncingRemote ? "Creating account..." : "Create account",
+                    action: {
+                        appState.signUp(
+                            firstName: firstName,
+                            lastName: lastName,
+                            email: email,
+                            city: city,
+                            region: region,
+                            password: password
+                        )
+                    },
+                    isLoading: appState.isSyncingRemote,
+                    isDisabled: appState.isSyncingRemote
                 )
-            } label: {
-                HStack(spacing: 8) {
-                    if appState.isSyncingRemote {
-                        ProgressView().tint(.white)
+
+                HStack(spacing: 4) {
+                    Text("Already registered?")
+                        .font(.system(size: 13, design: .rounded))
+                        .foregroundStyle(Color(red: 0.451, green: 0.490, blue: 0.569))
+                    Button("Log in", action: goToLogin)
+                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+                        .foregroundStyle(Color(red: 0.078, green: 0.518, blue: 0.851))
+                }
+                .frame(maxWidth: .infinity)
+
+                AuthMessages(error: appState.syncErrorMessage, info: appState.authInfoMessage)
+
+                if !email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Button("Resend verification email") {
+                        appState.resendSignupConfirmation(email: email)
                     }
-                    Text(appState.isSyncingRemote ? "Creating account..." : "Sign up")
+                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    .foregroundStyle(Color(red: 0.078, green: 0.518, blue: 0.851))
+                    .frame(maxWidth: .infinity)
+                    .disabled(appState.isSyncingRemote)
                 }
             }
-            .buttonStyle(PrimaryPillButtonStyle())
-            .disabled(appState.isSyncingRemote)
 
-            if let message = appState.syncErrorMessage {
-                Text(message)
-                    .font(.system(size: 12, weight: .semibold, design: .rounded))
-                    .foregroundStyle(HayameTheme.danger)
-            }
-            if let info = appState.authInfoMessage {
-                Text(info)
-                    .font(.system(size: 12, weight: .semibold, design: .rounded))
-                    .foregroundStyle(HayameTheme.success)
-            }
-
-            if !email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                Button("Resend verification email") {
-                    appState.resendSignupConfirmation(email: email)
-                }
-                .buttonStyle(SecondaryPillButtonStyle())
-                .disabled(appState.isSyncingRemote)
-            }
-
-            HStack(spacing: 4) {
-                Text("Already registered?")
-                    .font(.system(size: 13, weight: .medium, design: .rounded))
-                    .foregroundStyle(HayameTheme.mutedText)
-                Button("Log in", action: goToLogin)
-                    .font(.system(size: 13, weight: .bold, design: .rounded))
-                    .foregroundStyle(HayameTheme.brandBlue)
-            }
+            AuthGuestButton(action: onContinueAsGuest)
         }
-        .padding(16)
-        .hayameCard()
         .onChange(of: region) { _, newValue in
             let options = MockDataService.cities(for: newValue, preferred: city)
             if !options.contains(where: { $0.caseInsensitiveCompare(city) == .orderedSame }) {
@@ -299,47 +271,69 @@ private struct SignupScreenView: View {
             Text(appState.signupConfirmationPromptMessage ?? "Account created. Check your inbox/spam for verification email, then log in.")
         }
     }
+}
 
-    private func inputField(title: String, placeholder: String, text: Binding<String>) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title)
-                .font(.system(size: 13, weight: .semibold, design: .rounded))
-            TextField(placeholder, text: text)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .padding(12)
-                .background(Color.white)
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.black.opacity(0.08), lineWidth: 1))
-        }
-    }
+private struct AuthMessages: View {
+    let error: String?
+    let info: String?
 
-    private func menuField(title: String, selection: Binding<String>, items: [String]) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title)
-                .font(.system(size: 13, weight: .semibold, design: .rounded))
-
-            Menu {
-                ForEach(items, id: \.self) { item in
-                    Button(item) {
-                        selection.wrappedValue = item
-                    }
-                }
-            } label: {
-                HStack {
-                    Text(selection.wrappedValue)
-                        .font(.system(size: 14, weight: .medium, design: .rounded))
-                        .foregroundStyle(HayameTheme.brandNavy)
-                    Spacer()
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(HayameTheme.mutedText)
-                }
-                .padding(12)
-                .background(Color.white)
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.black.opacity(0.08), lineWidth: 1))
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if let error, !error.isEmpty {
+                Text(error)
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .foregroundStyle(HayameTheme.danger)
+            }
+            if let info, !info.isEmpty {
+                Text(info)
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .foregroundStyle(HayameTheme.success)
             }
         }
+    }
+}
+
+private enum BiometricCredentialStore {
+    private static let service = "com.hayame.app.biometric-login"
+    private static let account = "primary"
+
+    static var hasCredentials: Bool {
+        load() != nil
+    }
+
+    static func save(email: String, password: String) {
+        let payload = ["email": email.trimmingCharacters(in: .whitespacesAndNewlines), "password": password]
+        guard let data = try? JSONEncoder().encode(payload) else { return }
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account
+        ]
+        SecItemDelete(query as CFDictionary)
+        var attributes = query
+        attributes[kSecValueData as String] = data
+        attributes[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+        SecItemAdd(attributes as CFDictionary, nil)
+    }
+
+    static func load() -> (email: String, password: String)? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+        var result: AnyObject?
+        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
+              let data = result as? Data,
+              let payload = try? JSONDecoder().decode([String: String].self, from: data),
+              let email = payload["email"],
+              let password = payload["password"],
+              !email.isEmpty,
+              !password.isEmpty else {
+            return nil
+        }
+        return (email, password)
     }
 }

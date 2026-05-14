@@ -38,15 +38,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.hayame.app.core.network.CarDto
-import com.hayame.app.ui.theme.Border
 import com.hayame.app.ui.theme.BrandBlue
-import com.hayame.app.ui.theme.BrandLight
-import com.hayame.app.ui.theme.BrandNavy
-import com.hayame.app.ui.theme.CardBackground
-import com.hayame.app.ui.theme.MutedText
+import com.hayame.app.ui.theme.LocalHayameColors
 
 @Composable
 fun LoadingBlock(label: String = "Loading...") {
+    val colors = LocalHayameColors.current
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -54,15 +51,16 @@ fun LoadingBlock(label: String = "Loading...") {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        CircularProgressIndicator(color = BrandBlue)
-        Text(text = label, style = MaterialTheme.typography.bodyMedium, color = MutedText)
+        CircularProgressIndicator(color = colors.brandBlue)
+        Text(text = label, style = MaterialTheme.typography.bodyMedium, color = colors.mutedText)
     }
 }
 
 @Composable
 fun ErrorBlock(message: String, retryLabel: String = "Retry", onRetry: () -> Unit) {
+    val colors = LocalHayameColors.current
     Card(
-        colors = CardDefaults.cardColors(containerColor = CardBackground),
+        colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
         shape = RoundedCornerShape(16.dp),
         modifier = Modifier.fillMaxWidth(),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
@@ -71,8 +69,8 @@ fun ErrorBlock(message: String, retryLabel: String = "Retry", onRetry: () -> Uni
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Text(text = "Something went wrong", style = MaterialTheme.typography.titleMedium, color = BrandNavy)
-            Text(text = message, style = MaterialTheme.typography.bodyMedium, color = MutedText)
+            Text(text = "Something went wrong", style = MaterialTheme.typography.titleMedium, color = colors.brandNavy)
+            Text(text = message, style = MaterialTheme.typography.bodyMedium, color = colors.mutedText)
             OutlinedButton(onClick = onRetry) {
                 Text(retryLabel)
             }
@@ -82,8 +80,9 @@ fun ErrorBlock(message: String, retryLabel: String = "Retry", onRetry: () -> Uni
 
 @Composable
 fun EmptyBlock(title: String, subtitle: String) {
+    val colors = LocalHayameColors.current
     Card(
-        colors = CardDefaults.cardColors(containerColor = CardBackground),
+        colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
         shape = RoundedCornerShape(16.dp),
         modifier = Modifier.fillMaxWidth(),
     ) {
@@ -91,8 +90,8 @@ fun EmptyBlock(title: String, subtitle: String) {
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text(text = title, style = MaterialTheme.typography.titleMedium, color = BrandNavy)
-            Text(text = subtitle, style = MaterialTheme.typography.bodyMedium, color = MutedText)
+            Text(text = title, style = MaterialTheme.typography.titleMedium, color = colors.brandNavy)
+            Text(text = subtitle, style = MaterialTheme.typography.bodyMedium, color = colors.mutedText)
         }
     }
 }
@@ -105,12 +104,13 @@ fun CarCard(
     onClick: () -> Unit,
     onFavoriteClick: () -> Unit,
 ) {
+    val colors = LocalHayameColors.current
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = CardBackground),
+        colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
         elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
     ) {
         Column(
@@ -122,7 +122,7 @@ fun CarCard(
                     .fillMaxWidth()
                     .height(imageHeight)
                     .clip(RoundedCornerShape(16.dp))
-                    .background(BrandLight),
+                    .background(colors.brandLight),
             ) {
                 val imageUrl = resolvedCarImageUrl(car)
                 if (!imageUrl.isNullOrBlank()) {
@@ -147,7 +147,7 @@ fun CarCard(
                     Icon(
                         imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
                         contentDescription = null,
-                        tint = if (isFavorite) Color.Red else BrandNavy,
+                        tint = if (isFavorite) Color.Red else colors.brandNavy,
                         modifier = Modifier.size(20.dp),
                     )
                 }
@@ -158,7 +158,7 @@ fun CarCard(
                             .align(Alignment.BottomStart)
                             .padding(8.dp)
                             .clip(RoundedCornerShape(8.dp))
-                            .background(BrandBlue)
+                            .background(colors.brandBlue)
                             .padding(horizontal = 8.dp, vertical = 4.dp),
                     ) {
                         Text("INSTANT", color = Color.White, style = MaterialTheme.typography.labelSmall)
@@ -172,15 +172,15 @@ fun CarCard(
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    color = BrandNavy,
+                    color = colors.brandNavy,
                 )
 
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Outlined.LocationOn, contentDescription = null, tint = MutedText, modifier = Modifier.size(14.dp))
+                    Icon(Icons.Outlined.LocationOn, contentDescription = null, tint = colors.mutedText, modifier = Modifier.size(14.dp))
                     Text(
                         text = listOfNotNull(car.city, car.region).joinToString(", "),
                         style = MaterialTheme.typography.bodySmall,
-                        color = MutedText,
+                        color = colors.mutedText,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -191,12 +191,12 @@ fun CarCard(
                 Text(
                     text = "GH₵${car.daily_price?.toInt() ?: 0}",
                     style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.ExtraBold),
-                    color = BrandBlue,
+                    color = colors.brandBlue,
                 )
-                Text(text = " / day", style = MaterialTheme.typography.bodySmall, color = MutedText)
+                Text(text = " / day", style = MaterialTheme.typography.bodySmall, color = colors.mutedText)
                 Spacer(modifier = Modifier.weight(1f))
                 if (car.avg_rating != null && car.avg_rating!! > 0) {
-                    Text(text = "⭐ ${String.format("%.1f", car.avg_rating)}", style = MaterialTheme.typography.labelLarge, color = BrandNavy)
+                    Text(text = "⭐ ${String.format("%.1f", car.avg_rating)}", style = MaterialTheme.typography.labelLarge, color = colors.brandNavy)
                 }
             }
         }
@@ -214,17 +214,18 @@ private fun resolvedCarImageUrl(car: CarDto): String? {
 
 @Composable
 fun SectionHeader(title: String, action: String? = null, onAction: (() -> Unit)? = null) {
+    val colors = LocalHayameColors.current
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(title, style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold), color = BrandNavy)
+        Text(title, style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold), color = colors.brandNavy)
         Spacer(modifier = Modifier.weight(1f))
         if (action != null && onAction != null) {
             TextButton(onClick = onAction) {
-                Text(action, color = BrandBlue, fontWeight = FontWeight.Bold)
+                Text(action, color = colors.brandBlue, fontWeight = FontWeight.Bold)
             }
         }
     }

@@ -107,6 +107,7 @@ type SupabaseCar = Database["public"]["Tables"]["cars"]["Row"] & {
 
 export default async function CarDetailPage({ params }: PageProps) {
   const resolvedParams = await params;
+  console.log("[car-detail] start", resolvedParams);
   const {
     car,
     availability,
@@ -415,6 +416,9 @@ async function getCarFromInternalApi(id: string): Promise<SupabaseCar | null> {
     (process.env.VERCEL_URL
       ? `https://${process.env.VERCEL_URL}`
       : "http://localhost:3000");
+  if (process.env.NODE_ENV !== "production") {
+    console.log("[car-detail] using origin", origin);
+  }
   try {
     const res = await fetch(`${origin}/api/cars/${id}`, { cache: "no-store" });
     if (res.status === 404) return null;
@@ -444,6 +448,7 @@ async function loadCar(id: string): Promise<{
 }> {
   const mock = mockCars.find((c) => c.id === id);
   if (mock) {
+    console.log("[car-detail] using mock", id);
     return {
       car: mapMockCar(mock),
       availability: [],
@@ -457,16 +462,19 @@ async function loadCar(id: string): Promise<{
   }
 
   if (!isUUID(id)) {
+    console.log("[car-detail] not uuid", id);
     notFound();
   }
 
   // Fetch directly from Supabase REST first (anon key works in prod)
   const restCar = await getCarFromSupabaseRest(id);
+  console.log("[car-detail] rest car", { id, found: Boolean(restCar) });
   let car = restCar ? mapCar(restCar) : null;
 
   // Fallback: call our internal API
   if (!car) {
     const apiCar = await getCarFromInternalApi(id);
+    console.log("[car-detail] api car", { id, found: Boolean(apiCar) });
     car = apiCar ? mapCar(apiCar) : null;
   }
 
@@ -494,6 +502,7 @@ async function loadCar(id: string): Promise<{
         .eq("id", id)
         .maybeSingle();
       if (carData) {
+        console.log("[car-detail] supabase client car", { id, found: true });
         car = mapCar(carData as SupabaseCar);
       }
     }

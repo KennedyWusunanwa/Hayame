@@ -52,9 +52,9 @@ export default function PricesPage() {
           Transparent daily rates
         </h1>
         <p className="text-gray-700">
-          Prices are set by hosts. We show the total before checkout, including
-          platform, insurance, delivery, deposit, and outside-region fees when
-          they apply.
+          Prices are set by hosts. We show the total before you book. Paystack
+          integration is coming soon—book now and pay on handoff with digital
+          receipts.
         </p>
       </div>
       <div className="mt-10 grid gap-6 md:grid-cols-3">

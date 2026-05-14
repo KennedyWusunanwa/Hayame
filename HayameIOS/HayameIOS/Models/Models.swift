@@ -293,6 +293,8 @@ struct Car: Identifiable, Hashable {
     var model: String = ""
     var city: String
     var region: String
+    var latitude: Double? = nil
+    var longitude: Double? = nil
     var dailyPrice: Int
     var rating: Double
     var reviewsCount: Int
@@ -400,6 +402,8 @@ struct Booking: Identifiable, Hashable {
     var hostID: String = ""
     var conversationID: String? = nil
     var carTitle: String
+    var carBrand: String = ""
+    var carImageNames: [String] = []
     var renterName: String
     var hostName: String
     var startDate: Date
@@ -407,6 +411,10 @@ struct Booking: Identifiable, Hashable {
     var status: BookingStatus
     var paymentStatus: PaymentStatus
     var totalPrice: Int
+    var deliveryAddress: String = ""
+    var deliveryTime: String = ""
+    var contactPhone: String = ""
+    var deliveryNotes: String = ""
     var tripUseRegion: String
     var tripUseCity: String
     var tripUseAddress: String

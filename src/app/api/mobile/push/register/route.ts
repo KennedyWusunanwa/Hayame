@@ -2,39 +2,42 @@ import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getRequestUser } from "@/lib/supabase/request-auth";
-import { getPushConfigurationStatus } from "@/lib/push";
 
 type Body = {
   deviceToken?: string;
-  previousDeviceToken?: string;
   platform?: string;
 };
 
-function isMissingPushTableError(message: string) {
-  const lowered = message.toLowerCase();
-  return (
-    lowered.includes("does not exist") ||
-    lowered.includes("relation") ||
-    lowered.includes("could not find") ||
-    lowered.includes("schema cache")
-  );
+function isPlaceholderValue(value: string) {
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) return true;
+  if (normalized === "your_apple_team_id" || normalized === "your_apns_key_id")
+    return true;
+  if (normalized.includes("your_apns_p8_key")) return true;
+  if (normalized.includes("replace_me") || normalized.includes("placeholder"))
+    return true;
+  return false;
+}
+
+function hasConfiguredValue(value: string | undefined | null) {
+  if (!value) return false;
+  const normalized = value.trim();
+  if (!normalized) return false;
+  return !isPlaceholderValue(normalized);
 }
 
 export async function POST(req: Request) {
   try {
     const supabase = await createSupabaseServerClient();
     const user = await getRequestUser(supabase as any, req);
-    if (!user) {
+    if (!user)
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
-    }
 
     const payload = (await req.json().catch(() => ({}))) as Body;
     const deviceToken = String(payload.deviceToken ?? "").trim();
-    const previousDeviceToken = String(payload.previousDeviceToken ?? "").trim();
     const platform = String(payload.platform ?? "ios")
       .trim()
       .toLowerCase();
-
     if (!deviceToken) {
       return NextResponse.json(
         { message: "deviceToken is required." },
@@ -62,42 +65,6 @@ export async function POST(req: Request) {
       });
     }
 
-    const deleteSameTokenElsewhere = await admin
-      .from("mobile_push_tokens")
-      .delete()
-      .eq("platform", platform)
-      .eq("device_token", deviceToken)
-      .neq("user_id", user.id);
-    if (deleteSameTokenElsewhere.error) {
-      const message = String(deleteSameTokenElsewhere.error.message ?? "");
-      if (isMissingPushTableError(message)) {
-        return NextResponse.json({
-          registered: false,
-          warning: "mobile_push_tokens table is not set up yet.",
-        });
-      }
-      return NextResponse.json({ message }, { status: 400 });
-    }
-
-    if (previousDeviceToken && previousDeviceToken !== deviceToken) {
-      const previousDelete = await admin
-        .from("mobile_push_tokens")
-        .delete()
-        .eq("user_id", user.id)
-        .eq("platform", platform)
-        .eq("device_token", previousDeviceToken);
-      if (previousDelete.error) {
-        const message = String(previousDelete.error.message ?? "");
-        if (isMissingPushTableError(message)) {
-          return NextResponse.json({
-            registered: false,
-            warning: "mobile_push_tokens table is not set up yet.",
-          });
-        }
-        return NextResponse.json({ message }, { status: 400 });
-      }
-    }
-
     const { error } = await admin.from("mobile_push_tokens").upsert(
       {
         user_id: user.id,
@@ -110,7 +77,13 @@ export async function POST(req: Request) {
 
     if (error) {
       const message = String(error.message ?? "");
-      if (isMissingPushTableError(message)) {
+      const lowered = message.toLowerCase();
+      if (
+        lowered.includes("does not exist") ||
+        lowered.includes("relation") ||
+        lowered.includes("could not find") ||
+        lowered.includes("schema cache")
+      ) {
         return NextResponse.json({
           registered: false,
           warning: "mobile_push_tokens table is not set up yet.",
@@ -119,15 +92,22 @@ export async function POST(req: Request) {
       return NextResponse.json({ message }, { status: 400 });
     }
 
-    const pushStatus = getPushConfigurationStatus();
-    if (platform === "ios" && !pushStatus.apns.configured) {
+    const apnsConfigured =
+      hasConfiguredValue(process.env.APNS_TEAM_ID) &&
+      hasConfiguredValue(process.env.APNS_KEY_ID) &&
+      hasConfiguredValue(process.env.APNS_PRIVATE_KEY);
+    const fcmConfigured =
+      hasConfiguredValue(process.env.FCM_SERVER_KEY) ||
+      hasConfiguredValue(process.env.FIREBASE_SERVER_KEY);
+
+    if (platform === "ios" && !apnsConfigured) {
       return NextResponse.json({
         registered: true,
         warning:
           "Push token saved, but APNS server config is missing or still using placeholders.",
       });
     }
-    if (platform === "android" && !pushStatus.fcm.configured) {
+    if (platform === "android" && !fcmConfigured) {
       return NextResponse.json({
         registered: true,
         warning:

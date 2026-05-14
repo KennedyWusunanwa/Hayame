@@ -40,7 +40,6 @@ targets:
             CFBundleURLSchemes:
               - hayameios
         UILaunchScreen: {}
-        UIUserInterfaceStyle: Light
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
         NSPhotoLibraryUsageDescription: Hayame needs photo library access for profile and listing images.

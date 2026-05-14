@@ -40,7 +40,7 @@ export function AvailabilityPreview({ carId }: Props) {
       setResult(payload);
     } catch (err: any) {
       setResult(null);
-      setError(err.message ?? "Unable to check availability right now.");
+      setError(err.message ?? "Availability checking coming soon.");
     } finally {
       setLoading(false);
     }

@@ -46,12 +46,20 @@ class HayameFirebaseMessagingService : FirebaseMessagingService() {
         val conversationId = message.data["conversationId"]
         val bookingId = message.data["bookingId"]
         val recipientRole = message.data["recipientRole"]
+        val announcementId = message.data["announcementId"]
+        val ctaUrl = message.data["ctaUrl"]
+        val announcementCategory = message.data["category"]
 
         val intent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             putExtra("conversationId", conversationId)
             putExtra("bookingId", bookingId)
             putExtra("recipientRole", recipientRole)
+            putExtra("announcementId", announcementId)
+            putExtra("announcementTitle", title)
+            putExtra("announcementBody", body)
+            putExtra("announcementCategory", announcementCategory)
+            putExtra("announcementCtaUrl", ctaUrl)
         }
         val pendingIntent = PendingIntent.getActivity(
             this,

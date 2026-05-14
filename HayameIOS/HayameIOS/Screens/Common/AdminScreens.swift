@@ -1,24 +1,47 @@
 import SwiftUI
 
+private enum AdminTab: Hashable {
+    case home
+    case messages
+    case profile
+}
+
 struct AdminShellScreen: View {
     @EnvironmentObject private var appState: AppState
+    @Environment(\.colorScheme) private var colorScheme
+    @State private var selectedTab: AdminTab = .home
 
     var body: some View {
-        TabView {
+        activeContent
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(HayameTheme.pageBackground.ignoresSafeArea())
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                HayameBottomTabBar(selection: $selectedTab, items: adminTabItems)
+            }
+        .tint(HayameTheme.brandBlue)
+        .hayameNavigationChrome(colorScheme: colorScheme)
+    }
+
+    private var adminTabItems: [HayameBottomTabItem<AdminTab>] {
+        [
+            HayameBottomTabItem(id: .home, title: "Admin", systemImage: "shield.lefthalf.filled"),
+            HayameBottomTabItem(id: .messages, title: "Messages", systemImage: "message"),
+            HayameBottomTabItem(id: .profile, title: "Profile", systemImage: "person")
+        ]
+    }
+
+    @ViewBuilder
+    private var activeContent: some View {
+        switch selectedTab {
+        case .home:
             NavigationStack {
                 AdminHomeScreen()
             }
-            .tabItem {
-                Label("Admin", systemImage: "shield.lefthalf.filled")
-            }
-
+        case .messages:
             NavigationStack {
                 AdminMessagesScreen()
             }
-            .tabItem {
-                Label("Messages", systemImage: "message")
-            }
-
+        case .profile:
             NavigationStack {
                 List {
                     Section("Role") {
@@ -33,14 +56,11 @@ struct AdminShellScreen: View {
                         }
                     }
                 }
+                .scrollContentBackground(.hidden)
+                .background(HayameTheme.pageBackground)
                 .navigationTitle("Admin Profile")
             }
-            .tabItem {
-                Label("Profile", systemImage: "person")
-            }
         }
-        .tint(HayameTheme.brandBlue)
-        .toolbarBackground(.visible, for: .tabBar)
     }
 }
 
@@ -158,6 +178,8 @@ struct AdminFiltersScreen: View {
                 }
             }
         }
+        .scrollContentBackground(.hidden)
+        .background(HayameTheme.pageBackground)
         .navigationTitle("Filter Catalog")
     }
 }

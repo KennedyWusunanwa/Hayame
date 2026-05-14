@@ -337,10 +337,6 @@ export type Database = {
           start_date: string;
           end_date: string;
           status: Database["public"]["Enums"]["booking_status"];
-          delivery_address: string | null;
-          delivery_time: string | null;
-          contact_phone: string | null;
-          delivery_notes: string | null;
           trip_use_region: string | null;
           trip_use_city: string | null;
           trip_use_address: string | null;
@@ -374,10 +370,6 @@ export type Database = {
           start_date: string;
           end_date: string;
           status?: Database["public"]["Enums"]["booking_status"];
-          delivery_address?: string | null;
-          delivery_time?: string | null;
-          contact_phone?: string | null;
-          delivery_notes?: string | null;
           trip_use_region?: string | null;
           trip_use_city?: string | null;
           trip_use_address?: string | null;
@@ -411,10 +403,6 @@ export type Database = {
           start_date?: string;
           end_date?: string;
           status?: Database["public"]["Enums"]["booking_status"];
-          delivery_address?: string | null;
-          delivery_time?: string | null;
-          contact_phone?: string | null;
-          delivery_notes?: string | null;
           trip_use_region?: string | null;
           trip_use_city?: string | null;
           trip_use_address?: string | null;

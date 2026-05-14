@@ -197,7 +197,7 @@ export function FiltersSidebar({
         </Select>
         {!support.fuelType ? (
           <p className="text-xs text-amber-700">
-            Fuel filtering is unavailable for the current results.
+            Fuel filter wiring coming soon.
           </p>
         ) : null}
       </div>
@@ -336,7 +336,7 @@ export function FiltersSidebar({
       </div>
       {!support.year ? (
         <p className="-mt-3 text-xs text-amber-700">
-          Year filtering is unavailable for the current results.
+          Car year filter coming soon.
         </p>
       ) : null}
       <div className="grid gap-2 rounded-lg border border-border bg-white p-3">
@@ -375,12 +375,12 @@ export function FiltersSidebar({
       </div>
       {!support.deliveryAvailable ? (
         <p className="-mt-3 text-xs text-amber-700">
-          Delivery filtering is unavailable for the current results.
+          Delivery filter wiring coming soon.
         </p>
       ) : null}
       {!support.airConditioning ? (
         <p className="-mt-3 text-xs text-amber-700">
-          Air conditioning filtering is unavailable for the current results.
+          Air conditioning flag coming soon.
         </p>
       ) : null}
       <div className="grid grid-cols-2 gap-3 rounded-lg border border-border bg-white p-3">
@@ -428,12 +428,12 @@ export function FiltersSidebar({
       </div>
       {!support.rating ? (
         <p className="-mt-3 text-xs text-amber-700">
-          Rating filtering is unavailable for the current results.
+          Rating filter coming soon.
         </p>
       ) : null}
       {!support.hostType ? (
         <p className="-mt-3 text-xs text-amber-700">
-          Host level filtering is unavailable for the current results.
+          Host level filter coming soon.
         </p>
       ) : null}
       <div className="flex flex-col gap-3">

@@ -38,12 +38,7 @@ export async function GET(req: Request) {
       grouped[loc.region].push(loc.city);
     });
 
-    const response = NextResponse.json({ data: grouped });
-    response.headers.set(
-      "Cache-Control",
-      "public, s-maxage=300, stale-while-revalidate=3600",
-    );
-    return response;
+    return NextResponse.json({ data: grouped });
   } catch {
     if (strict) {
       return NextResponse.json(
@@ -57,14 +52,9 @@ export async function GET(req: Request) {
       if (!grouped[c.region]) grouped[c.region] = [];
       grouped[c.region].push(c.city);
     });
-    const response = NextResponse.json({
+    return NextResponse.json({
       data: grouped,
       message: "Using fallback locations",
     });
-    response.headers.set(
-      "Cache-Control",
-      "public, s-maxage=300, stale-while-revalidate=3600",
-    );
-    return response;
   }
 }

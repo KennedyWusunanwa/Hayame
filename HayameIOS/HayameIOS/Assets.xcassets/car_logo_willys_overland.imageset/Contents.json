@@ -1,0 +1,13 @@
+{
+  "images": [
+    {
+      "filename": "car_logo_willys_overland.png",
+      "idiom": "universal",
+      "scale": "1x"
+    }
+  ],
+  "info": {
+    "author": "xcode",
+    "version": 1
+  }
+}

@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -28,6 +29,7 @@ class SessionStore(private val context: Context) {
         val refresh = stringPreferencesKey("refresh_token")
         val userId = stringPreferencesKey("user_id")
         val seenAnnouncements = stringSetPreferencesKey("seen_announcement_ids")
+        val darkMode = booleanPreferencesKey("dark_mode_enabled")
     }
 
     val sessionFlow: Flow<SessionState> = context.dataStore.data
@@ -68,6 +70,17 @@ class SessionStore(private val context: Context) {
             val current = prefs[Keys.seenAnnouncements] ?: emptySet()
             prefs[Keys.seenAnnouncements] = current + normalized
         }
+    }
+
+    suspend fun darkMode(): Boolean {
+        return context.dataStore.data
+            .catch { emit(emptyPreferences()) }
+            .map { prefs -> prefs[Keys.darkMode] ?: false }
+            .first()
+    }
+
+    suspend fun setDarkMode(enabled: Boolean) {
+        context.dataStore.edit { prefs -> prefs[Keys.darkMode] = enabled }
     }
 
     suspend fun authHeader(): String? = current().accessToken?.let { "Bearer $it" }

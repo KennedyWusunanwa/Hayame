@@ -115,6 +115,10 @@ struct CarDTO: Decodable {
     let daily_price: DoubleOrIntOrString?
     let city: String?
     let region: String?
+    let latitude: DoubleOrIntOrString?
+    let longitude: DoubleOrIntOrString?
+    let lat: DoubleOrIntOrString?
+    let lng: DoubleOrIntOrString?
     let car_type: String?
     let seats: DoubleOrIntOrString?
     let transmission: String?
@@ -242,6 +246,10 @@ struct BookingDTO: Decodable {
     let status: String?
     let payment_status: String?
     let total_price: DoubleOrIntOrString?
+    let delivery_address: String?
+    let delivery_time: String?
+    let contact_phone: String?
+    let delivery_notes: String?
     let trip_use_region: String?
     let trip_use_city: String?
     let trip_use_address: String?
@@ -264,6 +272,10 @@ struct BookingDTO: Decodable {
 struct BookingCarDTO: Decodable {
     let id: String?
     let title: String?
+    let brand: String?
+    let model: String?
+    let image_url: String?
+    let car_photos: [CarPhotoDTO]?
     let owner_id: String?
     let owner: ProfileDTO?
 }
@@ -1622,7 +1634,7 @@ struct APIClient {
         }
 
         let bookingSelect =
-            "id,car_id,renter_id,start_date,end_date,status,trip_use_region,trip_use_city,trip_use_address,trip_outside_accra,daily_rate,subtotal,platform_fee,insurance_fee,delivery_fee,outside_accra_surcharge,deposit_amount,total_price,payment_status,payment_reference,rejection_reason,created_at,cars(id,title,owner_id,owner:profiles!cars_owner_id_fkey(id,full_name,avatar_url,phone)),renter:profiles!bookings_renter_id_fkey(id,full_name,avatar_url,phone)"
+            "id,car_id,renter_id,start_date,end_date,status,delivery_address,delivery_time,contact_phone,delivery_notes,trip_use_region,trip_use_city,trip_use_address,trip_outside_accra,daily_rate,subtotal,platform_fee,insurance_fee,delivery_fee,outside_accra_surcharge,deposit_amount,total_price,payment_status,payment_reference,rejection_reason,created_at,cars(id,title,brand,model,image_url,car_photos(url),owner_id,owner:profiles!cars_owner_id_fkey(id,full_name,avatar_url,phone)),renter:profiles!bookings_renter_id_fkey(id,full_name,avatar_url,phone)"
 
         guard
             let renterURL = supabaseURL(

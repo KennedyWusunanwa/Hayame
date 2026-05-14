@@ -65,60 +65,54 @@ struct HostApplicationPendingScreen: View {
 
 struct HostTabShell: View {
     @EnvironmentObject private var appState: AppState
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        TabView(selection: $appState.hostTab) {
-            NavigationStack {
-                HostDashboardScreen()
+        VStack(spacing: 0) {
+            activeContent
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .clipped()
+            if !appState.listingEditorActive {
+                HayameBottomTabBar(selection: $appState.hostTab, items: hostTabItems)
             }
-            .tabItem {
-                Label("Dashboard", systemImage: "house")
-            }
-            .tag(HostTab.dashboard)
-
-            NavigationStack {
-                HostCarsScreen()
-            }
-            .tabItem {
-                Label("Cars", systemImage: "car")
-            }
-            .tag(HostTab.cars)
-
-            NavigationStack {
-                HostBookingsScreen()
-            }
-            .tabItem {
-                Label("Bookings", systemImage: "calendar.badge.clock")
-            }
-            .tag(HostTab.bookings)
-
-            NavigationStack {
-                HostEarningsScreen()
-            }
-            .tabItem {
-                Label("Earnings", systemImage: "cedisign.circle")
-            }
-            .tag(HostTab.earnings)
-
-            NavigationStack {
-                InboxScreen()
-            }
-            .tabItem {
-                Label("Inbox", systemImage: "message")
-            }
-            .badge(appState.unreadMessagesCount > 0 ? appState.unreadMessagesCount : 0)
-            .tag(HostTab.inbox)
-
-            NavigationStack {
-                HostProfileScreen()
-            }
-            .tabItem {
-                Label("Profile", systemImage: "person")
-            }
-            .tag(HostTab.profile)
         }
+        .background(HayameTheme.pageBackground.ignoresSafeArea())
         .tint(HayameTheme.brandBlue)
-        .toolbarBackground(.visible, for: .tabBar)
+        .hayameNavigationChrome(colorScheme: colorScheme)
+    }
+
+    private var hostTabItems: [HayameBottomTabItem<HostTab>] {
+        [
+            HayameBottomTabItem(id: .dashboard, title: "Home", systemImage: "house"),
+            HayameBottomTabItem(id: .cars, title: "Cars", systemImage: "car"),
+            HayameBottomTabItem(id: .bookings, title: "Bookings", systemImage: "calendar.badge.clock"),
+            HayameBottomTabItem(id: .earnings, title: "Earnings", systemImage: "cedisign.circle"),
+            HayameBottomTabItem(
+                id: .inbox,
+                title: "Inbox",
+                systemImage: "message",
+                badgeCount: appState.unreadMessagesCount
+            ),
+            HayameBottomTabItem(id: .profile, title: "Profile", systemImage: "person")
+        ]
+    }
+
+    @ViewBuilder
+    private var activeContent: some View {
+        switch appState.hostTab {
+        case .dashboard:
+            NavigationStack { HostDashboardScreen() }
+        case .cars:
+            NavigationStack { HostCarsScreen() }
+        case .bookings:
+            NavigationStack { HostBookingsScreen() }
+        case .earnings:
+            NavigationStack { HostEarningsScreen() }
+        case .inbox:
+            NavigationStack { InboxScreen() }
+        case .profile:
+            NavigationStack { HostProfileScreen() }
+        }
     }
 }
 
@@ -335,11 +329,11 @@ struct HostDashboardScreen: View {
             }
             .frame(width: 48, height: 48)
             .clipShape(Circle())
-            .overlay(Circle().stroke(Color.black.opacity(0.08), lineWidth: 1))
+            .overlay(Circle().stroke(HayameTheme.controlStroke, lineWidth: 1))
         } else {
             fallbackAvatar
                 .frame(width: 48, height: 48)
-                .overlay(Circle().stroke(Color.black.opacity(0.08), lineWidth: 1))
+                .overlay(Circle().stroke(HayameTheme.controlStroke, lineWidth: 1))
         }
     }
 
@@ -402,11 +396,11 @@ private struct HostDashboardRowLabel: View {
                 .foregroundStyle(HayameTheme.mutedText)
         }
         .padding(12)
-        .background(Color.white)
+        .background(HayameTheme.cardBackground)
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(Color.black.opacity(0.05), lineWidth: 1)
+                .stroke(HayameTheme.cardStroke, lineWidth: 1)
         )
     }
 }
@@ -415,23 +409,32 @@ struct HostCarsScreen: View {
     @EnvironmentObject private var appState: AppState
     @State private var deleteTarget: Car?
     @State private var isDeleting = false
+    @State private var showCreateEditor = false
+    @State private var editTarget: Car?
 
     var body: some View {
         List {
-            Section {
-                NavigationLink {
-                    ListingEditorScreen(mode: .create)
+            Section("Actions") {
+                Button {
+                    appState.listingEditorActive = true
+                    showCreateEditor = true
                 } label: {
                     HStack {
                         Image(systemName: "plus.circle.fill")
                             .foregroundStyle(HayameTheme.brandBlue)
                         Text("Create Listing")
                             .font(.system(size: 15, weight: .bold, design: .rounded))
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(HayameTheme.mutedText)
                     }
+                    .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
             }
 
-            Section("My car listing") {
+            Section("My car listings") {
                 if case .loading = appState.publicCarsLoadState, appState.hostCars.isEmpty {
                     ForEach(0..<4, id: \.self) { _ in
                         HostListingPlaceholderRow()
@@ -449,8 +452,9 @@ struct HostCarsScreen: View {
                 } else {
                     ForEach(appState.hostCars) { car in
                         let status = listingStatusStyle(for: car.approvalStatus)
-                        NavigationLink {
-                            ListingEditorScreen(mode: .edit(car))
+                        Button {
+                            appState.listingEditorActive = true
+                            editTarget = car
                         } label: {
                             HStack(alignment: .top, spacing: 12) {
                                 HostListingThumbnailView(
@@ -482,9 +486,15 @@ struct HostCarsScreen: View {
                                         .font(.system(size: 13, weight: .bold, design: .rounded))
                                         .foregroundStyle(HayameTheme.brandBlue)
                                 }
+
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .foregroundStyle(HayameTheme.mutedText)
                             }
                             .padding(.vertical, 4)
+                            .contentShape(Rectangle())
                         }
+                        .buttonStyle(.plain)
                         .swipeActions(edge: .trailing) {
                             Button(role: .destructive) {
                                 deleteTarget = car
@@ -500,6 +510,7 @@ struct HostCarsScreen: View {
         .scrollContentBackground(.hidden)
         .background(HayameTheme.pageBackground)
         .navigationTitle("My Cars")
+        .navigationBarTitleDisplayMode(.inline)
         .refreshable {
             await appState.refreshAllRemoteData()
         }
@@ -533,6 +544,24 @@ struct HostCarsScreen: View {
             if let target = deleteTarget {
                 Text("This will permanently remove \(target.displayTitle) and its photos.")
             }
+        }
+        .fullScreenCover(isPresented: $showCreateEditor, onDismiss: {
+            appState.listingEditorActive = false
+        }) {
+            NavigationStack {
+                ListingEditorScreen(mode: .create)
+            }
+            .background(HayameTheme.pageBackground.ignoresSafeArea())
+            .environmentObject(appState)
+        }
+        .fullScreenCover(item: $editTarget, onDismiss: {
+            appState.listingEditorActive = false
+        }) { car in
+            NavigationStack {
+                ListingEditorScreen(mode: .edit(car))
+            }
+            .background(HayameTheme.pageBackground.ignoresSafeArea())
+            .environmentObject(appState)
         }
     }
 
@@ -764,7 +793,7 @@ struct ListingEditorScreen: View {
             }
             .padding(16)
         }
-        .background(HayameTheme.pageBackground)
+        .background(HayameTheme.pageBackground.ignoresSafeArea())
         .navigationTitle(modeTitle)
         .navigationBarTitleDisplayMode(.inline)
         .scrollDismissesKeyboard(.interactively)
@@ -834,6 +863,7 @@ struct ListingEditorScreen: View {
             Task { await queueFileImporterImages(result) }
         }
         .onAppear {
+            appState.listingEditorActive = true
             switch mode {
             case .create:
                 restoreCreateDraftIfAvailable()
@@ -869,6 +899,7 @@ struct ListingEditorScreen: View {
         }
         .onDisappear {
             persistCreateDraftIfNeeded()
+            appState.listingEditorActive = false
         }
         .animation(.easeInOut(duration: 0.2), value: currentStep)
     }
@@ -1754,12 +1785,12 @@ private struct ListingEditorProgressHeader: View {
                 ForEach(ListingEditorStep.allCases) { step in
                     VStack(spacing: 6) {
                         Capsule()
-                            .fill(step.rawValue <= currentStep.rawValue ? HayameTheme.brandBlue : Color.white)
+                            .fill(step.rawValue <= currentStep.rawValue ? HayameTheme.brandBlue : HayameTheme.fieldBackground)
                             .frame(height: 8)
                             .overlay(
                                 Capsule()
                                     .stroke(
-                                        step.rawValue <= currentStep.rawValue ? HayameTheme.brandBlue : Color.black.opacity(0.08),
+                                        step.rawValue <= currentStep.rawValue ? HayameTheme.brandBlue : HayameTheme.controlStroke,
                                         lineWidth: 1
                                     )
                             )
@@ -1776,12 +1807,12 @@ private struct ListingEditorProgressHeader: View {
             }
         }
         .padding(18)
-        .background(Color.white, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .background(HayameTheme.cardBackground, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(Color.black.opacity(0.05), lineWidth: 1)
+                .stroke(HayameTheme.cardStroke, lineWidth: 1)
         )
-        .shadow(color: Color.black.opacity(0.05), radius: 12, x: 0, y: 6)
+        .shadow(color: HayameTheme.cardShadow, radius: 12, x: 0, y: 6)
     }
 }
 
@@ -1813,12 +1844,12 @@ private struct ListingEditorSectionCard<Content: View>: View {
             content
         }
         .padding(18)
-        .background(Color.white, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .background(HayameTheme.cardBackground, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .stroke(Color.black.opacity(0.05), lineWidth: 1)
+                .stroke(HayameTheme.cardStroke, lineWidth: 1)
         )
-        .shadow(color: Color.black.opacity(0.05), radius: 12, x: 0, y: 6)
+        .shadow(color: HayameTheme.cardShadow, radius: 12, x: 0, y: 6)
     }
 }
 
@@ -1864,7 +1895,7 @@ private struct ListingEditorInputField: View {
                 .background(HayameTheme.brandLight, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .stroke(Color.black.opacity(0.05), lineWidth: 1)
+                        .stroke(HayameTheme.cardStroke, lineWidth: 1)
                 )
         }
     }
@@ -1903,7 +1934,7 @@ private struct ListingEditorSelectionField: View {
                 .background(HayameTheme.brandLight, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .stroke(Color.black.opacity(0.05), lineWidth: 1)
+                        .stroke(HayameTheme.cardStroke, lineWidth: 1)
                 )
             }
         }
@@ -1926,7 +1957,7 @@ private struct ListingEditorTextArea: View {
                     .fill(HayameTheme.brandLight)
                     .overlay(
                         RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .stroke(Color.black.opacity(0.05), lineWidth: 1)
+                            .stroke(HayameTheme.cardStroke, lineWidth: 1)
                     )
 
                 if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -1939,6 +1970,7 @@ private struct ListingEditorTextArea: View {
 
                 TextEditor(text: $text)
                     .scrollContentBackground(.hidden)
+                    .foregroundStyle(HayameTheme.brandNavy)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 8)
                     .frame(minHeight: 160)
@@ -1990,10 +2022,10 @@ private struct ListingEditorStepperField: View {
                 .buttonStyle(.plain)
             }
             .padding(14)
-            .background(Color.white, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .background(HayameTheme.fieldBackground, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(Color.black.opacity(0.05), lineWidth: 1)
+                    .stroke(HayameTheme.cardStroke, lineWidth: 1)
             )
         }
     }
@@ -2169,7 +2201,7 @@ private struct HostListingThumbnailView: View {
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(Color.black.opacity(0.05), lineWidth: 1)
+                .stroke(HayameTheme.cardStroke, lineWidth: 1)
         )
     }
 
@@ -2245,7 +2277,7 @@ private struct ListingEditorBottomBar: View {
                     .padding(.vertical, 16)
                     .background(
                         LinearGradient(
-                            colors: [HayameTheme.brandBlue, HayameTheme.brandNavy],
+                            colors: [HayameTheme.brandBlue, HayameTheme.primaryButtonEnd],
                             startPoint: .leading,
                             endPoint: .trailing
                         ),
@@ -2259,10 +2291,14 @@ private struct ListingEditorBottomBar: View {
         .padding(.horizontal, 16)
         .padding(.top, 12)
         .padding(.bottom, 8)
-        .background(.ultraThinMaterial)
+        .background {
+            Rectangle()
+                .fill(.ultraThinMaterial)
+                .ignoresSafeArea(edges: .bottom)
+        }
         .overlay(alignment: .top) {
             Rectangle()
-                .fill(Color.white.opacity(0.75))
+                .fill(HayameTheme.bottomBarSeparator)
                 .frame(height: 1)
         }
     }
@@ -2343,11 +2379,11 @@ private struct CurrencyInput: View {
             .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color.white)
+                    .fill(HayameTheme.fieldBackground)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(Color.black.opacity(0.08), lineWidth: 1)
+                    .stroke(HayameTheme.controlStroke, lineWidth: 1)
             )
 
             if showsQuickAdjustButtons {
@@ -2693,7 +2729,7 @@ struct HostEarningsScreen: View {
                                     RoundedRectangle(cornerRadius: 8, style: .continuous)
                                         .fill(
                                             LinearGradient(
-                                                colors: [HayameTheme.brandBlue, HayameTheme.brandNavy],
+                                                colors: [HayameTheme.brandBlue, HayameTheme.primaryButtonEnd],
                                                 startPoint: .top,
                                                 endPoint: .bottom
                                             )
@@ -2837,85 +2873,159 @@ struct HostProfileScreen: View {
     @EnvironmentObject private var appState: AppState
 
     var body: some View {
-        List {
-            Section {
-                HStack(spacing: 12) {
-                    profileAvatar
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 14) {
+                hostPageTitle("Profile")
 
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(appState.currentUser.fullName)
-                            .font(.system(size: 20, weight: .bold, design: .rounded))
-                        Text(appState.currentUser.email)
-                            .font(.system(size: 13, weight: .medium, design: .rounded))
-                            .foregroundStyle(HayameTheme.mutedText)
+                VStack(alignment: .leading, spacing: 14) {
+                    HStack(spacing: 12) {
+                        profileAvatar
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(appState.currentUser.fullName)
+                                .font(.system(size: 20, weight: .bold, design: .rounded))
+                                .foregroundStyle(HayameTheme.brandNavy)
+                            Text(appState.currentUser.email)
+                                .font(.system(size: 13, weight: .medium, design: .rounded))
+                                .foregroundStyle(HayameTheme.mutedText)
+                        }
+                        Spacer()
+                    }
+
+                    Divider()
+                        .background(HayameTheme.cardStroke)
+
+                    Label(hostLocationLabel, systemImage: "mappin.and.ellipse")
+                        .font(.system(size: 16, weight: .semibold, design: .rounded))
+                        .foregroundStyle(HayameTheme.brandNavy)
+
+                    Label("Host level: Verified Host", systemImage: "checkmark.seal.fill")
+                        .font(.system(size: 16, weight: .semibold, design: .rounded))
+                        .foregroundStyle(HayameTheme.brandNavy)
+                }
+                .hayameCard()
+
+                SectionHeader(title: "Notifications")
+                VStack(alignment: .leading, spacing: 12) {
+                    notificationPreferenceToggle(
+                        title: "Trips & bookings",
+                        subtitle: "Booking approvals, changes, and trip reminders.",
+                        isOn: Binding(
+                            get: { appState.notificationPreferences.bookingUpdates },
+                            set: { appState.updateNotificationPreference(bookingUpdates: $0) }
+                        )
+                    )
+                    preferenceDivider
+                    notificationPreferenceToggle(
+                        title: "Messages",
+                        subtitle: "New chats and replies from renters or hosts.",
+                        isOn: Binding(
+                            get: { appState.notificationPreferences.messages },
+                            set: { appState.updateNotificationPreference(messages: $0) }
+                        )
+                    )
+                    preferenceDivider
+                    notificationPreferenceToggle(
+                        title: "Account & security",
+                        subtitle: "Verification, login, and account notices.",
+                        isOn: Binding(
+                            get: { appState.notificationPreferences.accountSecurity },
+                            set: { appState.updateNotificationPreference(accountSecurity: $0) }
+                        )
+                    )
+                    preferenceDivider
+                    notificationPreferenceToggle(
+                        title: "News & announcements",
+                        subtitle: "Optional product updates, releases, and notices.",
+                        isOn: Binding(
+                            get: { appState.notificationPreferences.newsAnnouncements },
+                            set: { appState.updateNotificationPreference(newsAnnouncements: $0) }
+                        )
+                    )
+                    preferenceDivider
+                    Text("Operational alerts stay on by default. News & announcements are optional.")
+                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                        .foregroundStyle(HayameTheme.mutedText)
+                }
+                .hayameCard()
+
+                SectionHeader(title: "Host")
+                VStack(spacing: 10) {
+                    hostNavigationRow("Guest feedback") {
+                        HostReviewsScreen()
+                    }
+                    hostNavigationRow("Favorites analytics") {
+                        HostFavoritesScreen()
+                    }
+                    hostNavigationRow("Contact") {
+                        ContactScreen()
+                    }
+                    hostNavigationRow("Protection") {
+                        ProtectionScreen()
+                    }
+                    hostNavigationRow("Cancellation") {
+                        CancellationPolicyViewWrapper()
                     }
                 }
-                Label("\(appState.currentUser.city), \(appState.currentUser.region)", systemImage: "mappin.and.ellipse")
-                Label("Host level: Verified Host", systemImage: "checkmark.seal.fill")
-            }
+                .hayameCard()
 
-            Section("Notifications") {
-                notificationPreferenceToggle(
-                    title: "Trips & bookings",
-                    subtitle: "Booking approvals, changes, and trip reminders.",
-                    isOn: Binding(
-                        get: { appState.notificationPreferences.bookingUpdates },
-                        set: { appState.updateNotificationPreference(bookingUpdates: $0) }
-                    )
-                )
-                notificationPreferenceToggle(
-                    title: "Messages",
-                    subtitle: "New chats and replies from renters or hosts.",
-                    isOn: Binding(
-                        get: { appState.notificationPreferences.messages },
-                        set: { appState.updateNotificationPreference(messages: $0) }
-                    )
-                )
-                notificationPreferenceToggle(
-                    title: "Account & security",
-                    subtitle: "Verification, login, and account notices.",
-                    isOn: Binding(
-                        get: { appState.notificationPreferences.accountSecurity },
-                        set: { appState.updateNotificationPreference(accountSecurity: $0) }
-                    )
-                )
-                notificationPreferenceToggle(
-                    title: "News & announcements",
-                    subtitle: "Optional product updates, releases, and notices.",
-                    isOn: Binding(
-                        get: { appState.notificationPreferences.newsAnnouncements },
-                        set: { appState.updateNotificationPreference(newsAnnouncements: $0) }
-                    )
-                )
-                Text("Operational alerts stay on by default. News & announcements are optional.")
-                    .font(.system(size: 12, weight: .medium, design: .rounded))
-                    .foregroundStyle(HayameTheme.mutedText)
-            }
+                VStack(alignment: .leading, spacing: 10) {
+                    Button("Turn off Host mode") {
+                        appState.switchToGuestMode()
+                    }
+                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                    .foregroundStyle(HayameTheme.brandBlue)
 
-            Section("Host") {
-                NavigationLink("Guest feedback") {
-                    HostReviewsScreen()
+                    Button("Sign out", role: .destructive) {
+                        appState.signOut()
+                    }
+                    .font(.system(size: 14, weight: .semibold, design: .rounded))
                 }
-                NavigationLink("Favorites analytics") {
-                    HostFavoritesScreen()
-                }
-                NavigationLink("Contact") { ContactScreen() }
-                NavigationLink("Protection") { ProtectionScreen() }
-                NavigationLink("Cancellation") { CancellationPolicyViewWrapper() }
+                .hayameCard()
             }
-
-            Section {
-                Button("Turn off Host mode") {
-                    appState.switchToGuestMode()
-                }
-                Button("Sign out", role: .destructive) {
-                    appState.signOut()
-                }
-            }
+            .padding(16)
         }
-        .scrollContentBackground(.hidden)
-        .background(HayameTheme.pageBackground)
-        .navigationTitle("Profile")
+        .background(HayameTheme.pageBackground.ignoresSafeArea())
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private var hostLocationLabel: String {
+        let city = appState.currentUser.city.trimmingCharacters(in: .whitespacesAndNewlines)
+        let region = appState.currentUser.region.trimmingCharacters(in: .whitespacesAndNewlines)
+        let location = [city, region].filter { !$0.isEmpty }.joined(separator: ", ")
+        return location.isEmpty ? "Location not set" : location
+    }
+
+    private var preferenceDivider: some View {
+        Divider()
+            .background(HayameTheme.cardStroke)
+    }
+
+    private func hostPageTitle(_ title: String) -> some View {
+        Text(title)
+            .font(.system(size: 34, weight: .bold, design: .rounded))
+            .foregroundStyle(HayameTheme.brandNavy)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.top, 2)
+    }
+
+    private func hostNavigationRow<Destination: View>(
+        _ title: String,
+        @ViewBuilder destination: @escaping () -> Destination
+    ) -> some View {
+        NavigationLink(destination: destination) {
+            HStack {
+                Text(title)
+                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                    .foregroundStyle(HayameTheme.brandNavy)
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(HayameTheme.brandNavy)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     @ViewBuilder
@@ -2928,11 +3038,11 @@ struct HostProfileScreen: View {
             }
             .frame(width: 56, height: 56)
             .clipShape(Circle())
-            .overlay(Circle().stroke(Color.black.opacity(0.08), lineWidth: 1))
+            .overlay(Circle().stroke(HayameTheme.controlStroke, lineWidth: 1))
         } else {
             fallbackAvatar
                 .frame(width: 56, height: 56)
-                .overlay(Circle().stroke(Color.black.opacity(0.08), lineWidth: 1))
+                .overlay(Circle().stroke(HayameTheme.controlStroke, lineWidth: 1))
         }
     }
 
@@ -3351,6 +3461,8 @@ struct HostAvailabilityEditorScreen: View {
                 }
             }
         }
+        .scrollContentBackground(.hidden)
+        .background(HayameTheme.pageBackground)
         .navigationTitle("Availability")
     }
 

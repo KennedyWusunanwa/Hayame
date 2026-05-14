@@ -197,11 +197,11 @@ struct HostPublicProfileScreen: View {
             }
             .frame(width: 54, height: 54)
             .clipShape(Circle())
-            .overlay(Circle().stroke(Color.black.opacity(0.08), lineWidth: 1))
+            .overlay(Circle().stroke(HayameTheme.controlStroke, lineWidth: 1))
         } else {
             fallbackAvatar
                 .frame(width: 54, height: 54)
-                .overlay(Circle().stroke(Color.black.opacity(0.08), lineWidth: 1))
+                .overlay(Circle().stroke(HayameTheme.controlStroke, lineWidth: 1))
         }
     }
 
@@ -641,11 +641,11 @@ struct BecomeHostScreen: View {
             }
             .frame(width: 64, height: 64)
             .clipShape(Circle())
-            .overlay(Circle().stroke(Color.black.opacity(0.08), lineWidth: 1))
+            .overlay(Circle().stroke(HayameTheme.controlStroke, lineWidth: 1))
         } else {
             fallbackFacePhoto
                 .frame(width: 64, height: 64)
-                .overlay(Circle().stroke(Color.black.opacity(0.08), lineWidth: 1))
+                .overlay(Circle().stroke(HayameTheme.controlStroke, lineWidth: 1))
         }
     }
 
@@ -760,9 +760,9 @@ private struct MenuField: View {
                         .foregroundStyle(HayameTheme.mutedText)
                 }
                 .padding(12)
-                .background(.white)
+                .background(HayameTheme.fieldBackground)
                 .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.black.opacity(0.08), lineWidth: 1))
+                .overlay(RoundedRectangle(cornerRadius: 10).stroke(HayameTheme.controlStroke, lineWidth: 1))
             }
         }
     }

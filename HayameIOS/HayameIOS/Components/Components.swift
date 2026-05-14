@@ -405,9 +405,10 @@ struct HeroBannerCard: View {
 struct StatTile: View {
     let title: String
     let value: String
+    var action: (() -> Void)? = nil
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        let content = VStack(alignment: .leading, spacing: 4) {
             Text(title.uppercased())
                 .font(.system(size: 10, weight: .semibold, design: .rounded))
                 .foregroundStyle(HayameTheme.mutedText)
@@ -416,7 +417,17 @@ struct StatTile: View {
                 .foregroundStyle(HayameTheme.brandNavy)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .hayameCard()
+
+        if let action {
+            Button(action: action) {
+                content
+            }
+            .buttonStyle(.plain)
+            .hayameCard()
+        } else {
+            content
+                .hayameCard()
+        }
     }
 }
 
@@ -462,7 +473,7 @@ struct CarCardView: View {
                             .font(.system(size: 14, weight: .bold))
                             .foregroundStyle(isFavorite ? Color.red : HayameTheme.brandNavy)
                             .padding(8)
-                            .background(Color.white.opacity(0.9))
+                            .background(HayameTheme.floatingControlBackground)
                             .clipShape(Circle())
                     }
                     .buttonStyle(.plain)
@@ -510,11 +521,11 @@ struct CarCardView: View {
             }
         }
         .padding(12)
-        .background(Color.white)
+        .background(HayameTheme.cardBackground)
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(Color.black.opacity(0.05), lineWidth: 1)
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(HayameTheme.cardStroke, lineWidth: 1)
         )
     }
 }
@@ -537,7 +548,7 @@ struct BookingStatusBadge: View {
         case .pending: return HayameTheme.warning.opacity(0.16)
         case .confirmed: return HayameTheme.brandBlue.opacity(0.15)
         case .ongoing: return HayameTheme.success.opacity(0.16)
-        case .completed: return Color.black.opacity(0.06)
+        case .completed: return HayameTheme.subtleFill
         case .cancelled, .rejected, .refunded: return HayameTheme.danger.opacity(0.16)
         }
     }
@@ -678,11 +689,11 @@ struct ConversationRowView: View {
             }
         }
         .padding(10)
-        .background(Color.white)
+        .background(HayameTheme.cardBackground)
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(Color.black.opacity(0.05), lineWidth: 1)
+                .stroke(HayameTheme.cardStroke, lineWidth: 1)
         )
     }
 
@@ -696,11 +707,11 @@ struct ConversationRowView: View {
             }
             .frame(width: 42, height: 42)
             .clipShape(Circle())
-            .overlay(Circle().stroke(Color.black.opacity(0.06), lineWidth: 1))
+            .overlay(Circle().stroke(HayameTheme.cardStroke, lineWidth: 1))
         } else {
             fallbackAvatar
                 .frame(width: 42, height: 42)
-                .overlay(Circle().stroke(Color.black.opacity(0.06), lineWidth: 1))
+                .overlay(Circle().stroke(HayameTheme.cardStroke, lineWidth: 1))
         }
     }
 
@@ -751,11 +762,11 @@ struct ChatBubble: View {
                 }
             }
             .padding(10)
-            .background(message.isMine ? HayameTheme.brandBlue : Color.white)
+            .background(message.isMine ? HayameTheme.brandBlue : HayameTheme.cardBackground)
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .stroke(message.isMine ? Color.clear : Color.black.opacity(0.05), lineWidth: 1)
+                    .stroke(message.isMine ? Color.clear : HayameTheme.cardStroke, lineWidth: 1)
             )
 
             if !message.isMine { Spacer(minLength: 40) }
@@ -915,12 +926,12 @@ struct SkeletonBlock: View {
 
     var body: some View {
         RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-            .fill(Color.black.opacity(0.08))
+            .fill(HayameTheme.skeletonBase)
             .overlay(
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                     .fill(
                         LinearGradient(
-                            colors: [.clear, Color.white.opacity(0.5), .clear],
+                            colors: [.clear, HayameTheme.skeletonHighlight, .clear],
                             startPoint: .leading,
                             endPoint: .trailing
                         )
@@ -956,11 +967,11 @@ struct ListingGridPlaceholderCard: View {
             }
         }
         .padding(10)
-        .background(Color.white)
+        .background(HayameTheme.cardBackground)
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(Color.black.opacity(0.05), lineWidth: 1)
+                .stroke(HayameTheme.cardStroke, lineWidth: 1)
         )
     }
 }
@@ -979,11 +990,97 @@ struct ListingRowPlaceholderCard: View {
             Spacer()
         }
         .padding(10)
-        .background(Color.white)
+        .background(HayameTheme.cardBackground)
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(Color.black.opacity(0.06), lineWidth: 1)
+                .stroke(HayameTheme.cardStroke, lineWidth: 1)
+        )
+    }
+}
+
+struct HomeNearYouPlaceholderSection: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                SkeletonBlock(width: 88, height: 18, cornerRadius: 7)
+                Spacer()
+                SkeletonBlock(width: 48, height: 14, cornerRadius: 6)
+            }
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 12) {
+                    ForEach(0..<2, id: \.self) { _ in
+                        VStack(alignment: .leading, spacing: 0) {
+                            SkeletonBlock(width: 238, height: 154, cornerRadius: 18)
+
+                            VStack(alignment: .leading, spacing: 7) {
+                                HStack {
+                                    SkeletonBlock(width: 128, height: 15, cornerRadius: 6)
+                                    Spacer()
+                                    SkeletonBlock(width: 42, height: 18, cornerRadius: 9)
+                                }
+                                SkeletonBlock(width: 92, height: 12, cornerRadius: 6)
+                                SkeletonBlock(width: 104, height: 17, cornerRadius: 6)
+                            }
+                            .padding(12)
+                        }
+                        .frame(width: 238)
+                        .background(HayameTheme.cardBackground)
+                        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                .stroke(HayameTheme.cardStroke, lineWidth: 1)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+struct HomePopularPicksPlaceholderSection: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                SkeletonBlock(width: 132, height: 20, cornerRadius: 7)
+                Spacer()
+                SkeletonBlock(width: 48, height: 14, cornerRadius: 6)
+            }
+
+            VStack(spacing: 12) {
+                ForEach(0..<3, id: \.self) { _ in
+                    HomeFeaturedRowPlaceholderCard()
+                }
+            }
+        }
+    }
+}
+
+struct HomeFeaturedRowPlaceholderCard: View {
+    var body: some View {
+        HStack(spacing: 14) {
+            SkeletonBlock(width: 136, height: 104, cornerRadius: 14)
+
+            VStack(alignment: .leading, spacing: 8) {
+                SkeletonBlock(width: 150, height: 17, cornerRadius: 6)
+                SkeletonBlock(width: 176, height: 13, cornerRadius: 6)
+                HStack(spacing: 8) {
+                    SkeletonBlock(width: 46, height: 18, cornerRadius: 9)
+                    SkeletonBlock(width: 66, height: 18, cornerRadius: 9)
+                }
+                SkeletonBlock(width: 112, height: 18, cornerRadius: 6)
+            }
+
+            Spacer(minLength: 0)
+            SkeletonBlock(width: 42, height: 42, cornerRadius: 21)
+        }
+        .padding(12)
+        .background(HayameTheme.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(HayameTheme.cardStroke, lineWidth: 1)
         )
     }
 }
@@ -1029,11 +1126,11 @@ struct ConversationPlaceholderRow: View {
             SkeletonBlock(width: 34, height: 10, cornerRadius: 5)
         }
         .padding(12)
-        .background(Color.white)
+        .background(HayameTheme.cardBackground)
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(Color.black.opacity(0.05), lineWidth: 1)
+                .stroke(HayameTheme.cardStroke, lineWidth: 1)
         )
     }
 }

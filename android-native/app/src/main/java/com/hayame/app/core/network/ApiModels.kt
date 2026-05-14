@@ -140,6 +140,14 @@ data class CarDto(
     val daily_price: Double? = null,
     val city: String? = null,
     val region: String? = null,
+    @Serializable(with = FlexibleDoubleSerializer::class)
+    val latitude: Double? = null,
+    @Serializable(with = FlexibleDoubleSerializer::class)
+    val longitude: Double? = null,
+    @Serializable(with = FlexibleDoubleSerializer::class)
+    val lat: Double? = null,
+    @Serializable(with = FlexibleDoubleSerializer::class)
+    val lng: Double? = null,
     val car_type: String? = null,
     @Serializable(with = FlexibleDoubleSerializer::class)
     val seats: Double? = null,
@@ -207,6 +215,10 @@ data class FavoritesEnvelope(
 data class BookingCarDto(
     val id: String? = null,
     val title: String? = null,
+    val brand: String? = null,
+    val model: String? = null,
+    val image_url: String? = null,
+    val car_photos: List<CarPhotoDto>? = null,
     val owner_id: String? = null,
     val owner: OwnerDto? = null,
 )
@@ -228,6 +240,10 @@ data class BookingDto(
     val payment_status: String? = null,
     @Serializable(with = FlexibleDoubleSerializer::class)
     val total_price: Double? = null,
+    val delivery_address: String? = null,
+    val delivery_time: String? = null,
+    val contact_phone: String? = null,
+    val delivery_notes: String? = null,
     val trip_use_region: String? = null,
     val trip_use_city: String? = null,
     val trip_use_address: String? = null,

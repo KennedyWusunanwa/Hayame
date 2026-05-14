@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct RootView: View {
     @EnvironmentObject private var appState: AppState
@@ -34,6 +35,8 @@ struct RootView: View {
             }
         }
         .background(HayameTheme.pageBackground.ignoresSafeArea())
+        .simultaneousGesture(TapGesture().onEnded { dismissKeyboard() })
+        .dismissKeyboardOnBackgroundTap()
         .onAppear {
             syncHostStatusCache()
         }
@@ -76,6 +79,65 @@ struct RootView: View {
     }
 }
 
+private func dismissKeyboard() {
+    UIApplication.shared.sendAction(
+        #selector(UIResponder.resignFirstResponder),
+        to: nil,
+        from: nil,
+        for: nil
+    )
+}
+
+private extension View {
+    func dismissKeyboardOnBackgroundTap() -> some View {
+        background(KeyboardDismissBackgroundTapView())
+    }
+}
+
+private struct KeyboardDismissBackgroundTapView: UIViewRepresentable {
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView(frame: .zero)
+        view.backgroundColor = .clear
+        let recognizer = UITapGestureRecognizer(
+            target: context.coordinator,
+            action: #selector(Coordinator.handleTap)
+        )
+        recognizer.cancelsTouchesInView = false
+        recognizer.delegate = context.coordinator
+        view.addGestureRecognizer(recognizer)
+        return view
+    }
+
+    func updateUIView(_ uiView: UIView, context: Context) {}
+
+    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        @objc
+        func handleTap() {
+            UIApplication.shared.sendAction(
+                #selector(UIResponder.resignFirstResponder),
+                to: nil,
+                from: nil,
+                for: nil
+            )
+        }
+
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+            var current: UIView? = touch.view
+            while let view = current {
+                if view is UITextField || view is UITextView {
+                    return false
+                }
+                current = view.superview
+            }
+            return true
+        }
+    }
+}
+
 private struct AppAnnouncementOverlay: View {
     let announcement: AppAnnouncement
     let onDismiss: () -> Void
@@ -102,7 +164,7 @@ private struct AppAnnouncementOverlay: View {
                         .font(.system(size: 13, weight: .bold))
                         .foregroundStyle(HayameTheme.mutedText)
                         .padding(10)
-                        .background(Circle().fill(Color.black.opacity(0.05)))
+                        .background(Circle().fill(HayameTheme.fieldBackground))
                 }
                 .buttonStyle(.plain)
             }
@@ -140,7 +202,7 @@ private struct AppAnnouncementOverlay: View {
         .frame(maxWidth: 420)
         .background(
             RoundedRectangle(cornerRadius: 26, style: .continuous)
-                .fill(Color.white)
+                .fill(HayameTheme.cardBackground)
                 .shadow(color: Color.black.opacity(0.16), radius: 30, x: 0, y: 18)
         )
     }

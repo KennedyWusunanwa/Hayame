@@ -28,8 +28,11 @@ import com.hayame.app.core.session.SessionStore
 import com.hayame.app.push.PushTokenStore
 import com.hayame.app.ui.navigation.HostMainTab
 import com.hayame.app.ui.state.UiState
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonObject
@@ -160,6 +163,12 @@ class AppViewModel(
     private val _pendingCheckout = MutableStateFlow<PaystackInitDto?>(null)
     val pendingCheckout: StateFlow<PaystackInitDto?> = _pendingCheckout.asStateFlow()
 
+    private val _darkModeEnabled = MutableStateFlow(false)
+    val darkModeEnabled: StateFlow<Boolean> = _darkModeEnabled.asStateFlow()
+
+    private val _appearanceTransitionEvents = MutableSharedFlow<Boolean>(extraBufferCapacity = 1)
+    val appearanceTransitionEvents: SharedFlow<Boolean> = _appearanceTransitionEvents.asSharedFlow()
+
     private val _bookingDraft = MutableStateFlow<BookingDraft?>(null)
     val bookingDraft: StateFlow<BookingDraft?> = _bookingDraft.asStateFlow()
 
@@ -177,8 +186,19 @@ class AppViewModel(
         _authPrompt.value = null
     }
 
+    fun setDarkMode(enabled: Boolean) {
+        if (_darkModeEnabled.value != enabled) {
+            viewModelScope.launch {
+                _appearanceTransitionEvents.emit(enabled)
+            }
+        }
+        _darkModeEnabled.value = enabled
+        viewModelScope.launch { sessionStore.setDarkMode(enabled) }
+    }
+
     fun bootstrap() {
         viewModelScope.launch {
+            _darkModeEnabled.value = sessionStore.darkMode()
             val loggedIn = authRepository.isLoggedIn()
             _isAuthenticated.value = loggedIn
             if (loggedIn) {
@@ -689,6 +709,9 @@ class AppViewModel(
                     pendingAnnouncements = announcements.filter { announcement ->
                         announcement.shouldDisplay(locallySeen)
                     }
+                    if (_activeAnnouncement.value?.delivery == "push") {
+                        return@onSuccess
+                    }
                     _activeAnnouncement.value = pendingAnnouncements.firstOrNull()
                 }
                 .onFailure {
@@ -697,6 +720,34 @@ class AppViewModel(
                     }
                 }
         }
+    }
+
+    fun showAnnouncementFromPush(
+        id: String,
+        title: String?,
+        body: String?,
+        category: String?,
+        ctaUrl: String?,
+    ) {
+        val normalizedId = id.trim()
+        val normalizedTitle = title?.trim().takeUnless { it.isNullOrBlank() } ?: "Hayame update"
+        val normalizedBody = body?.trim().takeUnless { it.isNullOrBlank() } ?: "Open Hayame for the latest update."
+        if (normalizedId.isBlank()) return
+
+        val announcement = AppAnnouncementDto(
+            id = normalizedId,
+            title = normalizedTitle,
+            body = normalizedBody,
+            category = category?.trim().takeUnless { it.isNullOrBlank() } ?: "news",
+            delivery = "push",
+            audience = "all",
+            show_once = true,
+            cta_label = ctaUrl?.trim().takeUnless { it.isNullOrBlank() }?.let { "Open" },
+            cta_url = ctaUrl?.trim().takeUnless { it.isNullOrBlank() },
+            seen = false,
+        )
+        pendingAnnouncements = listOf(announcement) + pendingAnnouncements.filterNot { it.id == normalizedId }
+        _activeAnnouncement.value = announcement
     }
 
     fun dismissActiveAnnouncement() {
@@ -758,6 +809,10 @@ class AppViewModel(
         }
     }
 
+    fun requestHostTab(tab: HostMainTab) {
+        _pendingHostTab.value = tab
+    }
+
     fun consumePendingBookingFocus(bookingId: String) {
         if (_pendingBookingFocus.value == bookingId) {
             _pendingBookingFocus.value = null
@@ -796,6 +851,30 @@ class AppViewModel(
                     loadMessages(conversationId)
                 }
                 .onFailure { _snackbar.value = it.readableMessage("Unable to send message") }
+        }
+    }
+
+    fun sendMessageIfMissing(conversationId: String, body: String) {
+        viewModelScope.launch {
+            val trimmed = body.trim()
+            if (trimmed.isBlank()) return@launch
+            runCatching {
+                val existing = messagingRepository.messages(
+                    conversationId = conversationId,
+                    markRead = false,
+                    limit = 500,
+                ).data
+                val alreadySent = existing.any { message ->
+                    message.body.trim() == trimmed
+                }
+                if (!alreadySent) {
+                    messagingRepository.sendMessage(conversationId, trimmed)
+                }
+            }.onSuccess {
+                loadMessages(conversationId)
+            }.onFailure {
+                _snackbar.value = it.readableMessage("Unable to send message")
+            }
         }
     }
 
@@ -1090,7 +1169,9 @@ class AppViewModel(
                     if (response.registered != false) {
                         PushTokenStore.markUploadedToken(pushToken)
                     }
-                    response.warning?.let { _snackbar.value = it }
+                    if (response.registered == false) {
+                        response.warning?.let { _snackbar.value = it }
+                    }
                 }
         }
     }

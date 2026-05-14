@@ -103,6 +103,7 @@ dependencies {
     implementation("io.coil-kt:coil-compose:2.7.0")
 
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.9.0")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
 
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
@@ -113,6 +114,7 @@ dependencies {
     implementation("androidx.browser:browser:1.8.0")
 
     implementation("com.google.firebase:firebase-messaging-ktx:24.1.0")
+    implementation("com.google.android.gms:play-services-location:21.3.0")
 
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")

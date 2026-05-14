@@ -13,6 +13,11 @@ struct PushNotificationRoute: Equatable {
     let bookingID: String?
     let recipientRole: String?
     let participantName: String?
+    let announcementID: String?
+    let announcementTitle: String?
+    let announcementBody: String?
+    let announcementCategory: String?
+    let announcementCTAURL: String?
 }
 
 @MainActor
@@ -150,16 +155,26 @@ final class NotificationManager: NSObject, ObservableObject {
         let conversationID = pushString(forKey: "conversationId", in: userInfo)
         let bookingID = pushString(forKey: "bookingId", in: userInfo)
         let recipientRole = pushString(forKey: "recipientRole", in: userInfo)
+        let announcementID = pushString(forKey: "announcementId", in: userInfo)
+        let announcementCategory = pushString(forKey: "category", in: userInfo)
+        let announcementCTAURL = pushString(forKey: "ctaUrl", in: userInfo)
         let participantName =
             pushString(forKey: "participantName", in: userInfo) ??
             participantName(from: alertTitle(from: userInfo))
+        let title = pushString(forKey: "title", in: userInfo) ?? alertTitle(from: userInfo)
+        let body = pushString(forKey: "body", in: userInfo) ?? alertBody(from: userInfo)
 
-        guard conversationID != nil || bookingID != nil else { return nil }
+        guard conversationID != nil || bookingID != nil || announcementID != nil else { return nil }
         return PushNotificationRoute(
             conversationID: conversationID,
             bookingID: bookingID,
             recipientRole: recipientRole?.lowercased(),
-            participantName: participantName
+            participantName: participantName,
+            announcementID: announcementID,
+            announcementTitle: title,
+            announcementBody: body,
+            announcementCategory: announcementCategory,
+            announcementCTAURL: announcementCTAURL
         )
     }
 
@@ -188,6 +203,14 @@ final class NotificationManager: NSObject, ObservableObject {
         }
         if let alert = aps["alert"] as? [AnyHashable: Any] {
             return stringValue(alert["title"])
+        }
+        return nil
+    }
+
+    private func alertBody(from userInfo: [AnyHashable: Any]) -> String? {
+        guard let aps = userInfo["aps"] as? [AnyHashable: Any] else { return nil }
+        if let alert = aps["alert"] as? [AnyHashable: Any] {
+            return stringValue(alert["body"])
         }
         return nil
     }
@@ -237,7 +260,6 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     }
 
     func applicationDidBecomeActive(_ application: UIApplication) {
-        configureSystemBarAppearance()
     }
 
     func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
@@ -253,28 +275,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     }
 
     private func configureSystemBarAppearance() {
-        let pageBackground = UIColor(red: 0.97, green: 0.98, blue: 1.0, alpha: 1.0)
-        let brandBlue = UIColor(red: 0.08, green: 0.52, blue: 0.85, alpha: 1.0)
-        let brandNavy = UIColor(red: 0.04, green: 0.17, blue: 0.33, alpha: 1.0)
-
-        let navAppearance = UINavigationBarAppearance()
-        navAppearance.configureWithOpaqueBackground()
-        navAppearance.backgroundColor = pageBackground
-        navAppearance.shadowColor = UIColor.black.withAlphaComponent(0.06)
-        navAppearance.titleTextAttributes = [.foregroundColor: brandNavy]
-        navAppearance.largeTitleTextAttributes = [.foregroundColor: brandNavy]
-
-        let navBar = UINavigationBar.appearance()
-        navBar.standardAppearance = navAppearance
-        navBar.compactAppearance = navAppearance
-        navBar.scrollEdgeAppearance = navAppearance
-        if #available(iOS 15.0, *) {
-            navBar.compactScrollEdgeAppearance = navAppearance
-        }
-        navBar.tintColor = brandBlue
-
-        // Keep tab bar visuals under SwiftUI control to avoid intermittent
-        // transparent/glitched state after auth/root view transitions.
-        UITabBar.appearance().tintColor = brandBlue
+        let darkMode = UserDefaults.standard.bool(forKey: "hayame.dark_mode_enabled")
+        HayameSystemAppearance.configure(darkMode: darkMode)
     }
 }

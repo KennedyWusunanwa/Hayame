@@ -1,0 +1,13 @@
+{
+  "images": [
+    {
+      "filename": "car_logo_renault.png",
+      "idiom": "universal",
+      "scale": "1x"
+    }
+  ],
+  "info": {
+    "author": "xcode",
+    "version": 1
+  }
+}

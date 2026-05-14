@@ -3,11 +3,6 @@ import { differenceInCalendarDays } from "date-fns";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getRequestUser } from "@/lib/supabase/request-auth";
-import {
-  normalizeBookingDelivery,
-  resolveBookingTripMode,
-  validateBookingDelivery,
-} from "@/lib/booking-delivery";
 import { initializePaystackTransaction } from "@/lib/paystack";
 import { isLocationOutsideAccra, isOutsideListingRegion } from "@/lib/utils";
 
@@ -71,7 +66,7 @@ export async function POST(req: Request) {
     const { data: booking, error: bookingError } = await db
       .from("bookings")
       .select(
-        "id,car_id,renter_id,start_date,end_date,status,hold_expires_at,delivery_address,delivery_time,contact_phone,delivery_notes,delivery_fee,trip_use_region,trip_use_city,trip_use_address,trip_outside_accra,trip_outside_listing_region,outside_accra_surcharge",
+        "id,car_id,renter_id,start_date,end_date,status,hold_expires_at,trip_use_region,trip_use_city,trip_use_address,trip_outside_accra,trip_outside_listing_region,outside_accra_surcharge",
       )
       .eq("id", body.bookingId)
       .single();
@@ -112,7 +107,7 @@ export async function POST(req: Request) {
     const { data: car, error: carError } = await db
       .from("cars")
       .select(
-        "id,title,daily_price,is_available,region,outside_accra_fee,delivery_fee,delivery_available,insurance_fee,deposit_amount",
+        "id,title,daily_price,is_available,region,outside_accra_fee,delivery_fee,insurance_fee,deposit_amount",
       )
       .eq("id", booking.car_id)
       .single();
@@ -136,31 +131,6 @@ export async function POST(req: Request) {
           message:
             "Trip use location is required (region, city and exact area).",
         },
-        { status: 400 },
-      );
-    }
-    const tripMode = resolveBookingTripMode({
-      deliveryAvailable: car.delivery_available,
-      deliveryFee: booking.delivery_fee ?? car.delivery_fee,
-      deliveryAddress: booking.delivery_address,
-      deliveryTime: booking.delivery_time,
-      contactPhone: booking.contact_phone,
-      deliveryNotes: booking.delivery_notes,
-    });
-    const deliveryValidationError = validateBookingDelivery(
-      normalizeBookingDelivery({
-        deliveryAddress: booking.delivery_address,
-        deliveryTime: booking.delivery_time,
-        contactPhone: booking.contact_phone,
-        deliveryNotes: booking.delivery_notes,
-      }),
-      {
-        required: tripMode === "delivery",
-      },
-    );
-    if (deliveryValidationError) {
-      return NextResponse.json(
-        { message: deliveryValidationError },
         { status: 400 },
       );
     }
@@ -202,13 +172,7 @@ export async function POST(req: Request) {
     );
     const platformFee = subtotal * (Math.max(platformFeePercent, 0) / 100);
     const insuranceFee = Math.max(Number(car.insurance_fee ?? 0), 0);
-    const heldDeliveryFee = Number(booking.delivery_fee);
-    const deliveryFee =
-      tripMode === "delivery"
-        ? Number.isFinite(heldDeliveryFee)
-          ? Math.max(heldDeliveryFee, 0)
-          : Math.max(Number(car.delivery_fee ?? 0), 0)
-        : 0;
+    const deliveryFee = Math.max(Number(car.delivery_fee ?? 0), 0);
     const depositAmount = Math.max(Number(car.deposit_amount ?? 0), 0);
     const heldOutsideAccraSurcharge = Number(booking.outside_accra_surcharge);
     const outsideAccraSurcharge = Number.isFinite(heldOutsideAccraSurcharge)
