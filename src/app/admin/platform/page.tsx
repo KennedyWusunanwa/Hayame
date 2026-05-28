@@ -55,6 +55,19 @@ function announcementPreferenceKey(category: string) {
   return category === "news" ? "news_announcements" : "account_security";
 }
 
+function normalizeDirectPushTarget(raw: FormDataEntryValue | null) {
+  const value = String(raw ?? "").trim().toLowerCase();
+  if (value === "news") return "news";
+  if (value === "system") return "system";
+  return "all";
+}
+
+function directPushPreferenceKey(target: string) {
+  if (target === "news") return "news_announcements";
+  if (target === "system") return "account_security";
+  return null;
+}
+
 function buildAdminPlatformHref(
   params: Record<string, string | number | boolean | null | undefined> = {},
 ) {
@@ -137,6 +150,14 @@ function getPlatformNotice(searchParams: {
     };
   }
 
+  if (searchParams.error === "push-message-invalid") {
+    return {
+      tone: "error",
+      title: "Push message not sent",
+      description: "Add a title and a message with at least 8 characters.",
+    };
+  }
+
   switch (searchParams.notice) {
     case "listing-approved":
       return {
@@ -216,9 +237,79 @@ function getPlatformNotice(searchParams: {
         description: `Push delivered to ${delivered} of ${attempted} registered device${attempted === 1 ? "" : "s"}${reason ? `; ${reason}.` : "."}`,
       };
     }
+    case "push-message-sent": {
+      const attempted = Number(searchParams.attempted ?? "0");
+      const delivered = Number(searchParams.delivered ?? "0");
+      const reason = formatPushReason(searchParams.reason);
+
+      if (!attempted) {
+        return {
+          tone: "info",
+          title: "Push message skipped",
+          description: reason
+            ? `No push was sent because ${reason}.`
+            : "There were no registered devices to send to.",
+        };
+      }
+
+      return {
+        tone: delivered > 0 ? "success" : "info",
+        title: "Push message sent",
+        description: `Push delivered to ${delivered} of ${attempted} registered device${attempted === 1 ? "" : "s"}${reason ? `; ${reason}.` : "."}`,
+      };
+    }
     default:
       return null;
   }
+}
+
+async function sendDirectPushMessageAction(formData: FormData) {
+  "use server";
+  await requireAdminPage();
+  const admin = createSupabaseAdminClient() as any;
+
+  const title = String(formData.get("title") ?? "").trim();
+  const body = String(formData.get("body") ?? "").trim();
+  const target = normalizeDirectPushTarget(formData.get("target"));
+
+  if (!title || body.length < 8) {
+    redirectToAdminPlatform({ error: "push-message-invalid" });
+  }
+
+  const preferenceKey = directPushPreferenceKey(target);
+  const pushResult = await sendBroadcastPushNotifications({
+    adminClient: admin,
+    title,
+    body,
+    collapseId: `admin-message:${Date.now()}`,
+    preferenceKey,
+    notificationCategory: preferenceKey ?? "admin_message",
+    data: {
+      type: "admin_message",
+      title,
+      body,
+      target,
+    },
+  });
+
+  await admin.from("admin_actions").insert({
+    action: "push_message_sent",
+    target_type: "mobile_push",
+    performed_by: getAdminReviewerName(),
+    metadata: {
+      title,
+      body,
+      target,
+      pushResult,
+    },
+  });
+
+  redirectToAdminPlatform({
+    notice: "push-message-sent",
+    attempted: pushResult.attempted,
+    delivered: pushResult.delivered,
+    reason: pushResult.reason ?? "",
+  });
 }
 
 async function createAnnouncementAction(formData: FormData) {
@@ -1066,6 +1157,80 @@ export default async function AdminPlatformPage({
               </p>
             </div>
           </div>
+
+          <form
+            action={sendDirectPushMessageAction}
+            className="space-y-4 rounded-2xl border border-border bg-white p-3 sm:p-4"
+          >
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <p className="text-base font-semibold text-foreground">
+                  Push message
+                </p>
+                <p className="text-sm text-gray-600">
+                  Send an immediate notification to registered mobile devices.
+                </p>
+              </div>
+              <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
+                APNs / FCM
+              </span>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-[1fr_220px]">
+              <label className="space-y-2">
+                <span className="text-sm font-semibold text-foreground">
+                  Title
+                </span>
+                <input
+                  name="title"
+                  required
+                  maxLength={80}
+                  placeholder="Hayame update"
+                  className="w-full rounded-md border border-border px-3 py-2 text-sm"
+                />
+              </label>
+              <label className="space-y-2">
+                <span className="text-sm font-semibold text-foreground">
+                  Recipients
+                </span>
+                <select
+                  name="target"
+                  defaultValue="all"
+                  className="w-full rounded-md border border-border px-3 py-2 text-sm"
+                >
+                  <option value="all">All registered devices</option>
+                  <option value="system">System notices enabled</option>
+                  <option value="news">News opt-ins only</option>
+                </select>
+              </label>
+            </div>
+
+            <label className="space-y-2">
+              <span className="text-sm font-semibold text-foreground">
+                Message
+              </span>
+              <textarea
+                name="body"
+                required
+                minLength={8}
+                rows={3}
+                placeholder="Write the notification users should receive."
+                className="w-full rounded-md border border-border px-3 py-2 text-sm"
+              />
+            </label>
+
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-xs text-gray-600">
+                Direct pushes do not create an in-app announcement.
+              </p>
+              <PendingSubmitButton
+                pendingLabel="Sending..."
+                className="min-h-10 rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white"
+              >
+                Send push
+              </PendingSubmitButton>
+            </div>
+          </form>
 
           <form action={createAnnouncementAction} className="space-y-4 rounded-2xl border border-border p-3 sm:p-4">
             <div className="grid gap-4 md:grid-cols-2">
