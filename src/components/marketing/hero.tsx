@@ -7,7 +7,7 @@ export function Hero() {
     <section className="relative overflow-hidden bg-black">
       <div className="absolute inset-0">
         <Image
-          src="/hero.jpg"
+          src="/hero.png"
           alt="Driving in Ghana"
           fill
           priority
