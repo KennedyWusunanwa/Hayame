@@ -1,5 +1,11 @@
 package com.hayame.app.ui.components
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -28,18 +34,57 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.hayame.app.core.network.CarDto
-import com.hayame.app.ui.theme.BrandBlue
 import com.hayame.app.ui.theme.LocalHayameColors
+
+@Composable
+fun HayameShimmerBlock(
+    modifier: Modifier,
+    cornerRadius: Dp = 10.dp,
+) {
+    val colors = LocalHayameColors.current
+    val infiniteTransition = rememberInfiniteTransition(label = "shimmer")
+    val progress by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1050, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "shimmer_progress",
+    )
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(cornerRadius))
+            .background(colors.skeletonBase)
+            .drawWithContent {
+                drawContent()
+                val sweepWidth = size.width * 0.8f
+                val startX = (size.width + sweepWidth) * progress - sweepWidth
+                drawRect(
+                    brush = Brush.horizontalGradient(
+                        colors = listOf(Color.Transparent, colors.skeletonHighlight, Color.Transparent),
+                        startX = startX,
+                        endX = startX + sweepWidth,
+                    ),
+                )
+            },
+    )
+}
 
 @Composable
 fun LoadingBlock(label: String = "Loading...") {
@@ -59,16 +104,21 @@ fun LoadingBlock(label: String = "Loading...") {
 @Composable
 fun ErrorBlock(message: String, retryLabel: String = "Retry", onRetry: () -> Unit) {
     val colors = LocalHayameColors.current
-    Card(
-        colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
-        shape = RoundedCornerShape(16.dp),
-        modifier = Modifier.fillMaxWidth(),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .shadow(
+                elevation = 0.dp,
+                shape = RoundedCornerShape(16.dp),
+                ambientColor = colors.cardShadow,
+                spotColor = colors.cardShadow,
+            )
+            .clip(RoundedCornerShape(16.dp))
+            .background(colors.cardBackground)
+            .border(1.dp, colors.border, RoundedCornerShape(16.dp))
+            .padding(16.dp),
     ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(text = "Something went wrong", style = MaterialTheme.typography.titleMedium, color = colors.brandNavy)
             Text(text = message, style = MaterialTheme.typography.bodyMedium, color = colors.mutedText)
             OutlinedButton(onClick = onRetry) {
@@ -81,15 +131,21 @@ fun ErrorBlock(message: String, retryLabel: String = "Retry", onRetry: () -> Uni
 @Composable
 fun EmptyBlock(title: String, subtitle: String) {
     val colors = LocalHayameColors.current
-    Card(
-        colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
-        shape = RoundedCornerShape(16.dp),
-        modifier = Modifier.fillMaxWidth(),
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .shadow(
+                elevation = 0.dp,
+                shape = RoundedCornerShape(16.dp),
+                ambientColor = colors.cardShadow,
+                spotColor = colors.cardShadow,
+            )
+            .clip(RoundedCornerShape(16.dp))
+            .background(colors.cardBackground)
+            .border(1.dp, colors.border, RoundedCornerShape(16.dp))
+            .padding(16.dp),
     ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(text = title, style = MaterialTheme.typography.titleMedium, color = colors.brandNavy)
             Text(text = subtitle, style = MaterialTheme.typography.bodyMedium, color = colors.mutedText)
         }
@@ -100,18 +156,25 @@ fun EmptyBlock(title: String, subtitle: String) {
 fun CarCard(
     car: CarDto,
     isFavorite: Boolean,
-    imageHeight: androidx.compose.ui.unit.Dp = 180.dp,
+    imageHeight: Dp = 180.dp,
     onClick: () -> Unit,
     onFavoriteClick: () -> Unit,
 ) {
     val colors = LocalHayameColors.current
-    Card(
+    Box(
         modifier = Modifier
             .fillMaxWidth()
+            .shadow(
+                elevation = 10.dp,
+                shape = RoundedCornerShape(20.dp),
+                clip = false,
+                ambientColor = colors.cardShadow,
+                spotColor = colors.cardShadow,
+            )
+            .clip(RoundedCornerShape(20.dp))
+            .background(colors.cardBackground)
+            .border(1.dp, colors.border, RoundedCornerShape(20.dp))
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
-        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
     ) {
         Column(
             modifier = Modifier.padding(14.dp),
@@ -140,7 +203,7 @@ fun CarCard(
                         .padding(8.dp)
                         .size(36.dp)
                         .clip(CircleShape)
-                        .background(Color.White.copy(alpha = 0.8f))
+                        .background(colors.floatingControlBackground)
                         .clickable(onClick = onFavoriteClick),
                     contentAlignment = Alignment.Center,
                 ) {
@@ -226,6 +289,104 @@ fun SectionHeader(title: String, action: String? = null, onAction: (() -> Unit)?
         if (action != null && onAction != null) {
             TextButton(onClick = onAction) {
                 Text(action, color = colors.brandBlue, fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+}
+
+// Skeleton placeholder composables matching iOS patterns
+
+@Composable
+fun BookingPlaceholderCard() {
+    val colors = LocalHayameColors.current
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .shadow(0.dp, RoundedCornerShape(16.dp), false, colors.cardShadow, colors.cardShadow)
+            .clip(RoundedCornerShape(16.dp))
+            .background(colors.cardBackground)
+            .border(1.dp, colors.border, RoundedCornerShape(16.dp))
+            .padding(14.dp),
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    HayameShimmerBlock(modifier = Modifier.size(width = 132.dp, height = 15.dp), cornerRadius = 6.dp)
+                    HayameShimmerBlock(modifier = Modifier.size(width = 170.dp, height = 12.dp), cornerRadius = 6.dp)
+                }
+                HayameShimmerBlock(modifier = Modifier.size(width = 72.dp, height = 22.dp), cornerRadius = 11.dp)
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                HayameShimmerBlock(modifier = Modifier.size(width = 120.dp, height = 11.dp), cornerRadius = 6.dp)
+                HayameShimmerBlock(modifier = Modifier.size(width = 84.dp, height = 11.dp), cornerRadius = 6.dp)
+            }
+        }
+    }
+}
+
+@Composable
+fun ConversationPlaceholderRow() {
+    val colors = LocalHayameColors.current
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .shadow(0.dp, RoundedCornerShape(16.dp), false, colors.cardShadow, colors.cardShadow)
+            .clip(RoundedCornerShape(16.dp))
+            .background(colors.cardBackground)
+            .border(1.dp, colors.border, RoundedCornerShape(16.dp))
+            .padding(14.dp),
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            HayameShimmerBlock(modifier = Modifier.size(48.dp), cornerRadius = 24.dp)
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                HayameShimmerBlock(modifier = Modifier.size(width = 118.dp, height = 13.dp), cornerRadius = 6.dp)
+                HayameShimmerBlock(modifier = Modifier.size(width = 188.dp, height = 11.dp), cornerRadius = 6.dp)
+            }
+            HayameShimmerBlock(modifier = Modifier.size(width = 34.dp, height = 10.dp), cornerRadius = 5.dp)
+        }
+    }
+}
+
+@Composable
+fun HostListingPlaceholderRow() {
+    val colors = LocalHayameColors.current
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .shadow(0.dp, RoundedCornerShape(14.dp), false, colors.cardShadow, colors.cardShadow)
+            .clip(RoundedCornerShape(14.dp))
+            .background(colors.cardBackground)
+            .border(1.dp, colors.border, RoundedCornerShape(14.dp))
+            .padding(14.dp),
+    ) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                HayameShimmerBlock(modifier = Modifier.size(width = 154.dp, height = 14.dp), cornerRadius = 6.dp)
+                HayameShimmerBlock(modifier = Modifier.size(width = 120.dp, height = 12.dp), cornerRadius = 6.dp)
+            }
+            HayameShimmerBlock(modifier = Modifier.size(width = 84.dp, height = 20.dp), cornerRadius = 10.dp)
+        }
+    }
+}
+
+@Composable
+fun ExploreListRowPlaceholder() {
+    val colors = LocalHayameColors.current
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .shadow(0.dp, RoundedCornerShape(16.dp), false, colors.cardShadow, colors.cardShadow)
+            .clip(RoundedCornerShape(16.dp))
+            .background(colors.cardBackground)
+            .border(1.dp, colors.border, RoundedCornerShape(16.dp))
+            .padding(12.dp),
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            HayameShimmerBlock(modifier = Modifier.size(width = 94.dp, height = 72.dp), cornerRadius = 12.dp)
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                HayameShimmerBlock(modifier = Modifier.size(width = 150.dp, height = 14.dp), cornerRadius = 6.dp)
+                HayameShimmerBlock(modifier = Modifier.size(width = 110.dp, height = 12.dp), cornerRadius = 6.dp)
+                HayameShimmerBlock(modifier = Modifier.size(width = 84.dp, height = 12.dp), cornerRadius = 6.dp)
             }
         }
     }

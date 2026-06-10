@@ -73,26 +73,30 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         ingestIntent(intent)
-        val firebaseApp = FirebaseApp.initializeApp(this)
-        if (firebaseApp != null) {
-            FirebaseMessaging.getInstance().token
-                .addOnSuccessListener { token ->
-                    AppViewModel.cachePushToken(token)
-                    viewModel.registerPushIfAvailable(token)
-                }
+
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        window.statusBarColor = Color(0xFF0F85E3).toArgb()
+        window.navigationBarColor = Color(0xFF0F85E3).toArgb()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            window.navigationBarDividerColor = Color(0xFF0F85E3).toArgb()
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            window.isNavigationBarContrastEnforced = false
+            window.isStatusBarContrastEnforced = false
+        }
+        WindowCompat.getInsetsController(window, window.decorView).apply {
+            isAppearanceLightStatusBars = false
+            isAppearanceLightNavigationBars = false
         }
 
         setContent {
             val darkMode by viewModel.darkModeEnabled.collectAsState()
             var showAppearanceTransition by remember { mutableStateOf(false) }
             var appearanceTransitionTargetsDarkMode by remember { mutableStateOf(darkMode) }
-            var previousDarkMode by remember { mutableStateOf<Boolean?>(null) }
 
-            LaunchedEffect(darkMode) {
-                val previous = previousDarkMode
-                previousDarkMode = darkMode
-                if (previous != null && previous != darkMode) {
-                    appearanceTransitionTargetsDarkMode = darkMode
+            LaunchedEffect(Unit) {
+                viewModel.appearanceTransitionEvents.collect { targetsDarkMode ->
+                    appearanceTransitionTargetsDarkMode = targetsDarkMode
                     showAppearanceTransition = true
                     kotlinx.coroutines.delay(1_420)
                     showAppearanceTransition = false
@@ -102,10 +106,15 @@ class MainActivity : ComponentActivity() {
             HayameTheme(darkTheme = darkMode) {
                 val colors = LocalHayameColors.current
                 SideEffect {
+                    val navigationBarColor = colors.cardBackground.toArgb()
                     window.statusBarColor = colors.pageBackground.toArgb()
-                    window.navigationBarColor = colors.cardBackground.toArgb()
+                    window.navigationBarColor = navigationBarColor
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                        window.navigationBarDividerColor = colors.border.toArgb()
+                        window.navigationBarDividerColor = navigationBarColor
+                    }
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        window.isNavigationBarContrastEnforced = false
+                        window.isStatusBarContrastEnforced = false
                     }
                     WindowCompat.getInsetsController(window, window.decorView).apply {
                         isAppearanceLightStatusBars = !darkMode
@@ -148,6 +157,21 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             }
+        }
+
+        window.decorView.postDelayed({
+            initializePushTokenRegistration()
+        }, 500L)
+    }
+
+    private fun initializePushTokenRegistration() {
+        val firebaseApp = FirebaseApp.initializeApp(this)
+        if (firebaseApp != null) {
+            FirebaseMessaging.getInstance().token
+                .addOnSuccessListener { token ->
+                    AppViewModel.cachePushToken(token)
+                    viewModel.registerPushIfAvailable(token)
+                }
         }
     }
 

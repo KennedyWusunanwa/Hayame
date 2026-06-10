@@ -17,9 +17,14 @@ type Body = {
   carId?: string;
   startDate?: string;
   endDate?: string;
+  tripMode?: "pickup" | "delivery";
   tripUseRegion?: string;
   tripUseCity?: string;
   tripUseAddress?: string;
+  deliveryAddress?: string;
+  deliveryTime?: string;
+  contactPhone?: string;
+  deliveryNotes?: string;
   tripOutsideAccra?: boolean;
   reference?: string;
   amount?: number;
@@ -126,6 +131,12 @@ export async function POST(req: Request) {
     const { reference, amount, bookingId } = body;
     let { carId, startDate, endDate } = body;
     let { tripUseRegion, tripUseCity, tripUseAddress } = body;
+    let {
+      deliveryAddress,
+      deliveryTime,
+      contactPhone,
+      deliveryNotes,
+    } = body;
     let heldBooking: any = null;
     if (!reference || !amount) {
       return NextResponse.json(
@@ -138,7 +149,7 @@ export async function POST(req: Request) {
       const { data: booking, error: bookingError } = await supa
         .from("bookings")
         .select(
-          "id,car_id,renter_id,start_date,end_date,status,hold_expires_at,trip_use_region,trip_use_city,trip_use_address,trip_outside_accra,trip_outside_listing_region,outside_accra_surcharge,payment_reference,payment_provider",
+          "id,car_id,renter_id,start_date,end_date,status,hold_expires_at,trip_use_region,trip_use_city,trip_use_address,delivery_address,delivery_time,contact_phone,delivery_notes,trip_outside_accra,trip_outside_listing_region,outside_accra_surcharge,payment_reference,payment_provider",
         )
         .eq("id", bookingId)
         .single();
@@ -221,6 +232,10 @@ export async function POST(req: Request) {
       tripUseRegion = booking.trip_use_region ?? tripUseRegion;
       tripUseCity = booking.trip_use_city ?? tripUseCity;
       tripUseAddress = booking.trip_use_address ?? tripUseAddress;
+      deliveryAddress = booking.delivery_address ?? deliveryAddress;
+      deliveryTime = booking.delivery_time ?? deliveryTime;
+      contactPhone = booking.contact_phone ?? contactPhone;
+      deliveryNotes = booking.delivery_notes ?? deliveryNotes;
       body.tripOutsideAccra =
         typeof booking.trip_outside_accra === "boolean"
           ? booking.trip_outside_accra
@@ -270,6 +285,11 @@ export async function POST(req: Request) {
     tripUseRegion = (tripUseRegion ?? "").trim();
     tripUseCity = (tripUseCity ?? "").trim();
     tripUseAddress = (tripUseAddress ?? "").trim();
+    deliveryAddress =
+      body.tripMode === "pickup" ? "" : (deliveryAddress ?? "").trim();
+    deliveryTime = deliveryAddress ? (deliveryTime ?? "").trim() : "";
+    contactPhone = deliveryAddress ? (contactPhone ?? "").trim() : "";
+    deliveryNotes = deliveryAddress ? (deliveryNotes ?? "").trim() : "";
     if (!tripUseRegion || !tripUseCity || tripUseAddress.length < 3) {
       if (bookingId) {
         await supa
@@ -400,7 +420,9 @@ export async function POST(req: Request) {
     );
     const platformFee = subtotal * (Math.max(platformFeePercent, 0) / 100);
     const insuranceFee = Math.max(Number(car.insurance_fee ?? 0), 0);
-    const deliveryFee = Math.max(Number(car.delivery_fee ?? 0), 0);
+    const deliveryFee = deliveryAddress
+      ? Math.max(Number(car.delivery_fee ?? 0), 0)
+      : 0;
     const depositAmount = Math.max(Number(car.deposit_amount ?? 0), 0);
     const heldOutsideAccraSurcharge = Number(
       heldBooking?.outside_accra_surcharge,
@@ -778,6 +800,10 @@ export async function POST(req: Request) {
           trip_use_region: tripUseRegion,
           trip_use_city: tripUseCity,
           trip_use_address: tripUseAddress,
+          delivery_address: deliveryAddress || null,
+          delivery_time: deliveryTime || null,
+          contact_phone: contactPhone || null,
+          delivery_notes: deliveryNotes || null,
           trip_outside_accra: tripOutsideAccra,
           trip_outside_listing_region: tripOutsideListingRegion,
           payment_status: "paid",
@@ -844,6 +870,10 @@ export async function POST(req: Request) {
         trip_use_region: tripUseRegion,
         trip_use_city: tripUseCity,
         trip_use_address: tripUseAddress,
+        delivery_address: deliveryAddress || null,
+        delivery_time: deliveryTime || null,
+        contact_phone: contactPhone || null,
+        delivery_notes: deliveryNotes || null,
         trip_outside_accra: tripOutsideAccra,
         trip_outside_listing_region: tripOutsideListingRegion,
         payment_status: "paid",

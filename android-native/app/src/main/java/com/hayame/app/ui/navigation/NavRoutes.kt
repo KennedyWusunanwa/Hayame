@@ -31,6 +31,8 @@ object NavRoutes {
     const val Protection = "protection"
     const val Cancellation = "cancellation"
     const val Marketing = "marketing"
+    const val HostPublicProfile = "host_public_profile"
+    const val AdminShell = "admin_shell"
 
     fun main(tab: MainTab? = null): String = if (tab == null) {
         Main
@@ -48,6 +50,7 @@ object NavRoutes {
     } else {
         HostCarEditor + "/" + carId
     }
+    fun hostPublicProfile(ownerId: String): String = HostPublicProfile + "/" + ownerId
 }
 
 fun parseMainTab(raw: String?): MainTab {

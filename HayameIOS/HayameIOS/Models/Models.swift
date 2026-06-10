@@ -242,15 +242,37 @@ struct AppAnnouncement: Identifiable, Hashable {
     var publishedAt: String?
     var seen: Bool
 
-    func shouldDisplay(locallySeen: Set<String>) -> Bool {
+    func shouldDisplay(locallySeen: Set<String>, installedAfter: Date? = nil) -> Bool {
         let trimmedID = id.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedBody = body.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedID.isEmpty, !trimmedTitle.isEmpty, !trimmedBody.isEmpty else { return false }
+        if delivery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() != "push",
+           let installedAfter {
+            guard let publishedDate else { return false }
+            guard publishedDate >= installedAfter else { return false }
+        }
         if !showOnce { return true }
         if seen { return false }
         return !locallySeen.contains(trimmedID)
     }
+
+    private var publishedDate: Date? {
+        Self.dateWithFractionalSeconds.date(from: publishedAt ?? "") ??
+            Self.dateWithoutFractionalSeconds.date(from: publishedAt ?? "")
+    }
+
+    private static let dateWithFractionalSeconds: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
+
+    private static let dateWithoutFractionalSeconds: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter
+    }()
 }
 
 extension AppAnnouncement {

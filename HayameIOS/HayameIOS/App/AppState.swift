@@ -81,6 +81,7 @@ final class AppState: ObservableObject {
     private let cachedUserNameKey = "hayame.cached_user_name"
     private let cachedUserAvatarKey = "hayame.cached_user_avatar"
     private let seenAnnouncementIDsKey = "hayame.seen_announcement_ids"
+    private let firstLaunchAtKey = "hayame.first_launch_at"
     private let darkModeKey = "hayame.dark_mode_enabled"
     private let exploreLayoutModeKey = "hayame.explore_layout_mode"
 
@@ -126,6 +127,7 @@ final class AppState: ObservableObject {
     static let productionBaseURL = "https://www.hayamegh.com"
 
     init() {
+        ensureFirstLaunchTimestamp()
         if let persistedBaseURL = defaults.string(forKey: apiBaseURLKey) {
             let trimmed = persistedBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)
             if !trimmed.isEmpty {
@@ -217,6 +219,14 @@ final class AppState: ObservableObject {
 
     var hasAppAccess: Bool {
         isAuthenticated || isGuestMode
+    }
+
+    var canPresentActiveAnnouncement: Bool {
+        guard hasAppAccess else { return false }
+        if isAuthenticated, hostAccessState == .host, hostModeEnabled {
+            return hostTab == .dashboard
+        }
+        return renterTab == .home
     }
 
     var hostCars: [Car] {
@@ -2027,6 +2037,22 @@ final class AppState: ObservableObject {
         defaults.set(Array(ids).sorted(), forKey: seenAnnouncementIDsKey)
     }
 
+    private func ensureFirstLaunchTimestamp() {
+        guard defaults.object(forKey: firstLaunchAtKey) == nil else { return }
+        defaults.set(Date().timeIntervalSince1970, forKey: firstLaunchAtKey)
+    }
+
+    private func firstLaunchAt() -> Date {
+        ensureFirstLaunchTimestamp()
+        let seconds = defaults.double(forKey: firstLaunchAtKey)
+        guard seconds > 0 else {
+            let now = Date()
+            defaults.set(now.timeIntervalSince1970, forKey: firstLaunchAtKey)
+            return now
+        }
+        return Date(timeIntervalSince1970: seconds)
+    }
+
     // MARK: - Sync
 
     func refreshAllRemoteData() async {
@@ -2080,8 +2106,9 @@ final class AppState: ObservableObject {
             }
 
             let locallySeen = seenAnnouncementIDs()
+            let installedAfter = firstLaunchAt()
             pendingAnnouncements = response.data.compactMap(AppAnnouncement.init).filter { announcement in
-                announcement.shouldDisplay(locallySeen: locallySeen)
+                announcement.shouldDisplay(locallySeen: locallySeen, installedAfter: installedAfter)
             }
             if activeAnnouncement?.delivery == "push" {
                 return

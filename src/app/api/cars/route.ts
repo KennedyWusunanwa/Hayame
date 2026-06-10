@@ -19,6 +19,48 @@ function parseBoolean(value: string | null) {
   return undefined;
 }
 
+function searchTokens(value: string) {
+  return value
+    .split(/\s+/)
+    .map((token) => token.replace(/[^a-zA-Z0-9-]/g, "").trim())
+    .filter(Boolean)
+    .slice(0, 8);
+}
+
+function normalizeSearchText(value: unknown) {
+  return String(value ?? "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+function rowMatchesSearch(row: any, tokens: string[]) {
+  if (tokens.length === 0) return true;
+  const haystack = normalizeSearchText(
+    [
+      row?.title,
+      row?.description,
+      row?.city,
+      row?.region,
+      row?.brand,
+      row?.model,
+      row?.car_type,
+      row?.fuel_type,
+      row?.transmission,
+      row?.host_name,
+      row?.host_level,
+      row?.host_type,
+      row?.year,
+      row?.car_year,
+      row?.instant_book ? "instant book" : "",
+      row?.delivery_available ? "delivery available" : "",
+      row?.air_conditioning ? "air conditioning ac" : "",
+      Array.isArray(row?.features) ? row.features.join(" ") : "",
+    ].join(" "),
+  );
+  return tokens.every((token) => haystack.includes(token));
+}
+
 async function getPlatformFeePercent(supa: any) {
   const envValue = Number(
     process.env.NEXT_PUBLIC_PLATFORM_FEE_PERCENT ??
@@ -43,6 +85,7 @@ export async function GET(req: Request) {
     const mineOnly = parseBoolean(searchParams.get("mine")) === true;
     const limit = Math.min(Number(searchParams.get("limit") ?? 48), 100);
     const q = (searchParams.get("q") ?? "").trim();
+    const qTokens = searchTokens(q);
     const sort = (searchParams.get("sort") ?? "").trim();
 
     let ownerId: string | null = null;
@@ -56,7 +99,7 @@ export async function GET(req: Request) {
     let query = supa
       .from("car_search_view")
       .select("*")
-      .limit(Number.isFinite(limit) ? limit : 48);
+      .limit(qTokens.length > 0 ? 1000 : Number.isFinite(limit) ? limit : 48);
     if (mineOnly) {
       query = query.eq("owner_id", ownerId);
     } else {
@@ -122,13 +165,6 @@ export async function GET(req: Request) {
       }
     }
 
-    if (q) {
-      const safe = q.replace(/,/g, " ");
-      query = query.or(
-        `title.ilike.%${safe}%,city.ilike.%${safe}%,brand.ilike.%${safe}%,model.ilike.%${safe}%`,
-      );
-    }
-
     const featureFilters = searchParams.getAll("feature");
     for (const feature of featureFilters) {
       if (feature.trim()) {
@@ -171,7 +207,9 @@ export async function GET(req: Request) {
       error = null;
     }
 
-    const rows = Array.isArray(data) ? data : [];
+    const rows = (Array.isArray(data) ? data : []).filter((row: any) =>
+      rowMatchesSearch(row, qTokens),
+    );
     const favoriteCounts: Record<string, number> = {};
     if (mineOnly && rows.length > 0) {
       const admin = (() => {
@@ -197,12 +235,14 @@ export async function GET(req: Request) {
       }
     }
 
-    const normalizedRows = rows.map((row: any) => ({
-      ...row,
-      favorites_count: mineOnly
-        ? (favoriteCounts[row?.id] ?? 0)
-        : (row?.favorites_count ?? 0),
-    }));
+    const normalizedRows = rows
+      .slice(0, Number.isFinite(limit) ? limit : 48)
+      .map((row: any) => ({
+        ...row,
+        favorites_count: mineOnly
+          ? (favoriteCounts[row?.id] ?? 0)
+          : (row?.favorites_count ?? 0),
+      }));
 
     const platformFeePercent = await getPlatformFeePercent(supa).catch(
       () => 10,

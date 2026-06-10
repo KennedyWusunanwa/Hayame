@@ -6,6 +6,7 @@ import { getRequestUser } from "@/lib/supabase/request-auth";
 type Body = {
   deviceToken?: string;
   platform?: string;
+  previousDeviceToken?: string;
 };
 
 function isPlaceholderValue(value: string) {
@@ -35,6 +36,7 @@ export async function POST(req: Request) {
 
     const payload = (await req.json().catch(() => ({}))) as Body;
     const deviceToken = String(payload.deviceToken ?? "").trim();
+    const previousDeviceToken = String(payload.previousDeviceToken ?? "").trim() || null;
     const platform = String(payload.platform ?? "ios")
       .trim()
       .toLowerCase();
@@ -92,13 +94,24 @@ export async function POST(req: Request) {
       return NextResponse.json({ message }, { status: 400 });
     }
 
+    // Clean up the previous token so stale entries don't accumulate
+    if (previousDeviceToken && previousDeviceToken !== deviceToken) {
+      await admin
+        .from("mobile_push_tokens")
+        .delete()
+        .eq("user_id", user.id)
+        .eq("platform", platform)
+        .eq("device_token", previousDeviceToken)
+        .catch(() => {});
+    }
+
     const apnsConfigured =
       hasConfiguredValue(process.env.APNS_TEAM_ID) &&
       hasConfiguredValue(process.env.APNS_KEY_ID) &&
       hasConfiguredValue(process.env.APNS_PRIVATE_KEY);
-    const fcmConfigured =
-      hasConfiguredValue(process.env.FCM_SERVER_KEY) ||
-      hasConfiguredValue(process.env.FIREBASE_SERVER_KEY);
+    const fcmConfigured = hasConfiguredValue(
+      process.env.FIREBASE_SERVICE_ACCOUNT_JSON,
+    );
 
     if (platform === "ios" && !apnsConfigured) {
       return NextResponse.json({

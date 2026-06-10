@@ -248,14 +248,20 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
 }
 
 final class AppDelegate: NSObject, UIApplicationDelegate {
+    private static var pendingLaunchOptions: [UIApplication.LaunchOptionsKey: Any]?
+
+    static func consumePendingLaunchOptions() -> [UIApplication.LaunchOptionsKey: Any]? {
+        let launchOptions = pendingLaunchOptions
+        pendingLaunchOptions = nil
+        return launchOptions
+    }
+
     func application(
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
+        Self.pendingLaunchOptions = launchOptions
         configureSystemBarAppearance()
-        Task { @MainActor in
-            NotificationManager.shared.configure(launchOptions: launchOptions)
-        }
         return true
     }
 

@@ -64,6 +64,7 @@ type CarDetail = {
   features?: string[] | null;
   is_available?: boolean | null;
   instant_book?: boolean | null;
+  delivery_available?: boolean | null;
   delivery_fee?: number | null;
   insurance_fee?: number | null;
   deposit_amount?: number | null;
@@ -354,6 +355,7 @@ export default async function CarDetailPage({ params }: PageProps) {
                 dailyPrice={car.daily_price}
                 platformFeePercent={platformFeePercent}
                 instantBook={car.instant_book}
+                deliveryAvailable={car.delivery_available}
                 deliveryFee={car.delivery_fee}
                 insuranceFee={car.insurance_fee}
                 depositAmount={car.deposit_amount}
@@ -726,6 +728,7 @@ function mapCar(data: SupabaseCar): CarDetail {
     features: data.features,
     is_available: data.is_available,
     instant_book: data.instant_book,
+    delivery_available: (data as any).delivery_available ?? false,
     delivery_fee:
       typeof (data as any).delivery_fee === "number"
         ? Number((data as any).delivery_fee)
@@ -770,6 +773,7 @@ function mapMockCar(mock: MockCar): CarDetail {
     features: mock.features,
     is_available: true,
     instant_book: false,
+    delivery_available: false,
     delivery_fee: null,
     insurance_fee: null,
     deposit_amount: null,

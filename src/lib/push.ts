@@ -18,7 +18,9 @@ type PushConfig = {
 };
 
 type FcmConfig = {
-  serverKey: string;
+  projectId: string;
+  clientEmail: string;
+  privateKey: string;
 };
 
 type ApnsSendResult = {
@@ -67,14 +69,15 @@ const INVALID_TOKEN_REASONS = new Set([
   "DeviceTokenNotForTopic",
   "Unregistered",
 ]);
+// FCM HTTP v1 error status codes that indicate a stale/invalid token
 const INVALID_FCM_TOKEN_REASONS = new Set([
-  "InvalidRegistration",
-  "NotRegistered",
-  "MismatchSenderId",
+  "UNREGISTERED",
+  "INVALID_ARGUMENT",
 ]);
 const MESSAGE_FALLBACK = "You have a new notification.";
 
 let cachedJwt: CachedJwt | null = null;
+let cachedFcmToken: { token: string; expiresAt: number } | null = null;
 
 function normalizeEnvValue(value: string | undefined | null) {
   return value?.trim() ?? "";
@@ -131,13 +134,20 @@ function resolvePushConfig(): PushConfig | null {
 }
 
 function resolveFcmConfig(): FcmConfig | null {
-  const serverKey =
-    normalizeEnvValue(process.env.FCM_SERVER_KEY) ||
-    normalizeEnvValue(process.env.FIREBASE_SERVER_KEY);
-  if (!hasConfiguredValue(serverKey)) {
-    return null;
-  }
-  return { serverKey };
+  const saJson = normalizeEnvValue(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
+  if (!hasConfiguredValue(saJson)) return null;
+  try {
+    const decoded = Buffer.from(saJson, "base64").toString("utf8");
+    const sa = JSON.parse(decoded);
+    if (sa.project_id && sa.client_email && sa.private_key) {
+      return {
+        projectId: sa.project_id,
+        clientEmail: sa.client_email,
+        privateKey: sa.private_key.replace(/\\n/g, "\n"),
+      };
+    }
+  } catch {}
+  return null;
 }
 
 function base64Url(input: string | Buffer) {
@@ -364,6 +374,41 @@ async function sendApnsPush(params: {
   return first;
 }
 
+async function getFcmAccessToken(config: FcmConfig): Promise<string> {
+  const now = Math.floor(Date.now() / 1000);
+  if (cachedFcmToken && cachedFcmToken.expiresAt > now + 60) {
+    return cachedFcmToken.token;
+  }
+
+  const header = base64Url(JSON.stringify({ alg: "RS256", typ: "JWT" }));
+  const claims = base64Url(
+    JSON.stringify({
+      iss: config.clientEmail,
+      scope: "https://www.googleapis.com/auth/firebase.messaging",
+      aud: "https://oauth2.googleapis.com/token",
+      iat: now,
+      exp: now + 3600,
+    }),
+  );
+  const tokenBody = `${header}.${claims}`;
+  const signer = createSign("SHA256");
+  signer.update(tokenBody);
+  signer.end();
+  const sig = signer.sign({ key: config.privateKey });
+  const jwt = `${tokenBody}.${base64Url(sig)}`;
+
+  const res = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: `grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion=${jwt}`,
+  });
+  const json = (await res.json()) as { access_token?: string; expires_in?: number };
+  const token = json.access_token;
+  if (!token) throw new Error("fcm_oauth_failed");
+  cachedFcmToken = { token, expiresAt: now + (json.expires_in ?? 3600) - 120 };
+  return token;
+}
+
 async function sendFcmPush(params: {
   config: FcmConfig;
   deviceToken: string;
@@ -372,66 +417,49 @@ async function sendFcmPush(params: {
   data?: Record<string, string | number | boolean | null>;
   collapseId?: string;
 }): Promise<FcmSendResult> {
-  const payload: Record<string, unknown> = {
-    to: params.deviceToken,
-    priority: "high",
-    notification: {
-      title: trimMessage(params.title, "Hayame"),
-      body: trimMessage(params.body, MESSAGE_FALLBACK),
-      sound: "default",
-    },
-  };
-  if (params.collapseId) {
-    payload.collapse_key = params.collapseId;
-  }
-  if (params.data && Object.keys(params.data).length > 0) {
-    payload.data = Object.fromEntries(
-      Object.entries(params.data).map(([key, value]) => [
-        key,
-        String(value ?? ""),
-      ]),
-    );
-  }
-
   try {
-    const response = await fetch("https://fcm.googleapis.com/fcm/send", {
-      method: "POST",
-      headers: {
-        Authorization: `key=${params.config.serverKey}`,
-        "Content-Type": "application/json",
+    const accessToken = await getFcmAccessToken(params.config);
+
+    const message: Record<string, unknown> = {
+      token: params.deviceToken,
+      notification: {
+        title: trimMessage(params.title, "Hayame"),
+        body: trimMessage(params.body, MESSAGE_FALLBACK),
       },
-      body: JSON.stringify(payload),
-    });
+      android: {
+        priority: "high",
+        notification: { channel_id: "hayame_updates", sound: "default" },
+        ...(params.collapseId ? { collapse_key: params.collapseId } : {}),
+      },
+    };
+    if (params.data && Object.keys(params.data).length > 0) {
+      message.data = Object.fromEntries(
+        Object.entries(params.data).map(([k, v]) => [k, String(v ?? "")]),
+      );
+    }
+
+    const response = await fetch(
+      `https://fcm.googleapis.com/v1/projects/${params.config.projectId}/messages:send`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ message }),
+      },
+    );
 
     const raw = await response.text();
     let reason: string | null = null;
-    if (raw) {
-      try {
-        const parsed = JSON.parse(raw) as {
-          error?: string;
-          results?: Array<{ error?: string }>;
-        };
-        reason =
-          parsed.error ??
-          parsed.results?.find((item) => item?.error)?.error ??
-          null;
-      } catch {
-        reason = null;
-      }
-    }
+    try {
+      const parsed = JSON.parse(raw) as { error?: { status?: string; message?: string } };
+      reason = parsed?.error?.status ?? parsed?.error?.message ?? null;
+    } catch {}
 
-    const ok = response.ok && !reason;
-    return {
-      ok,
-      statusCode: response.status,
-      reason,
-    };
+    return { ok: response.ok && !reason, statusCode: response.status, reason };
   } catch (error: any) {
-    return {
-      ok: false,
-      statusCode: 0,
-      reason: error?.message ?? "fcm_request_error",
-    };
+    return { ok: false, statusCode: 0, reason: error?.message ?? "fcm_request_error" };
   }
 }
 

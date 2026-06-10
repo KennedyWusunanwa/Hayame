@@ -815,6 +815,14 @@ fun MobileMeDto?.preferredEmail(): String? {
     )
 }
 
+fun MobileMeDto?.preferredRole(): String? {
+    val raw = (this?.user?.user_metadata?.get("role") as? JsonPrimitive)?.contentOrNull?.trim()
+    return if (raw.isNullOrBlank()) null else raw
+}
+
+fun MobileMeDto?.isAdmin(): Boolean =
+    this.preferredRole()?.equals("admin", ignoreCase = true) == true
+
 private fun AuthUserDto?.metadataString(key: String): String? {
     val value = this?.user_metadata?.get(key) as? JsonPrimitive ?: return null
     return value.contentOrNull?.trim()?.takeIf { it.isNotBlank() }

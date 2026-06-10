@@ -27,6 +27,7 @@ import com.hayame.app.core.repo.StorageRepository
 import com.hayame.app.core.session.SessionStore
 import com.hayame.app.push.PushTokenStore
 import com.hayame.app.ui.navigation.HostMainTab
+import com.hayame.app.ui.reference.AndroidReferenceData
 import com.hayame.app.ui.state.UiState
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -36,8 +37,12 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import retrofit2.HttpException
 import java.io.File
+import java.time.Instant
 import kotlin.math.roundToInt
 
 data class BookingDraft(
@@ -142,10 +147,10 @@ class AppViewModel(
     private val _hostApplicationMessage = MutableStateFlow<String?>(null)
     val hostApplicationMessage: StateFlow<String?> = _hostApplicationMessage.asStateFlow()
 
-    private val _locations = MutableStateFlow<Map<String, List<String>>>(emptyMap())
+    private val _locations = MutableStateFlow(AndroidReferenceData.districtsByRegion)
     val locations: StateFlow<Map<String, List<String>>> = _locations.asStateFlow()
 
-    private val _catalog = MutableStateFlow<Map<String, List<String>>>(emptyMap())
+    private val _catalog = MutableStateFlow(AndroidReferenceData.carModelsByMake)
     val catalog: StateFlow<Map<String, List<String>>> = _catalog.asStateFlow()
 
     private val _snackbar = MutableStateFlow<String?>(null)
@@ -173,6 +178,7 @@ class AppViewModel(
     val bookingDraft: StateFlow<BookingDraft?> = _bookingDraft.asStateFlow()
 
     private var pendingAnnouncements: List<AppAnnouncementDto> = emptyList()
+    private var firstLaunchAtMillis: Long? = null
 
     init {
         bootstrap()
@@ -198,32 +204,38 @@ class AppViewModel(
 
     fun bootstrap() {
         viewModelScope.launch {
-            _darkModeEnabled.value = sessionStore.darkMode()
-            val loggedIn = authRepository.isLoggedIn()
-            _isAuthenticated.value = loggedIn
-            if (loggedIn) {
-                runCatching { loadMeWithAvatarFallback() }
-                    .onSuccess {
-                        _me.value = it
-                        loadAfterAuth()
-                    }
-                    .onFailure {
-                        _snackbar.value = it.readableMessage("Session expired. Please log in again.")
-                        authRepository.logout()
-                        _isAuthenticated.value = false
-                    }
+            _bootstrapping.value = true
+            try {
+                _darkModeEnabled.value = sessionStore.darkMode()
+                val loggedIn = authRepository.isLoggedIn()
+                _isAuthenticated.value = loggedIn
+                if (loggedIn) {
+                    runCatching { loadMeWithAvatarFallback() }
+                        .onSuccess {
+                            _me.value = it
+                            loadAfterAuth()
+                        }
+                        .onFailure {
+                            _snackbar.value = it.readableMessage("Session expired. Please log in again.")
+                            authRepository.logout()
+                            _isAuthenticated.value = false
+                        }
+                }
+                loadReferenceData()
+                refreshActiveAnnouncements()
+                if (!loggedIn) {
+                    _carsState.value = UiState.Loading
+                    runCatching { carsRepository.getCars() }
+                        .onSuccess { envelope ->
+                            _carsState.value = if (envelope.data.isEmpty()) UiState.Empty else UiState.Success(envelope.data)
+                        }
+                        .onFailure { _carsState.value = UiState.Error(it.readableMessage("Unable to load cars.")) }
+                }
+            } catch (error: Throwable) {
+                _snackbar.value = error.readableMessage("Unable to finish app startup.")
+            } finally {
+                _bootstrapping.value = false
             }
-            loadReferenceData()
-            refreshActiveAnnouncements()
-            if (!loggedIn) {
-                _carsState.value = UiState.Loading
-                runCatching { carsRepository.getCars() }
-                    .onSuccess { envelope ->
-                        _carsState.value = if (envelope.data.isEmpty()) UiState.Empty else UiState.Success(envelope.data)
-                    }
-                    .onFailure { _carsState.value = UiState.Error(it.readableMessage("Unable to load cars.")) }
-            }
-            _bootstrapping.value = false
         }
     }
 
@@ -362,11 +374,41 @@ class AppViewModel(
     fun loadReferenceData() {
         viewModelScope.launch {
             runCatching { carsRepository.getLocations() }
-                .onSuccess { _locations.value = it.data.orEmpty() }
+                .onSuccess { envelope ->
+                    val remote = envelope.data.orEmpty().filterKeys { it.isNotBlank() }
+                    _locations.value = if (remote.isEmpty()) {
+                        AndroidReferenceData.districtsByRegion
+                    } else {
+                        AndroidReferenceData.districtsByRegion.toMutableMap().apply {
+                            remote.forEach { (region, cities) ->
+                                val canonicalRegion = AndroidReferenceData.normalizedRegion(region)
+                                this[canonicalRegion] = (this[canonicalRegion].orEmpty() + cities)
+                                    .map { it.trim() }
+                                    .filter { it.isNotBlank() }
+                                    .distinct()
+                            }
+                        }
+                    }
+                }
             runCatching { carsRepository.getCarCatalog() }
                 .onSuccess { envelope ->
-                    _catalog.value = envelope.makes.associate { make ->
-                        make.name to make.models.map { it.name }
+                    val remote = envelope.makes
+                        .filter { it.name.isNotBlank() }
+                        .associate { make ->
+                            make.name to make.models.map { it.name }.filter { it.isNotBlank() }
+                        }
+                    _catalog.value = if (remote.isEmpty()) {
+                        AndroidReferenceData.carModelsByMake
+                    } else {
+                        AndroidReferenceData.carModelsByMake.toMutableMap().apply {
+                            remote.forEach { (make, models) ->
+                                val canonicalMake = AndroidReferenceData.normalizedMake(make).ifBlank { make.trim() }
+                                this[canonicalMake] = (this[canonicalMake].orEmpty() + models)
+                                    .map { it.trim() }
+                                    .filter { it.isNotBlank() }
+                                    .distinct()
+                            }
+                        }
                     }
                 }
         }
@@ -704,10 +746,13 @@ class AppViewModel(
     fun refreshActiveAnnouncements() {
         viewModelScope.launch {
             val locallySeen = sessionStore.seenAnnouncementIds()
+            val installedAfter = firstLaunchAtMillis ?: sessionStore.firstLaunchAtMillis().also {
+                firstLaunchAtMillis = it
+            }
             runCatching { hostRepository.announcements().data }
                 .onSuccess { announcements ->
                     pendingAnnouncements = announcements.filter { announcement ->
-                        announcement.shouldDisplay(locallySeen)
+                        announcement.shouldDisplay(locallySeen, installedAfter)
                     }
                     if (_activeAnnouncement.value?.delivery == "push") {
                         return@onSuccess
@@ -1053,6 +1098,15 @@ class AppViewModel(
         }
     }
 
+    fun updateCarApprovalStatus(carId: String, status: String) {
+        val payload = buildJsonObject { put("approval_status", status) }
+        updateCar(
+            carId = carId,
+            payload = payload,
+            onDone = { loadCars(mapOf("limit" to "100")) },
+        )
+    }
+
     fun deleteCar(carId: String) {
         viewModelScope.launch {
             runCatching { carsRepository.deleteCar(carId) }
@@ -1207,9 +1261,15 @@ private fun NotificationPreferencesDto?.normalize(
     )
 }
 
-private fun AppAnnouncementDto.shouldDisplay(locallySeen: Set<String>): Boolean {
+private fun AppAnnouncementDto.shouldDisplay(locallySeen: Set<String>, installedAfterMillis: Long): Boolean {
     if (id.isBlank()) return false
     if (title.isNullOrBlank() || body.isNullOrBlank()) return false
+    if (delivery?.trim()?.lowercase() != "push") {
+        val publishedAtMillis = published_at?.trim()?.takeIf { it.isNotBlank() }?.let { raw ->
+            runCatching { Instant.parse(raw).toEpochMilli() }.getOrNull()
+        } ?: return false
+        if (publishedAtMillis < installedAfterMillis) return false
+    }
     if (show_once == false) return true
     if (seen == true) return false
     return id !in locallySeen

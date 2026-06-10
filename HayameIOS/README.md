@@ -37,6 +37,9 @@ Default production API base URL is `https://www.hayamegh.com`.
   - registers and unregisters device tokens with the backend
   - routes notification taps into messages or bookings
   - suppresses local polling duplicates once remote delivery is active
+- When moving the app to another Apple Developer account, follow
+  `docs/IOS_APPLE_ACCOUNT_SWITCH.md` from the repo root before archiving or
+  rotating APNs credentials.
 
 ## Features
 

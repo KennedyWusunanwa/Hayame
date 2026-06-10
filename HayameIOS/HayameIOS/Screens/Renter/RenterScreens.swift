@@ -4560,12 +4560,13 @@ struct TripsScreen: View {
     }
 
     private func tripMessageSummary(for booking: Booking) -> String {
-        let mode = booking.deliveryFee > 0 ? "Delivery" : "Pickup"
         let location = [booking.tripUseAddress, booking.tripUseCity, booking.tripUseRegion]
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
             .joined(separator: ", ")
         let deliveryAddress = booking.deliveryAddress.trimmingCharacters(in: .whitespacesAndNewlines)
+        let mode = !deliveryAddress.isEmpty || booking.deliveryFee > 0 ? "Delivery" : "Pickup"
+        let handoffLocation = deliveryAddress.isEmpty ? (location.isEmpty ? "Not provided" : location) : deliveryAddress
         let deliveryTime = booking.deliveryTime.trimmingCharacters(in: .whitespacesAndNewlines)
         let contactPhone = booking.contactPhone.trimmingCharacters(in: .whitespacesAndNewlines)
         let deliveryNotes = booking.deliveryNotes.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -4577,7 +4578,7 @@ struct TripsScreen: View {
             "Dates: \(booking.startDate.hayameDateLabel()) - \(booking.endDate.hayameDateLabel())",
             "Duration: \(booking.nights) day\(booking.nights == 1 ? "" : "s")",
             "Time: \(deliveryTime.isEmpty ? "Not set" : deliveryTime)",
-            "\(mode): \(deliveryAddress.isEmpty ? (location.isEmpty ? "Not provided" : location) : deliveryAddress)",
+            "\(mode) location: \(handoffLocation)",
             "Trip use area: \(location.isEmpty ? "Not provided" : location)",
             "Price: GHS \(booking.totalPrice)",
             "Daily rate: GHS \(booking.dailyRate)",

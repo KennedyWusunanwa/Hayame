@@ -22,7 +22,6 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
@@ -61,6 +60,7 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -111,6 +111,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
@@ -124,8 +125,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -137,6 +136,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -151,19 +151,23 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -181,6 +185,7 @@ import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.core.view.WindowCompat
 import coil.compose.AsyncImage
 import coil.compose.SubcomposeAsyncImage
 import com.hayame.app.R
@@ -200,24 +205,27 @@ import com.hayame.app.core.network.preferredFullName
 import com.hayame.app.core.network.preferredLastName
 import com.hayame.app.core.network.preferredPhone
 import com.hayame.app.core.network.preferredRegion
+import com.hayame.app.core.network.preferredRole
+import com.hayame.app.core.network.isAdmin
+import com.hayame.app.ui.components.BookingPlaceholderCard
 import com.hayame.app.ui.components.CarCard
+import com.hayame.app.ui.components.ConversationPlaceholderRow
 import com.hayame.app.ui.components.EmptyBlock
 import com.hayame.app.ui.components.ErrorBlock
+import com.hayame.app.ui.components.ExploreListRowPlaceholder
+import com.hayame.app.ui.components.HayameShimmerBlock
+import com.hayame.app.ui.components.HostListingPlaceholderRow
 import com.hayame.app.ui.components.LoadingBlock
 import com.hayame.app.ui.components.RemoteImageUrlResolver
 import com.hayame.app.ui.components.SectionHeader
 import com.hayame.app.ui.navigation.HostMainTab
 import com.hayame.app.ui.navigation.MainTab
 import com.hayame.app.ui.navigation.NavRoutes
+import com.hayame.app.ui.reference.AndroidReferenceData
 import com.hayame.app.ui.state.UiState
-import com.hayame.app.ui.theme.BrandBlue
-import com.hayame.app.ui.theme.BrandLight
-import com.hayame.app.ui.theme.BrandNavy
-import com.hayame.app.ui.theme.CardBackground
 import com.hayame.app.ui.theme.Danger
+import com.hayame.app.ui.theme.LocalDarkMode
 import com.hayame.app.ui.theme.LocalHayameColors
-import com.hayame.app.ui.theme.MutedText
-import com.hayame.app.ui.theme.PageBackground
 import com.hayame.app.ui.theme.Success
 import com.hayame.app.ui.theme.Warning
 import com.hayame.app.ui.viewmodel.BookingDraft
@@ -248,155 +256,88 @@ import kotlin.math.roundToInt
 
 @Composable
 fun SplashScreen() {
-    val progress = remember { Animatable(0f) }
-    val logoScale = remember { Animatable(1f) }
-    val splashMotion = rememberInfiniteTransition(label = "splash-motion")
-    val logoFloat by splashMotion.animateFloat(
-        initialValue = 5f,
-        targetValue = -5f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1500, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse,
-        ),
-        label = "logo-float",
-    )
-    val shimmerShift by splashMotion.animateFloat(
-        initialValue = -38f,
-        targetValue = 210f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart,
-        ),
-        label = "bar-shimmer",
-    )
-    val topPanelOffset = remember { Animatable(-600f) }
-    val bottomPanelOffset = remember { Animatable(600f) }
-    val logoAlpha = remember { Animatable(0f) }
-    val logoEntryScale = remember { Animatable(0.82f) }
-    val taglineAlpha = remember { Animatable(0f) }
-    val taglineOffset = remember { Animatable(12f) }
-    val badgeAlpha = remember { Animatable(0f) }
-    val barAlpha = remember { Animatable(0f) }
+    val context = LocalContext.current
+    val splashBlue = Color(0xFF0F85E3)
+    val appColors = LocalHayameColors.current
+    val darkMode = LocalDarkMode.current
 
-    val streak1X = remember { Animatable(-400f) }
-    val streak2X = remember { Animatable(-400f) }
-    val streak3X = remember { Animatable(-400f) }
+    val activity = context as? Activity
+    val window = activity?.window
 
-    val pulseTransition = rememberInfiniteTransition(label = "pulse")
-    val pulseScale by pulseTransition.animateFloat(
-        initialValue = 0.85f,
-        targetValue = 1.08f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1600, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse,
-        ),
-        label = "pulse-scale",
-    )
-    val pulseAlpha by pulseTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 0.18f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1600, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse,
-        ),
-        label = "pulse-alpha",
-    )
-
-    val badgeScale = remember { Animatable(0.88f) }
-    val sublineAlpha = remember { Animatable(0f) }
-
-    LaunchedEffect(Unit) {
-        launch {
-            logoScale.animateTo(
-                targetValue = 1f,
-                animationSpec = spring(dampingRatio = 0.72f, stiffness = 180f),
-            )
-        }
-        launch {
-            progress.animateTo(
-                targetValue = 1f,
-                animationSpec = tween(durationMillis = 4650, easing = FastOutSlowInEasing),
-            )
+    SideEffect {
+        if (window != null) {
+            WindowCompat.setDecorFitsSystemWindows(window, false)
+            window.statusBarColor = splashBlue.toArgb()
+            window.navigationBarColor = splashBlue.toArgb()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                window.navigationBarDividerColor = splashBlue.toArgb()
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                window.isNavigationBarContrastEnforced = false
+                window.isStatusBarContrastEnforced = false
+            }
+            WindowCompat.getInsetsController(window, window.decorView).apply {
+                isAppearanceLightStatusBars = false
+                isAppearanceLightNavigationBars = false
+            }
         }
     }
 
-    LaunchedEffect(Unit) {
-        // Stage 1 - panels slide in (T+0ms)
-        launch {
-            topPanelOffset.animateTo(
-                targetValue = 0f,
-                animationSpec = spring(dampingRatio = 0.78f, stiffness = 200f),
-            )
+    LaunchedEffect(window) {
+        while (window != null) {
+            WindowCompat.setDecorFitsSystemWindows(window, false)
+            window.statusBarColor = splashBlue.toArgb()
+            window.navigationBarColor = splashBlue.toArgb()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                window.navigationBarDividerColor = splashBlue.toArgb()
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                window.isNavigationBarContrastEnforced = false
+                window.isStatusBarContrastEnforced = false
+            }
+            WindowCompat.getInsetsController(window, window.decorView).apply {
+                isAppearanceLightStatusBars = false
+                isAppearanceLightNavigationBars = false
+            }
+            delay(120)
         }
-        launch {
-            bottomPanelOffset.animateTo(
-                targetValue = 0f,
-                animationSpec = spring(dampingRatio = 0.78f, stiffness = 200f),
-            )
-        }
-
-        // Stage 2 - logo entrance (T+300ms)
-        delay(300)
-        launch {
-            logoAlpha.animateTo(1f, animationSpec = tween(durationMillis = 300))
-        }
-        launch {
-            logoEntryScale.animateTo(
-                targetValue = 1f,
-                animationSpec = spring(dampingRatio = 0.72f, stiffness = 220f),
-            )
-        }
-
-        // Stage 3 - tagline slides up (T+500ms)
-        delay(200)
-        launch {
-            taglineAlpha.animateTo(1f, animationSpec = tween(durationMillis = 380, easing = FastOutSlowInEasing))
-        }
-        launch {
-            taglineOffset.animateTo(0f, animationSpec = tween(durationMillis = 380, easing = FastOutSlowInEasing))
-        }
-
-        // Stage 4 - progress bar fades in (T+750ms)
-        delay(250)
-        barAlpha.animateTo(1f, animationSpec = tween(durationMillis = 280))
     }
 
-    LaunchedEffect(Unit) {
-        delay(380)
-
-        fun CoroutineScope.loopStreak(
-            anim: Animatable<Float, AnimationVector1D>,
-            initialDelay: Long,
-            duration: Int,
-        ) = launch {
-            delay(initialDelay)
-            while (true) {
-                anim.snapTo(-400f)
-                anim.animateTo(
-                    targetValue = 500f,
-                    animationSpec = tween(durationMillis = duration, easing = LinearEasing),
-                )
+    DisposableEffect(window, appColors, darkMode) {
+        if (window != null) {
+            WindowCompat.setDecorFitsSystemWindows(window, false)
+            window.statusBarColor = splashBlue.toArgb()
+            window.navigationBarColor = splashBlue.toArgb()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                window.navigationBarDividerColor = splashBlue.toArgb()
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                window.isNavigationBarContrastEnforced = false
+                window.isStatusBarContrastEnforced = false
+            }
+            WindowCompat.getInsetsController(window, window.decorView).apply {
+                isAppearanceLightStatusBars = false
+                isAppearanceLightNavigationBars = false
             }
         }
 
-        loopStreak(streak1X, initialDelay = 0L, duration = 1100)
-        loopStreak(streak2X, initialDelay = 280L, duration = 1200)
-        loopStreak(streak3X, initialDelay = 550L, duration = 1000)
-
-        launch {
-            delay(240)
-            sublineAlpha.animateTo(1f, animationSpec = tween(durationMillis = 350))
-        }
-        launch {
-            delay(320)
-            launch {
-                badgeAlpha.animateTo(1f, animationSpec = tween(durationMillis = 280))
-            }
-            launch {
-                badgeScale.animateTo(
-                    targetValue = 1f,
-                    animationSpec = spring(dampingRatio = 0.72f, stiffness = 220f),
-                )
+        onDispose {
+            if (window != null) {
+                WindowCompat.setDecorFitsSystemWindows(window, true)
+                window.statusBarColor = appColors.pageBackground.toArgb()
+                val navigationBarColor = appColors.cardBackground.toArgb()
+                window.navigationBarColor = navigationBarColor
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    window.navigationBarDividerColor = navigationBarColor
+                }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    window.isNavigationBarContrastEnforced = false
+                    window.isStatusBarContrastEnforced = false
+                }
+                WindowCompat.getInsetsController(window, window.decorView).apply {
+                    isAppearanceLightStatusBars = !darkMode
+                    isAppearanceLightNavigationBars = !darkMode
+                }
             }
         }
     }
@@ -404,182 +345,16 @@ fun SplashScreen() {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(
-                        Color(0xFF1484D9),
-                        Color(0xFF0C497D),
-                        Color(0xFF071A2F),
-                    )
-                )
-            ),
+            .background(splashBlue),
     ) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .fillMaxHeight(0.55f)
-                    .offset { IntOffset(x = 0, y = topPanelOffset.value.roundToInt()) }
-                    .clipToBounds(),
-                contentAlignment = Alignment.Center,
-            ) {
-                Box(
-                    modifier = Modifier
-                        .width(90.dp)
-                        .height(2.5.dp)
-                        .offset(x = streak1X.value.dp, y = 20.dp)
-                        .background(Color.White.copy(alpha = 0.14f), RoundedCornerShape(99.dp)),
-                )
-                Box(
-                    modifier = Modifier
-                        .width(60.dp)
-                        .height(1.5.dp)
-                        .offset(x = streak2X.value.dp, y = 36.dp)
-                        .background(Color.White.copy(alpha = 0.10f), RoundedCornerShape(99.dp)),
-                )
-                Box(
-                    modifier = Modifier
-                        .width(44.dp)
-                        .height(1.5.dp)
-                        .offset(x = streak3X.value.dp, y = 8.dp)
-                        .background(Color.White.copy(alpha = 0.08f), RoundedCornerShape(99.dp)),
-                )
-
-                Box(
-                    modifier = Modifier
-                        .size(280.dp)
-                        .scale(pulseScale)
-                        .border(
-                            width = 2.dp,
-                            color = Color.White.copy(alpha = pulseAlpha),
-                            shape = CircleShape,
-                        ),
-                )
-
-                Box(
-                    modifier = Modifier
-                        .size(318.dp)
-                        .background(Color.White.copy(alpha = 0.05f), CircleShape)
-                        .blur(18.dp),
-                )
-
-                Box(
-                    modifier = Modifier
-                        .size(300.dp)
-                        .background(Color.White.copy(alpha = 0.10f), CircleShape)
-                        .border(1.dp, Color.White.copy(alpha = 0.18f), CircleShape),
-                )
-
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(18.dp),
-                ) {
-                    Image(
-                        painter = painterResource(id = R.drawable.hayame_logo_white),
-                        contentDescription = "Hayame",
-                        modifier = Modifier
-                            .width(210.dp)
-                            .scale(logoEntryScale.value * logoScale.value)
-                            .offset(y = logoFloat.dp)
-                            .alpha(logoAlpha.value),
-                        contentScale = ContentScale.Fit,
-                    )
-                    Surface(
-                        color = Color.White.copy(alpha = 0.14f),
-                        contentColor = Color(0xFFE8F7FF),
-                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.18f)),
-                        shape = RoundedCornerShape(99.dp),
-                        modifier = Modifier
-                            .alpha(badgeAlpha.value)
-                            .scale(badgeScale.value),
-                    ) {
-                        Text(
-                            text = "Ghana's No.1 Car Rental Platform",
-                            color = Color(0xFFE8F7FF),
-                            style = MaterialTheme.typography.labelMedium.copy(fontSize = 11.sp),
-                            fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier.padding(horizontal = 15.dp, vertical = 7.dp),
-                        )
-                    }
-                }
-            }
-
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .fillMaxHeight()
-                    .offset { IntOffset(x = 0, y = bottomPanelOffset.value.roundToInt()) },
-                contentAlignment = Alignment.Center,
-            ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                    modifier = Modifier
-                        .padding(horizontal = 48.dp)
-                        .padding(bottom = 22.dp),
-                ) {
-                    Text(
-                        text = "Rent a car, anytime, anywhere in Ghana.",
-                        style = MaterialTheme.typography.bodyLarge.copy(fontSize = 17.sp),
-                        color = Color(0xFFEBF8FF),
-                        fontWeight = FontWeight.SemiBold,
-                        textAlign = TextAlign.Center,
-                        lineHeight = 26.sp,
-                        modifier = Modifier
-                            .alpha(taglineAlpha.value)
-                            .offset(y = taglineOffset.value.dp),
-                    )
-
-                    Text(
-                        text = "Trusted by renters across Ghana",
-                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
-                        color = Color(0xFFADC7E6),
-                        fontWeight = FontWeight.Medium,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier
-                            .alpha(sublineAlpha.value)
-                            .padding(top = 2.dp),
-                    )
-
-                    Box(
-                        modifier = Modifier
-                            .width(192.dp)
-                            .height(5.dp)
-                            .alpha(barAlpha.value),
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .clip(RoundedCornerShape(99.dp))
-                                .background(Color.White.copy(alpha = 0.16f)),
-                        )
-                        Box(
-                            modifier = Modifier
-                                .fillMaxHeight()
-                                .fillMaxWidth(progress.value)
-                                .clip(RoundedCornerShape(99.dp))
-                                .background(Color(0xFF4DB3FF)),
-                        )
-                        Box(
-                            modifier = Modifier
-                                .width(60.dp)
-                                .fillMaxHeight()
-                                .offset(x = shimmerShift.dp)
-                                .clip(RoundedCornerShape(99.dp))
-                                .background(
-                                    Brush.horizontalGradient(
-                                        colors = listOf(
-                                            Color.White.copy(alpha = 0f),
-                                            Color.White.copy(alpha = 0.55f),
-                                            Color.White.copy(alpha = 0f),
-                                        )
-                                    )
-                                ),
-                        )
-                    }
-                }
-            }
-        }
+        Image(
+            painter = painterResource(id = R.drawable.splash_system_logo),
+            contentDescription = "Hayame",
+            modifier = Modifier
+                .align(Alignment.Center)
+                .size(216.dp),
+            contentScale = ContentScale.Fit,
+        )
     }
 }
 
@@ -754,7 +529,7 @@ fun SignupScreen(
         }
         AuthTextField("Email", email, { email = it }, keyboardType = KeyboardType.Email)
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            AuthSelectField("Region", region, AuthReferenceData.regions, { selection ->
+            AuthSelectField("Region", region, AndroidReferenceData.regions, { selection ->
                 region = selection
                 val options = authCitiesFor(selection, city)
                 if (options.none { it.equals(city, ignoreCase = true) }) {
@@ -810,44 +585,8 @@ fun SignupScreen(
     )
 }
 
-private object AuthReferenceData {
-    val regions = listOf(
-        "Greater Accra Region",
-        "Ashanti Region",
-        "Western Region",
-        "Central Region",
-        "Eastern Region",
-        "Volta Region",
-        "Northern Region",
-        "Upper East Region",
-        "Upper West Region",
-        "Bono Region",
-        "Bono East Region",
-        "Ahafo Region",
-        "Western North Region",
-        "Oti Region",
-        "North East Region",
-        "Savannah Region",
-    )
-
-    val citiesByRegion = mapOf(
-        "Greater Accra Region" to listOf("Accra", "Tema", "Madina", "East Legon", "Adenta"),
-        "Ashanti Region" to listOf("Kumasi", "Obuasi", "Ejisu"),
-        "Western Region" to listOf("Takoradi", "Sekondi", "Tarkwa"),
-        "Central Region" to listOf("Cape Coast", "Kasoa", "Winneba"),
-        "Eastern Region" to listOf("Koforidua", "Akosombo", "Nsawam"),
-        "Volta Region" to listOf("Ho", "Hohoe", "Keta"),
-        "Northern Region" to listOf("Tamale", "Yendi"),
-    )
-}
-
 private fun authCitiesFor(region: String, preferred: String): List<String> {
-    val defaults = AuthReferenceData.citiesByRegion[region].orEmpty().ifEmpty { listOf("Accra") }
-    return if (preferred.isNotBlank() && defaults.none { it.equals(preferred, ignoreCase = true) }) {
-        listOf(preferred) + defaults
-    } else {
-        defaults
-    }
+    return AndroidReferenceData.citiesFor(region, preferred)
 }
 
 private data class StoredBiometricCredentials(val email: String, val password: String)
@@ -919,6 +658,7 @@ fun MainShell(
     viewModel: AppViewModel,
     initialTab: MainTab = MainTab.HOME,
     appearanceHighlightNonce: Int = 0,
+    onSelectedTabChanged: (MainTab) -> Unit = {},
     onOpenCarDetail: (String) -> Unit,
     onOpenConversation: (String) -> Unit,
     onOpenMessages: () -> Unit,
@@ -933,6 +673,7 @@ fun MainShell(
     onOpenCancellation: () -> Unit,
     onOpenPrivacy: () -> Unit,
     onOpenAuth: () -> Unit,
+    onOpenAdmin: () -> Unit = {},
 ) {
     var tab by rememberSaveable(initialTab) { mutableStateOf(initialTab) }
     var homeSearchToken by rememberSaveable { mutableStateOf(0) }
@@ -940,15 +681,31 @@ fun MainShell(
     var homeSearchCarType by rememberSaveable { mutableStateOf("") }
     var homeSearchRegion by rememberSaveable { mutableStateOf("") }
     var homeSearchCity by rememberSaveable { mutableStateOf("") }
+    var homeSearchBrand by rememberSaveable { mutableStateOf("") }
+    var homeSearchModel by rememberSaveable { mutableStateOf("") }
+    var homeSearchMinPrice by rememberSaveable { mutableStateOf(50) }
     var homeSearchMaxPrice by rememberSaveable { mutableStateOf(8000f) }
     var homeSearchInstantOnly by rememberSaveable { mutableStateOf(false) }
+    var homeSearchTransmission by rememberSaveable { mutableStateOf("") }
+    var homeSearchFuel by rememberSaveable { mutableStateOf("") }
+    var homeSearchDeliveryOnly by rememberSaveable { mutableStateOf(false) }
+    var homeSearchAcOnly by rememberSaveable { mutableStateOf(false) }
     val tabs = remember { MainTab.entries }
     val isAuthenticated by viewModel.isAuthenticated.collectAsState()
+    val conversationsState by viewModel.conversationsState.collectAsState()
     val focusManager = LocalFocusManager.current
     val colors = LocalHayameColors.current
+    val unreadCount = (conversationsState as? UiState.Success<List<com.hayame.app.core.network.ConversationDto>>)
+        ?.data
+        ?.sumOf { it.unread_count ?: 0 }
+        ?: 0
 
     LaunchedEffect(initialTab) {
         tab = initialTab
+    }
+
+    LaunchedEffect(tab) {
+        onSelectedTabChanged(tab)
     }
 
     Scaffold(
@@ -969,6 +726,7 @@ fun MainShell(
                             MainTab.SAVED -> Icons.Outlined.FavoriteBorder
                             MainTab.MORE -> Icons.Outlined.MoreHoriz
                         },
+                        badgeCount = if (item == MainTab.MORE) unreadCount else 0,
                     )
                 },
                 selected = tab,
@@ -1011,13 +769,20 @@ fun MainShell(
                     onOpenExplore = { tab = MainTab.EXPLORE },
                     onOpenMore = { tab = MainTab.MORE },
                     onOpenAuth = onOpenAuth,
-                    onApplySearchToExplore = { search, carType, region, city, maxPrice, instantOnly ->
+                    onApplySearchToExplore = { search, carType, region, city, brand, model, minPrice, maxPrice, instantOnly, transmission, fuel, deliveryOnly, acOnly ->
                         homeSearchQuery = search
                         homeSearchCarType = carType
                         homeSearchRegion = region
                         homeSearchCity = city
+                        homeSearchBrand = brand
+                        homeSearchModel = model
+                        homeSearchMinPrice = minPrice
                         homeSearchMaxPrice = maxPrice
                         homeSearchInstantOnly = instantOnly
+                        homeSearchTransmission = transmission
+                        homeSearchFuel = fuel
+                        homeSearchDeliveryOnly = deliveryOnly
+                        homeSearchAcOnly = acOnly
                         homeSearchToken += 1
                         tab = MainTab.EXPLORE
                     },
@@ -1031,8 +796,15 @@ fun MainShell(
                     homeSearchCarType = homeSearchCarType,
                     homeSearchRegion = homeSearchRegion,
                     homeSearchCity = homeSearchCity,
+                    homeSearchBrand = homeSearchBrand,
+                    homeSearchModel = homeSearchModel,
+                    homeSearchMinPrice = homeSearchMinPrice,
                     homeSearchMaxPrice = homeSearchMaxPrice,
                     homeSearchInstantOnly = homeSearchInstantOnly,
+                    homeSearchTransmission = homeSearchTransmission,
+                    homeSearchFuel = homeSearchFuel,
+                    homeSearchDeliveryOnly = homeSearchDeliveryOnly,
+                    homeSearchAcOnly = homeSearchAcOnly,
                 )
                 MainTab.TRIPS -> TripsTab(
                     viewModel = viewModel,
@@ -1060,6 +832,7 @@ fun MainShell(
                     onOpenProtection = onOpenProtection,
                     onOpenCancellation = onOpenCancellation,
                     onOpenPrivacy = onOpenPrivacy,
+                    onOpenAdmin = onOpenAdmin,
                 )
             }
         }
@@ -1069,6 +842,7 @@ fun MainShell(
 @Composable
 fun HostShell(
     viewModel: AppViewModel,
+    onSelectedTabChanged: (HostMainTab) -> Unit = {},
     onExitHostMode: () -> Unit,
     onOpenConversation: (String) -> Unit,
     onOpenCarEditor: (String?) -> Unit,
@@ -1103,6 +877,10 @@ fun HostShell(
         val requestedTab = pendingHostTab ?: return@LaunchedEffect
         tab = requestedTab
         viewModel.consumePendingHostTab(requestedTab)
+    }
+
+    LaunchedEffect(tab) {
+        onSelectedTabChanged(tab)
     }
 
     Scaffold(
@@ -1191,12 +969,15 @@ private fun <T> HayameBottomTabBar(
     onSelect: (T) -> Unit,
 ) {
     val colors = LocalHayameColors.current
+    val isDark = LocalDarkMode.current
     Surface(
         color = colors.cardBackground,
-        shadowElevation = 8.dp,
+        shadowElevation = if (isDark) 0.dp else 8.dp,
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
-            HorizontalDivider(color = colors.border)
+            if (!isDark) {
+                HorizontalDivider(color = colors.border)
+            }
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1260,29 +1041,34 @@ private fun HomeTab(
     onOpenExplore: () -> Unit,
     onOpenMore: () -> Unit,
     onOpenAuth: () -> Unit,
-    onApplySearchToExplore: (String, String, String, String, Float, Boolean) -> Unit,
+    onApplySearchToExplore: (String, String, String, String, String, String, Int, Float, Boolean, String, String, Boolean, Boolean) -> Unit,
 ) {
     val carsState by viewModel.carsState.collectAsState()
     val favoritesState by viewModel.favoritesState.collectAsState()
     val isAuthenticated by viewModel.isAuthenticated.collectAsState()
     val me by viewModel.me.collectAsState()
     val locations by viewModel.locations.collectAsState()
+    val catalog by viewModel.catalog.collectAsState()
     val conversationsState by viewModel.conversationsState.collectAsState()
     val favoriteIds = (favoritesState as? UiState.Success<Set<String>>)?.data ?: emptySet()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var query by rememberSaveable { mutableStateOf("") }
-    var selectedRegion by rememberSaveable { mutableStateOf("Any region") }
-    var selectedCity by rememberSaveable { mutableStateOf("Any city") }
-    var selectedType by rememberSaveable { mutableStateOf("Any type") }
-    var maxPrice by rememberSaveable { mutableStateOf(5000f) }
     var selectedCat by rememberSaveable { mutableStateOf("All") }
     var homeSearchText by rememberSaveable { mutableStateOf("") }
     var showHomeFilterSheet by rememberSaveable { mutableStateOf(false) }
+    val homeFilterSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var homeRegion by rememberSaveable { mutableStateOf("") }
     var homeCity by rememberSaveable { mutableStateOf("") }
+    var homeMake by rememberSaveable { mutableStateOf("") }
+    var homeModel by rememberSaveable { mutableStateOf("") }
+    var homeVehicleType by rememberSaveable { mutableStateOf("") }
+    var homeTransmission by rememberSaveable { mutableStateOf("") }
+    var homeFuel by rememberSaveable { mutableStateOf("") }
+    var homeMinPrice by rememberSaveable { mutableStateOf(50) }
     var homeMaxPrice by rememberSaveable { mutableStateOf(8000f) }
     var homeInstantOnly by rememberSaveable { mutableStateOf(false) }
+    var homeDeliveryOnly by rememberSaveable { mutableStateOf(false) }
+    var homeAcOnly by rememberSaveable { mutableStateOf(false) }
     var homeLocation by remember { mutableStateOf<HomeLocation?>(null) }
     var detectedCityName by remember { mutableStateOf<String?>(null) }
     val colors = LocalHayameColors.current
@@ -1297,33 +1083,59 @@ private fun HomeTab(
         }
     }
 
-    val regionOptions = remember(locations) {
-        listOf("Any region") + locations.keys.filter { it.isNotBlank() }.sorted()
-    }
-    val cityOptions = remember(locations, selectedRegion) {
-        val cities = if (selectedRegion == "Any region") locations.values.flatten() else locations[selectedRegion].orEmpty()
-        listOf("Any city") + cities.filter { it.isNotBlank() }.distinct().sorted()
-    }
-    val carTypeOptions = remember(carsState) {
-        val types = (carsState as? UiState.Success<List<CarDto>>)
-            ?.data
-            ?.mapNotNull { it.car_type?.trim() }
-            ?.filter { it.isNotBlank() }
-            ?.distinct()
-            .orEmpty()
-            .sorted()
-        listOf("Any type") + types
-    }
     val availableCategories = remember(carsState) {
-        val defaultTypes = listOf("SUV", "Sedan", "Electric", "Luxury", "Pickup", "Van", "Compact", "Convertible", "Minivan", "Crossover")
         val types = (carsState as? UiState.Success<List<CarDto>>)
             ?.data
             ?.mapNotNull { it.car_type?.trim()?.takeIf { type -> type.isNotBlank() } }
             ?: emptyList()
-        listOf("All") + (defaultTypes + types).distinct().sorted()
+        listOf("All") + (AndroidReferenceData.carTypes + types)
+            .distinctBy { it.lowercase(Locale.US) }
     }
     val homeCars = remember(carsState) {
         (carsState as? UiState.Success<List<CarDto>>)?.data ?: emptyList()
+    }
+    val homeMakeOptions = remember(carsState, catalog) {
+        val liveBrands = (carsState as? UiState.Success<List<CarDto>>)
+            ?.data
+            ?.mapNotNull { it.brand?.trim()?.takeIf { brand -> brand.isNotBlank() } }
+            ?: emptyList()
+        (AndroidReferenceData.carMakes + catalog.keys + liveBrands)
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinctBy { it.lowercase(Locale.US) }
+    }
+    val homeModelOptions = remember(carsState, catalog, homeMake, homeModel) {
+        val liveModels = (carsState as? UiState.Success<List<CarDto>>)
+            ?.data
+            ?.filter { homeMake.isBlank() || it.brand.orEmpty().equals(homeMake, ignoreCase = true) }
+            ?.mapNotNull { it.model?.trim()?.takeIf { model -> model.isNotBlank() } }
+            ?: emptyList()
+        (AndroidReferenceData.modelsFor(homeMake, homeModel) + catalog[AndroidReferenceData.normalizedMake(homeMake)].orEmpty() + liveModels)
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinctBy { it.lowercase(Locale.US) }
+            .sortedWith(String.CASE_INSENSITIVE_ORDER)
+    }
+    val homeTypeOptions = remember(carsState) {
+        val liveTypes = (carsState as? UiState.Success<List<CarDto>>)
+            ?.data
+            ?.mapNotNull { it.car_type?.trim()?.takeIf { type -> type.isNotBlank() } }
+            ?: emptyList()
+        (AndroidReferenceData.carTypes + liveTypes).distinctBy { it.lowercase(Locale.US) }
+    }
+    val homeTransmissionOptions = remember(carsState) {
+        val liveValues = (carsState as? UiState.Success<List<CarDto>>)
+            ?.data
+            ?.mapNotNull { it.transmission?.trim()?.takeIf { value -> value.isNotBlank() } }
+            ?: emptyList()
+        (AndroidReferenceData.transmissions + liveValues).distinctBy { it.lowercase(Locale.US) }
+    }
+    val homeFuelOptions = remember(carsState) {
+        val liveValues = (carsState as? UiState.Success<List<CarDto>>)
+            ?.data
+            ?.mapNotNull { it.fuel_type?.trim()?.takeIf { value -> value.isNotBlank() } }
+            ?: emptyList()
+        (AndroidReferenceData.fuels + liveValues).distinctBy { it.lowercase(Locale.US) }
     }
     val nearYouCars = remember(homeCars, homeLocation) {
         val loc = homeLocation
@@ -1364,28 +1176,24 @@ private fun HomeTab(
         ?: 0
     val profileCity = me?.profile?.city?.trim().orEmpty()
     val profileRegion = me?.profile?.region?.trim().orEmpty()
-    val selectedCarType = if (selectedType == "Any type") "" else selectedType
-
-    fun applyFilters() {
-        val params = mutableMapOf<String, String>()
-        params["sort"] = "new_listings"
-        params["limit"] = "48"
-        if (query.trim().isNotEmpty()) params["q"] = query.trim()
-        if (selectedRegion != "Any region") params["region"] = selectedRegion
-        if (selectedCity != "Any city") params["city"] = selectedCity
-        if (selectedType != "Any type") params["carType"] = selectedType
-        if (maxPrice < 5000f) params["maxPrice"] = maxPrice.toInt().toString()
-        viewModel.loadCars(params)
-    }
-
     fun applyHomeSearchToExplore() {
+        val selectedFilterType = homeVehicleType.ifBlank {
+            if (selectedCat == "All") "" else selectedCat
+        }
         onApplySearchToExplore(
             homeSearchText.trim(),
-            if (selectedCat == "All") "" else selectedCat,
+            selectedFilterType,
             homeRegion,
             homeCity,
+            homeMake,
+            homeModel,
+            homeMinPrice,
             homeMaxPrice,
             homeInstantOnly,
+            homeTransmission,
+            homeFuel,
+            homeDeliveryOnly,
+            homeAcOnly,
         )
     }
 
@@ -1443,7 +1251,7 @@ private fun HomeTab(
 	                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
 	                        val displayName = if (isAuthenticated) {
 	                            me.preferredFullName()?.trim()
-	                                .takeUnless { it.isNullOrBlank() } ?: "Guest"
+	                                .takeUnless { it.isNullOrBlank() } ?: "Guest User"
 	                        } else {
 	                            "Sign in or sign up"
 	                        }
@@ -1476,7 +1284,7 @@ private fun HomeTab(
 	                                Icon(
 	                                    Icons.Outlined.ExpandMore,
 	                                    contentDescription = null,
-	                                    tint = BrandBlue,
+	                                    tint = LocalHayameColors.current.brandBlue,
 	                                    modifier = Modifier.size(12.dp),
 	                                )
 	                            }
@@ -1508,7 +1316,7 @@ private fun HomeTab(
                                     .align(Alignment.TopEnd)
                                     .padding(top = 6.dp, end = 6.dp)
                                     .size(10.dp)
-                                    .background(BrandBlue, CircleShape)
+                                    .background(LocalHayameColors.current.brandBlue, CircleShape)
                             )
                         }
                     }
@@ -1543,7 +1351,7 @@ private fun HomeTab(
                             IconButton(onClick = { showHomeFilterSheet = true }) {
                                 Box(
                                     modifier = Modifier
-                                        .background(BrandBlue, RoundedCornerShape(10.dp))
+                                        .background(LocalHayameColors.current.brandBlue, RoundedCornerShape(10.dp))
                                         .padding(8.dp),
                                     contentAlignment = Alignment.Center,
                                 ) {
@@ -1558,10 +1366,10 @@ private fun HomeTab(
                         }
                     },
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = BrandBlue,
+                        focusedBorderColor = LocalHayameColors.current.brandBlue,
                         unfocusedBorderColor = colors.border,
-                        focusedContainerColor = colors.cardBackground,
-                        unfocusedContainerColor = colors.cardBackground,
+                        focusedContainerColor = colors.fieldBackground,
+                        unfocusedContainerColor = colors.fieldBackground,
                         focusedTextColor = colors.brandNavy,
                         unfocusedTextColor = colors.brandNavy,
                     ),
@@ -1569,7 +1377,7 @@ private fun HomeTab(
 	                Button(
 	                    onClick = { applyHomeSearchToExplore() },
 	                    shape = RoundedCornerShape(14.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = BrandBlue),
+                    colors = ButtonDefaults.buttonColors(containerColor = LocalHayameColors.current.brandBlue),
                     modifier = Modifier.height(56.dp),
                 ) {
                     Text("Search", color = Color.White, fontWeight = FontWeight.SemiBold)
@@ -1659,20 +1467,61 @@ private fun HomeTab(
         }
 
         if (showHomeFilterSheet) {
-            ModalBottomSheet(onDismissRequest = { showHomeFilterSheet = false }) {
+            ModalBottomSheet(
+                onDismissRequest = { showHomeFilterSheet = false },
+                sheetState = homeFilterSheetState,
+            ) {
                 ExploreFilterContent(
                     locations = locations,
                     selectedRegion = homeRegion,
                     selectedCity = homeCity,
+                    selectedMake = homeMake,
+                    selectedModel = homeModel,
+                    selectedType = homeVehicleType,
+                    selectedTransmission = homeTransmission,
+                    selectedFuel = homeFuel,
+                    minPrice = homeMinPrice,
                     maxPrice = homeMaxPrice,
                     instantOnly = homeInstantOnly,
+                    deliveryOnly = homeDeliveryOnly,
+                    acOnly = homeAcOnly,
+                    makeOptions = homeMakeOptions,
+                    modelOptions = homeModelOptions,
+                    typeOptions = homeTypeOptions,
+                    transmissionOptions = homeTransmissionOptions,
+                    fuelOptions = homeFuelOptions,
                     onRegionChange = {
                         homeRegion = it
                         homeCity = ""
                     },
                     onCityChange = { homeCity = it },
+                    onMakeChange = {
+                        homeMake = it
+                        homeModel = ""
+                    },
+                    onModelChange = { homeModel = it },
+                    onTypeChange = { homeVehicleType = it },
+                    onTransmissionChange = { homeTransmission = it },
+                    onFuelChange = { homeFuel = it },
+                    onMinPriceChange = { homeMinPrice = it },
                     onMaxPriceChange = { homeMaxPrice = it },
                     onInstantOnlyChange = { homeInstantOnly = it },
+                    onDeliveryOnlyChange = { homeDeliveryOnly = it },
+                    onAcOnlyChange = { homeAcOnly = it },
+                    onReset = {
+                        homeRegion = ""
+                        homeCity = ""
+                        homeMake = ""
+                        homeModel = ""
+                        homeVehicleType = ""
+                        homeTransmission = ""
+                        homeFuel = ""
+                        homeMinPrice = 50
+                        homeMaxPrice = 8000f
+                        homeInstantOnly = false
+                        homeDeliveryOnly = false
+                        homeAcOnly = false
+                    },
                     onDismiss = { showHomeFilterSheet = false },
                 )
             }
@@ -1685,86 +1534,292 @@ private fun ExploreFilterContent(
     locations: Map<String, List<String>>,
     selectedRegion: String,
     selectedCity: String,
+    selectedMake: String = "",
+    selectedModel: String = "",
+    selectedType: String = "",
+    selectedTransmission: String = "",
+    selectedFuel: String = "",
+    minPrice: Int = 50,
     maxPrice: Float,
     instantOnly: Boolean,
+    deliveryOnly: Boolean = false,
+    acOnly: Boolean = false,
+    makeOptions: List<String> = AndroidReferenceData.carMakes,
+    modelOptions: List<String> = emptyList(),
+    typeOptions: List<String> = AndroidReferenceData.carTypes,
+    transmissionOptions: List<String> = AndroidReferenceData.transmissions,
+    fuelOptions: List<String> = AndroidReferenceData.fuels,
     onRegionChange: (String) -> Unit,
     onCityChange: (String) -> Unit,
+    onMakeChange: (String) -> Unit = {},
+    onModelChange: (String) -> Unit = {},
+    onTypeChange: (String) -> Unit = {},
+    onTransmissionChange: (String) -> Unit = {},
+    onFuelChange: (String) -> Unit = {},
+    onMinPriceChange: (Int) -> Unit = {},
     onMaxPriceChange: (Float) -> Unit,
     onInstantOnlyChange: (Boolean) -> Unit,
+    onDeliveryOnlyChange: (Boolean) -> Unit = {},
+    onAcOnlyChange: (Boolean) -> Unit = {},
+    onReset: () -> Unit = {},
     onDismiss: () -> Unit,
 ) {
+    val colors = LocalHayameColors.current
     val regionOptions = remember(locations) {
-        listOf("") + locations.keys.filter { it.isNotBlank() }.sorted()
+        listOf("") + (AndroidReferenceData.regions + locations.keys)
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinctBy { it.lowercase(Locale.US) }
+            .sortedWith(String.CASE_INSENSITIVE_ORDER)
     }
     val cityOptions = remember(locations, selectedRegion) {
         val cities = if (selectedRegion.isBlank()) {
-            locations.values.flatten()
+            AndroidReferenceData.districtsByRegion.values.flatten() + locations.values.flatten()
         } else {
-            locations[selectedRegion].orEmpty()
+            AndroidReferenceData.citiesFor(selectedRegion) + locations[selectedRegion].orEmpty()
         }
-        listOf("") + cities.filter { it.isNotBlank() }.distinct().sorted()
+        listOf("") + cities
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinctBy { it.lowercase(Locale.US) }
+            .sortedWith(String.CASE_INSENSITIVE_ORDER)
+    }
+    val normalizedMakeOptions = remember(makeOptions, selectedMake) {
+        (listOf("") + makeOptions + selectedMake)
+            .map { it.trim() }
+            .distinctBy { it.lowercase(Locale.US) }
+            .filter { it.isNotBlank() || it == "" }
+    }
+    val normalizedModelOptions = remember(modelOptions, selectedModel) {
+        (listOf("") + modelOptions + selectedModel)
+            .map { it.trim() }
+            .distinctBy { it.lowercase(Locale.US) }
+            .filter { it.isNotBlank() || it == "" }
+    }
+    val normalizedTypeOptions = remember(typeOptions, selectedType) {
+        (listOf("") + typeOptions + selectedType)
+            .map { it.trim() }
+            .distinctBy { it.lowercase(Locale.US) }
+            .filter { it.isNotBlank() || it == "" }
     }
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 16.dp)
             .navigationBarsPadding(),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("Filters", style = MaterialTheme.typography.titleLarge, color = BrandNavy, fontWeight = FontWeight.Bold)
+            TextButton(onClick = onReset) {
+                Text("Reset", color = colors.brandBlue)
+            }
+            Text("Filters", style = MaterialTheme.typography.titleLarge, color = colors.brandNavy, fontWeight = FontWeight.Bold)
             TextButton(onClick = onDismiss) {
-                Text("Done", color = BrandBlue, fontWeight = FontWeight.SemiBold)
+                Text("Done", color = colors.brandBlue, fontWeight = FontWeight.Bold)
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-            HomeFilterChip(
-                label = selectedRegion.ifBlank { "Any region" },
-                options = regionOptions.map { it.ifBlank { "Any region" } },
-                modifier = Modifier.weight(1f),
-                onSelected = { onRegionChange(if (it == "Any region") "" else it) },
-            )
-            HomeFilterChip(
-                label = selectedCity.ifBlank { "Any city" },
-                options = cityOptions.map { it.ifBlank { "Any city" } },
-                modifier = Modifier.weight(1f),
-                onSelected = { onCityChange(if (it == "Any city") "" else it) },
-            )
+
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(colors.pageBackground),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            item {
+                FilterSectionCard(title = "Location") {
+                    FilterPickerRow("Region", selectedRegion.ifBlank { "Any" }, regionOptions.map { it.ifBlank { "Any" } }) {
+                        onRegionChange(if (it == "Any") "" else it)
+                    }
+                    FilterDivider()
+                    FilterPickerRow("City", selectedCity.ifBlank { "Any" }, cityOptions.map { it.ifBlank { "Any" } }) {
+                        onCityChange(if (it == "Any") "" else it)
+                    }
+                }
+            }
+            item {
+                FilterSectionCard(title = "Vehicle") {
+                    FilterPickerRow("Make", selectedMake.ifBlank { "Any" }, normalizedMakeOptions.map { it.ifBlank { "Any" } }) {
+                        onMakeChange(if (it == "Any") "" else it)
+                    }
+                    FilterDivider()
+                    FilterPickerRow("Model", selectedModel.ifBlank { "Any" }, normalizedModelOptions.map { it.ifBlank { "Any" } }) {
+                        onModelChange(if (it == "Any") "" else it)
+                    }
+                    FilterDivider()
+                    FilterPickerRow("Type", selectedType.ifBlank { "Any" }, normalizedTypeOptions.map { it.ifBlank { "Any" } }) {
+                        onTypeChange(if (it == "Any") "" else it)
+                    }
+                    FilterDivider()
+                    FilterPickerRow("Transmission", selectedTransmission.ifBlank { "Any" }, (listOf("") + transmissionOptions).map { it.ifBlank { "Any" } }) {
+                        onTransmissionChange(if (it == "Any") "" else it)
+                    }
+                    FilterDivider()
+                    FilterPickerRow("Fuel", selectedFuel.ifBlank { "Any" }, (listOf("") + fuelOptions).map { it.ifBlank { "Any" } }) {
+                        onFuelChange(if (it == "Any") "" else it)
+                    }
+                }
+            }
+            item {
+                FilterSectionCard(title = "Price") {
+                    FilterStepperRow("Min price", "GHS$minPrice", minPrice > 50, { onMinPriceChange((minPrice - 50).coerceAtLeast(50)) }, { onMinPriceChange((minPrice + 50).coerceAtMost(5000)) })
+                    FilterDivider()
+                    FilterStepperRow("Max price", "GHS${maxPrice.roundToInt()}", maxPrice.roundToInt() > 100, { onMaxPriceChange((maxPrice - 50f).coerceAtLeast(100f)) }, { onMaxPriceChange((maxPrice + 50f).coerceAtMost(8000f)) })
+                }
+            }
+            item {
+                FilterSectionCard(title = "Options") {
+                    FilterToggleRow("Instant Book", instantOnly, onInstantOnlyChange)
+                    FilterDivider()
+                    FilterToggleRow("Delivery available", deliveryOnly, onDeliveryOnlyChange)
+                    FilterDivider()
+                    FilterToggleRow("Air conditioning", acOnly, onAcOnlyChange)
+                }
+            }
+            item {
+                Spacer(modifier = Modifier.height(8.dp))
+            }
         }
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(
-                "Max GHS ${maxPrice.roundToInt()}",
-                style = MaterialTheme.typography.labelLarge,
-                color = MutedText,
-                fontWeight = FontWeight.SemiBold,
-            )
-            Slider(
-                value = maxPrice,
-                onValueChange = onMaxPriceChange,
-                valueRange = 100f..8000f,
-                steps = 157,
-                colors = SliderDefaults.colors(
-                    activeTrackColor = BrandBlue,
-                    inactiveTrackColor = Color(0xFFE4E8EF),
-                    thumbColor = Color.White,
-                    activeTickColor = Color.Transparent,
-                    inactiveTickColor = Color.Transparent,
-                ),
-            )
-        }
-        Row(
+    }
+}
+
+@Composable
+private fun FilterSectionCard(
+    title: String,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val colors = LocalHayameColors.current
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            title,
+            style = MaterialTheme.typography.labelLarge,
+            color = colors.mutedText,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(horizontal = 4.dp),
+        )
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = colors.cardBackground,
+            border = BorderStroke(1.dp, colors.border),
             modifier = Modifier.fillMaxWidth(),
+        ) {
+            Column(content = content)
+        }
+    }
+}
+
+@Composable
+private fun FilterDivider() {
+    val colors = LocalHayameColors.current
+    HorizontalDivider(color = colors.border, modifier = Modifier.padding(start = 16.dp))
+}
+
+@Composable
+private fun FilterPickerRow(
+    label: String,
+    value: String,
+    options: List<String>,
+    onSelected: (String) -> Unit,
+) {
+    val colors = LocalHayameColors.current
+    var expanded by remember { mutableStateOf(false) }
+
+    Box {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { expanded = true }
+                .padding(horizontal = 16.dp, vertical = 14.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("Instant Book only", color = BrandNavy, fontWeight = FontWeight.SemiBold)
-            Switch(checked = instantOnly, onCheckedChange = onInstantOnlyChange)
+            Text(label, color = colors.brandNavy, style = MaterialTheme.typography.bodyLarge)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(value, color = colors.mutedText, style = MaterialTheme.typography.bodyMedium)
+                Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = colors.mutedText, modifier = Modifier.size(18.dp))
+            }
         }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            options.distinct().forEach { option ->
+                DropdownMenuItem(
+                    text = { Text(option) },
+                    onClick = {
+                        onSelected(option)
+                        expanded = false
+                    },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun FilterStepperRow(
+    label: String,
+    value: String,
+    canDecrease: Boolean,
+    onDecrease: () -> Unit,
+    onIncrease: () -> Unit,
+) {
+    val colors = LocalHayameColors.current
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("$label: $value", color = colors.brandNavy, style = MaterialTheme.typography.bodyLarge)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            OutlinedButton(
+                onClick = onDecrease,
+                enabled = canDecrease,
+                shape = CircleShape,
+                contentPadding = PaddingValues(0.dp),
+                modifier = Modifier.size(36.dp),
+            ) {
+                Text("-", fontWeight = FontWeight.Bold)
+            }
+            OutlinedButton(
+                onClick = onIncrease,
+                shape = CircleShape,
+                contentPadding = PaddingValues(0.dp),
+                modifier = Modifier.size(36.dp),
+            ) {
+                Text("+", fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+}
+
+@Composable
+private fun FilterToggleRow(
+    label: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    val colors = LocalHayameColors.current
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(label, color = colors.brandNavy, style = MaterialTheme.typography.bodyLarge)
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            colors = androidx.compose.material3.SwitchDefaults.colors(
+                checkedThumbColor = Color.White,
+                checkedTrackColor = colors.brandBlue,
+            )
+        )
     }
 }
 
@@ -1783,7 +1838,7 @@ private fun HomeSectionTitlePlaceholderAware(title: String, onSeeAll: () -> Unit
             fontWeight = FontWeight.SemiBold,
         )
         TextButton(onClick = onSeeAll) {
-            Text("See all", color = BrandBlue, fontWeight = FontWeight.Medium)
+            Text("See all", color = LocalHayameColors.current.brandBlue, fontWeight = FontWeight.Medium)
         }
     }
 }
@@ -1975,10 +2030,32 @@ private fun HomeFeaturedRowPlaceholderCard() {
 @Composable
 private fun HomeSkeletonBlock(modifier: Modifier, cornerRadius: Int) {
     val colors = LocalHayameColors.current
+    val infiniteTransition = rememberInfiniteTransition(label = "shimmer")
+    val progress by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1050, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "shimmer_progress",
+    )
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(cornerRadius.dp))
-            .background(colors.mutedText.copy(alpha = 0.14f)),
+            .background(colors.skeletonBase)
+            .drawWithContent {
+                drawContent()
+                val sweepWidth = size.width * 0.8f
+                val startX = (size.width + sweepWidth) * progress - sweepWidth
+                drawRect(
+                    brush = Brush.horizontalGradient(
+                        colors = listOf(Color.Transparent, colors.skeletonHighlight, Color.Transparent),
+                        startX = startX,
+                        endX = startX + sweepWidth,
+                    ),
+                )
+            },
     )
 }
 
@@ -2004,7 +2081,7 @@ private fun HomeNearYouSection(
                 color = colors.brandNavy,
             )
             TextButton(onClick = onSeeAll) {
-                Text("See all", color = BrandBlue, fontWeight = FontWeight.Medium)
+                Text("See all", color = LocalHayameColors.current.brandBlue, fontWeight = FontWeight.Medium)
             }
         }
         LazyRow(
@@ -2123,7 +2200,7 @@ private fun HomeNearYouCard(
                     "GHS ${(car.daily_price ?: 0.0).roundToInt()} / day",
                     style = MaterialTheme.typography.titleMedium.copy(fontSize = 15.sp),
                     fontWeight = FontWeight.SemiBold,
-                    color = BrandBlue,
+                    color = LocalHayameColors.current.brandBlue,
                 )
             }
         }
@@ -2145,7 +2222,7 @@ private fun HomeFilterChip(
                 .clip(RoundedCornerShape(99.dp))
                 .clickable { expanded = true },
             shape = RoundedCornerShape(99.dp),
-            color = Color(0xFFE8F2FC),
+            color = LocalHayameColors.current.fieldBackground,
         ) {
             Row(
                 modifier = Modifier
@@ -2157,12 +2234,12 @@ private fun HomeFilterChip(
                 Text(
                     text = label,
                     style = MaterialTheme.typography.labelLarge.copy(fontSize = 11.sp),
-                    color = BrandNavy,
+                    color = LocalHayameColors.current.brandNavy,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                Icon(Icons.Outlined.ExpandMore, contentDescription = null, tint = BrandNavy, modifier = Modifier.size(14.dp))
+                Icon(Icons.Outlined.ExpandMore, contentDescription = null, tint = LocalHayameColors.current.brandNavy, modifier = Modifier.size(14.dp))
             }
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
@@ -2186,16 +2263,16 @@ private fun HomeLocationTag(
 ) {
     Surface(
         shape = RoundedCornerShape(99.dp),
-        color = Color.White,
-        border = BorderStroke(1.dp, Color.Black.copy(alpha = 0.08f)),
+        color = LocalHayameColors.current.chipBackground,
+        border = BorderStroke(1.dp, LocalHayameColors.current.border),
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(icon, contentDescription = null, tint = BrandNavy, modifier = Modifier.size(16.dp))
-            Text(label, color = BrandNavy, fontWeight = FontWeight.SemiBold)
+            Icon(icon, contentDescription = null, tint = LocalHayameColors.current.brandNavy, modifier = Modifier.size(16.dp))
+            Text(label, color = LocalHayameColors.current.brandNavy, fontWeight = FontWeight.SemiBold)
         }
     }
 }
@@ -2208,6 +2285,9 @@ private fun HomeFeaturedCarRow(
     onToggleFavorite: () -> Unit,
 ) {
     val colors = LocalHayameColors.current
+    val imageUrl = remember(car.id, car.image_url, car.car_photos) {
+        resolveAppImage(car.image_url) ?: car.car_photos.orEmpty().firstNotNullOfOrNull { resolveAppImage(it.url) }
+    }
     Box {
         Row(
             modifier = Modifier
@@ -2221,7 +2301,7 @@ private fun HomeFeaturedCarRow(
             verticalAlignment = Alignment.Top,
         ) {
             AsyncImage(
-                model = car.image_url ?: car.car_photos?.firstOrNull()?.url,
+                model = imageUrl,
                 contentDescription = null,
                 modifier = Modifier
                     .size(width = 136.dp, height = 104.dp)
@@ -2275,7 +2355,7 @@ private fun HomeFeaturedCarRow(
                 Text(
                     "GHS${(car.daily_price ?: 0.0).toInt()}/day",
                     style = MaterialTheme.typography.bodyLarge.copy(fontSize = 15.sp),
-                    color = BrandBlue,
+                    color = LocalHayameColors.current.brandBlue,
                     fontWeight = FontWeight.Bold,
                 )
             }
@@ -2313,6 +2393,57 @@ private const val ExploreLayoutPrefsName = "hayame_explore_layout"
 private const val ExploreLayoutPrefsKey = "layout_mode"
 
 @Composable
+private fun PageTitle(title: String) {
+    val colors = LocalHayameColors.current
+    Text(
+        text = title,
+        style = MaterialTheme.typography.headlineLarge.copy(fontSize = 34.sp),
+        color = colors.brandNavy,
+        fontWeight = FontWeight.Bold,
+        modifier = Modifier.fillMaxWidth(),
+    )
+}
+
+private fun normalizedExploreSearchTokens(query: String): List<String> {
+    return Normalizer
+        .normalize(query.trim().lowercase(Locale.US), Normalizer.Form.NFD)
+        .replace(Regex("\\p{Mn}+"), "")
+        .split(Regex("\\s+"))
+        .map { it.trim() }
+        .filter { it.isNotBlank() }
+}
+
+private fun CarDto.matchesExploreSearch(tokens: List<String>): Boolean {
+    if (tokens.isEmpty()) return true
+    val haystack = Normalizer
+        .normalize(
+            listOfNotNull(
+                title,
+                description,
+                brand,
+                model,
+                city,
+                region,
+                car_type,
+                transmission,
+                fuel_type,
+                host_name,
+                host_level,
+                year?.roundToInt()?.toString(),
+                car_year?.roundToInt()?.toString(),
+                if (instant_book == true) "instant book" else null,
+                if (delivery_available == true) "delivery available" else null,
+                if (air_conditioning == true) "air conditioning ac" else null,
+                features?.joinToString(" "),
+            ).joinToString(" ").lowercase(Locale.US),
+            Normalizer.Form.NFD,
+        )
+        .replace(Regex("\\p{Mn}+"), "")
+    return tokens.all { token -> haystack.contains(token) }
+}
+
+@Composable
+@OptIn(ExperimentalMaterial3Api::class)
 private fun ExploreTab(
     viewModel: AppViewModel,
     paddingValues: PaddingValues,
@@ -2322,12 +2453,22 @@ private fun ExploreTab(
     homeSearchCarType: String = "",
     homeSearchRegion: String = "",
     homeSearchCity: String = "",
+    homeSearchBrand: String = "",
+    homeSearchModel: String = "",
+    homeSearchMinPrice: Int = 50,
     homeSearchMaxPrice: Float = 8000f,
     homeSearchInstantOnly: Boolean = false,
+    homeSearchTransmission: String = "",
+    homeSearchFuel: String = "",
+    homeSearchDeliveryOnly: Boolean = false,
+    homeSearchAcOnly: Boolean = false,
 ) {
     val carsState by viewModel.carsState.collectAsState()
     val favoritesState by viewModel.favoritesState.collectAsState()
+    val locations by viewModel.locations.collectAsState()
+    val catalog by viewModel.catalog.collectAsState()
     val favoriteIds = (favoritesState as? UiState.Success<Set<String>>)?.data ?: emptySet()
+    val colors = LocalHayameColors.current
     val context = LocalContext.current
     val exploreLayoutPrefs = remember(context) {
         context.getSharedPreferences(ExploreLayoutPrefsName, Context.MODE_PRIVATE)
@@ -2336,17 +2477,26 @@ private fun ExploreTab(
     var sort by rememberSaveable { mutableStateOf("new_listings") }
     var appliedCarType by rememberSaveable { mutableStateOf("") }
     var selectedBrand by rememberSaveable { mutableStateOf("") }
+    var selectedModel by rememberSaveable { mutableStateOf("") }
     var appliedRegion by rememberSaveable { mutableStateOf("") }
     var appliedCity by rememberSaveable { mutableStateOf("") }
+    var appliedMinPrice by rememberSaveable { mutableStateOf(50) }
     var appliedMaxPrice by rememberSaveable { mutableStateOf(8000f) }
     var appliedInstantOnly by rememberSaveable { mutableStateOf(false) }
+    var appliedDeliveryOnly by rememberSaveable { mutableStateOf(false) }
+    var appliedAcOnly by rememberSaveable { mutableStateOf(false) }
+    var appliedTransmission by rememberSaveable { mutableStateOf("") }
+    var appliedFuel by rememberSaveable { mutableStateOf("") }
+    var showFilters by rememberSaveable { mutableStateOf(false) }
+    val exploreFilterSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var sortMenuExpanded by remember { mutableStateOf(false) }
     var layoutMode by rememberSaveable {
         mutableStateOf(exploreLayoutPrefs.getString(ExploreLayoutPrefsKey, ExploreLayoutMode.LIST.name) ?: ExploreLayoutMode.LIST.name)
     }
     val selectedLayout = remember(layoutMode) {
         runCatching { ExploreLayoutMode.valueOf(layoutMode) }.getOrElse { ExploreLayoutMode.LIST }
     }
-    val vehicleBrandOptions = remember(carsState) {
+    val vehicleBrandOptions = remember(carsState, catalog) {
         val popular = listOf(
             "Toyota",
             "Honda",
@@ -2363,9 +2513,45 @@ private fun ExploreTab(
             ?.data
             ?.mapNotNull { it.brand?.trim()?.takeIf { brand -> brand.isNotBlank() } }
             ?: emptyList()
-        (popular + liveBrands)
-            .distinctBy { it.lowercase() }
+        (popular + AndroidReferenceData.carMakes + catalog.keys + liveBrands)
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinctBy { it.lowercase(Locale.US) }
     }
+    val modelOptions = remember(carsState, catalog, selectedBrand, selectedModel) {
+        val liveModels = (carsState as? UiState.Success<List<CarDto>>)
+            ?.data
+            ?.filter { selectedBrand.isBlank() || it.brand.orEmpty().equals(selectedBrand, ignoreCase = true) }
+            ?.mapNotNull { it.model?.trim()?.takeIf { model -> model.isNotBlank() } }
+            ?: emptyList()
+        (AndroidReferenceData.modelsFor(selectedBrand, selectedModel) + catalog[AndroidReferenceData.normalizedMake(selectedBrand)].orEmpty() + liveModels)
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinctBy { it.lowercase(Locale.US) }
+            .sortedWith(String.CASE_INSENSITIVE_ORDER)
+    }
+    val typeOptions = remember(carsState) {
+        val liveTypes = (carsState as? UiState.Success<List<CarDto>>)
+            ?.data
+            ?.mapNotNull { it.car_type?.trim()?.takeIf { type -> type.isNotBlank() } }
+            .orEmpty()
+        (AndroidReferenceData.carTypes + liveTypes).distinctBy { it.lowercase(Locale.US) }
+    }
+    val transmissionOptions = remember(carsState) {
+        val liveValues = (carsState as? UiState.Success<List<CarDto>>)
+            ?.data
+            ?.mapNotNull { it.transmission?.trim()?.takeIf { value -> value.isNotBlank() } }
+            .orEmpty()
+        (AndroidReferenceData.transmissions + liveValues).distinctBy { it.lowercase(Locale.US) }
+    }
+    val fuelOptions = remember(carsState) {
+        val liveValues = (carsState as? UiState.Success<List<CarDto>>)
+            ?.data
+            ?.mapNotNull { it.fuel_type?.trim()?.takeIf { value -> value.isNotBlank() } }
+            .orEmpty()
+        (AndroidReferenceData.fuels + liveValues).distinctBy { it.lowercase(Locale.US) }
+    }
+    val searchTokens = remember(query) { normalizedExploreSearchTokens(query) }
 
     fun exploreParams(): Map<String, String> {
         val params = mutableMapOf<String, String>()
@@ -2373,10 +2559,16 @@ private fun ExploreTab(
         if (query.trim().isNotEmpty()) params["q"] = query.trim()
         if (appliedCarType.isNotEmpty()) params["carType"] = appliedCarType
         if (selectedBrand.isNotEmpty()) params["brand"] = selectedBrand
+        if (selectedModel.isNotEmpty()) params["model"] = selectedModel
         if (appliedRegion.isNotEmpty()) params["region"] = appliedRegion
         if (appliedCity.isNotEmpty()) params["city"] = appliedCity
+        if (appliedMinPrice > 50) params["minPrice"] = appliedMinPrice.toString()
         if (appliedMaxPrice < 8000f) params["maxPrice"] = appliedMaxPrice.toInt().toString()
         if (appliedInstantOnly) params["instantBook"] = "true"
+        if (appliedDeliveryOnly) params["delivery"] = "true"
+        if (appliedAcOnly) params["airConditioning"] = "true"
+        if (appliedTransmission.isNotEmpty()) params["transmission"] = appliedTransmission
+        if (appliedFuel.isNotEmpty()) params["fuelType"] = appliedFuel
         return params
     }
 
@@ -2391,115 +2583,176 @@ private fun ExploreTab(
         if (homeSearchToken > 0) {
             query = homeSearchQuery
             appliedCarType = homeSearchCarType
-            selectedBrand = ""
+            selectedBrand = homeSearchBrand
+            selectedModel = homeSearchModel
             appliedRegion = homeSearchRegion
             appliedCity = homeSearchCity
+            appliedMinPrice = homeSearchMinPrice
             appliedMaxPrice = homeSearchMaxPrice
             appliedInstantOnly = homeSearchInstantOnly
+            appliedDeliveryOnly = homeSearchDeliveryOnly
+            appliedAcOnly = homeSearchAcOnly
+            appliedTransmission = homeSearchTransmission
+            appliedFuel = homeSearchFuel
             val params = mutableMapOf<String, String>()
             params["sort"] = sort
             if (homeSearchQuery.trim().isNotEmpty()) params["q"] = homeSearchQuery.trim()
             if (homeSearchCarType.isNotEmpty()) params["carType"] = homeSearchCarType
+            if (homeSearchBrand.isNotEmpty()) params["brand"] = homeSearchBrand
+            if (homeSearchModel.isNotEmpty()) params["model"] = homeSearchModel
             if (homeSearchRegion.isNotEmpty()) params["region"] = homeSearchRegion
             if (homeSearchCity.isNotEmpty()) params["city"] = homeSearchCity
+            if (homeSearchMinPrice > 50) params["minPrice"] = homeSearchMinPrice.toString()
             if (homeSearchMaxPrice < 8000f) params["maxPrice"] = homeSearchMaxPrice.toInt().toString()
             if (homeSearchInstantOnly) params["instantBook"] = "true"
+            if (homeSearchDeliveryOnly) params["delivery"] = "true"
+            if (homeSearchAcOnly) params["airConditioning"] = "true"
+            if (homeSearchTransmission.isNotEmpty()) params["transmission"] = homeSearchTransmission
+            if (homeSearchFuel.isNotEmpty()) params["fuelType"] = homeSearchFuel
             viewModel.loadCars(params)
         }
     }
 
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
-            .padding(paddingValues)
-            .padding(horizontal = 16.dp),
+            .padding(paddingValues),
     ) {
-        Spacer(modifier = Modifier.height(16.dp))
-	        OutlinedTextField(
-	            value = query,
-	            onValueChange = { query = it },
-            placeholder = { Text("Search by car, city or region") },
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
-	            singleLine = true,
-	            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-	            keyboardActions = KeyboardActions(onSearch = { viewModel.loadCars(exploreParams()) }),
-	            trailingIcon = {
-	                if (query.isNotEmpty()) {
-	                    TextButton(onClick = {
-	                        viewModel.loadCars(exploreParams())
-	                    }) { Text("Search", fontWeight = FontWeight.Bold) }
-	                }
-	            }
-	        )
-
-	        VehicleBrandCarousel(
-	            brands = vehicleBrandOptions,
-	            selectedBrand = selectedBrand,
-	            onSelect = { brand ->
-	                selectedBrand = brand
-	                val params = exploreParams().toMutableMap()
-	                if (brand.isBlank()) {
-	                    params.remove("brand")
-	                } else {
-	                    params["brand"] = brand
-	                }
-	                viewModel.loadCars(params)
-	            },
-	        )
-
-	        Row(
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
+                .fillMaxSize()
+                .padding(horizontal = 16.dp),
         ) {
-            Box(modifier = Modifier.weight(1f)) {
-                LazyRow(
-                    contentPadding = PaddingValues(vertical = 0.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+            Spacer(modifier = Modifier.height(16.dp))
+            PageTitle("Explore")
+            Spacer(modifier = Modifier.height(14.dp))
+
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = colors.cardBackground,
+                border = BorderStroke(1.dp, colors.border),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    val filters = listOf("Price Low" to "price_low", "Price High" to "price_high", "Top Rated" to "top_rated", "Latest" to "new_listings")
-                    items(filters) { filter ->
-                        val selected = sort == filter.second
+                    Icon(Icons.Outlined.Search, contentDescription = null, tint = colors.mutedText, modifier = Modifier.size(20.dp))
+                    BasicTextField(
+                        value = query,
+                        onValueChange = { query = it },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true,
+                        textStyle = TextStyle(
+                            color = colors.brandNavy,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
+                        ),
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                        keyboardActions = KeyboardActions(onSearch = { viewModel.loadCars(exploreParams()) }),
+                        decorationBox = { innerTextField ->
+                            if (query.isBlank()) {
+                                Text(
+                                    text = "Search cars, cities, hosts",
+                                    color = colors.mutedText,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                )
+                            }
+                            innerTextField()
+                        },
+                    )
+                    if (query.trim().isNotEmpty()) {
+                        IconButton(onClick = { query = "" }, modifier = Modifier.size(28.dp)) {
+                            Icon(Icons.Outlined.Close, contentDescription = "Clear", tint = colors.mutedText, modifier = Modifier.size(16.dp))
+                        }
+                    }
+                    Box {
                         Surface(
-	                            onClick = {
-	                                sort = filter.second
-	                                viewModel.loadCars(exploreParams() + ("sort" to filter.second))
-	                            },
-                            shape = RoundedCornerShape(20.dp),
-                            color = if (selected) BrandBlue else Color.White,
-                            border = if (selected) null else BorderStroke(1.dp, Color.LightGray.copy(alpha = 0.5f)),
-                            modifier = Modifier.height(36.dp)
+                            modifier = Modifier.clickable { sortMenuExpanded = true },
+                            shape = RoundedCornerShape(999.dp),
+                            color = colors.brandLight,
                         ) {
-                            Box(modifier = Modifier.padding(horizontal = 16.dp), contentAlignment = Alignment.Center) {
-                                Text(filter.first, style = MaterialTheme.typography.labelLarge, color = if (selected) Color.White else BrandNavy)
+                            Text(
+                                text = "Sort",
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                                style = MaterialTheme.typography.labelLarge.copy(fontSize = 12.sp),
+                                color = colors.brandBlue,
+                                fontWeight = FontWeight.Bold,
+                            )
+                        }
+                        DropdownMenu(expanded = sortMenuExpanded, onDismissRequest = { sortMenuExpanded = false }) {
+                            listOf(
+                                "Price Low" to "price_low",
+                                "Price High" to "price_high",
+                                "Top Rated" to "top_rated",
+                                "Latest" to "new_listings",
+                            ).forEach { option ->
+                                DropdownMenuItem(
+                                    text = { Text(option.first) },
+                                    onClick = {
+                                        sort = option.second
+                                        sortMenuExpanded = false
+                                        viewModel.loadCars(exploreParams() + ("sort" to option.second))
+                                    },
+                                )
                             }
                         }
                     }
+                    ExploreLayoutToggle(
+                        selectedLayout = selectedLayout,
+                        onSelect = {
+                            layoutMode = it.name
+                            exploreLayoutPrefs.edit().putString(ExploreLayoutPrefsKey, it.name).apply()
+                        },
+                    )
+                    IconButton(onClick = { showFilters = true }, modifier = Modifier.size(34.dp)) {
+                        Icon(
+                            Icons.Outlined.Tune,
+                            contentDescription = "Filters",
+                            tint = colors.brandBlue,
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
                 }
             }
-            ExploreLayoutToggle(
-                selectedLayout = selectedLayout,
-                onSelect = {
-                    layoutMode = it.name
-                    exploreLayoutPrefs.edit().putString(ExploreLayoutPrefsKey, it.name).apply()
+
+            VehicleBrandCarousel(
+                brands = vehicleBrandOptions,
+                selectedBrand = selectedBrand,
+                onSelect = { brand ->
+                    selectedBrand = brand
+                    val params = exploreParams().toMutableMap()
+                    if (brand.isBlank()) {
+                        params.remove("brand")
+                    } else {
+                        params["brand"] = brand
+                    }
+                    viewModel.loadCars(params)
                 },
             )
-        }
+            Spacer(modifier = Modifier.height(12.dp))
 
         when (val state = carsState) {
-            UiState.Loading -> LoadingBlock("Searching...")
+            UiState.Loading -> Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                repeat(4) { ExploreListRowPlaceholder() }
+            }
             is UiState.Error -> ErrorBlock(state.message, onRetry = { viewModel.loadCars() })
 	            UiState.Empty -> EmptyBlock("No matching listings", "Try changing filters or search terms.")
 	            is UiState.Success -> {
-	                val visibleCars = if (selectedBrand.isBlank()) {
-	                    state.data
-	                } else {
-	                    state.data.filter { it.brand.orEmpty().equals(selectedBrand, ignoreCase = true) }
-	                }
+	                val visibleCars = state.data.filter { car ->
+                        car.matchesExploreSearch(searchTokens) &&
+                            (selectedBrand.isBlank() || car.brand.orEmpty().equals(selectedBrand, ignoreCase = true)) &&
+                            (selectedModel.isBlank() || car.model.orEmpty().equals(selectedModel, ignoreCase = true)) &&
+                            (appliedCarType.isBlank() || car.car_type.orEmpty().equals(appliedCarType, ignoreCase = true)) &&
+                            (appliedTransmission.isBlank() || car.transmission.orEmpty().equals(appliedTransmission, ignoreCase = true)) &&
+                            (appliedFuel.isBlank() || car.fuel_type.orEmpty().equals(appliedFuel, ignoreCase = true)) &&
+                            ((car.daily_price ?: 0.0).roundToInt() >= appliedMinPrice) &&
+                            (!appliedDeliveryOnly || car.delivery_available == true) &&
+                            (!appliedAcOnly || car.air_conditioning == true)
+                    }
 	                if (visibleCars.isEmpty()) {
 	                    EmptyBlock("No matching listings", "Try another vehicle make or search term.")
 	                } else if (selectedLayout == ExploreLayoutMode.GRID) {
@@ -2528,14 +2781,13 @@ private fun ExploreTab(
                 } else {
 	                    LazyColumn(
                         modifier = Modifier.weight(1f),
-	                        verticalArrangement = Arrangement.spacedBy(16.dp),
+	                        verticalArrangement = Arrangement.spacedBy(12.dp),
 	                        contentPadding = PaddingValues(bottom = 16.dp)
 	                    ) {
 	                        items(visibleCars, key = { it.id }) { car ->
-	                            CarCard(
+	                            ExploreListRow(
                                 car = car,
                                 isFavorite = favoriteIds.contains(car.id),
-                                imageHeight = 220.dp,
                                 onClick = { onOpenCarDetail(car.id) },
                                 onFavoriteClick = {
                                     viewModel.toggleFavorite(
@@ -2549,9 +2801,91 @@ private fun ExploreTab(
                     }
                 }
             }
-            UiState.Idle -> LoadingBlock()
+            UiState.Idle -> Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                repeat(4) { ExploreListRowPlaceholder() }
+            }
+        }
+        }
+
+        if (showFilters) {
+            ModalBottomSheet(
+                onDismissRequest = { showFilters = false },
+                sheetState = exploreFilterSheetState,
+            ) {
+                ExploreFilterContent(
+                    locations = locations,
+                    selectedRegion = appliedRegion,
+                    selectedCity = appliedCity,
+                    selectedMake = selectedBrand,
+                    selectedModel = selectedModel,
+                    selectedType = appliedCarType,
+                    selectedTransmission = appliedTransmission,
+                    selectedFuel = appliedFuel,
+                    minPrice = appliedMinPrice,
+                    maxPrice = appliedMaxPrice,
+                    instantOnly = appliedInstantOnly,
+                    deliveryOnly = appliedDeliveryOnly,
+                    acOnly = appliedAcOnly,
+                    makeOptions = vehicleBrandOptions,
+                    modelOptions = modelOptions,
+                    typeOptions = typeOptions,
+                    transmissionOptions = transmissionOptions,
+                    fuelOptions = fuelOptions,
+                    onRegionChange = {
+                        appliedRegion = it
+                        appliedCity = ""
+                    },
+                    onCityChange = { appliedCity = it },
+                    onMakeChange = {
+                        selectedBrand = it
+                        selectedModel = ""
+                    },
+                    onModelChange = { selectedModel = it },
+                    onTypeChange = { appliedCarType = it },
+                    onTransmissionChange = { appliedTransmission = it },
+                    onFuelChange = { appliedFuel = it },
+                    onMinPriceChange = { appliedMinPrice = it },
+                    onMaxPriceChange = { appliedMaxPrice = it },
+                    onInstantOnlyChange = { appliedInstantOnly = it },
+                    onDeliveryOnlyChange = { appliedDeliveryOnly = it },
+                    onAcOnlyChange = { appliedAcOnly = it },
+                    onReset = {
+                        appliedRegion = ""
+                        appliedCity = ""
+                        selectedBrand = ""
+                        selectedModel = ""
+                        appliedCarType = ""
+                        appliedTransmission = ""
+                        appliedFuel = ""
+                        appliedMinPrice = 50
+                        appliedMaxPrice = 8000f
+                        appliedInstantOnly = false
+                        appliedDeliveryOnly = false
+                        appliedAcOnly = false
+                    },
+                    onDismiss = {
+                        showFilters = false
+                        viewModel.loadCars(exploreParams())
+                    },
+                )
+            }
         }
     }
+}
+
+@Composable
+private fun ExploreListRow(
+    car: CarDto,
+    isFavorite: Boolean,
+    onClick: () -> Unit,
+    onFavoriteClick: () -> Unit,
+) {
+    HomeFeaturedCarRow(
+        car = car,
+        isFavorite = isFavorite,
+        onOpen = onClick,
+        onToggleFavorite = onFavoriteClick,
+    )
 }
 
 @Composable
@@ -2618,7 +2952,7 @@ private fun VehicleBrandPill(
         Box(
             modifier = Modifier
                 .size(width = 22.dp, height = 3.dp)
-                .background(if (selected) BrandBlue else Color.Transparent, CircleShape),
+                .background(if (selected) LocalHayameColors.current.brandBlue else Color.Transparent, CircleShape),
         )
     }
 }
@@ -2631,7 +2965,6 @@ private fun VehicleBrandLogo(
 ) {
     val context = LocalContext.current
     val colors = LocalHayameColors.current
-    val darkMode = colors.pageBackground.luminance() < 0.5f
     val logoRes = vehicleBrandLogoRes(context, title)
     Box(modifier = modifier, contentAlignment = Alignment.Center) {
         if (logoRes != null) {
@@ -2640,7 +2973,6 @@ private fun VehicleBrandLogo(
                 contentDescription = "$title logo",
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Fit,
-                colorFilter = if (darkMode && !selected) ColorFilter.tint(Color.White) else null,
             )
         } else if (title == "All") {
             Icon(
@@ -2681,8 +3013,14 @@ private fun vehicleBrandLogoCandidates(title: String): List<String> {
         .trim()
 
     val aliases = mapOf(
+        "aeolus" to listOf("dongfeng"),
+        "aeolus dongfeng aeolus" to listOf("dongfeng"),
         "baic" to listOf("baic_motor"),
+        "deepal" to listOf("changan"),
+        "deepal changan deepal" to listOf("changan"),
+        "dongfeng aeolus" to listOf("dongfeng"),
         "gac" to listOf("gac_group"),
+        "maruti suzuki" to listOf("suzuki"),
         "range rover" to listOf("land_rover"),
         "mercedes" to listOf("mercedes_benz"),
         "mercedes benz" to listOf("mercedes_benz"),
@@ -2739,8 +3077,8 @@ private fun ExploreLayoutToggle(
 ) {
     Surface(
         shape = RoundedCornerShape(22.dp),
-        color = Color.White,
-        border = BorderStroke(1.dp, Color.LightGray.copy(alpha = 0.45f)),
+        color = LocalHayameColors.current.cardBackground,
+        border = BorderStroke(1.dp, LocalHayameColors.current.border),
     ) {
         Row(
             modifier = Modifier.padding(4.dp),
@@ -2775,13 +3113,13 @@ private fun ExploreLayoutButton(
             .size(38.dp)
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(16.dp),
-        color = if (selected) BrandBlue.copy(alpha = 0.16f) else Color.Transparent,
+        color = if (selected) LocalHayameColors.current.brandBlue.copy(alpha = 0.16f) else Color.Transparent,
     ) {
         Box(contentAlignment = Alignment.Center) {
             Icon(
                 painter = painterResource(id = iconRes),
                 contentDescription = contentDescription,
-                tint = if (selected) BrandBlue else BrandNavy,
+                tint = if (selected) LocalHayameColors.current.brandBlue else LocalHayameColors.current.brandNavy,
                 modifier = Modifier.size(18.dp),
             )
         }
@@ -2867,14 +3205,14 @@ private fun ExploreGridCard(
                     text = title,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = BrandNavy,
+                    color = LocalHayameColors.current.brandNavy,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
                     text = location,
                     style = MaterialTheme.typography.bodyMedium.copy(fontSize = 12.sp),
-                    color = MutedText,
+                    color = LocalHayameColors.current.mutedText,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -2907,7 +3245,7 @@ private fun ExploreGridCard(
                     text = "GHS$price / day",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.ExtraBold,
-                    color = BrandBlue,
+                    color = LocalHayameColors.current.brandBlue,
                 )
             }
         }
@@ -2923,9 +3261,12 @@ private fun TripsTab(
     onOpenConversation: (String) -> Unit,
 ) {
     val bookingsState by viewModel.bookingsState.collectAsState()
+    val carsState by viewModel.carsState.collectAsState()
     val pendingBookingFocus by viewModel.pendingBookingFocus.collectAsState()
     val me by viewModel.me.collectAsState()
     val listState = rememberLazyListState()
+    val knownCars = (carsState as? UiState.Success<List<CarDto>>)?.data.orEmpty()
+    val carsById = remember(knownCars) { knownCars.associateBy { it.id } }
     val guestTrips = (bookingsState as? UiState.Success<List<BookingDto>>)
         ?.data
         .orEmpty()
@@ -2939,7 +3280,12 @@ private fun TripsTab(
     val hostStatus = (me?.host_application_status ?: me?.host_status ?: "").trim().lowercase()
     val isHost = me?.is_host == true || hostStatus == "approved"
 
-    LaunchedEffect(Unit) { viewModel.loadBookings() }
+    LaunchedEffect(Unit) {
+        viewModel.loadBookings()
+        if (knownCars.isEmpty()) {
+            viewModel.loadCars(mapOf("limit" to "100"))
+        }
+    }
 
     LaunchedEffect(pendingBookingFocus, guestTrips) {
         val bookingId = pendingBookingFocus ?: return@LaunchedEffect
@@ -2959,7 +3305,7 @@ private fun TripsTab(
     ) {
         item { Spacer(modifier = Modifier.height(16.dp)); SectionHeader("Your trips") }
         when (val state = bookingsState) {
-            UiState.Loading -> item { LoadingBlock("Loading bookings...") }
+            UiState.Loading -> items(3) { BookingPlaceholderCard() }
             is UiState.Error -> item { ErrorBlock(state.message, onRetry = { viewModel.loadBookings() }) }
             UiState.Empty -> item { EmptyBlock("No trips yet", "Your bookings will appear here after payment.") }
             is UiState.Success -> {
@@ -2973,6 +3319,7 @@ private fun TripsTab(
                         items(upcomingTrips, key = { it.id }) { booking ->
                             BookingCard(
                                 booking = booking,
+                                car = carsById[booking.car_id.orEmpty()],
                                 onOpenCarDetail = onOpenCarDetail,
                                 onMessageHost = { messageHostForTrip(viewModel, booking, me, onOpenConversation) },
                                 onApprove = { viewModel.approveBooking(it) },
@@ -3002,6 +3349,7 @@ private fun TripsTab(
                         items(pastTrips, key = { it.id }) { booking ->
                         BookingCard(
                             booking = booking,
+                            car = carsById[booking.car_id.orEmpty()],
                             onOpenCarDetail = onOpenCarDetail,
                             onMessageHost = { messageHostForTrip(viewModel, booking, me, onOpenConversation) },
                             onApprove = { viewModel.approveBooking(it) },
@@ -3013,7 +3361,7 @@ private fun TripsTab(
                     }
                 }
             }
-            UiState.Idle -> item { LoadingBlock() }
+            UiState.Idle -> items(3) { BookingPlaceholderCard() }
         }
         item { Spacer(modifier = Modifier.height(24.dp)) }
     }
@@ -3021,7 +3369,8 @@ private fun TripsTab(
 
 @Composable
 private fun BookingCard(
-    booking: com.hayame.app.core.network.BookingDto,
+    booking: BookingDto,
+    car: CarDto? = null,
     onOpenCarDetail: (String) -> Unit,
     onMessageHost: () -> Unit,
     onApprove: (String) -> Unit,
@@ -3029,6 +3378,7 @@ private fun BookingCard(
     onDispute: (String, String) -> Unit,
     isHighlighted: Boolean = false,
 ) {
+    val colors = LocalHayameColors.current
     var disputeReason by remember { mutableStateOf("") }
     val displayStatus = resolveBookingDisplayStatus(
         status = booking.status,
@@ -3041,22 +3391,25 @@ private fun BookingCard(
         paymentStatus = booking.payment_status,
     )
     val showPaidBadge = shouldShowCompletedPaidBadge(displayStatus, booking.payment_status)
-    val carId = booking.car_id.orEmpty()
-    val vehicleImageUrl = resolveAppImage(booking.cars?.image_url)
+    val carId = booking.car_id?.trim()?.takeIf { it.isNotBlank() } ?: car?.id.orEmpty()
+    val vehicleTitle = booking.cars?.title?.trim()?.takeIf { it.isNotBlank() }
+        ?: car?.title?.trim()?.takeIf { it.isNotBlank() }
+        ?: "Trip with Hayame"
+    val vehicleImageUrl = resolveAppImage(car?.image_url)
+        ?: car?.car_photos.orEmpty().firstNotNullOfOrNull { resolveAppImage(it.url) }
+        ?: resolveAppImage(booking.cars?.image_url)
         ?: booking.cars?.car_photos.orEmpty().firstNotNullOfOrNull { resolveAppImage(it.url) }
-    val brandTitle = booking.cars?.brand?.takeIf { it.isNotBlank() }
-        ?: booking.cars?.title
-        ?: "All"
+    val brandTitle = tripBrandLogoTitle(car, booking)
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(enabled = carId.isNotBlank()) { onOpenCarDetail(carId) },
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
         elevation = CardDefaults.cardElevation(defaultElevation = if (isHighlighted) 6.dp else 2.dp),
         border = BorderStroke(
             width = if (isHighlighted) 2.dp else 1.dp,
-            color = if (isHighlighted) BrandBlue else Color.Black.copy(alpha = 0.05f),
+            color = if (isHighlighted) colors.brandBlue else colors.border,
         ),
     ) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -3074,28 +3427,32 @@ private fun BookingCard(
                     Box(
                         modifier = Modifier
                             .size(width = 86.dp, height = 70.dp)
-                            .background(BrandLight, RoundedCornerShape(14.dp)),
+                            .background(colors.brandLight, RoundedCornerShape(14.dp)),
                         contentAlignment = Alignment.Center,
                     ) {
-                        Icon(Icons.Outlined.DirectionsCar, contentDescription = null, tint = BrandBlue)
+                        Icon(Icons.Outlined.DirectionsCar, contentDescription = null, tint = colors.brandBlue)
                     }
                 }
 
-                Column(modifier = Modifier.weight(1f)) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.Top,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = booking.cars?.title ?: "Trip with Hayame",
+                                text = vehicleTitle,
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
-                                color = BrandNavy,
+                                color = colors.brandNavy,
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis,
                             )
                             Text(
                                 text = helperText,
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MutedText,
+                                color = colors.mutedText,
                                 modifier = Modifier.padding(top = 4.dp),
                             )
                         }
@@ -3105,29 +3462,31 @@ private fun BookingCard(
                             modifier = Modifier.size(width = 38.dp, height = 28.dp),
                         )
                     }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        BookingStatusBadge(status = displayStatus)
+                        if (showPaidBadge) {
+                            BookingPaidBadge()
+                        }
+                    }
                 }
-                BookingStatusBadgeStack(
-                    status = displayStatus,
-                    showPaidBadge = showPaidBadge,
-                )
             }
 
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(24.dp)) {
                 Column {
-                    Text("START", style = MaterialTheme.typography.labelSmall, color = MutedText)
-                    Text(booking.start_date ?: "-", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                    Text("START", style = MaterialTheme.typography.labelSmall, color = colors.mutedText)
+                    Text(booking.start_date ?: "-", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = colors.brandNavy)
                 }
-                Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = Color.LightGray, modifier = Modifier.size(16.dp))
+                Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = colors.mutedText, modifier = Modifier.size(16.dp))
                 Column {
-                    Text("END", style = MaterialTheme.typography.labelSmall, color = MutedText)
-                    Text(booking.end_date ?: "-", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                    Text("END", style = MaterialTheme.typography.labelSmall, color = colors.mutedText)
+                    Text(booking.end_date ?: "-", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = colors.brandNavy)
                 }
             }
 
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(text = "Total Price", style = MaterialTheme.typography.bodyMedium, color = MutedText)
+                Text(text = "Total Price", style = MaterialTheme.typography.bodyMedium, color = colors.mutedText)
                 Spacer(modifier = Modifier.weight(1f))
-                Text(text = "GH₵${(booking.total_price ?: 0.0).toInt()}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.ExtraBold, color = BrandBlue)
+                Text(text = "GH₵${(booking.total_price ?: 0.0).toInt()}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.ExtraBold, color = colors.brandBlue)
             }
 
             if ((booking.role ?: "").contains("owner") && booking.status == "awaiting_host") {
@@ -3172,6 +3531,28 @@ private fun BookingCard(
     }
 }
 
+private fun tripBrandLogoTitle(car: CarDto?, booking: BookingDto): String {
+    val explicitBrand = listOfNotNull(car?.brand, booking.cars?.brand)
+        .firstOrNull { it.trim().isNotBlank() }
+        ?.trim()
+    if (!explicitBrand.isNullOrBlank()) return explicitBrand
+
+    val title = booking.cars?.title?.trim()?.takeIf { it.isNotBlank() }
+        ?: car?.title?.trim()?.takeIf { it.isNotBlank() }
+        ?: return "All"
+
+    return AndroidReferenceData.carMakes.firstOrNull { make ->
+        val normalizedMake = make
+            .replace("-", " ")
+            .replace("(", " ")
+            .replace(")", " ")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+        title.contains(make, ignoreCase = true) ||
+            (normalizedMake.isNotBlank() && title.contains(normalizedMake, ignoreCase = true))
+    } ?: title
+}
+
 private fun messageHostForTrip(
     viewModel: AppViewModel,
     booking: BookingDto,
@@ -3203,7 +3584,6 @@ private fun messageHostForTrip(
 }
 
 private fun tripMessageSummary(booking: BookingDto, me: MobileMeDto?): String {
-    val mode = if ((booking.delivery_fee ?: 0.0) > 0.0) "Delivery" else "Pickup"
     val location = listOf(
         booking.trip_use_address,
         booking.trip_use_city,
@@ -3212,6 +3592,8 @@ private fun tripMessageSummary(booking: BookingDto, me: MobileMeDto?): String {
         .joinToString(", ")
         .ifBlank { "Not provided" }
     val deliveryAddress = booking.delivery_address?.trim().orEmpty()
+    val mode = if (deliveryAddress.isNotBlank() || (booking.delivery_fee ?: 0.0) > 0.0) "Delivery" else "Pickup"
+    val handoffLocation = deliveryAddress.ifBlank { location }
     val deliveryTime = booking.delivery_time?.trim().orEmpty()
     val contactPhone = booking.contact_phone?.trim().orEmpty()
     val deliveryNotes = booking.delivery_notes?.trim().orEmpty()
@@ -3225,7 +3607,7 @@ private fun tripMessageSummary(booking: BookingDto, me: MobileMeDto?): String {
         "Dates: $start - $end",
         "Duration: $days day${if (days == 1) "" else "s"}",
         "Time: ${deliveryTime.ifBlank { "Not set" }}",
-        "$mode: ${deliveryAddress.ifBlank { location }}",
+        "$mode location: $handoffLocation",
         "Trip use area: $location",
         "Price: GHS ${(booking.total_price ?: 0.0).roundToInt()}",
         "Daily rate: GHS ${(booking.daily_rate ?: 0.0).roundToInt()}",
@@ -3294,7 +3676,7 @@ private fun SavedTab(
     ) {
         item { Spacer(modifier = Modifier.height(16.dp)); SectionHeader("Saved for later") }
         when {
-            favoritesState is UiState.Loading || carsState is UiState.Loading -> item { LoadingBlock() }
+            favoritesState is UiState.Loading || carsState is UiState.Loading -> items(3) { ExploreListRowPlaceholder() }
             favoritesState is UiState.Error -> item {
                 ErrorBlock((favoritesState as UiState.Error).message, onRetry = { viewModel.loadFavorites() })
             }
@@ -3338,6 +3720,7 @@ private fun MoreTab(
     onOpenProtection: () -> Unit,
     onOpenCancellation: () -> Unit,
     onOpenPrivacy: () -> Unit,
+    onOpenAdmin: () -> Unit = {},
 ) {
     val isAuthenticated by viewModel.isAuthenticated.collectAsState()
     val me by viewModel.me.collectAsState()
@@ -3458,7 +3841,7 @@ private fun MoreTab(
                             }
                         },
                     )
-                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = Color.LightGray.copy(alpha = 0.2f))
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = LocalHayameColors.current.border)
                     ActionRow(
                         title = "Trips",
                         icon = Icons.Outlined.CalendarMonth,
@@ -3473,7 +3856,7 @@ private fun MoreTab(
                             }
                         },
                     )
-                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = Color.LightGray.copy(alpha = 0.2f))
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = LocalHayameColors.current.border)
                     ActionRow(
                         title = "Messages",
                         icon = Icons.Outlined.ChatBubble,
@@ -3488,7 +3871,7 @@ private fun MoreTab(
                             }
                         },
                     )
-                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = Color.LightGray.copy(alpha = 0.2f))
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = LocalHayameColors.current.border)
                     ActionRow(
                         title = "Dashboard",
                         icon = Icons.Outlined.Home,
@@ -3718,12 +4101,33 @@ private fun MoreTab(
             ) {
                 Column(modifier = Modifier.padding(8.dp)) {
                     ActionRow(title = "Contact", icon = Icons.Outlined.MailOutline, onClick = onOpenContact)
-                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = Color.LightGray.copy(alpha = 0.2f))
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = LocalHayameColors.current.border)
                     ActionRow(title = "Protection", icon = Icons.Outlined.Shield, onClick = onOpenProtection)
-                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = Color.LightGray.copy(alpha = 0.2f))
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = LocalHayameColors.current.border)
                     ActionRow(title = "Cancellation Policy", icon = Icons.Outlined.CalendarMonth, onClick = onOpenCancellation)
-                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = Color.LightGray.copy(alpha = 0.2f))
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = LocalHayameColors.current.border)
                     ActionRow(title = "Privacy", icon = Icons.Outlined.Public, onClick = onOpenPrivacy)
+                }
+            }
+        }
+
+        val isAdmin = me.isAdmin()
+        if (isAdmin) {
+            item {
+                Card(
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
+                    border = BorderStroke(1.dp, colors.brandBlue.copy(alpha = 0.25f)),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                ) {
+                    Column(modifier = Modifier.padding(8.dp)) {
+                        ActionRow(
+                            title = "Admin Panel",
+                            icon = Icons.Outlined.Shield,
+                            onClick = onOpenAdmin,
+                            color = colors.brandBlue,
+                        )
+                    }
                 }
             }
         }
@@ -3889,7 +4293,15 @@ private fun GradientPillButton(
     val darkMode = colors.pageBackground.luminance() < 0.5f
     Button(
         onClick = onClick,
-        modifier = modifier.height(48.dp),
+        modifier = modifier
+            .height(48.dp)
+            .shadow(
+                elevation = 8.dp,
+                shape = RoundedCornerShape(999.dp),
+                clip = false,
+                ambientColor = colors.brandBlue.copy(alpha = 0.28f),
+                spotColor = colors.brandBlue.copy(alpha = 0.28f),
+            ),
         shape = RoundedCornerShape(999.dp),
         colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
         contentPadding = PaddingValues(0.dp),
@@ -3930,15 +4342,15 @@ private fun SecondaryPillButton(
         onClick = onClick,
         modifier = modifier.height(44.dp),
         shape = RoundedCornerShape(999.dp),
-        border = BorderStroke(1.dp, if (isSelected) BrandBlue else BrandBlue.copy(alpha = 0.25f)),
+        border = BorderStroke(1.dp, if (isSelected) LocalHayameColors.current.brandBlue else LocalHayameColors.current.brandBlue.copy(alpha = 0.25f)),
         colors = ButtonDefaults.outlinedButtonColors(
-            containerColor = if (isSelected) BrandBlue else BrandLight,
-            contentColor = if (isSelected) Color.White else BrandNavy,
+            containerColor = if (isSelected) LocalHayameColors.current.brandBlue else LocalHayameColors.current.brandLight,
+            contentColor = if (isSelected) Color.White else LocalHayameColors.current.brandNavy,
         ),
     ) {
         Text(
             text = text,
-            color = if (isSelected) Color.White else BrandNavy,
+            color = if (isSelected) Color.White else LocalHayameColors.current.brandNavy,
             style = MaterialTheme.typography.bodyLarge.copy(fontSize = 15.sp),
             fontWeight = FontWeight.SemiBold,
         )
@@ -3954,6 +4366,7 @@ fun CarDetailScreen(
     onBook: (String) -> Unit,
     onOpenConversation: (String) -> Unit,
     onOpenProtection: () -> Unit = {},
+    onOpenHostProfile: (String) -> Unit = {},
 ) {
     val state by viewModel.carDetailState.collectAsState()
     val favoritesState by viewModel.favoritesState.collectAsState()
@@ -4351,9 +4764,9 @@ fun CarDetailScreen(
                             DetailSectionCard {
                                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                        DetailPill("Car in ${car.city ?: "Ghana"}", BrandLight, BrandBlue)
-                                        DetailPill(car.car_type ?: "Car", BrandLight, BrandNavy)
-                                        DetailPill("Added $addedDateLabel", Color.Black.copy(alpha = 0.04f), MutedText)
+                                        DetailPill("Car in ${car.city ?: "Ghana"}", LocalHayameColors.current.brandLight, LocalHayameColors.current.brandBlue)
+                                        DetailPill(car.car_type ?: "Car", LocalHayameColors.current.brandLight, LocalHayameColors.current.brandNavy)
+                                        DetailPill("Added $addedDateLabel", LocalHayameColors.current.border, LocalHayameColors.current.mutedText)
                                     }
 
                                     Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.Top) {
@@ -4365,12 +4778,12 @@ fun CarDetailScreen(
                                                 text = carTitle,
                                                 style = MaterialTheme.typography.headlineLarge,
                                                 fontWeight = FontWeight.ExtraBold,
-                                                color = BrandNavy,
+                                                color = LocalHayameColors.current.brandNavy,
                                             )
                                             Text(
                                                 text = listOfNotNull(car.city, car.region).joinToString(", "),
                                                 style = MaterialTheme.typography.titleMedium,
-                                                color = MutedText,
+                                                color = LocalHayameColors.current.mutedText,
                                             )
                                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                                                 Text(
@@ -4382,7 +4795,7 @@ fun CarDetailScreen(
                                                 Text(
                                                     text = "$reviewsCount reviews",
                                                     style = MaterialTheme.typography.titleMedium,
-                                                    color = MutedText,
+                                                    color = LocalHayameColors.current.mutedText,
                                                 )
                                             }
                                         }
@@ -4422,10 +4835,10 @@ fun CarDetailScreen(
                                         Box(
                                             modifier = Modifier
                                                 .fillMaxSize()
-                                                .background(BrandLight),
+                                                .background(LocalHayameColors.current.brandLight),
                                             contentAlignment = Alignment.Center,
                                         ) {
-                                            Text("No photos available", color = MutedText)
+                                            Text("No photos available", color = LocalHayameColors.current.mutedText)
                                         }
                                     } else {
                                         AsyncImage(
@@ -4448,7 +4861,7 @@ fun CarDetailScreen(
                                                     .clip(RoundedCornerShape(10.dp))
                                                     .border(
                                                         width = if (selectedImageIndex == index) 2.dp else 1.dp,
-                                                        color = if (selectedImageIndex == index) BrandBlue else Color.Black.copy(alpha = 0.08f),
+                                                        color = if (selectedImageIndex == index) LocalHayameColors.current.brandBlue else LocalHayameColors.current.border,
                                                         shape = RoundedCornerShape(10.dp),
                                                     )
                                                     .clickable {
@@ -4486,7 +4899,7 @@ fun CarDetailScreen(
                             Text(
                                 text = car.description?.takeIf { it.isNotBlank() } ?: "No description provided.",
                                 style = MaterialTheme.typography.bodyLarge,
-                                color = MutedText,
+                                color = LocalHayameColors.current.mutedText,
                                 lineHeight = 24.sp,
                             )
                         }
@@ -4496,7 +4909,7 @@ fun CarDetailScreen(
                         SectionHeader(title = "Features")
                         DetailSectionCard {
                             if (normalizedFeatures.isEmpty()) {
-                                Text("No features listed.", color = MutedText)
+                                Text("No features listed.", color = LocalHayameColors.current.mutedText)
                             } else {
                                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                     normalizedFeatures.chunked(2).forEach { row ->
@@ -4505,14 +4918,14 @@ fun CarDetailScreen(
                                                 Surface(
                                                     modifier = Modifier.weight(1f),
                                                     shape = RoundedCornerShape(12.dp),
-                                                    color = BrandLight,
+                                                    color = LocalHayameColors.current.brandLight,
                                                 ) {
                                                     Text(
                                                         text = feature,
                                                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
                                                         style = MaterialTheme.typography.bodyLarge,
                                                         fontWeight = FontWeight.SemiBold,
-                                                        color = BrandNavy,
+                                                        color = LocalHayameColors.current.brandNavy,
                                                     )
                                                 }
                                             }
@@ -4531,14 +4944,14 @@ fun CarDetailScreen(
                         DetailSectionCard {
                             when (carReviewsState) {
                                 UiState.Loading -> LoadingBlock("Loading reviews...")
-                                is UiState.Error -> Text((carReviewsState as UiState.Error).message, color = MutedText)
-                                UiState.Empty -> Text("No reviews yet. Be the first to share your experience.", color = MutedText)
+                                is UiState.Error -> Text((carReviewsState as UiState.Error).message, color = LocalHayameColors.current.mutedText)
+                                UiState.Empty -> Text("No reviews yet. Be the first to share your experience.", color = LocalHayameColors.current.mutedText)
                                 is UiState.Success -> Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                     listingReviews.take(3).forEach { review ->
                                         ReviewSummaryCard(review = review)
                                     }
                                 }
-                                else -> Text("No reviews yet. Be the first to share your experience.", color = MutedText)
+                                else -> Text("No reviews yet. Be the first to share your experience.", color = LocalHayameColors.current.mutedText)
                             }
                         }
                     }
@@ -4553,7 +4966,7 @@ fun CarDetailScreen(
                                         text = "Rating",
                                         style = MaterialTheme.typography.bodyLarge,
                                         fontWeight = FontWeight.Bold,
-                                        color = BrandNavy,
+                                        color = LocalHayameColors.current.brandNavy,
                                     )
                                     Spacer(modifier = Modifier.weight(1f))
                                     (1..5).forEach { star ->
@@ -4581,7 +4994,7 @@ fun CarDetailScreen(
                                         "Only guests with completed trips can review this listing."
                                     },
                                     style = MaterialTheme.typography.bodyMedium,
-                                    color = if (completedReviewBooking != null && isAuthenticated) BrandBlue else MutedText,
+                                    color = if (completedReviewBooking != null && isAuthenticated) LocalHayameColors.current.brandBlue else LocalHayameColors.current.mutedText,
                                 )
                                 GradientPillButton(
                                     text = "Submit review",
@@ -4589,7 +5002,7 @@ fun CarDetailScreen(
                                     onClick = ::submitReviewNow,
                                 )
                                 if (!reviewStatusMessage.isNullOrBlank()) {
-                                    Text(reviewStatusMessage.orEmpty(), color = MutedText, style = MaterialTheme.typography.bodyMedium)
+                                    Text(reviewStatusMessage.orEmpty(), color = LocalHayameColors.current.mutedText, style = MaterialTheme.typography.bodyMedium)
                                 }
                             }
                         }
@@ -4600,7 +5013,7 @@ fun CarDetailScreen(
                         DetailSectionCard {
                             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                 InfoLine(label = "Status", value = if (car.is_available == false) "Unavailable" else "Available")
-                                Text("AVAILABILITY PREVIEW", style = MaterialTheme.typography.labelMedium, color = MutedText, fontWeight = FontWeight.Bold)
+                                Text("AVAILABILITY PREVIEW", style = MaterialTheme.typography.labelMedium, color = LocalHayameColors.current.mutedText, fontWeight = FontWeight.Bold)
                                 InfoLine(label = "Selected dates", value = "${startDate.toDisplayDate()} - ${endDate.toDisplayDate()}")
                                 SecondaryPillButton(
                                     text = if (isCheckingAvailability) "Checking..." else "Check availability",
@@ -4627,7 +5040,7 @@ fun CarDetailScreen(
                                     Text(
                                         text = "Pay now with Paystack; host approval required before pickup.",
                                         style = MaterialTheme.typography.bodyMedium,
-                                        color = MutedText,
+                                        color = LocalHayameColors.current.mutedText,
                                     )
                                     Text(
                                         text = "Refunded if host rejects",
@@ -4636,14 +5049,14 @@ fun CarDetailScreen(
                                         color = Success,
                                     )
 
-                                    Text("HOST VERIFICATION", style = MaterialTheme.typography.labelMedium, color = MutedText, fontWeight = FontWeight.Bold)
+                                    Text("HOST VERIFICATION", style = MaterialTheme.typography.labelMedium, color = LocalHayameColors.current.mutedText, fontWeight = FontWeight.Bold)
                                     HostVerificationLine("ID Verified", car.id_verified == true || car.owner?.id_verified == true)
                                     HostVerificationLine("Phone Verified", car.phone_verified == true || car.owner?.phone_verified == true)
                                     HostVerificationLine("Email Verified", car.email_verified == true || car.owner?.email_verified == true)
 
                                     InfoLine(label = "Cancellation", value = car.cancellation_policy ?: "Moderate")
 
-                                    Text("TRIP DATES", style = MaterialTheme.typography.labelMedium, color = MutedText, fontWeight = FontWeight.Bold)
+                                    Text("TRIP DATES", style = MaterialTheme.typography.labelMedium, color = LocalHayameColors.current.mutedText, fontWeight = FontWeight.Bold)
                                     DateSelectionRow(
                                         label = "Start date",
                                         date = startDate,
@@ -4671,18 +5084,18 @@ fun CarDetailScreen(
                                     Text(
                                         text = "Unavailable dates are crossed out. The first available trip day is selected automatically.",
                                         style = MaterialTheme.typography.bodyMedium,
-                                        color = MutedText,
+                                        color = LocalHayameColors.current.mutedText,
                                     )
 
-                                    Text("Quick select:", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = BrandNavy)
+                                    Text("Quick select:", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = LocalHayameColors.current.brandNavy)
                                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                         SecondaryPillButton(text = "2 days", modifier = Modifier.weight(1f), isSelected = selectedQuickDuration == 2) { applyQuickTripDuration(2) }
                                         SecondaryPillButton(text = "5 days", modifier = Modifier.weight(1f), isSelected = selectedQuickDuration == 5) { applyQuickTripDuration(5) }
                                         SecondaryPillButton(text = "7 days", modifier = Modifier.weight(1f), isSelected = selectedQuickDuration == 7) { applyQuickTripDuration(7) }
                                     }
 
-                                    Text("TRIP USE LOCATION", style = MaterialTheme.typography.labelMedium, color = MutedText, fontWeight = FontWeight.Bold)
-                                    Text("Listing region: ${car.region ?: "Unknown"}", color = MutedText, style = MaterialTheme.typography.bodyMedium)
+                                    Text("TRIP USE LOCATION", style = MaterialTheme.typography.labelMedium, color = LocalHayameColors.current.mutedText, fontWeight = FontWeight.Bold)
+                                    Text("Listing region: ${car.region ?: "Unknown"}", color = LocalHayameColors.current.mutedText, style = MaterialTheme.typography.bodyMedium)
 
                                     SelectionField(
                                         selected = tripUseRegion,
@@ -4703,7 +5116,7 @@ fun CarDetailScreen(
                                         placeholder = { Text("Exact area / destination") },
                                         shape = RoundedCornerShape(14.dp),
                                     )
-                                    Text("Minimum 3 characters.", style = MaterialTheme.typography.labelLarge, color = MutedText)
+                                    Text("Minimum 3 characters.", style = MaterialTheme.typography.labelLarge, color = LocalHayameColors.current.mutedText)
 
                                     Text(
                                         text = if (outsideListingRegion) {
@@ -4718,14 +5131,14 @@ fun CarDetailScreen(
                                     if (outsideListingRegion) {
                                         Text(
                                             text = "Trip use region differs from listing region (${car.region ?: "Unknown"}).",
-                                            color = MutedText,
+                                            color = LocalHayameColors.current.mutedText,
                                             style = MaterialTheme.typography.bodyMedium,
                                         )
                                     }
                                     if (outsideAccra) {
                                         Text(
                                             text = "Trip use location is also outside Accra.",
-                                            color = MutedText,
+                                            color = LocalHayameColors.current.mutedText,
                                             style = MaterialTheme.typography.bodyMedium,
                                         )
                                     }
@@ -4740,7 +5153,7 @@ fun CarDetailScreen(
                                     InfoLine(label = "Deposit", value = "GH₵$depositAmount")
                                     Text(
                                         text = "Final payable total is calculated by the server at checkout.",
-                                        color = MutedText,
+                                        color = LocalHayameColors.current.mutedText,
                                         style = MaterialTheme.typography.labelLarge,
                                     )
 
@@ -4760,10 +5173,10 @@ fun CarDetailScreen(
                                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                                         HostAvatar(hostAvatar = hostAvatar, hostName = hostName)
                                         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                            Text(hostName, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = BrandNavy)
-                                            Text(hostLevel, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = BrandBlue)
+                                            Text(hostName, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = LocalHayameColors.current.brandNavy)
+                                            Text(hostLevel, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = LocalHayameColors.current.brandBlue)
                                             if (hostLocation.isNotBlank()) {
-                                                Text(hostLocation, style = MaterialTheme.typography.bodyMedium, color = MutedText)
+                                                Text(hostLocation, style = MaterialTheme.typography.bodyMedium, color = LocalHayameColors.current.mutedText)
                                             }
                                         }
                                     }
@@ -4774,14 +5187,14 @@ fun CarDetailScreen(
                                     Text(
                                         text = "Host level updates as verification and trip performance grow.",
                                         style = MaterialTheme.typography.bodyMedium,
-                                        color = MutedText,
+                                        color = LocalHayameColors.current.mutedText,
                                     )
 
                                     TextButton(
-                                        onClick = { viewModel.showMessage("Host public profile is the next parity screen to expose on Android.") },
+                                        onClick = { if (!hostId.isNullOrBlank()) onOpenHostProfile(hostId) },
                                         contentPadding = PaddingValues(0.dp),
                                     ) {
-                                        Text("View host", color = BrandBlue, fontWeight = FontWeight.Bold)
+                                        Text("View host", color = LocalHayameColors.current.brandBlue, fontWeight = FontWeight.Bold)
                                     }
 
                                     SecondaryPillButton(
@@ -4789,7 +5202,7 @@ fun CarDetailScreen(
                                         modifier = Modifier.fillMaxWidth(),
                                         onClick = { openHostChat(quickMessages.firstOrNull()) },
                                     )
-                                    Text("Use a quick prompt to start the chat.", style = MaterialTheme.typography.bodyMedium, color = MutedText)
+                                    Text("Use a quick prompt to start the chat.", style = MaterialTheme.typography.bodyMedium, color = LocalHayameColors.current.mutedText)
                                     quickMessages.forEach { prompt ->
                                         SecondaryPillButton(
                                             text = prompt,
@@ -4855,7 +5268,7 @@ private fun DetailSectionCard(
     Card(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = LocalHayameColors.current.cardBackground),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
     ) {
         Column(
@@ -4871,19 +5284,14 @@ private fun FloatingBookingBar(
     pricePerDay: Int,
     onBook: () -> Unit,
 ) {
-    val isDarkTheme = isSystemInDarkTheme()
-    val containerColor = if (isDarkTheme) Color(0xD9162230) else Color.White.copy(alpha = 0.90f)
-    val borderColor = if (isDarkTheme) Color.White.copy(alpha = 0.10f) else Color.White.copy(alpha = 0.78f)
-    val primaryTextColor = if (isDarkTheme) Color.White else BrandNavy
-    val secondaryTextColor = if (isDarkTheme) Color.White.copy(alpha = 0.72f) else MutedText
+    val colors = LocalHayameColors.current
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
-        color = containerColor,
-        tonalElevation = 6.dp,
+        color = colors.cardBackground,
         shadowElevation = 12.dp,
-        border = BorderStroke(1.dp, borderColor),
+        border = BorderStroke(1.dp, colors.border),
     ) {
         Row(
             modifier = Modifier
@@ -4899,7 +5307,7 @@ private fun FloatingBookingBar(
                 Text(
                     text = "Price per day",
                     style = MaterialTheme.typography.labelLarge,
-                    color = secondaryTextColor,
+                    color = colors.mutedText,
                 )
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -4909,13 +5317,13 @@ private fun FloatingBookingBar(
                         text = "GHS $pricePerDay",
                         style = MaterialTheme.typography.headlineSmall.copy(fontSize = 24.sp),
                         fontWeight = FontWeight.ExtraBold,
-                        color = primaryTextColor,
+                        color = colors.brandNavy,
                     )
                     Text(
                         text = "/ day",
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.SemiBold,
-                        color = secondaryTextColor,
+                        color = colors.mutedText,
                     )
                 }
             }
@@ -4927,7 +5335,7 @@ private fun FloatingBookingBar(
                     .widthIn(min = 134.dp),
                 shape = RoundedCornerShape(999.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = BrandBlue,
+                    containerColor = LocalHayameColors.current.brandBlue,
                     contentColor = Color.White,
                 ),
             ) {
@@ -4970,9 +5378,9 @@ private fun FavoriteOverviewButton(
         modifier = Modifier
             .widthIn(min = 130.dp)
             .clickable(onClick = onClick),
-        color = Color.White,
+        color = LocalHayameColors.current.cardBackground,
         shape = RoundedCornerShape(16.dp),
-        border = BorderStroke(1.dp, Color.Black.copy(alpha = 0.08f)),
+        border = BorderStroke(1.dp, LocalHayameColors.current.border),
     ) {
         Column(
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
@@ -4982,13 +5390,13 @@ private fun FavoriteOverviewButton(
             Icon(
                 imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
                 contentDescription = "Favorite",
-                tint = if (isFavorite) Color.Red else BrandNavy,
+                tint = if (isFavorite) Color.Red else LocalHayameColors.current.brandNavy,
             )
             Text(
                 text = "Save to favorites",
                 textAlign = TextAlign.Center,
                 style = MaterialTheme.typography.labelLarge,
-                color = MutedText,
+                color = LocalHayameColors.current.mutedText,
                 fontWeight = FontWeight.SemiBold,
             )
         }
@@ -5002,14 +5410,14 @@ private fun CarDetailLine(label: String, value: String) {
             text = label,
             style = MaterialTheme.typography.labelLarge,
             fontWeight = FontWeight.Bold,
-            color = MutedText,
+            color = LocalHayameColors.current.mutedText,
         )
         Spacer(modifier = Modifier.weight(1f))
         Text(
             text = value,
             style = MaterialTheme.typography.bodyLarge,
             fontWeight = FontWeight.Bold,
-            color = BrandNavy,
+            color = LocalHayameColors.current.brandNavy,
             textAlign = TextAlign.End,
         )
     }
@@ -5049,18 +5457,18 @@ private fun HostAvatar(
             modifier = Modifier
                 .size(54.dp)
                 .clip(CircleShape)
-                .border(1.dp, Color.Black.copy(alpha = 0.08f), CircleShape),
+                .border(1.dp, LocalHayameColors.current.border, CircleShape),
             contentScale = ContentScale.Crop,
         )
     } else {
         Box(
             modifier = Modifier
                 .size(54.dp)
-                .background(BrandLight, CircleShape)
-                .border(1.dp, Color.Black.copy(alpha = 0.08f), CircleShape),
+                .background(LocalHayameColors.current.brandLight, CircleShape)
+                .border(1.dp, LocalHayameColors.current.border, CircleShape),
             contentAlignment = Alignment.Center,
         ) {
-            Text(hostInitials(hostName), color = BrandNavy, fontWeight = FontWeight.Bold)
+            Text(hostInitials(hostName), color = LocalHayameColors.current.brandNavy, fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -5074,13 +5482,13 @@ private fun HostVerificationLine(
         Box(
             modifier = Modifier
                 .size(10.dp)
-                .background(if (verified) BrandBlue else Danger.copy(alpha = 0.75f), CircleShape),
+                .background(if (verified) LocalHayameColors.current.brandBlue else Danger.copy(alpha = 0.75f), CircleShape),
         )
         Text(
             text = label,
             style = MaterialTheme.typography.bodyLarge,
             fontWeight = FontWeight.SemiBold,
-            color = BrandNavy,
+            color = LocalHayameColors.current.brandNavy,
         )
     }
 }
@@ -5090,8 +5498,8 @@ private fun ReviewSummaryCard(review: ReviewDto) {
     val rating = (review.rating ?: 0.0).roundToInt().coerceIn(1, 5)
     Card(
         shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        border = BorderStroke(1.dp, Color.Black.copy(alpha = 0.05f)),
+        colors = CardDefaults.cardColors(containerColor = LocalHayameColors.current.cardBackground),
+        border = BorderStroke(1.dp, LocalHayameColors.current.border),
     ) {
         Column(
             modifier = Modifier.padding(12.dp),
@@ -5101,7 +5509,7 @@ private fun ReviewSummaryCard(review: ReviewDto) {
                 text = review.reviewer?.full_name ?: "Hayame guest",
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.Bold,
-                color = BrandNavy,
+                color = LocalHayameColors.current.brandNavy,
             )
             Text(
                 text = "★".repeat(rating),
@@ -5112,7 +5520,7 @@ private fun ReviewSummaryCard(review: ReviewDto) {
             Text(
                 text = review.comment?.takeIf { it.isNotBlank() } ?: "No comment provided.",
                 style = MaterialTheme.typography.bodyMedium,
-                color = MutedText,
+                color = LocalHayameColors.current.mutedText,
             )
         }
     }
@@ -5136,12 +5544,12 @@ private fun DateSelectionRow(
             text = label,
             style = MaterialTheme.typography.bodyLarge,
             fontWeight = FontWeight.SemiBold,
-            color = BrandNavy,
+            color = LocalHayameColors.current.brandNavy,
         )
         Spacer(modifier = Modifier.weight(1f))
         Surface(
             modifier = Modifier.clickable { showCalendar = true },
-            color = Color(0xFFF1F3F6),
+            color = LocalHayameColors.current.brandLight,
             shape = RoundedCornerShape(999.dp),
         ) {
             Row(
@@ -5153,19 +5561,19 @@ private fun DateSelectionRow(
                     text = date.toDisplayDate(),
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.SemiBold,
-                    color = BrandNavy,
+                    color = LocalHayameColors.current.brandNavy,
                 )
                 if (isLoadingAvailability) {
                     CircularProgressIndicator(
                         modifier = Modifier.size(16.dp),
                         strokeWidth = 2.dp,
-                        color = BrandBlue,
+                        color = LocalHayameColors.current.brandBlue,
                     )
                 } else {
                     Icon(
                         imageVector = Icons.Outlined.CalendarMonth,
                         contentDescription = null,
-                        tint = BrandBlue,
+                        tint = LocalHayameColors.current.brandBlue,
                     )
                 }
             }
@@ -5204,7 +5612,7 @@ private fun AvailabilityCalendarDialog(
     onDismiss: () -> Unit,
     onDateSelected: (LocalDate) -> Unit,
 ) {
-    val darkMode = isSystemInDarkTheme()
+    val darkMode = LocalDarkMode.current
     val months = remember(minimumDate) { buildBookingCalendarMonths(minimumDate, 6) }
     val weekdayLabels = remember { listOf("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat") }
 
@@ -5216,9 +5624,8 @@ private fun AvailabilityCalendarDialog(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 24.dp),
-            color = if (darkMode) Color(0xFF152033) else Color.White,
+            color = LocalHayameColors.current.cardBackground,
             shape = RoundedCornerShape(28.dp),
-            tonalElevation = 8.dp,
             shadowElevation = 18.dp,
         ) {
             Column(
@@ -5233,7 +5640,7 @@ private fun AvailabilityCalendarDialog(
                         text = title,
                         style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.Bold,
-                        color = if (darkMode) Color.White else BrandNavy,
+                        color = if (darkMode) Color.White else LocalHayameColors.current.brandNavy,
                     )
                     Spacer(modifier = Modifier.weight(1f))
                     TextButton(onClick = onDismiss) {
@@ -5244,7 +5651,7 @@ private fun AvailabilityCalendarDialog(
                 Text(
                     text = "Unavailable days are crossed out. Only bookable dates can be selected.",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = if (darkMode) Color.White.copy(alpha = 0.7f) else MutedText,
+                    color = if (darkMode) Color.White.copy(alpha = 0.7f) else LocalHayameColors.current.mutedText,
                 )
 
                 months.forEach { month ->
@@ -5262,7 +5669,7 @@ private fun AvailabilityCalendarDialog(
                             text = month.title,
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
-                            color = if (darkMode) Color.White else BrandNavy,
+                            color = if (darkMode) Color.White else LocalHayameColors.current.brandNavy,
                         )
 
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -5272,7 +5679,7 @@ private fun AvailabilityCalendarDialog(
                                     modifier = Modifier.weight(1f),
                                     style = MaterialTheme.typography.labelMedium,
                                     fontWeight = FontWeight.Bold,
-                                    color = if (darkMode) Color.White.copy(alpha = 0.62f) else MutedText,
+                                    color = if (darkMode) Color.White.copy(alpha = 0.62f) else LocalHayameColors.current.mutedText,
                                     textAlign = TextAlign.Center,
                                 )
                             }
@@ -5294,8 +5701,8 @@ private fun AvailabilityCalendarDialog(
                                                 .height(42.dp)
                                                 .clickable(enabled = selectable) { onDateSelected(day) },
                                             color = when {
-                                                selected -> BrandBlue
-                                                inRange && selectable -> BrandBlue.copy(alpha = 0.14f)
+                                                selected -> LocalHayameColors.current.brandBlue
+                                                inRange && selectable -> LocalHayameColors.current.brandBlue.copy(alpha = 0.14f)
                                                 !selectable -> Color.Black.copy(alpha = if (darkMode) 0.14f else 0.03f)
                                                 else -> Color.Transparent
                                             },
@@ -5308,9 +5715,9 @@ private fun AvailabilityCalendarDialog(
                                                     fontWeight = FontWeight.SemiBold,
                                                     color = when {
                                                         selected -> Color.White
-                                                        blocked || !selectable -> if (darkMode) Color.White.copy(alpha = 0.42f) else MutedText.copy(alpha = 0.6f)
+                                                        blocked || !selectable -> if (darkMode) Color.White.copy(alpha = 0.42f) else LocalHayameColors.current.mutedText.copy(alpha = 0.6f)
                                                         darkMode -> Color.White
-                                                        else -> BrandNavy
+                                                        else -> LocalHayameColors.current.brandNavy
                                                     },
                                                     textDecoration = if (blocked || !selectable) TextDecoration.LineThrough else TextDecoration.None,
                                                 )
@@ -5341,9 +5748,9 @@ private fun SelectionField(
             modifier = Modifier
                 .fillMaxWidth()
                 .clickable { expanded = true },
-            color = Color.White,
+            color = LocalHayameColors.current.fieldBackground,
             shape = RoundedCornerShape(14.dp),
-            border = BorderStroke(1.dp, Color.Black.copy(alpha = 0.08f)),
+            border = BorderStroke(1.dp, LocalHayameColors.current.border),
         ) {
             Row(
                 modifier = Modifier.padding(horizontal = 14.dp, vertical = 14.dp),
@@ -5354,10 +5761,10 @@ private fun SelectionField(
                     text = selected.ifBlank { placeholder },
                     modifier = Modifier.weight(1f),
                     style = MaterialTheme.typography.bodyLarge,
-                    color = if (selected.isBlank()) MutedText else BrandBlue,
+                    color = if (selected.isBlank()) LocalHayameColors.current.mutedText else LocalHayameColors.current.brandBlue,
                     fontWeight = FontWeight.SemiBold,
                 )
-                Icon(Icons.Outlined.ExpandMore, contentDescription = null, tint = BrandBlue)
+                Icon(Icons.Outlined.ExpandMore, contentDescription = null, tint = LocalHayameColors.current.brandBlue)
             }
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
@@ -5626,7 +6033,7 @@ fun BookingScreen(
     when (val state = carState) {
         UiState.Loading -> {
             Scaffold(
-                containerColor = PageBackground,
+                containerColor = LocalHayameColors.current.pageBackground,
                 topBar = {
                     CheckoutTopBar(title = "Checkout", backLabel = "Cancel", onBack = onBack)
                 },
@@ -5639,7 +6046,7 @@ fun BookingScreen(
 
         is UiState.Error -> {
             Scaffold(
-                containerColor = PageBackground,
+                containerColor = LocalHayameColors.current.pageBackground,
                 topBar = {
                     CheckoutTopBar(title = "Checkout", backLabel = "Cancel", onBack = onBack)
                 },
@@ -5858,7 +6265,7 @@ fun BookingScreen(
             }
 
             Scaffold(
-                containerColor = PageBackground,
+                containerColor = LocalHayameColors.current.pageBackground,
                 topBar = {
                     CheckoutTopBar(
                         title = currentStep.title,
@@ -5961,18 +6368,18 @@ fun BookingScreen(
                                                 text = "Your trip",
                                                 style = MaterialTheme.typography.bodyLarge,
                                                 fontWeight = FontWeight.Bold,
-                                                color = BrandNavy,
+                                                color = LocalHayameColors.current.brandNavy,
                                             )
                                             Text(
                                                 text = "$nights day${if (nights == 1) "" else "s"}",
                                                 style = MaterialTheme.typography.headlineMedium,
                                                 fontWeight = FontWeight.ExtraBold,
-                                                color = BrandBlue,
+                                                color = LocalHayameColors.current.brandBlue,
                                             )
                                             Text(
                                                 text = "Choose dates below. Unavailable and booked days are blocked automatically.",
                                                 style = MaterialTheme.typography.bodyMedium,
-                                                color = MutedText,
+                                                color = LocalHayameColors.current.mutedText,
                                             )
                                         }
                                     }
@@ -6006,13 +6413,13 @@ fun BookingScreen(
                                             Text(
                                                 text = "Unavailable dates are crossed out. The first bookable day is selected for you automatically.",
                                                 style = MaterialTheme.typography.bodyMedium,
-                                                color = MutedText,
+                                                color = LocalHayameColors.current.mutedText,
                                             )
                                             Text(
                                                 text = "Quick select",
                                                 style = MaterialTheme.typography.bodyLarge,
                                                 fontWeight = FontWeight.Bold,
-                                                color = BrandNavy,
+                                                color = LocalHayameColors.current.brandNavy,
                                             )
                                             SecondaryPillButton(text = "2 days", modifier = Modifier.fillMaxWidth(), isSelected = selectedQuickDuration == 2) {
                                                 applyQuickTripDuration(2)
@@ -6095,8 +6502,8 @@ fun BookingScreen(
                                                     placeholder = { Text("House number, street, landmark") },
                                                     shape = RoundedCornerShape(16.dp),
                                                     colors = OutlinedTextFieldDefaults.colors(
-                                                        focusedBorderColor = BrandBlue,
-                                                        unfocusedBorderColor = Color.Black.copy(alpha = 0.08f),
+                                                        focusedBorderColor = LocalHayameColors.current.brandBlue,
+                                                        unfocusedBorderColor = LocalHayameColors.current.border,
                                                     ),
                                                 )
                                                 OutlinedTextField(
@@ -6107,8 +6514,8 @@ fun BookingScreen(
                                                     placeholder = { Text("10:00") },
                                                     shape = RoundedCornerShape(16.dp),
                                                     colors = OutlinedTextFieldDefaults.colors(
-                                                        focusedBorderColor = BrandBlue,
-                                                        unfocusedBorderColor = Color.Black.copy(alpha = 0.08f),
+                                                        focusedBorderColor = LocalHayameColors.current.brandBlue,
+                                                        unfocusedBorderColor = LocalHayameColors.current.border,
                                                     ),
                                                 )
                                                 OutlinedTextField(
@@ -6120,8 +6527,8 @@ fun BookingScreen(
                                                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                                                     shape = RoundedCornerShape(16.dp),
                                                     colors = OutlinedTextFieldDefaults.colors(
-                                                        focusedBorderColor = BrandBlue,
-                                                        unfocusedBorderColor = Color.Black.copy(alpha = 0.08f),
+                                                        focusedBorderColor = LocalHayameColors.current.brandBlue,
+                                                        unfocusedBorderColor = LocalHayameColors.current.border,
                                                     ),
                                                 )
                                                 OutlinedTextField(
@@ -6134,8 +6541,8 @@ fun BookingScreen(
                                                     maxLines = 5,
                                                     shape = RoundedCornerShape(16.dp),
                                                     colors = OutlinedTextFieldDefaults.colors(
-                                                        focusedBorderColor = BrandBlue,
-                                                        unfocusedBorderColor = Color.Black.copy(alpha = 0.08f),
+                                                        focusedBorderColor = LocalHayameColors.current.brandBlue,
+                                                        unfocusedBorderColor = LocalHayameColors.current.border,
                                                     ),
                                                 )
                                                 Text(
@@ -6146,7 +6553,7 @@ fun BookingScreen(
                                                     },
                                                     style = MaterialTheme.typography.bodyMedium,
                                                     fontWeight = FontWeight.SemiBold,
-                                                    color = BrandBlue,
+                                                    color = LocalHayameColors.current.brandBlue,
                                                 )
                                             }
                                         }
@@ -6173,8 +6580,8 @@ fun BookingScreen(
                                                 placeholder = { Text("Exact destination (optional)") },
                                                 shape = RoundedCornerShape(16.dp),
                                                 colors = OutlinedTextFieldDefaults.colors(
-                                                    focusedBorderColor = BrandBlue,
-                                                    unfocusedBorderColor = Color.Black.copy(alpha = 0.08f),
+                                                    focusedBorderColor = LocalHayameColors.current.brandBlue,
+                                                    unfocusedBorderColor = LocalHayameColors.current.border,
                                                 ),
                                             )
                                             Text(
@@ -6192,12 +6599,12 @@ fun BookingScreen(
                                                 text = "Smart defaults",
                                                 style = MaterialTheme.typography.bodyLarge,
                                                 fontWeight = FontWeight.Bold,
-                                                color = BrandNavy,
+                                                color = LocalHayameColors.current.brandNavy,
                                             )
                                             Text(
                                                 text = "Trip use location stays separate from pickup or delivery so pricing and host handoff stay accurate.",
                                                 style = MaterialTheme.typography.bodyMedium,
-                                                color = MutedText,
+                                                color = LocalHayameColors.current.mutedText,
                                             )
                                         }
                                     }
@@ -6222,13 +6629,13 @@ fun BookingScreen(
                                                 Box(
                                                     modifier = Modifier
                                                         .size(width = 86.dp, height = 72.dp)
-                                                        .background(BrandLight, RoundedCornerShape(16.dp)),
+                                                        .background(LocalHayameColors.current.brandLight, RoundedCornerShape(16.dp)),
                                                     contentAlignment = Alignment.Center,
                                                 ) {
                                                     Icon(
                                                         Icons.Outlined.DirectionsCar,
                                                         contentDescription = null,
-                                                        tint = BrandBlue,
+                                                        tint = LocalHayameColors.current.brandBlue,
                                                     )
                                                 }
                                             }
@@ -6241,7 +6648,7 @@ fun BookingScreen(
                                                     text = carTitle,
                                                     style = MaterialTheme.typography.titleLarge,
                                                     fontWeight = FontWeight.Bold,
-                                                    color = BrandNavy,
+                                                    color = LocalHayameColors.current.brandNavy,
                                                     maxLines = 2,
                                                     overflow = TextOverflow.Ellipsis,
                                                 )
@@ -6249,19 +6656,19 @@ fun BookingScreen(
                                                     text = "${startDate.toDisplayDate()} - ${endDate.toDisplayDate()}",
                                                     style = MaterialTheme.typography.bodyLarge,
                                                     fontWeight = FontWeight.SemiBold,
-                                                    color = BrandBlue,
+                                                    color = LocalHayameColors.current.brandBlue,
                                                 )
                                                 Text(
                                                     text = "$nights day${if (nights == 1) "" else "s"} • ${selectedTripMode.label}",
                                                     style = MaterialTheme.typography.bodyMedium,
-                                                    color = MutedText,
+                                                    color = LocalHayameColors.current.mutedText,
                                                     maxLines = 2,
                                                     overflow = TextOverflow.Ellipsis,
                                                 )
                                                 Text(
                                                     text = resolvedTripAddress(),
                                                     style = MaterialTheme.typography.bodyMedium,
-                                                    color = MutedText,
+                                                    color = LocalHayameColors.current.mutedText,
                                                     maxLines = 2,
                                                     overflow = TextOverflow.Ellipsis,
                                                 )
@@ -6275,7 +6682,7 @@ fun BookingScreen(
                                                 text = "Trip summary",
                                                 style = MaterialTheme.typography.bodyLarge,
                                                 fontWeight = FontWeight.Bold,
-                                                color = BrandNavy,
+                                                color = LocalHayameColors.current.brandNavy,
                                             )
                                             InfoLine(label = "Trip mode", value = selectedTripMode.label)
                                             InfoLine(label = "Trip use area", value = resolvedTripAddress())
@@ -6296,7 +6703,7 @@ fun BookingScreen(
                                                 text = "Price breakdown",
                                                 style = MaterialTheme.typography.bodyLarge,
                                                 fontWeight = FontWeight.Bold,
-                                                color = BrandNavy,
+                                                color = LocalHayameColors.current.brandNavy,
                                             )
                                             InfoLine(label = "Daily rate × $nights", value = "GHS $subtotal")
                                             InfoLine(label = "Insurance", value = "GHS $insuranceFee")
@@ -6307,26 +6714,26 @@ fun BookingScreen(
                                                 InfoLine(label = "Outside region fee", value = "GHS $outsideSurcharge")
                                             }
                                             InfoLine(label = "Deposit", value = "GHS $depositAmount")
-                                            HorizontalDivider(color = Color.Black.copy(alpha = 0.08f))
+                                            HorizontalDivider(color = LocalHayameColors.current.border)
                                             Row(verticalAlignment = Alignment.Bottom) {
                                                 Text(
                                                     text = "Total",
                                                     style = MaterialTheme.typography.bodyLarge,
                                                     fontWeight = FontWeight.Bold,
-                                                    color = BrandNavy,
+                                                    color = LocalHayameColors.current.brandNavy,
                                                 )
                                                 Spacer(modifier = Modifier.weight(1f))
                                                 Text(
                                                     text = "GHS $totalAmount",
                                                     style = MaterialTheme.typography.headlineMedium,
                                                     fontWeight = FontWeight.ExtraBold,
-                                                    color = BrandBlue,
+                                                    color = LocalHayameColors.current.brandBlue,
                                                 )
                                             }
                                             Text(
                                                 text = "No hidden fees. This is the amount shown before payment.",
                                                 style = MaterialTheme.typography.bodyMedium,
-                                                color = MutedText,
+                                                color = LocalHayameColors.current.mutedText,
                                             )
                                         }
                                     }
@@ -6339,18 +6746,18 @@ fun BookingScreen(
                                                 text = "Total amount",
                                                 style = MaterialTheme.typography.bodyLarge,
                                                 fontWeight = FontWeight.Bold,
-                                                color = MutedText,
+                                                color = LocalHayameColors.current.mutedText,
                                             )
                                             Text(
                                                 text = "GHS $totalAmount",
                                                 style = MaterialTheme.typography.headlineLarge,
                                                 fontWeight = FontWeight.ExtraBold,
-                                                color = BrandNavy,
+                                                color = LocalHayameColors.current.brandNavy,
                                             )
                                             Text(
                                                 text = "Secure payment with no hidden fees.",
                                                 style = MaterialTheme.typography.bodyMedium,
-                                                color = MutedText,
+                                                color = LocalHayameColors.current.mutedText,
                                             )
                                         }
                                     }
@@ -6361,7 +6768,7 @@ fun BookingScreen(
                                                 text = "Payment methods",
                                                 style = MaterialTheme.typography.bodyLarge,
                                                 fontWeight = FontWeight.Bold,
-                                                color = BrandNavy,
+                                                color = LocalHayameColors.current.brandNavy,
                                             )
                                             CheckoutPaymentMethodRow(
                                                 title = "Mobile Money",
@@ -6387,12 +6794,12 @@ fun BookingScreen(
                                                 text = "What happens next",
                                                 style = MaterialTheme.typography.bodyLarge,
                                                 fontWeight = FontWeight.Bold,
-                                                color = BrandNavy,
+                                                color = LocalHayameColors.current.brandNavy,
                                             )
                                             Text(
                                                 text = "Tap Make payment and we'll open the secure checkout sheet to finish your booking.",
                                                 style = MaterialTheme.typography.bodyMedium,
-                                                color = MutedText,
+                                                color = LocalHayameColors.current.mutedText,
                                             )
                                         }
                                     }
@@ -6404,12 +6811,12 @@ fun BookingScreen(
                                                     text = "Payment pending",
                                                     style = MaterialTheme.typography.titleLarge,
                                                     fontWeight = FontWeight.Bold,
-                                                    color = BrandNavy,
+                                                    color = LocalHayameColors.current.brandNavy,
                                                 )
                                                 Text(
                                                     text = "Complete the payment in the secure checkout sheet. We'll detect completion automatically when you return.",
                                                     style = MaterialTheme.typography.bodyMedium,
-                                                    color = MutedText,
+                                                    color = LocalHayameColors.current.mutedText,
                                                 )
                                                 InfoLine(label = "Reference", value = pendingCheckout!!.reference)
                                                 GradientPillButton(
@@ -6488,7 +6895,7 @@ private fun CheckoutSectionHeader(
             text = title,
             style = MaterialTheme.typography.bodyLarge,
             fontWeight = FontWeight.Bold,
-            color = BrandNavy,
+            color = LocalHayameColors.current.brandNavy,
         )
         if (!helpTitle.isNullOrBlank() && !helpMessage.isNullOrBlank()) {
             InlineInfoButton(title = helpTitle, message = helpMessage)
@@ -6507,7 +6914,7 @@ private fun InlineInfoButton(
         Icon(
             Icons.Outlined.Info,
             contentDescription = title,
-            tint = BrandBlue,
+            tint = LocalHayameColors.current.brandBlue,
             modifier = Modifier.size(16.dp),
         )
     }
@@ -6520,8 +6927,8 @@ private fun InlineInfoButton(
                     Text("OK")
                 }
             },
-            title = { Text(title, color = BrandNavy, fontWeight = FontWeight.Bold) },
-            text = { Text(message, color = MutedText) },
+            title = { Text(title, color = LocalHayameColors.current.brandNavy, fontWeight = FontWeight.Bold) },
+            text = { Text(message, color = LocalHayameColors.current.mutedText) },
         )
     }
 }
@@ -6538,11 +6945,11 @@ private fun BookingModeOptionCard(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
-        color = if (selected) BrandBlue.copy(alpha = 0.1f) else BrandLight,
+        color = if (selected) LocalHayameColors.current.brandBlue.copy(alpha = 0.1f) else LocalHayameColors.current.brandLight,
         shape = RoundedCornerShape(16.dp),
         border = BorderStroke(
             1.dp,
-            if (selected) BrandBlue else Color.Black.copy(alpha = 0.05f),
+            if (selected) LocalHayameColors.current.brandBlue else LocalHayameColors.current.border,
         ),
     ) {
         Row(
@@ -6554,19 +6961,19 @@ private fun BookingModeOptionCard(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                Text(title, color = BrandNavy, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyLarge)
-                Text(subtitle, color = MutedText, style = MaterialTheme.typography.bodyMedium)
+                Text(title, color = LocalHayameColors.current.brandNavy, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyLarge)
+                Text(subtitle, color = LocalHayameColors.current.mutedText, style = MaterialTheme.typography.bodyMedium)
             }
             Column(
                 horizontalAlignment = Alignment.End,
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Text(trailingText, color = BrandBlue, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge)
+                Text(trailingText, color = LocalHayameColors.current.brandBlue, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge)
                 Surface(
                     modifier = Modifier.size(18.dp),
                     shape = CircleShape,
-                    color = if (selected) BrandBlue else Color.Transparent,
-                    border = BorderStroke(2.dp, if (selected) BrandBlue else Color.Black.copy(alpha = 0.14f)),
+                    color = if (selected) LocalHayameColors.current.brandBlue else Color.Transparent,
+                    border = BorderStroke(2.dp, if (selected) LocalHayameColors.current.brandBlue else Color.Black.copy(alpha = 0.14f)),
                 ) {}
             }
         }
@@ -6580,7 +6987,7 @@ private fun BookingModeSummaryCard(
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        color = BrandLight,
+        color = LocalHayameColors.current.brandLight,
         shape = RoundedCornerShape(16.dp),
     ) {
         Row(
@@ -6590,8 +6997,8 @@ private fun BookingModeSummaryCard(
         ) {
             Text("✓", color = Success, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(title, color = BrandNavy, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyLarge)
-                Text(message, color = MutedText, style = MaterialTheme.typography.bodyMedium)
+                Text(title, color = LocalHayameColors.current.brandNavy, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyLarge)
+                Text(message, color = LocalHayameColors.current.mutedText, style = MaterialTheme.typography.bodyMedium)
             }
         }
     }
@@ -6669,19 +7076,19 @@ private fun CheckoutProgressHeader(
             text = "Step ${currentStep.ordinal + 1} of ${CheckoutStep.values().size}",
             style = MaterialTheme.typography.labelLarge,
             fontWeight = FontWeight.Bold,
-            color = BrandBlue,
+            color = LocalHayameColors.current.brandBlue,
         )
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(
                 text = currentStep.title,
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.ExtraBold,
-                color = BrandNavy,
+                color = LocalHayameColors.current.brandNavy,
             )
             Text(
                 text = currentStep.subtitle,
                 style = MaterialTheme.typography.bodyMedium,
-                color = MutedText,
+                color = LocalHayameColors.current.mutedText,
             )
         }
         Row(
@@ -6715,13 +7122,13 @@ private fun CheckoutProgressItem(
         Surface(
             modifier = Modifier.size(28.dp),
             shape = CircleShape,
-            color = if (isActive || isCompleted) BrandBlue else Color.White,
-            border = BorderStroke(1.dp, if (isActive || isCompleted) BrandBlue else Color.Black.copy(alpha = 0.08f)),
+            color = if (isActive || isCompleted) LocalHayameColors.current.brandBlue else LocalHayameColors.current.subtleFill,
+            border = BorderStroke(1.dp, if (isActive || isCompleted) LocalHayameColors.current.brandBlue else LocalHayameColors.current.border),
         ) {
             Box(contentAlignment = Alignment.Center) {
                 Text(
                     text = if (isCompleted) "✓" else "${step.ordinal + 1}",
-                    color = if (isActive || isCompleted) Color.White else MutedText,
+                    color = if (isActive || isCompleted) Color.White else LocalHayameColors.current.mutedText,
                     fontWeight = FontWeight.Bold,
                     style = MaterialTheme.typography.labelLarge,
                 )
@@ -6730,7 +7137,7 @@ private fun CheckoutProgressItem(
         Text(
             text = step.progressLabel,
             style = MaterialTheme.typography.labelMedium,
-            color = if (isActive || isCompleted) BrandNavy else MutedText,
+            color = if (isActive || isCompleted) LocalHayameColors.current.brandNavy else LocalHayameColors.current.mutedText,
             fontWeight = FontWeight.SemiBold,
         )
     }
@@ -6742,8 +7149,8 @@ private fun CheckoutStepCard(
 ) {
     Card(
         shape = RoundedCornerShape(22.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        border = BorderStroke(1.dp, Color.Black.copy(alpha = 0.05f)),
+        colors = CardDefaults.cardColors(containerColor = LocalHayameColors.current.cardBackground),
+        border = BorderStroke(1.dp, LocalHayameColors.current.border),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
     ) {
         Column(
@@ -6843,7 +7250,7 @@ private fun CheckoutPaymentMethodRow(
 ) {
     Surface(
         shape = RoundedCornerShape(16.dp),
-        color = BrandLight,
+        color = LocalHayameColors.current.brandLight,
     ) {
         Row(
             modifier = Modifier
@@ -6855,13 +7262,13 @@ private fun CheckoutPaymentMethodRow(
             Box(
                 modifier = Modifier
                     .size(34.dp)
-                    .background(BrandBlue.copy(alpha = 0.12f), CircleShape),
+                    .background(LocalHayameColors.current.brandBlue.copy(alpha = 0.12f), CircleShape),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
-                    tint = BrandBlue,
+                    tint = LocalHayameColors.current.brandBlue,
                     modifier = Modifier.size(18.dp),
                 )
             }
@@ -6873,12 +7280,12 @@ private fun CheckoutPaymentMethodRow(
                     text = title,
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.Bold,
-                    color = BrandNavy,
+                    color = LocalHayameColors.current.brandNavy,
                 )
                 Text(
                     text = subtitle,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MutedText,
+                    color = LocalHayameColors.current.mutedText,
                 )
             }
         }
@@ -6895,7 +7302,7 @@ private fun PaymentProcessingOverlay() {
     ) {
         Card(
             shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White),
+            colors = CardDefaults.cardColors(containerColor = LocalHayameColors.current.cardBackground),
             elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
         ) {
             Column(
@@ -6903,11 +7310,11 @@ private fun PaymentProcessingOverlay() {
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                CircularProgressIndicator(color = BrandBlue)
-                Text("Processing payment", color = BrandNavy, fontWeight = FontWeight.Bold)
+                CircularProgressIndicator(color = LocalHayameColors.current.brandBlue)
+                Text("Processing payment", color = LocalHayameColors.current.brandNavy, fontWeight = FontWeight.Bold)
                 Text(
                     "Please wait while we confirm your payment.",
-                    color = MutedText,
+                    color = LocalHayameColors.current.mutedText,
                     style = MaterialTheme.typography.bodyMedium,
                     textAlign = TextAlign.Center,
                 )
@@ -7087,14 +7494,19 @@ fun MessagesScreen(
 ) {
     val state by viewModel.conversationsState.collectAsState()
     LaunchedEffect(Unit) { viewModel.loadConversations() }
+    val colors = LocalHayameColors.current
 
     Scaffold(
+        containerColor = colors.pageBackground,
         topBar = {
             PageTopBar(title = title, onBack = if (showBackButton) onBack else null)
         }
     ) { inner ->
         when (val s = state) {
-            UiState.Loading -> LoadingBlock("Loading...")
+            UiState.Loading -> LazyColumn(modifier = Modifier.fillMaxSize().padding(inner).padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                item { Spacer(modifier = Modifier.height(8.dp)) }
+                items(4) { ConversationPlaceholderRow() }
+            }
             is UiState.Error -> ErrorBlock(s.message, onRetry = { viewModel.loadConversations() })
             UiState.Empty -> EmptyBlock("No messages", "Your conversations will appear here.")
             is UiState.Success -> LazyColumn(modifier = Modifier.fillMaxSize().padding(inner).padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -7110,10 +7522,12 @@ fun MessagesScreen(
 
 @Composable
 private fun ConversationItem(row: com.hayame.app.core.network.ConversationDto, onClick: () -> Unit) {
+    val colors = LocalHayameColors.current
     Card(
         modifier = Modifier.fillMaxWidth().clickable { onClick() },
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
+        border = BorderStroke(1.dp, colors.border),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
         Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -7122,20 +7536,20 @@ private fun ConversationItem(row: com.hayame.app.core.network.ConversationDto, o
             if (!otherAvatar.isNullOrBlank()) {
                 AsyncImage(model = otherAvatar, contentDescription = null, modifier = Modifier.size(52.dp).clip(CircleShape), contentScale = ContentScale.Crop)
             } else {
-                Box(modifier = Modifier.size(52.dp).background(BrandLight, CircleShape), contentAlignment = Alignment.Center) {
-                    Text(other?.name?.take(1) ?: "U", fontWeight = FontWeight.Bold, color = BrandBlue)
+                Box(modifier = Modifier.size(52.dp).background(colors.brandLight, CircleShape), contentAlignment = Alignment.Center) {
+                    Text(other?.name?.take(1) ?: "U", fontWeight = FontWeight.Bold, color = colors.brandBlue)
                 }
             }
             Column(modifier = Modifier.weight(1f)) {
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text(other?.name ?: "User", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text(other?.name ?: "User", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = colors.brandNavy)
                     if ((row.unread_count ?: 0) > 0) {
-                        Surface(color = BrandBlue, shape = CircleShape) {
+                        Surface(color = colors.brandBlue, shape = CircleShape) {
                             Text("${row.unread_count}", color = Color.White, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
                         }
                     }
                 }
-                Text(row.last_message_preview ?: "Tap to open chat", style = MaterialTheme.typography.bodyMedium, color = MutedText, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(row.last_message_preview ?: "Tap to open chat", style = MaterialTheme.typography.bodyMedium, color = colors.mutedText, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
     }
@@ -7152,16 +7566,15 @@ fun ConversationScreen(
     var draft by rememberSaveable { mutableStateOf("") }
 
     LaunchedEffect(conversationId) { viewModel.selectConversation(conversationId) }
+    val colors = LocalHayameColors.current
 
     Scaffold(
+        containerColor = colors.pageBackground,
         topBar = {
-            Row(modifier = Modifier.fillMaxWidth().background(Color.White).padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
-                Text("Chat", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 8.dp))
-            }
+            PageTopBar(title = "Chat", onBack = onBack)
         },
         bottomBar = {
-            Surface(tonalElevation = 4.dp, color = Color.White) {
+            Surface(tonalElevation = 4.dp, color = colors.cardBackground) {
                 Row(modifier = Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
                         value = draft,
@@ -7174,7 +7587,7 @@ fun ConversationScreen(
                     IconButton(
                         onClick = { if (draft.isNotBlank()) { viewModel.sendMessage(conversationId, draft); draft = "" } },
                         enabled = draft.isNotBlank(),
-                        modifier = Modifier.background(if (draft.isNotBlank()) BrandBlue else Color.LightGray, CircleShape).size(48.dp)
+                        modifier = Modifier.background(if (draft.isNotBlank()) colors.brandBlue else colors.border, CircleShape).size(48.dp)
                     ) { Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null, tint = Color.White) }
                 }
             }
@@ -7207,7 +7620,7 @@ private fun MessageBubble(message: com.hayame.app.core.network.MessageDto, isMe:
         horizontalAlignment = if (isMe) Alignment.End else Alignment.Start
     ) {
         Surface(
-            color = if (isMe) BrandBlue else Color(0xFFEFEFEF),
+            color = if (isMe) LocalHayameColors.current.brandBlue else LocalHayameColors.current.brandLight,
             shape = RoundedCornerShape(
                 topStart = 16.dp,
                 topEnd = 16.dp,
@@ -7218,14 +7631,14 @@ private fun MessageBubble(message: com.hayame.app.core.network.MessageDto, isMe:
             Text(
                 text = message.body,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-                color = if (isMe) Color.White else BrandNavy,
+                color = if (isMe) Color.White else LocalHayameColors.current.brandNavy,
                 style = MaterialTheme.typography.bodyLarge
             )
         }
         Text(
             text = message.created_at.takeLast(5),
             style = MaterialTheme.typography.labelSmall,
-            color = MutedText,
+            color = LocalHayameColors.current.mutedText,
             modifier = Modifier.padding(top = 2.dp, start = 4.dp, end = 4.dp)
         )
     }
@@ -7233,12 +7646,11 @@ private fun MessageBubble(message: com.hayame.app.core.network.MessageDto, isMe:
 
 @Composable
 fun BecomeHostScreen(viewModel: AppViewModel, onBack: () -> Unit) {
+    val colors = LocalHayameColors.current
     Scaffold(
+        containerColor = colors.pageBackground,
         topBar = {
-            Row(modifier = Modifier.fillMaxWidth().background(Color.White).padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
-                Text("Become a Host", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 8.dp))
-            }
+            PageTopBar(title = "Become Host", onBack = onBack)
         },
     ) { inner ->
         LazyColumn(
@@ -7246,10 +7658,14 @@ fun BecomeHostScreen(viewModel: AppViewModel, onBack: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             item {
-                Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                Card(
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
+                    border = BorderStroke(1.dp, colors.border),
+                ) {
                     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("Host application", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = BrandNavy)
-                        Text("Your Android host application form is being finalized to match iOS parity.", color = MutedText)
+                        Text("Host application", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = colors.brandNavy)
+                        Text("Your Android host application form is being finalized to match iOS parity.", color = colors.mutedText)
                         Button(onClick = { viewModel.loadHostStatus() }, modifier = Modifier.fillMaxWidth()) { Text("Refresh status") }
                     }
                 }
@@ -7368,7 +7784,7 @@ fun HostDashboardScreen(
                             fallback = "H",
                             size = 48.dp,
                             textStyle = MaterialTheme.typography.labelLarge,
-                            borderColor = Color.Black.copy(alpha = 0.08f),
+                            borderColor = LocalHayameColors.current.border,
                         )
                         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Text(fullName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = colors.brandNavy)
@@ -7466,7 +7882,7 @@ fun HostCarsScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        Icon(Icons.Outlined.AddCircleOutline, contentDescription = null, tint = BrandBlue)
+                        Icon(Icons.Outlined.AddCircleOutline, contentDescription = null, tint = LocalHayameColors.current.brandBlue)
                         Text("Create Listing", color = colors.brandNavy, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
                     }
                 }
@@ -7475,7 +7891,7 @@ fun HostCarsScreen(
                 Text("My car listing", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = colors.brandNavy)
             }
             when (val s = state) {
-                UiState.Loading -> item { LoadingBlock("Loading host listings...") }
+                UiState.Loading -> items(3) { HostListingPlaceholderRow() }
                 is UiState.Error -> item { ErrorBlock(s.message, onRetry = { viewModel.loadMyCars() }) }
                 UiState.Empty -> item { EmptyBlock("No listings yet", "Create your first listing to start hosting.") }
                 is UiState.Success -> {
@@ -7523,7 +7939,7 @@ fun HostCarsScreen(
                                         )
                                         Text(
                                             "GH₵${(car.daily_price ?: 0.0).toInt()} / day",
-                                            color = BrandBlue,
+                                            color = LocalHayameColors.current.brandBlue,
                                             fontWeight = FontWeight.Bold,
                                         )
                                     }
@@ -7540,7 +7956,7 @@ fun HostCarsScreen(
                         }
                     }
                 }
-                UiState.Idle -> item { LoadingBlock("Loading host listings...") }
+                UiState.Idle -> items(3) { HostListingPlaceholderRow() }
             }
         }
     }
@@ -7637,13 +8053,10 @@ fun HostCarEditorScreen(
         withCurrentOption(strictModelOptions, model)
     }
     val typeOptions = remember(carType) {
-        withCurrentOption(
-            listOf("SUV", "Sedan", "Luxury", "Van", "Pickup", "Hatchback", "Coupe"),
-            carType,
-        )
+        withCurrentOption(AndroidReferenceData.carTypes, carType)
     }
-    val transmissionOptions = remember { listOf("Automatic", "Manual") }
-    val fuelOptions = remember { listOf("Petrol", "Diesel", "Hybrid", "Electric") }
+    val transmissionOptions = remember { AndroidReferenceData.transmissions }
+    val fuelOptions = remember { AndroidReferenceData.fuels }
     val cancellationOptions = remember { listOf("Flexible", "Moderate", "Strict") }
     val yearOptions = remember(currentYear, maxListingYear) { (maxListingYear downTo minListingYear).map(Int::toString) }
     val existingCoverUrl = remember(existingCar?.id, existingCar?.image_url, existingCar?.car_photos) {
@@ -8141,7 +8554,7 @@ fun HostCarEditorScreen(
                             },
                             enabled = !isSaving,
                         ) {
-                            Text("Save Draft", color = BrandBlue, fontWeight = FontWeight.Bold)
+                            Text("Save Draft", color = LocalHayameColors.current.brandBlue, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -8234,7 +8647,7 @@ fun HostCarEditorScreen(
                                             "Default format: $generatedListingTitlePreview"
                                         },
                                         style = MaterialTheme.typography.bodyMedium,
-                                        color = MutedText,
+                                        color = LocalHayameColors.current.mutedText,
                                     )
                                     SelectionTextField(
                                         label = "Brand",
@@ -8269,7 +8682,7 @@ fun HostCarEditorScreen(
                                     Text(
                                         text = "Valid range: $minListingYear-$maxListingYear",
                                         style = MaterialTheme.typography.labelLarge,
-                                        color = MutedText,
+                                        color = LocalHayameColors.current.mutedText,
                                     )
                                 }
                             }
@@ -8301,7 +8714,7 @@ fun HostCarEditorScreen(
                                     Text(
                                         text = "Tell guests about condition, comfort, and what makes pickup easy.",
                                         style = MaterialTheme.typography.bodyMedium,
-                                        color = MutedText,
+                                        color = LocalHayameColors.current.mutedText,
                                     )
                                 }
                             }
@@ -8323,7 +8736,7 @@ fun HostCarEditorScreen(
                                         text = "Optional add-ons",
                                         style = MaterialTheme.typography.titleMedium,
                                         fontWeight = FontWeight.Bold,
-                                        color = BrandNavy,
+                                        color = LocalHayameColors.current.brandNavy,
                                     )
                                     if (showInsuranceField || insuranceFee.isNotBlank()) {
                                         OutlinedTextField(
@@ -8393,7 +8806,7 @@ fun HostCarEditorScreen(
                                     Text(
                                         text = "Guests use this to find nearby cars, so keep it accurate.",
                                         style = MaterialTheme.typography.bodyMedium,
-                                        color = MutedText,
+                                        color = LocalHayameColors.current.mutedText,
                                     )
                                 }
                             }
@@ -8443,7 +8856,7 @@ fun HostCarEditorScreen(
                                         Text(
                                             text = "Only applied when delivery is enabled.",
                                             style = MaterialTheme.typography.bodyMedium,
-                                            color = MutedText,
+                                            color = LocalHayameColors.current.mutedText,
                                         )
                                     }
                                 }
@@ -8455,7 +8868,7 @@ fun HostCarEditorScreen(
                                         text = "Extra trip rule",
                                         style = MaterialTheme.typography.titleMedium,
                                         fontWeight = FontWeight.Bold,
-                                        color = BrandNavy,
+                                        color = LocalHayameColors.current.brandNavy,
                                     )
                                     if (showOutsideRegionFeeField || outsideAccraFee.isNotBlank()) {
                                         OutlinedTextField(
@@ -8489,7 +8902,7 @@ fun HostCarEditorScreen(
                                     Text(
                                         text = "Upload clear exterior and interior photos. Maximum $maxPhotos photos, up to 4MB each.",
                                         style = MaterialTheme.typography.bodyMedium,
-                                        color = MutedText,
+                                        color = LocalHayameColors.current.mutedText,
                                     )
                                     if (isCreate) {
                                         if (pendingUploads.isEmpty()) {
@@ -8497,10 +8910,10 @@ fun HostCarEditorScreen(
                                                 modifier = Modifier
                                                     .fillMaxWidth()
                                                     .height(180.dp)
-                                                    .background(BrandLight, RoundedCornerShape(20.dp)),
+                                                    .background(LocalHayameColors.current.brandLight, RoundedCornerShape(20.dp)),
                                                 contentAlignment = Alignment.Center,
                                             ) {
-                                                Text("No photos selected yet.", color = MutedText)
+                                                Text("No photos selected yet.", color = LocalHayameColors.current.mutedText)
                                             }
                                         } else {
                                             HostPendingUploadGrid(
@@ -8513,7 +8926,7 @@ fun HostCarEditorScreen(
                                             Text(
                                                 text = "Long-press and drag to reorder. The first photo is the cover.",
                                                 style = MaterialTheme.typography.bodyMedium,
-                                                color = MutedText,
+                                                color = LocalHayameColors.current.mutedText,
                                             )
                                         }
                                         SecondaryPillButton(
@@ -8607,7 +9020,7 @@ fun HostCarEditorScreen(
                                             text = "Photos",
                                             style = MaterialTheme.typography.titleMedium,
                                             fontWeight = FontWeight.Bold,
-                                            color = BrandNavy,
+                                            color = LocalHayameColors.current.brandNavy,
                                             modifier = Modifier.weight(1f),
                                         )
                                         TextButton(onClick = { jumpToStep(HostListingEditorStep.PHOTOS) }) {
@@ -8622,7 +9035,7 @@ fun HostCarEditorScreen(
                                             if (currentCount == 0) "No photos uploaded yet" else "$currentCount current photo(s)"
                                         },
                                         style = MaterialTheme.typography.bodyMedium,
-                                        color = MutedText,
+                                        color = LocalHayameColors.current.mutedText,
                                     )
                                     when {
                                         isCreate && pendingUploads.isNotEmpty() -> {
@@ -8660,12 +9073,12 @@ fun HostCarEditorScreen(
                                     text = "Availability",
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold,
-                                    color = BrandNavy,
+                                    color = LocalHayameColors.current.brandNavy,
                                 )
                                 Text(
                                     text = "Blocked dates remain in the availability editor after you save changes.",
                                     style = MaterialTheme.typography.bodyMedium,
-                                    color = MutedText,
+                                    color = LocalHayameColors.current.mutedText,
                                 )
                                 SecondaryPillButton(
                                     text = "Edit blocked dates and weekly blocks",
@@ -8694,6 +9107,7 @@ fun HostBookingsScreen(
     val pendingBookingFocus by viewModel.pendingBookingFocus.collectAsState()
     val currentUserId = me?.user?.id.orEmpty()
     val listState = rememberLazyListState()
+    val colors = LocalHayameColors.current
 
     LaunchedEffect(Unit) { viewModel.loadBookings() }
 
@@ -8711,6 +9125,7 @@ fun HostBookingsScreen(
     }
 
     Scaffold(
+        containerColor = colors.pageBackground,
         topBar = {
             PageTopBar(title = "Host Bookings")
         },
@@ -8732,10 +9147,10 @@ fun HostBookingsScreen(
                             val canAct = booking.status.equals("awaiting_host", ignoreCase = true) && booking.payment_status.equals("paid", ignoreCase = true)
                             Card(
                                 shape = RoundedCornerShape(16.dp),
-                                colors = CardDefaults.cardColors(containerColor = Color.White),
+                                colors = CardDefaults.cardColors(containerColor = LocalHayameColors.current.cardBackground),
                                 border = BorderStroke(
                                     width = if (pendingBookingFocus == booking.id) 2.dp else 1.dp,
-                                    color = if (pendingBookingFocus == booking.id) BrandBlue else Color.Black.copy(alpha = 0.05f),
+                                    color = if (pendingBookingFocus == booking.id) LocalHayameColors.current.brandBlue else LocalHayameColors.current.border,
                                 ),
                                 elevation = CardDefaults.cardElevation(
                                     defaultElevation = if (pendingBookingFocus == booking.id) 6.dp else 1.dp,
@@ -8761,19 +9176,19 @@ fun HostBookingsScreen(
                                             Text(
                                                 booking.cars?.title ?: "Hayame listing",
                                                 style = MaterialTheme.typography.titleMedium,
-                                                color = BrandNavy,
+                                                color = LocalHayameColors.current.brandNavy,
                                                 fontWeight = FontWeight.Bold,
                                             )
                                             Text(
                                                 text = "Renter: ${booking.renter?.full_name ?: "Guest"}",
                                                 style = MaterialTheme.typography.bodyMedium,
-                                                color = MutedText,
+                                                color = LocalHayameColors.current.mutedText,
                                                 fontWeight = FontWeight.Medium,
                                             )
                                             Text(
                                                 text = helperText,
                                                 style = MaterialTheme.typography.bodySmall,
-                                                color = MutedText,
+                                                color = LocalHayameColors.current.mutedText,
                                             )
                                         }
                                         BookingStatusBadgeStack(
@@ -8941,7 +9356,7 @@ fun HostEarningsScreen(viewModel: AppViewModel, onBack: () -> Unit) {
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                             )
                         }
-                        Text("GHS${bucket.amount}", color = BrandBlue, fontWeight = FontWeight.Bold)
+                        Text("GHS${bucket.amount}", color = LocalHayameColors.current.brandBlue, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -9232,8 +9647,8 @@ fun HostProfileScreen(
                             Text(location, style = MaterialTheme.typography.bodyMedium, color = colors.brandNavy)
                         }
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            Icon(Icons.Outlined.Shield, contentDescription = null, tint = BrandBlue)
-                            Text("Host level: $hostLevel", style = MaterialTheme.typography.bodyMedium, color = BrandBlue, fontWeight = FontWeight.SemiBold)
+                            Icon(Icons.Outlined.Shield, contentDescription = null, tint = LocalHayameColors.current.brandBlue)
+                            Text("Host level: $hostLevel", style = MaterialTheme.typography.bodyMedium, color = LocalHayameColors.current.brandBlue, fontWeight = FontWeight.SemiBold)
                         }
                     }
                 }
@@ -9303,12 +9718,11 @@ fun SupportLegalScreen(
     onOpenCancellation: () -> Unit = {},
     onOpenMarketing: () -> Unit = {},
 ) {
+    val colors = LocalHayameColors.current
     Scaffold(
+        containerColor = colors.pageBackground,
         topBar = {
-            Row(modifier = Modifier.fillMaxWidth().background(Color.White).padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
-                Text("Support & Legal", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 8.dp))
-            }
+            PageTopBar(title = "Support & Legal", onBack = onBack)
         },
     ) { inner ->
         LazyColumn(
@@ -9316,16 +9730,20 @@ fun SupportLegalScreen(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             item {
-                Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                Card(
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
+                    border = BorderStroke(1.dp, colors.border),
+                ) {
                     Column(modifier = Modifier.padding(8.dp)) {
                         ActionRow("Contact", Icons.Outlined.MailOutline, onOpenContact)
-                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = Color.LightGray.copy(alpha = 0.2f))
+                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = colors.border)
                         ActionRow("Privacy", Icons.Outlined.Person, onOpenPrivacy)
-                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = Color.LightGray.copy(alpha = 0.2f))
+                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = colors.border)
                         ActionRow("Protection", Icons.Outlined.Shield, onOpenProtection)
-                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = Color.LightGray.copy(alpha = 0.2f))
+                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = colors.border)
                         ActionRow("Cancellation", Icons.Outlined.CalendarMonth, onOpenCancellation)
-                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = Color.LightGray.copy(alpha = 0.2f))
+                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = colors.border)
                         ActionRow("Marketing pages", Icons.Outlined.Search, onOpenMarketing)
                     }
                 }
@@ -9456,7 +9874,7 @@ private fun HostListingThumbnail(imageUrl: String?) {
         modifier = Modifier
             .size(width = 92.dp, height = 76.dp)
             .clip(RoundedCornerShape(16.dp))
-            .background(BrandLight),
+            .background(LocalHayameColors.current.brandLight),
         contentAlignment = Alignment.Center,
     ) {
         if (!imageUrl.isNullOrBlank()) {
@@ -9470,7 +9888,7 @@ private fun HostListingThumbnail(imageUrl: String?) {
             Icon(
                 Icons.Outlined.DirectionsCar,
                 contentDescription = null,
-                tint = BrandBlue,
+                tint = LocalHayameColors.current.brandBlue,
                 modifier = Modifier.size(22.dp),
             )
         }
@@ -9534,14 +9952,14 @@ private fun AvatarFallback(
     modifier: Modifier = Modifier,
 ) {
     Box(
-        modifier = modifier.background(BrandLight, CircleShape),
+        modifier = modifier.background(LocalHayameColors.current.brandLight, CircleShape),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             text = initials,
             style = textStyle,
             fontWeight = FontWeight.Bold,
-            color = BrandNavy,
+            color = LocalHayameColors.current.brandNavy,
         )
     }
 }
@@ -9752,7 +10170,7 @@ private fun FieldLabelWithInfo(
     ) {
         Text(
             label,
-            color = BrandNavy,
+            color = LocalHayameColors.current.brandNavy,
             style = MaterialTheme.typography.bodyLarge,
             fontWeight = FontWeight.Bold,
         )
@@ -9807,7 +10225,7 @@ private fun calculatePhotoReorderTarget(fromIndex: Int, dragOffset: Offset, tota
 private fun HostListingProgressHeader(currentStep: HostListingEditorStep) {
     Card(
         shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = LocalHayameColors.current.cardBackground),
     ) {
         Column(
             modifier = Modifier.padding(18.dp),
@@ -9817,13 +10235,13 @@ private fun HostListingProgressHeader(currentStep: HostListingEditorStep) {
                 text = "Step ${currentStep.ordinal + 1} of ${HostListingEditorStep.entries.size}",
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.Bold,
-                color = BrandBlue,
+                color = LocalHayameColors.current.brandBlue,
             )
             Text(
                 text = currentStep.title,
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.ExtraBold,
-                color = BrandNavy,
+                color = LocalHayameColors.current.brandNavy,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 HostListingEditorStep.entries.forEach { step ->
@@ -9835,18 +10253,18 @@ private fun HostListingProgressHeader(currentStep: HostListingEditorStep) {
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(8.dp),
-                            color = if (step.ordinal <= currentStep.ordinal) BrandBlue else Color.White,
+                            color = if (step.ordinal <= currentStep.ordinal) LocalHayameColors.current.brandBlue else Color.White,
                             shape = RoundedCornerShape(999.dp),
                             border = BorderStroke(
                                 1.dp,
-                                if (step.ordinal <= currentStep.ordinal) BrandBlue else Color.Black.copy(alpha = 0.08f),
+                                if (step.ordinal <= currentStep.ordinal) LocalHayameColors.current.brandBlue else LocalHayameColors.current.border,
                             ),
                         ) {}
                         Text(
                             text = step.shortTitle,
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
-                            color = if (step == currentStep) BrandBlue else MutedText,
+                            color = if (step == currentStep) LocalHayameColors.current.brandBlue else LocalHayameColors.current.mutedText,
                             modifier = Modifier.fillMaxWidth(),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
@@ -9884,8 +10302,8 @@ private fun HostListingStatusBanner(text: String, color: Color) {
 @Composable
 private fun HostListingStepIntro(title: String, subtitle: String) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(text = title, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.ExtraBold, color = BrandNavy)
-        Text(text = subtitle, style = MaterialTheme.typography.bodyMedium, color = MutedText)
+        Text(text = title, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.ExtraBold, color = LocalHayameColors.current.brandNavy)
+        Text(text = subtitle, style = MaterialTheme.typography.bodyMedium, color = LocalHayameColors.current.mutedText)
     }
 }
 
@@ -9893,7 +10311,7 @@ private fun HostListingStepIntro(title: String, subtitle: String) {
 private fun HostListingStepCard(content: @Composable ColumnScope.() -> Unit) {
     Card(
         shape = RoundedCornerShape(22.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = LocalHayameColors.current.cardBackground),
     ) {
         Column(
             modifier = Modifier.padding(18.dp),
@@ -9906,35 +10324,35 @@ private fun HostListingStepCard(content: @Composable ColumnScope.() -> Unit) {
 @Composable
 private fun HostHeroPriceField(value: String, onValueChange: (String) -> Unit, suggestionText: String) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(text = "Daily price", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = BrandNavy)
+        Text(text = "Daily price", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = LocalHayameColors.current.brandNavy)
         Surface(
-            color = BrandLight,
+            color = LocalHayameColors.current.brandLight,
             shape = RoundedCornerShape(22.dp),
-            border = BorderStroke(1.dp, BrandBlue.copy(alpha = 0.14f)),
+            border = BorderStroke(1.dp, LocalHayameColors.current.brandBlue.copy(alpha = 0.14f)),
         ) {
             Row(
                 modifier = Modifier.padding(horizontal = 18.dp, vertical = 18.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                Text("GHS", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = BrandBlue)
+                Text("GHS", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = LocalHayameColors.current.brandBlue)
                 OutlinedTextField(
                     value = value,
                     onValueChange = { onValueChange(it.filter(Char::isDigit)) },
                     modifier = Modifier.weight(1f),
-                    textStyle = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.ExtraBold, color = BrandNavy),
+                    textStyle = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.ExtraBold, color = LocalHayameColors.current.brandNavy),
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     shape = RoundedCornerShape(16.dp),
                 )
-                Text("/ day", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold, color = MutedText)
+                Text("/ day", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold, color = LocalHayameColors.current.mutedText)
             }
         }
-        Text(text = suggestionText, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = BrandBlue)
+        Text(text = suggestionText, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = LocalHayameColors.current.brandBlue)
         Text(
             text = "This is the main number guests notice first, so keep it competitive and easy to justify.",
             style = MaterialTheme.typography.bodyMedium,
-            color = MutedText,
+            color = LocalHayameColors.current.mutedText,
         )
     }
 }
@@ -9942,11 +10360,11 @@ private fun HostHeroPriceField(value: String, onValueChange: (String) -> Unit, s
 @Composable
 private fun HostSeatsStepper(seats: Int, onSeatsChange: (Int) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(text = "Seats", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = BrandNavy)
+        Text(text = "Seats", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = LocalHayameColors.current.brandNavy)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Color(0xFFF7F9FC), RoundedCornerShape(16.dp))
+                .background(LocalHayameColors.current.brandLight, RoundedCornerShape(16.dp))
                 .padding(14.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -9959,7 +10377,7 @@ private fun HostSeatsStepper(seats: Int, onSeatsChange: (Int) -> Unit) {
                 modifier = Modifier.weight(1f),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.ExtraBold,
-                color = BrandBlue,
+                color = LocalHayameColors.current.brandBlue,
                 textAlign = TextAlign.Center,
             )
             SecondaryPillButton(text = "+", modifier = Modifier.widthIn(min = 56.dp)) {
@@ -10023,13 +10441,13 @@ private fun HostListingBottomBar(
 private fun HostListingSummaryCard(title: String, lines: List<String>, onEdit: () -> Unit) {
     HostListingStepCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(text = title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = BrandNavy, modifier = Modifier.weight(1f))
+            Text(text = title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = LocalHayameColors.current.brandNavy, modifier = Modifier.weight(1f))
             TextButton(onClick = onEdit) {
                 Text("Edit")
             }
         }
         lines.filter { it.isNotBlank() }.forEach { line ->
-            Text(text = line, style = MaterialTheme.typography.bodyMedium, color = MutedText)
+            Text(text = line, style = MaterialTheme.typography.bodyMedium, color = LocalHayameColors.current.mutedText)
         }
     }
 }
@@ -10053,7 +10471,7 @@ private fun HostPendingUploadGrid(
                             .offset { IntOffset(dragOffset.x.roundToInt(), dragOffset.y.roundToInt()) }
                             .zIndex(if (dragOffset != Offset.Zero) 1f else 0f)
                             .clip(RoundedCornerShape(18.dp))
-                            .background(BrandLight)
+                            .background(LocalHayameColors.current.brandLight)
                             .pointerInput(upload.id, uploads.size) {
                                 detectDragGesturesAfterLongPress(
                                     onDrag = { change, amount ->
@@ -10084,7 +10502,7 @@ private fun HostPendingUploadGrid(
                             modifier = Modifier
                                 .align(Alignment.BottomStart)
                                 .padding(10.dp)
-                                .background(if (index == 0) BrandBlue else Color.Black.copy(alpha = 0.58f), RoundedCornerShape(999.dp))
+                                .background(if (index == 0) LocalHayameColors.current.brandBlue else Color.Black.copy(alpha = 0.58f), RoundedCornerShape(999.dp))
                                 .padding(horizontal = 10.dp, vertical = 6.dp),
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.Bold,
@@ -10170,6 +10588,485 @@ private fun SelectionTextField(
                 }
             }
         }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Host Public Profile Screen
+// ─────────────────────────────────────────────────────────────────────────────
+
+@Composable
+fun HostPublicProfileScreen(
+    viewModel: AppViewModel,
+    ownerId: String,
+    onBack: () -> Unit,
+    onOpenCarDetail: (String) -> Unit,
+) {
+    val colors = LocalHayameColors.current
+    val carsState by viewModel.carsState.collectAsState()
+
+    LaunchedEffect(Unit) { viewModel.loadCars(mapOf("limit" to "100")) }
+
+    val hostCars = (carsState as? UiState.Success<List<CarDto>>)?.data
+        .orEmpty()
+        .filter { it.owner_id == ownerId }
+
+    val hostName = hostCars.firstOrNull()?.let {
+        it.host_name ?: it.owner?.full_name
+    } ?: "Host"
+    val hostAvatar = hostCars.firstOrNull()?.let {
+        it.host_avatar ?: it.owner?.avatar_url
+    }
+    val idVerified = hostCars.firstOrNull()?.let {
+        it.id_verified == true || it.owner?.id_verified == true
+    } ?: false
+    val phoneVerified = hostCars.firstOrNull()?.let {
+        it.phone_verified == true || it.owner?.phone_verified == true
+    } ?: false
+    val emailVerified = hostCars.firstOrNull()?.let {
+        it.email_verified == true || it.owner?.email_verified == true
+    } ?: false
+
+    Scaffold(
+        containerColor = colors.pageBackground,
+        topBar = { PageTopBar(title = "Host", onBack = onBack) },
+    ) { inner ->
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(inner).padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    val avatarUrl = RemoteImageUrlResolver.resolve(hostAvatar)
+                    if (!avatarUrl.isNullOrBlank()) {
+                        AsyncImage(
+                            model = avatarUrl,
+                            contentDescription = null,
+                            modifier = Modifier.size(54.dp).clip(CircleShape),
+                            contentScale = ContentScale.Crop,
+                        )
+                    } else {
+                        val initials = hostName.split(" ").take(2)
+                            .mapNotNull { it.firstOrNull()?.toString() }
+                            .joinToString("").uppercase().ifEmpty { "H" }
+                        Box(
+                            modifier = Modifier
+                                .size(54.dp)
+                                .background(colors.brandLight, CircleShape)
+                                .border(1.dp, colors.controlStroke, CircleShape),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(initials, fontWeight = FontWeight.Bold, color = colors.brandNavy)
+                        }
+                    }
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            hostName,
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = colors.brandNavy,
+                        )
+                        Text(
+                            "Verified host profile",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = colors.mutedText,
+                        )
+                    }
+                }
+            }
+
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .shadow(0.dp, RoundedCornerShape(16.dp), false, colors.cardShadow, colors.cardShadow)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(colors.cardBackground)
+                        .border(1.dp, colors.border, RoundedCornerShape(16.dp))
+                        .padding(16.dp),
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        HostVerificationLine("ID Verified", idVerified)
+                        HostVerificationLine("Phone Verified", phoneVerified)
+                        HostVerificationLine("Email Verified", emailVerified)
+                    }
+                }
+            }
+
+            item { SectionHeader("Listings") }
+
+            when {
+                carsState is UiState.Loading -> items(3) { HostListingPlaceholderRow() }
+                hostCars.isEmpty() -> item { EmptyBlock("No listings", "This host has no active listings.") }
+                else -> items(hostCars, key = { it.id }) { car ->
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .shadow(0.dp, RoundedCornerShape(16.dp), false, colors.cardShadow, colors.cardShadow)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(colors.cardBackground)
+                            .border(1.dp, colors.border, RoundedCornerShape(16.dp))
+                            .clickable { onOpenCarDetail(car.id) }
+                            .padding(14.dp),
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                car.title ?: listOfNotNull(car.brand, car.model).joinToString(" "),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = colors.brandNavy,
+                            )
+                            Text(
+                                listOfNotNull(car.city, car.region).joinToString(", "),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = colors.mutedText,
+                            )
+                            Text(
+                                "GH₵${(car.daily_price ?: 0.0).toInt()} / day",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = colors.brandBlue,
+                            )
+                        }
+                    }
+                }
+            }
+
+            item { Spacer(modifier = Modifier.height(24.dp)) }
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Admin Screens
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum class AdminTab { HOME, MESSAGES, PROFILE }
+
+@Composable
+fun AdminShellScreen(
+    viewModel: AppViewModel,
+    onExitAdmin: () -> Unit,
+    onOpenConversation: (String) -> Unit,
+) {
+    var selectedTab by remember { mutableStateOf(AdminTab.HOME) }
+    val colors = LocalHayameColors.current
+
+    Scaffold(
+        containerColor = colors.pageBackground,
+        bottomBar = {
+            NavigationBar(
+                containerColor = colors.cardBackground,
+                tonalElevation = 0.dp,
+            ) {
+                NavigationBarItem(
+                    selected = selectedTab == AdminTab.HOME,
+                    onClick = { selectedTab = AdminTab.HOME },
+                    icon = { Icon(Icons.Outlined.Shield, contentDescription = null) },
+                    label = { Text("Admin") },
+                    colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = colors.brandBlue,
+                        selectedTextColor = colors.brandBlue,
+                        unselectedIconColor = colors.mutedText,
+                        unselectedTextColor = colors.mutedText,
+                        indicatorColor = colors.brandLight,
+                    ),
+                )
+                NavigationBarItem(
+                    selected = selectedTab == AdminTab.MESSAGES,
+                    onClick = { selectedTab = AdminTab.MESSAGES },
+                    icon = { Icon(Icons.Outlined.MailOutline, contentDescription = null) },
+                    label = { Text("Messages") },
+                    colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = colors.brandBlue,
+                        selectedTextColor = colors.brandBlue,
+                        unselectedIconColor = colors.mutedText,
+                        unselectedTextColor = colors.mutedText,
+                        indicatorColor = colors.brandLight,
+                    ),
+                )
+                NavigationBarItem(
+                    selected = selectedTab == AdminTab.PROFILE,
+                    onClick = { selectedTab = AdminTab.PROFILE },
+                    icon = { Icon(Icons.Outlined.Person, contentDescription = null) },
+                    label = { Text("Profile") },
+                    colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = colors.brandBlue,
+                        selectedTextColor = colors.brandBlue,
+                        unselectedIconColor = colors.mutedText,
+                        unselectedTextColor = colors.mutedText,
+                        indicatorColor = colors.brandLight,
+                    ),
+                )
+            }
+        },
+    ) { inner ->
+        when (selectedTab) {
+            AdminTab.HOME -> AdminHomeScreen(viewModel = viewModel, paddingValues = inner)
+            AdminTab.MESSAGES -> MessagesScreen(
+                viewModel = viewModel,
+                onBack = {},
+                onOpenConversation = onOpenConversation,
+                title = "Admin Messages",
+                showBackButton = false,
+            )
+            AdminTab.PROFILE -> AdminProfileTab(
+                viewModel = viewModel,
+                paddingValues = inner,
+                onExitAdmin = onExitAdmin,
+            )
+        }
+    }
+}
+
+@Composable
+private fun AdminHomeScreen(viewModel: AppViewModel, paddingValues: PaddingValues) {
+    val colors = LocalHayameColors.current
+    val carsState by viewModel.carsState.collectAsState()
+    val me by viewModel.me.collectAsState()
+
+    LaunchedEffect(Unit) { viewModel.loadCars(mapOf("limit" to "100")) }
+
+    val allCars = (carsState as? UiState.Success<List<CarDto>>)?.data.orEmpty()
+    val pendingCars = allCars.filter {
+        !it.approval_status.orEmpty().equals("approved", ignoreCase = true)
+    }
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize().padding(paddingValues).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        item { Spacer(modifier = Modifier.height(8.dp)) }
+        item {
+            Text(
+                "Admin",
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.ExtraBold,
+                color = colors.brandNavy,
+            )
+        }
+
+        item { SectionHeader("Admin overview") }
+
+        item {
+            AdminNavCard(
+                title = "Platform controls",
+                subtitle = "${pendingCars.size} pending listing${if (pendingCars.size == 1) "" else "s"}",
+                icon = Icons.Outlined.Shield,
+            )
+        }
+        item {
+            AdminNavCard(
+                title = "User details",
+                subtitle = "Signed in as ${me?.profile?.full_name ?: me?.user?.email ?: "Admin"}",
+                icon = Icons.Outlined.Person,
+            )
+        }
+
+        item { SectionHeader("Listing moderation") }
+
+        when (carsState) {
+            UiState.Loading -> items(3) { HostListingPlaceholderRow() }
+            else -> {
+                if (pendingCars.isEmpty()) {
+                    item {
+                        EmptyBlock("No pending listings", "All listings are approved.")
+                    }
+                } else {
+                    items(pendingCars.take(5), key = { it.id }) { car ->
+                        AdminListingModerationCard(car = car, viewModel = viewModel)
+                    }
+                }
+                if (allCars.isNotEmpty()) {
+                    item { SectionHeader("All listings (${allCars.size})") }
+                    items(allCars, key = { "all_${it.id}" }) { car ->
+                        AdminListingModerationCard(car = car, viewModel = viewModel)
+                    }
+                }
+            }
+        }
+
+        item { Spacer(modifier = Modifier.height(24.dp)) }
+    }
+}
+
+@Composable
+private fun AdminNavCard(title: String, subtitle: String, icon: androidx.compose.ui.graphics.vector.ImageVector) {
+    val colors = LocalHayameColors.current
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .shadow(0.dp, RoundedCornerShape(16.dp), false, colors.cardShadow, colors.cardShadow)
+            .clip(RoundedCornerShape(16.dp))
+            .background(colors.cardBackground)
+            .border(1.dp, colors.border, RoundedCornerShape(16.dp))
+            .padding(16.dp),
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .background(colors.brandLight, RoundedCornerShape(10.dp)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(icon, contentDescription = null, tint = colors.brandBlue, modifier = Modifier.size(20.dp))
+            }
+            Column {
+                Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = colors.brandNavy)
+                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = colors.mutedText)
+            }
+            Spacer(modifier = Modifier.weight(1f))
+            Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = colors.mutedText)
+        }
+    }
+}
+
+@Composable
+private fun AdminListingModerationCard(car: CarDto, viewModel: AppViewModel) {
+    val colors = LocalHayameColors.current
+    val isApproved = car.approval_status.orEmpty().equals("approved", ignoreCase = true)
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .shadow(0.dp, RoundedCornerShape(16.dp), false, colors.cardShadow, colors.cardShadow)
+            .clip(RoundedCornerShape(16.dp))
+            .background(colors.cardBackground)
+            .border(1.dp, colors.border, RoundedCornerShape(16.dp))
+            .padding(14.dp),
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top,
+            ) {
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        car.title ?: listOfNotNull(car.brand, car.model).joinToString(" "),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = colors.brandNavy,
+                    )
+                    Text(
+                        listOfNotNull(car.city, car.region).joinToString(", "),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.mutedText,
+                    )
+                    Text(
+                        "Host: ${car.host_name ?: car.owner?.full_name ?: "Unknown"}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.mutedText,
+                    )
+                }
+                StatusBadge(status = car.approval_status ?: "pending")
+            }
+
+            if (!isApproved) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    GradientPillButton(
+                        text = "Approve",
+                        modifier = Modifier.weight(1f),
+                        onClick = { viewModel.updateCarApprovalStatus(car.id, "approved") },
+                    )
+                    SecondaryPillButton(
+                        text = "Reject",
+                        modifier = Modifier.weight(1f),
+                        onClick = { viewModel.updateCarApprovalStatus(car.id, "rejected") },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AdminProfileTab(
+    viewModel: AppViewModel,
+    paddingValues: PaddingValues,
+    onExitAdmin: () -> Unit,
+) {
+    val colors = LocalHayameColors.current
+    val me by viewModel.me.collectAsState()
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize().padding(paddingValues).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        item { Spacer(modifier = Modifier.height(8.dp)) }
+        item { SectionHeader("Admin Profile") }
+
+        me?.let { profile ->
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .shadow(0.dp, RoundedCornerShape(16.dp), false, colors.cardShadow, colors.cardShadow)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(colors.cardBackground)
+                        .border(1.dp, colors.border, RoundedCornerShape(16.dp))
+                        .padding(16.dp),
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        InfoRow("Name", profile.profile?.full_name ?: "—")
+                        InfoRow("Email", profile.user.email ?: "—")
+                        InfoRow("Role", profile.preferredRole()?.replaceFirstChar { it.uppercase() } ?: "Admin")
+                    }
+                }
+            }
+        }
+
+        item { SectionHeader("Role") }
+
+        item {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .shadow(0.dp, RoundedCornerShape(16.dp), false, colors.cardShadow, colors.cardShadow)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(colors.cardBackground)
+                    .border(1.dp, colors.border, RoundedCornerShape(16.dp))
+                    .padding(4.dp),
+            ) {
+                Column {
+                    TextButton(
+                        onClick = { viewModel.continueAsGuest(); onExitAdmin() },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Switch to Guest App", color = colors.brandBlue, fontWeight = FontWeight.SemiBold)
+                    }
+                    HorizontalDivider(color = colors.border)
+                    TextButton(
+                        onClick = { onExitAdmin() },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Switch to Host App", color = colors.brandBlue, fontWeight = FontWeight.SemiBold)
+                    }
+                    HorizontalDivider(color = colors.border)
+                    TextButton(
+                        onClick = { viewModel.logout() },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Sign out", color = colors.danger, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+            }
+        }
+
+        item { Spacer(modifier = Modifier.height(24.dp)) }
+    }
+}
+
+@Composable
+private fun InfoRow(label: String, value: String) {
+    val colors = LocalHayameColors.current
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(label, style = MaterialTheme.typography.bodyMedium, color = colors.mutedText)
+        Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = colors.brandNavy)
     }
 }
 

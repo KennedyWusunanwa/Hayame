@@ -24,6 +24,7 @@ type Props = {
   dailyPrice: number;
   platformFeePercent?: number;
   instantBook?: boolean | null;
+  deliveryAvailable?: boolean | null;
   deliveryFee?: number | null;
   insuranceFee?: number | null;
   depositAmount?: number | null;
@@ -43,6 +44,7 @@ export function BookingWidget({
   dailyPrice,
   platformFeePercent = 10,
   instantBook,
+  deliveryAvailable,
   deliveryFee,
   insuranceFee,
   depositAmount,
@@ -66,6 +68,8 @@ export function BookingWidget({
   );
   const [tripUseCity, setTripUseCity] = useState<string>(listingCity ?? "");
   const [tripUseAddress, setTripUseAddress] = useState<string>("");
+  const [tripMode, setTripMode] = useState<"pickup" | "delivery">("pickup");
+  const [deliveryAddress, setDeliveryAddress] = useState<string>("");
   const router = useRouter();
   const { regions, citiesByRegion } = useLocations();
   const publicKey = useMemo(
@@ -78,7 +82,11 @@ export function BookingWidget({
   const baseTotal = billableNights * dailyPrice;
   const platformFeeAmount = baseTotal * (Math.max(platformFeePercent, 0) / 100);
   const insuranceFeeAmount = Math.max(Number(insuranceFee ?? 0), 0);
-  const deliveryFeeAmount = Math.max(Number(deliveryFee ?? 0), 0);
+  const canDeliver = Boolean(deliveryAvailable);
+  const selectedDelivery = canDeliver && tripMode === "delivery";
+  const deliveryFeeAmount = selectedDelivery
+    ? Math.max(Number(deliveryFee ?? 0), 0)
+    : 0;
   const depositAmountValue = Math.max(Number(depositAmount ?? 0), 0);
   const outsideAccraFeeValue = Math.max(Number(outsideAccraFee ?? 0), 0);
   const tripOutsideAccra = isLocationOutsideAccra({
@@ -124,12 +132,23 @@ export function BookingWidget({
   useEffect(() => {
     setHold(null);
     setHoldRemaining(null);
-  }, [carId, startDate, endDate, tripUseRegion, tripUseCity, tripUseAddress]);
+  }, [
+    carId,
+    startDate,
+    endDate,
+    tripMode,
+    tripUseRegion,
+    tripUseCity,
+    tripUseAddress,
+    deliveryAddress,
+  ]);
 
   useEffect(() => {
     setTripUseRegion(listingRegion ?? "");
     setTripUseCity(listingCity ?? "");
     setTripUseAddress("");
+    setTripMode("pickup");
+    setDeliveryAddress("");
   }, [carId, listingCity, listingRegion]);
 
   useEffect(() => {
@@ -166,6 +185,10 @@ export function BookingWidget({
       );
       return;
     }
+    if (selectedDelivery && deliveryAddress.trim().length < 3) {
+      setMessage("Please enter the exact delivery point.");
+      return;
+    }
     try {
       setLoading(true);
       setMessage(null);
@@ -197,6 +220,10 @@ export function BookingWidget({
             tripUseRegion,
             tripUseCity,
             tripUseAddress: tripUseAddress.trim(),
+            tripMode,
+            deliveryAddress: selectedDelivery
+              ? deliveryAddress.trim()
+              : undefined,
             tripOutsideAccra,
           }),
         });
@@ -238,6 +265,10 @@ export function BookingWidget({
               tripUseRegion,
               tripUseCity,
               tripUseAddress: tripUseAddress.trim(),
+              tripMode,
+              deliveryAddress: selectedDelivery
+                ? deliveryAddress.trim()
+                : undefined,
               tripOutsideAccra,
               reference: tran?.reference ?? reference,
               amount: amountInMinorUnit,
@@ -437,6 +468,66 @@ export function BookingWidget({
           ) : null}
         </div>
       </div>
+      {canDeliver ? (
+        <div className="space-y-3 rounded-xl border border-border bg-gray-50 p-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+            Pickup or delivery
+          </p>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <button
+              type="button"
+              className={`rounded-lg border px-3 py-2 text-left text-sm ${
+                tripMode === "pickup"
+                  ? "border-brand bg-brand/10 text-brand"
+                  : "border-border bg-white text-gray-700"
+              }`}
+              onClick={() => {
+                setMessage(null);
+                setTripMode("pickup");
+              }}
+            >
+              <span className="block font-semibold">Pickup</span>
+              <span className="block text-xs text-gray-600">
+                Meet at the listing area
+              </span>
+            </button>
+            <button
+              type="button"
+              className={`rounded-lg border px-3 py-2 text-left text-sm ${
+                tripMode === "delivery"
+                  ? "border-brand bg-brand/10 text-brand"
+                  : "border-border bg-white text-gray-700"
+              }`}
+              onClick={() => {
+                setMessage(null);
+                setTripMode("delivery");
+              }}
+            >
+              <span className="block font-semibold">Delivery</span>
+              <span className="block text-xs text-gray-600">
+                {Math.max(Number(deliveryFee ?? 0), 0) > 0
+                  ? `${formatCurrency(Math.max(Number(deliveryFee ?? 0), 0))} fee`
+                  : "Free delivery"}
+              </span>
+            </button>
+          </div>
+          {selectedDelivery ? (
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-gray-700">
+                Exact delivery point
+              </label>
+              <Input
+                value={deliveryAddress}
+                onChange={(e) => {
+                  setMessage(null);
+                  setDeliveryAddress(e.target.value);
+                }}
+                placeholder="e.g. A&C Mall, East Legon"
+              />
+            </div>
+          ) : null}
+        </div>
+      ) : null}
       {holdRemaining ? (
         <p className="text-xs text-emerald-700">
           Reserved for {holdRemaining}. Complete payment to confirm.

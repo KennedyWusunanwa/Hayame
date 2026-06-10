@@ -16,10 +16,12 @@
 		4283F2AC8F40398F6628A3E2 /* AdminScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = EDDD74C69D95930539578828 /* AdminScreens.swift */; };
 		4EA8F953F7D42F5C7920714E /* Components.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70C63679032CDE6B1C16B367 /* Components.swift */; };
 		5136B34C04DCDEA1FB21C1D4 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 62B555BAFABD9F1EE76F7D93 /* Assets.xcassets */; };
+		5F0C2F23C8A048BAA02EC73C /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 5F0C2F22C8A048BAA02EC73C /* PrivacyInfo.xcprivacy */; };
 		662EEF16760A82C361576D99 /* DatabaseReferenceData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7939F5F4C58306B8B9C7A871 /* DatabaseReferenceData.swift */; };
 		6C1A5C0663D24BEFA3A7DB7F /* HomeLocationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C1A5C0563D24BEFA3A7DB7F /* HomeLocationManager.swift */; };
 		745B1A08A768E4E0B626726F /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = C35FF516F27CD52298E15051 /* AppState.swift */; };
 		83383CFE842BB17A7022D329 /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E5B38248DE6D925A12AC4E5 /* APIClient.swift */; };
+		8C7B62E96F0F4D169BF81A21 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 8C7B62E86F0F4D169BF81A21 /* LaunchScreen.storyboard */; };
 		87DCF289372A6C6F4AEA75BB /* AuthScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F95E920C7641A88FCE7E0E6 /* AuthScreens.swift */; };
 		8DF66CF558B08006BDB51042 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = A74C04F09A7EB5CEF79E3165 /* Models.swift */; };
 		A0227C9F0F57B9B47C6CC29B /* HayameIOSApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 374D26C81A3EC27AE6793B1C /* HayameIOSApp.swift */; };
@@ -34,6 +36,7 @@
 		0C9B841E8A3F4B95A28C91BC /* AuthComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthComponents.swift; sourceTree = "<group>"; };
 		374D26C81A3EC27AE6793B1C /* HayameIOSApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HayameIOSApp.swift; sourceTree = "<group>"; };
 		4E5B38248DE6D925A12AC4E5 /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
+		5F0C2F22C8A048BAA02EC73C /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		62B555BAFABD9F1EE76F7D93 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		6C1A5C0563D24BEFA3A7DB7F /* HomeLocationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeLocationManager.swift; sourceTree = "<group>"; };
 		70C63679032CDE6B1C16B367 /* Components.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Components.swift; sourceTree = "<group>"; };
@@ -41,6 +44,7 @@
 		7F95E920C7641A88FCE7E0E6 /* AuthScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthScreens.swift; sourceTree = "<group>"; };
 		7FC388EB25847DA29E3DFF2C /* MockDataService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockDataService.swift; sourceTree = "<group>"; };
 		81AA2598E2189D8B1F3B5720 /* RenterScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RenterScreens.swift; sourceTree = "<group>"; };
+		8C7B62E86F0F4D169BF81A21 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
 		90869CE125FCD22FD5450526 /* NotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationManager.swift; sourceTree = "<group>"; };
 		95B87581576C44D745F473DF /* LegalAndSupportScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegalAndSupportScreens.swift; sourceTree = "<group>"; };
 		A74C04F09A7EB5CEF79E3165 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
@@ -85,6 +89,8 @@
 			children = (
 				62B555BAFABD9F1EE76F7D93 /* Assets.xcassets */,
 				FF0916E1A558ED58660B6561 /* Info.plist */,
+				8C7B62E86F0F4D169BF81A21 /* LaunchScreen.storyboard */,
+				5F0C2F22C8A048BAA02EC73C /* PrivacyInfo.xcprivacy */,
 				36610C36B7FBCB614D6CAAD0 /* App */,
 				34CE46668485F4DB0E11C588 /* Components */,
 				1DEAD784E3B2D97CE29F318D /* Models */,
@@ -238,6 +244,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				5136B34C04DCDEA1FB21C1D4 /* Assets.xcassets in Resources */,
+				8C7B62E96F0F4D169BF81A21 /* LaunchScreen.storyboard in Resources */,
+				5F0C2F23C8A048BAA02EC73C /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -308,9 +316,10 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 3;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = "";
+				ENABLE_DEBUG_DYLIB = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
@@ -347,7 +356,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = HayameIOS/HayameIOS.Release.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				DEVELOPMENT_TEAM = AUF9LKGT7P;
+				DEVELOPMENT_TEAM = XJHSMVRVW4;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = HayameIOS/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -397,7 +406,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 3;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = "";
 				ENABLE_NS_ASSERTIONS = NO;
@@ -429,7 +438,8 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = HayameIOS/HayameIOS.Debug.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				DEVELOPMENT_TEAM = AUF9LKGT7P;
+				DEVELOPMENT_TEAM = XJHSMVRVW4;
+				ENABLE_DEBUG_DYLIB = NO;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = HayameIOS/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;

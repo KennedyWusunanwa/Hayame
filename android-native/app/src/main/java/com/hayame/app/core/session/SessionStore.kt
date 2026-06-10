@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -29,6 +30,7 @@ class SessionStore(private val context: Context) {
         val refresh = stringPreferencesKey("refresh_token")
         val userId = stringPreferencesKey("user_id")
         val seenAnnouncements = stringSetPreferencesKey("seen_announcement_ids")
+        val firstLaunchAtMillis = longPreferencesKey("first_launch_at_millis")
         val darkMode = booleanPreferencesKey("dark_mode_enabled")
     }
 
@@ -53,7 +55,13 @@ class SessionStore(private val context: Context) {
     }
 
     suspend fun clear() {
-        context.dataStore.edit { it.clear() }
+        context.dataStore.edit { prefs ->
+            val firstLaunchAtMillis = prefs[Keys.firstLaunchAtMillis]
+            prefs.clear()
+            if (firstLaunchAtMillis != null && firstLaunchAtMillis > 0L) {
+                prefs[Keys.firstLaunchAtMillis] = firstLaunchAtMillis
+            }
+        }
     }
 
     suspend fun seenAnnouncementIds(): Set<String> {
@@ -70,6 +78,22 @@ class SessionStore(private val context: Context) {
             val current = prefs[Keys.seenAnnouncements] ?: emptySet()
             prefs[Keys.seenAnnouncements] = current + normalized
         }
+    }
+
+    suspend fun firstLaunchAtMillis(): Long {
+        val existing = context.dataStore.data
+            .catch { emit(emptyPreferences()) }
+            .map { prefs -> prefs[Keys.firstLaunchAtMillis] }
+            .first()
+        if (existing != null && existing > 0L) return existing
+
+        val now = System.currentTimeMillis()
+        context.dataStore.edit { prefs ->
+            if ((prefs[Keys.firstLaunchAtMillis] ?: 0L) <= 0L) {
+                prefs[Keys.firstLaunchAtMillis] = now
+            }
+        }
+        return now
     }
 
     suspend fun darkMode(): Boolean {

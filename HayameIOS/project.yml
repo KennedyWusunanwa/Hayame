@@ -4,10 +4,12 @@ options:
 settings:
   base:
     SWIFT_VERSION: 5.0
-    DEVELOPMENT_TEAM: ""
+    # Set this to the recipient Apple Team ID before regenerating
+    # HayameIOS.xcodeproj from this file.
+    DEVELOPMENT_TEAM: XJHSMVRVW4
     CODE_SIGN_STYLE: Automatic
     IPHONEOS_DEPLOYMENT_TARGET: 17.0
-    CURRENT_PROJECT_VERSION: 1
+    CURRENT_PROJECT_VERSION: 3
     MARKETING_VERSION: 1.0
 packages: {}
 targets:
@@ -24,6 +26,7 @@ targets:
         INFOPLIST_FILE: HayameIOS/Info.plist
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        ENABLE_DEBUG_DYLIB: NO
         GENERATE_INFOPLIST_FILE: NO
         TARGETED_DEVICE_FAMILY: "1"
       configs:
@@ -38,8 +41,10 @@ targets:
         CFBundleURLTypes:
           - CFBundleURLName: com.hayame.app.paystack
             CFBundleURLSchemes:
+              - hayame
               - hayameios
-        UILaunchScreen: {}
+        UILaunchStoryboardName: LaunchScreen
+        UIStatusBarHidden: true
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
         NSPhotoLibraryUsageDescription: Hayame needs photo library access for profile and listing images.

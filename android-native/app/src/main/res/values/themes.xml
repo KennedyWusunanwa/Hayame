@@ -1,3 +1,9 @@
 <resources>
-    <style name="Theme.Hayame" parent="Theme.Material3.DayNight.NoActionBar" />
+    <style name="Theme.Hayame" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="android:windowBackground">@drawable/splash_window_background</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:navigationBarColor">#0F85E3</item>
+        <item name="android:statusBarColor">#0F85E3</item>
+    </style>
 </resources>

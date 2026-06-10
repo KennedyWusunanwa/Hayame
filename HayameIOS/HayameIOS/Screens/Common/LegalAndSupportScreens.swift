@@ -13,8 +13,7 @@ struct ContactScreen: View {
                     .hayameCaptionStyle()
 
                 VStack(alignment: .leading, spacing: 10) {
-                    Label("+233 (0) 55 555 5555", systemImage: "phone.fill")
-                    Label("support@hayame.com", systemImage: "envelope.fill")
+                    Label("support@hayamegh.com", systemImage: "envelope.fill")
                     Label("Accra Digital Centre, Ring Road West", systemImage: "mappin.and.ellipse")
                 }
                 .font(.system(size: 14, weight: .semibold, design: .rounded))
@@ -33,7 +32,7 @@ struct PrivacyScreen: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 SectionHeader(title: "Privacy")
-                Text("We store only the information required to operate bookings, payments, messages and listings. For account/data requests, contact support@hayame.com.")
+                Text("We store only the information required to operate bookings, payments, messages and listings. For account/data requests, contact support@hayamegh.com.")
                     .font(.system(size: 14, weight: .medium, design: .rounded))
                     .foregroundStyle(HayameTheme.mutedText)
                     .hayameCard()
@@ -65,7 +64,7 @@ struct ProtectionScreen: View {
         ),
         (
             title: "Disputes and emergency support",
-            body: "For accidents or immediate safety issues, contact local emergency services first. Then notify the other party and reach Hayame via Messages, the dispute flow, or support@hayame.com."
+            body: "For accidents or immediate safety issues, contact local emergency services first. Then notify the other party and reach Hayame via Messages, the dispute flow, or support@hayamegh.com."
         )
     ]
 

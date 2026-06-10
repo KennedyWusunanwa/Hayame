@@ -78,7 +78,7 @@ export async function POST(req: Request) {
     const { data: booking, error: bookingError } = await db
       .from("bookings")
       .select(
-        "id,car_id,renter_id,start_date,end_date,status,hold_expires_at,trip_use_region,trip_use_city,trip_use_address,trip_outside_accra,trip_outside_listing_region,outside_accra_surcharge",
+        "id,car_id,renter_id,start_date,end_date,status,hold_expires_at,trip_use_region,trip_use_city,trip_use_address,delivery_address,trip_outside_accra,trip_outside_listing_region,outside_accra_surcharge",
       )
       .eq("id", body.bookingId)
       .single();
@@ -184,7 +184,9 @@ export async function POST(req: Request) {
     );
     const platformFee = subtotal * (Math.max(platformFeePercent, 0) / 100);
     const insuranceFee = Math.max(Number(car.insurance_fee ?? 0), 0);
-    const deliveryFee = Math.max(Number(car.delivery_fee ?? 0), 0);
+    const deliveryFee = String(booking.delivery_address ?? "").trim()
+      ? Math.max(Number(car.delivery_fee ?? 0), 0)
+      : 0;
     const depositAmount = Math.max(Number(car.deposit_amount ?? 0), 0);
     const heldOutsideAccraSurcharge = Number(booking.outside_accra_surcharge);
     const outsideAccraSurcharge = Number.isFinite(heldOutsideAccraSurcharge)

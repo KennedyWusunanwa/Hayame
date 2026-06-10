@@ -1,24 +1,25 @@
 package com.hayame.app.ui.navigation
 
 import android.Manifest
-import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -27,38 +28,36 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.togetherWith
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.DarkMode
-import androidx.compose.material.icons.outlined.LightMode
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Icon
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -68,6 +67,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.hayame.app.ui.screens.AdminShellScreen
 import com.hayame.app.ui.screens.BecomeHostScreen
 import com.hayame.app.ui.screens.BookingScreen
 import com.hayame.app.ui.screens.CancellationPolicyScreen
@@ -85,6 +85,7 @@ import com.hayame.app.ui.screens.HostEarningsScreen
 import com.hayame.app.ui.screens.HostFavoritesScreen
 import com.hayame.app.ui.screens.HostListingPhotosScreen
 import com.hayame.app.ui.screens.HostProfileScreen
+import com.hayame.app.ui.screens.HostPublicProfileScreen
 import com.hayame.app.ui.screens.HostReviewsScreen
 import com.hayame.app.ui.screens.HostShell
 import com.hayame.app.ui.screens.LoginScreen
@@ -100,6 +101,8 @@ import com.hayame.app.ui.screens.SupportLegalScreen
 import com.hayame.app.ui.viewmodel.AppViewModel
 import com.hayame.app.ui.theme.LocalHayameColors
 import kotlinx.coroutines.delay
+
+private const val SplashMinimumDurationMs = 5_000L
 
 @Composable
 fun HayameNavApp(
@@ -120,6 +123,7 @@ fun HayameNavApp(
 ) {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = navBackStackEntry?.destination?.route
     val snackbarHostState = remember { SnackbarHostState() }
 
     val isAuthenticated by viewModel.isAuthenticated.collectAsState()
@@ -132,28 +136,53 @@ fun HayameNavApp(
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
-    val appearanceIntroPreferences = remember {
-        context.getSharedPreferences("hayame_appearance_intro", Context.MODE_PRIVATE)
-    }
-    var showAppearanceIntro by rememberSaveable {
-        mutableStateOf(!appearanceIntroPreferences.getBoolean("seen", false))
-    }
-    var appearanceHighlightNonce by rememberSaveable { mutableStateOf(0) }
+    val appearanceHighlightNonce = 0
+    var hasRequestedNotificationPermission by rememberSaveable { mutableStateOf(false) }
+    var visibleMainTab by rememberSaveable { mutableStateOf<MainTab?>(null) }
+    var visibleHostTab by rememberSaveable { mutableStateOf<HostMainTab?>(null) }
 
     var pendingProtectedRoute by rememberSaveable { mutableStateOf<String?>(null) }
     var authRouteOverride by rememberSaveable { mutableStateOf<String?>(null) }
-    val splashStartedAt = remember { System.currentTimeMillis() }
 
     val hasAppAccess = isAuthenticated || isGuestMode
+    val latestHasAppAccess by rememberUpdatedState(hasAppAccess)
+    val latestCurrentRoute by rememberUpdatedState(currentRoute)
     val hostStatus = (me?.host_application_status ?: me?.host_status ?: "").lowercase()
+    val canShowAnnouncement = hasAppAccess && when (currentRoute) {
+        NavRoutes.MainRoute -> visibleMainTab == MainTab.HOME
+        NavRoutes.HostShell -> visibleHostTab == HostMainTab.DASHBOARD
+        else -> false
+    }
 
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
     ) {}
 
-    LaunchedEffect(showAppearanceIntro) {
-        if (!showAppearanceIntro && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+    LaunchedEffect(bootstrapping, canShowAnnouncement) {
+        if (
+            !hasRequestedNotificationPermission &&
+            !bootstrapping &&
+            canShowAnnouncement &&
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+        ) {
+            hasRequestedNotificationPermission = true
             notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+
+    LaunchedEffect(currentRoute) {
+        if (currentRoute != NavRoutes.MainRoute) visibleMainTab = null
+        if (currentRoute != NavRoutes.HostShell) visibleHostTab = null
+    }
+
+    LaunchedEffect(Unit) {
+        delay(SplashMinimumDurationMs)
+        if (latestCurrentRoute == NavRoutes.Splash || latestCurrentRoute == null) {
+            val destination = if (latestHasAppAccess) NavRoutes.main() else NavRoutes.Login
+            navController.navigate(destination) {
+                popUpTo(NavRoutes.Splash) { inclusive = true }
+                launchSingleTop = true
+            }
         }
     }
 
@@ -193,29 +222,12 @@ fun HayameNavApp(
         }
     }
 
-    LaunchedEffect(bootstrapping) {
-        if (bootstrapping || !showAppearanceIntro) return@LaunchedEffect
-        delay(650)
-        showAppearanceIntro = !appearanceIntroPreferences.getBoolean("seen", false)
-    }
-
-    LaunchedEffect(bootstrapping, hasAppAccess, navBackStackEntry, isAuthenticated, pendingProtectedRoute, authRouteOverride) {
-        if (bootstrapping) return@LaunchedEffect
-        val currentRoute = navBackStackEntry?.destination?.route
+    LaunchedEffect(bootstrapping, hasAppAccess, currentRoute, isAuthenticated, pendingProtectedRoute, authRouteOverride) {
         val authRoutes = setOf(NavRoutes.Login, NavRoutes.Signup)
 
-        if (currentRoute == NavRoutes.Splash || currentRoute == null) {
-            val remainingSplashMs = 5_000L - (System.currentTimeMillis() - splashStartedAt)
-            if (remainingSplashMs > 0) {
-                delay(remainingSplashMs)
-            }
-            val destination = if (hasAppAccess) NavRoutes.main() else NavRoutes.Login
-            navController.navigate(destination) {
-                popUpTo(NavRoutes.Splash) { inclusive = true }
-                launchSingleTop = true
-            }
-            return@LaunchedEffect
-        }
+        if (currentRoute == NavRoutes.Splash || currentRoute == null) return@LaunchedEffect
+
+        if (bootstrapping) return@LaunchedEffect
 
         if (hasAppAccess && currentRoute in authRoutes) {
             val destination = if (isAuthenticated) {
@@ -269,39 +281,137 @@ fun HayameNavApp(
         onBookingConsumed()
     }
 
-    activeAnnouncement?.let { announcement ->
+    if (canShowAnnouncement) activeAnnouncement?.let { announcement ->
         val ctaUrl = announcement.cta_url?.takeIf { it.isNotBlank() }
-        AlertDialog(
-            onDismissRequest = { viewModel.dismissActiveAnnouncement() },
-            title = { Text(announcement.title ?: "Hayame") },
-            text = { Text(announcement.body ?: "") },
-            confirmButton = {
-                if (ctaUrl != null) {
-                    TextButton(
-                        onClick = {
-                            runCatching {
-                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(ctaUrl)).apply {
-                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                }
-                                context.startActivity(intent)
-                            }
-                            viewModel.dismissActiveAnnouncement()
-                        },
+        val colors = LocalHayameColors.current
+        val category = announcement.category?.trim()?.lowercase()
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.36f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .widthIn(max = 390.dp)
+                    .padding(20.dp)
+                    .shadow(
+                        elevation = 28.dp,
+                        shape = RoundedCornerShape(24.dp),
+                        ambientColor = Color.Black.copy(alpha = 0.18f),
+                        spotColor = Color.Black.copy(alpha = 0.18f),
+                    )
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(colors.cardBackground)
+                    .border(1.dp, colors.border, RoundedCornerShape(24.dp)),
+            ) {
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.Top,
+                        horizontalArrangement = Arrangement.spacedBy(14.dp),
                     ) {
-                        Text(announcement.cta_label ?: "Open")
+                        Box(
+                            modifier = Modifier
+                                .size(48.dp)
+                                .clip(RoundedCornerShape(24.dp))
+                                .background(colors.brandBlue.copy(alpha = 0.12f)),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = "H",
+                                color = colors.brandBlue,
+                                fontSize = 20.sp,
+                                fontWeight = FontWeight.Black,
+                            )
+                        }
+
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(7.dp),
+                        ) {
+                            Text(
+                                text = if (category == "news") "News & announcements" else "App update",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = colors.brandBlue,
+                            )
+                            Text(
+                                text = announcement.title ?: "Hayame",
+                                style = MaterialTheme.typography.headlineSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = colors.brandNavy,
+                            )
+                        }
+
+                        TextButton(
+                            onClick = { viewModel.dismissActiveAnnouncement() },
+                        ) {
+                            Text("✕", color = colors.mutedText, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                        }
                     }
-                } else {
-                    Button(onClick = { viewModel.dismissActiveAnnouncement() }) {
-                        Text("OK")
+
+                    Text(
+                        text = announcement.body ?: "",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = colors.brandNavy.copy(alpha = 0.88f),
+                        maxLines = 8,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+
+                    if (announcement.show_once != false) {
+                        Text(
+                            text = "Shown once on this device.",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = colors.mutedText,
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        if (ctaUrl != null) {
+                            Button(
+                                onClick = {
+                                    runCatching {
+                                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(ctaUrl)).apply {
+                                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                        }
+                                        context.startActivity(intent)
+                                    }
+                                    viewModel.dismissActiveAnnouncement()
+                                },
+                                modifier = Modifier.weight(1f),
+                            ) {
+                                Text(announcement.cta_label ?: "Open")
+                            }
+                            TextButton(
+                                onClick = { viewModel.dismissActiveAnnouncement() },
+                                modifier = Modifier.weight(1f),
+                            ) {
+                                Text(
+                                    "Not now",
+                                    color = colors.brandBlue,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                            }
+                        } else {
+                            Button(
+                                onClick = { viewModel.dismissActiveAnnouncement() },
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Text("Got it")
+                            }
+                        }
                     }
                 }
-            },
-            dismissButton = {
-                TextButton(onClick = { viewModel.dismissActiveAnnouncement() }) {
-                    Text("Dismiss")
-                }
-            },
-        )
+            }
+        }
     }
 
     Scaffold(
@@ -313,10 +423,11 @@ fun HayameNavApp(
         },
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
     ) { innerPadding ->
+        val isSplashRoute = currentRoute == NavRoutes.Splash || currentRoute == null
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding),
+                .then(if (isSplashRoute) Modifier else Modifier.padding(innerPadding)),
         ) {
             NavHost(
                 navController = navController,
@@ -375,6 +486,10 @@ fun HayameNavApp(
                     MainShell(
                         viewModel = viewModel,
                         initialTab = initialTab,
+                        onSelectedTabChanged = {
+                            visibleMainTab = it
+                            visibleHostTab = null
+                        },
                         onOpenCarDetail = { navController.navigate(NavRoutes.carDetail(it)) },
                         onOpenConversation = { navController.navigate(NavRoutes.conversation(it)) },
                         onOpenMessages = { navController.navigate(NavRoutes.Messages) },
@@ -392,6 +507,7 @@ fun HayameNavApp(
                         onOpenCancellation = { navController.navigate(NavRoutes.Cancellation) },
                         onOpenPrivacy = { navController.navigate(NavRoutes.Privacy) },
                         onOpenAuth = { navController.navigate(NavRoutes.Login) },
+                        onOpenAdmin = { navController.navigate(NavRoutes.AdminShell) },
                         appearanceHighlightNonce = appearanceHighlightNonce,
                     )
                 }
@@ -419,6 +535,10 @@ fun HayameNavApp(
                 composable(NavRoutes.HostShell) {
                     HostShell(
                         viewModel = viewModel,
+                        onSelectedTabChanged = {
+                            visibleHostTab = it
+                            visibleMainTab = null
+                        },
                         onExitHostMode = {
                             val popped = navController.popBackStack()
                             if (!popped) {
@@ -448,6 +568,9 @@ fun HayameNavApp(
                         onBook = { navController.navigate(NavRoutes.booking(it)) },
                         onOpenConversation = { navController.navigate(NavRoutes.conversation(it)) },
                         onOpenProtection = { navController.navigate(NavRoutes.Protection) },
+                        onOpenHostProfile = { ownerId ->
+                            if (ownerId.isNotBlank()) navController.navigate(NavRoutes.hostPublicProfile(ownerId))
+                        },
                     )
                 }
                 composable(
@@ -628,6 +751,28 @@ fun HayameNavApp(
                 composable(NavRoutes.Marketing) {
                     MarketingPagesScreen(onBack = { navController.popBackStack() })
                 }
+                composable(
+                    route = NavRoutes.HostPublicProfile + "/{ownerId}",
+                    arguments = listOf(navArgument("ownerId") { type = NavType.StringType }),
+                ) { backStack ->
+                    val ownerId = backStack.arguments?.getString("ownerId").orEmpty()
+                    HostPublicProfileScreen(
+                        viewModel = viewModel,
+                        ownerId = ownerId,
+                        onBack = { navController.popBackStack() },
+                        onOpenCarDetail = { navController.navigate(NavRoutes.carDetail(it)) },
+                    )
+                }
+                composable(NavRoutes.AdminShell) {
+                    AdminShellScreen(
+                        viewModel = viewModel,
+                        onExitAdmin = {
+                            val popped = navController.popBackStack()
+                            if (!popped) navController.navigate(NavRoutes.HostShell) { launchSingleTop = true }
+                        },
+                        onOpenConversation = { navController.navigate(NavRoutes.conversation(it)) },
+                    )
+                }
             }
 
             authPrompt?.let { prompt ->
@@ -660,113 +805,6 @@ fun HayameNavApp(
                 )
             }
 
-            if (showAppearanceIntro && !bootstrapping) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.34f))
-                        .padding(20.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    AppearanceIntroPrompt(
-                        darkModeEnabled = viewModel.darkModeEnabled.collectAsState().value,
-                        onOpenSettings = {
-                            appearanceIntroPreferences.edit().putBoolean("seen", true).apply()
-                            showAppearanceIntro = false
-                            if (!hasAppAccess) {
-                                viewModel.continueAsGuest()
-                            }
-                            appearanceHighlightNonce += 1
-                            navController.navigate(NavRoutes.main(MainTab.MORE)) {
-                                popUpTo(navController.graph.findStartDestination().id) {
-                                    saveState = false
-                                }
-                                launchSingleTop = true
-                            }
-                        },
-                        onTryLater = {
-                            appearanceIntroPreferences.edit().putBoolean("seen", true).apply()
-                            showAppearanceIntro = false
-                        },
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun AppearanceIntroPrompt(
-    darkModeEnabled: Boolean,
-    onOpenSettings: () -> Unit,
-    onTryLater: () -> Unit,
-) {
-    val colors = LocalHayameColors.current
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .widthIn(max = 360.dp),
-        shape = RoundedCornerShape(28.dp),
-        colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
-        elevation = CardDefaults.cardElevation(defaultElevation = 16.dp),
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(64.dp)
-                    .clip(CircleShape)
-                    .background(colors.brandBlue.copy(alpha = 0.14f)),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = if (darkModeEnabled) Icons.Outlined.DarkMode else Icons.Outlined.LightMode,
-                    contentDescription = null,
-                    tint = colors.brandBlue,
-                    modifier = Modifier.size(30.dp),
-                )
-            }
-
-            Text(
-                text = "Choose your look",
-                modifier = Modifier.fillMaxWidth(),
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-                color = colors.brandNavy,
-                textAlign = TextAlign.Center,
-            )
-
-            Text(
-                text = "Hayame now supports light and dark mode. You can change it anytime in Appearance.",
-                modifier = Modifier.fillMaxWidth(),
-                style = MaterialTheme.typography.bodyMedium,
-                color = colors.mutedText,
-                textAlign = TextAlign.Center,
-            )
-
-            Button(
-                onClick = onOpenSettings,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(50.dp)
-                    .padding(top = 2.dp),
-            ) {
-                Text("Open Appearance settings")
-            }
-
-            TextButton(
-                onClick = onTryLater,
-                modifier = Modifier
-                    .height(44.dp)
-                    .padding(top = 2.dp),
-            ) {
-                Text("Try later", color = colors.brandBlue, fontWeight = FontWeight.SemiBold)
-            }
         }
     }
 }

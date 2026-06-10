@@ -73,11 +73,7 @@ import com.hayame.app.ui.components.ErrorBlock
 import com.hayame.app.ui.components.LoadingBlock
 import com.hayame.app.ui.components.SectionHeader
 import com.hayame.app.ui.state.UiState
-import com.hayame.app.ui.theme.BrandBlue
-import com.hayame.app.ui.theme.BrandLight
-import com.hayame.app.ui.theme.BrandNavy
 import com.hayame.app.ui.theme.LocalHayameColors
-import com.hayame.app.ui.theme.MutedText
 import com.hayame.app.ui.viewmodel.AppViewModel
 import java.io.File
 
@@ -234,7 +230,7 @@ private fun ParityNavRow(title: String, subtitle: String, onClick: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Icon(Icons.Outlined.Info, contentDescription = null, tint = BrandBlue)
+            Icon(Icons.Outlined.Info, contentDescription = null, tint = LocalHayameColors.current.brandBlue)
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(title, color = colors.brandNavy, fontWeight = FontWeight.Bold)
                 Text(subtitle, color = colors.mutedText, style = androidx.compose.material3.MaterialTheme.typography.bodySmall)
@@ -247,7 +243,7 @@ private fun ParityNavRow(title: String, subtitle: String, onClick: () -> Unit) {
 @Composable
 fun ContactScreen(onBack: () -> Unit) {
     Scaffold(
-        containerColor = Color(0xFFF8FAFF),
+        containerColor = LocalHayameColors.current.pageBackground,
         topBar = { ParityTopBar(title = "Contact", onBack = onBack) },
     ) { inner ->
         LazyColumn(
@@ -259,12 +255,12 @@ fun ContactScreen(onBack: () -> Unit) {
             contentPadding = PaddingValues(vertical = 12.dp),
         ) {
             item {
-                Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = LocalHayameColors.current.cardBackground)) {
                     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("We are here to help with bookings, hosting and trip issues.", color = MutedText)
-                        Text("+233 (0) 55 555 5555", color = BrandNavy, fontWeight = FontWeight.Bold)
-                        Text("support@hayame.com", color = BrandBlue, fontWeight = FontWeight.Bold)
-                        Text("Accra Digital Centre, Ring Road West", color = BrandNavy)
+                        Text("We are here to help with bookings, hosting and trip issues.", color = LocalHayameColors.current.mutedText)
+                        Text("+233 (0) 55 555 5555", color = LocalHayameColors.current.brandNavy, fontWeight = FontWeight.Bold)
+                        Text("support@hayame.com", color = LocalHayameColors.current.brandBlue, fontWeight = FontWeight.Bold)
+                        Text("Accra Digital Centre, Ring Road West", color = LocalHayameColors.current.brandNavy)
                     }
                 }
             }
@@ -275,7 +271,7 @@ fun ContactScreen(onBack: () -> Unit) {
 @Composable
 fun PrivacyScreen(onBack: () -> Unit) {
     Scaffold(
-        containerColor = Color(0xFFF8FAFF),
+        containerColor = LocalHayameColors.current.pageBackground,
         topBar = { ParityTopBar(title = "Privacy", onBack = onBack) },
     ) { inner ->
         Box(
@@ -284,11 +280,11 @@ fun PrivacyScreen(onBack: () -> Unit) {
                 .padding(inner)
                 .padding(16.dp),
         ) {
-            Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+            Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = LocalHayameColors.current.cardBackground)) {
                 Text(
                     text = "We store only the information required to operate bookings, payments, messages and listings. For account/data requests, contact support@hayame.com.",
                     modifier = Modifier.padding(16.dp),
-                    color = MutedText,
+                    color = LocalHayameColors.current.mutedText,
                 )
             }
         }
@@ -308,7 +304,7 @@ fun ProtectionScreen(onBack: () -> Unit) {
     }
 
     Scaffold(
-        containerColor = Color(0xFFF8FAFF),
+        containerColor = LocalHayameColors.current.pageBackground,
         topBar = { ParityTopBar(title = "Protection", onBack = onBack) },
     ) { inner ->
         LazyColumn(
@@ -323,23 +319,23 @@ fun ProtectionScreen(onBack: () -> Unit) {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
                         "This page describes the support, evidence, and dispute process currently available on Hayame.",
-                        color = MutedText,
+                        color = LocalHayameColors.current.mutedText,
                         style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
                     )
-                    Card(shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                    Card(shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = LocalHayameColors.current.cardBackground)) {
                         Text(
                             text = "Hayame does not publish bundled insurance coverage on this page. Any third-party cover must be confirmed directly with the vehicle owner.",
                             modifier = Modifier.padding(14.dp),
-                            color = MutedText,
+                            color = LocalHayameColors.current.mutedText,
                         )
                     }
                 }
             }
             items(sections) { section ->
-                Card(shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                Card(shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = LocalHayameColors.current.cardBackground)) {
                     Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text(section.first, color = BrandNavy, fontWeight = FontWeight.Bold)
-                        Text(section.second, color = MutedText)
+                        Text(section.first, color = LocalHayameColors.current.brandNavy, fontWeight = FontWeight.Bold)
+                        Text(section.second, color = LocalHayameColors.current.mutedText)
                     }
                 }
             }
@@ -358,7 +354,7 @@ fun CancellationPolicyScreen(onBack: () -> Unit) {
     }
 
     Scaffold(
-        containerColor = Color(0xFFF8FAFF),
+        containerColor = LocalHayameColors.current.pageBackground,
         topBar = { ParityTopBar(title = "Cancellation", onBack = onBack) },
     ) { inner ->
         LazyColumn(
@@ -370,10 +366,10 @@ fun CancellationPolicyScreen(onBack: () -> Unit) {
             contentPadding = PaddingValues(vertical = 12.dp),
         ) {
             items(policies) { policy ->
-                Card(shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                Card(shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = LocalHayameColors.current.cardBackground)) {
                     Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text(policy.first, color = BrandNavy, fontWeight = FontWeight.Bold)
-                        Text(policy.second, color = MutedText)
+                        Text(policy.first, color = LocalHayameColors.current.brandNavy, fontWeight = FontWeight.Bold)
+                        Text(policy.second, color = LocalHayameColors.current.mutedText)
                     }
                 }
             }
@@ -398,7 +394,7 @@ fun MarketingPagesScreen(onBack: () -> Unit) {
     }
 
     Scaffold(
-        containerColor = Color(0xFFF8FAFF),
+        containerColor = LocalHayameColors.current.pageBackground,
         topBar = { ParityTopBar(title = "Marketing", onBack = onBack) },
     ) { inner ->
         LazyColumn(
@@ -412,7 +408,7 @@ fun MarketingPagesScreen(onBack: () -> Unit) {
             item {
                 Text(
                     "SEO landing pages are served as web content and opened in-app.",
-                    color = MutedText,
+                    color = LocalHayameColors.current.mutedText,
                     style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
                 )
             }
@@ -422,15 +418,15 @@ fun MarketingPagesScreen(onBack: () -> Unit) {
                         .fillMaxWidth()
                         .clickable { openExternalUrlCompat(context, page.second) },
                     shape = RoundedCornerShape(14.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    colors = CardDefaults.cardColors(containerColor = LocalHayameColors.current.cardBackground),
                 ) {
                     Row(
                         modifier = Modifier.padding(14.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
-                        Text(page.first, color = BrandNavy, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                        Icon(Icons.Outlined.OpenInNew, contentDescription = null, tint = BrandBlue)
+                        Text(page.first, color = LocalHayameColors.current.brandNavy, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                        Icon(Icons.Outlined.OpenInNew, contentDescription = null, tint = LocalHayameColors.current.brandBlue)
                     }
                 }
             }
@@ -444,7 +440,7 @@ fun HostApplicationPendingScreen(viewModel: AppViewModel, onBack: () -> Unit, on
     val status = (me?.host_application_status ?: me?.host_status ?: me?.host_application?.status ?: "").lowercase()
 
     Scaffold(
-        containerColor = Color(0xFFF8FAFF),
+        containerColor = LocalHayameColors.current.pageBackground,
         topBar = { ParityTopBar(title = "Host Review", onBack = onBack) },
     ) { inner ->
         LazyColumn(
@@ -463,10 +459,10 @@ fun HostApplicationPendingScreen(viewModel: AppViewModel, onBack: () -> Unit, on
             }
 
             item {
-                Card(shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                Card(shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = LocalHayameColors.current.cardBackground)) {
                     Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text("Status", color = MutedText)
-                        Text(status.ifBlank { "pending" }.replace("_", " ").uppercase(), color = BrandNavy, fontWeight = FontWeight.Bold)
+                        Text("Status", color = LocalHayameColors.current.mutedText)
+                        Text(status.ifBlank { "pending" }.replace("_", " ").uppercase(), color = LocalHayameColors.current.brandNavy, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -497,7 +493,7 @@ fun HostFavoritesScreen(viewModel: AppViewModel, onBack: () -> Unit) {
         .sortedByDescending { it.favorites_count ?: 0.0 }
 
     Scaffold(
-        containerColor = Color(0xFFF8FAFF),
+        containerColor = LocalHayameColors.current.pageBackground,
         topBar = { ParityTopBar(title = "Favorites", onBack = onBack) },
     ) { inner ->
         LazyColumn(
@@ -517,12 +513,12 @@ fun HostFavoritesScreen(viewModel: AppViewModel, onBack: () -> Unit) {
                         item { EmptyBlock("No host listings", "Create listings to track favorite performance.") }
                     } else {
                         items(cars, key = { it.id }) { car ->
-                            Card(shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                            Card(shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = LocalHayameColors.current.cardBackground)) {
                                 Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    Text(car.title.orEmpty().ifBlank { listOfNotNull(car.brand, car.model).joinToString(" ") }, color = BrandNavy, fontWeight = FontWeight.Bold)
-                                    Text(listOfNotNull(car.city, car.region).joinToString(", "), color = MutedText)
+                                    Text(car.title.orEmpty().ifBlank { listOfNotNull(car.brand, car.model).joinToString(" ") }, color = LocalHayameColors.current.brandNavy, fontWeight = FontWeight.Bold)
+                                    Text(listOfNotNull(car.city, car.region).joinToString(", "), color = LocalHayameColors.current.mutedText)
                                     Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text("GH₵${(car.daily_price ?: 0.0).toInt()} / day", color = BrandBlue, fontWeight = FontWeight.Bold)
+                                        Text("GH₵${(car.daily_price ?: 0.0).toInt()} / day", color = LocalHayameColors.current.brandBlue, fontWeight = FontWeight.Bold)
                                         Spacer(modifier = Modifier.weight(1f))
                                         AssistChip(onClick = {}, label = { Text("${(car.favorites_count ?: 0.0).toInt()} saves") })
                                     }
@@ -559,7 +555,7 @@ fun HostListingPhotosScreen(viewModel: AppViewModel, carId: String, onBack: () -
     val photos = (photosState as? UiState.Success<List<CarPhotoItemDto>>)?.data.orEmpty()
 
     Scaffold(
-        containerColor = Color(0xFFF8FAFF),
+        containerColor = LocalHayameColors.current.pageBackground,
         topBar = { ParityTopBar(title = "Listing Photos", onBack = onBack) },
     ) { inner ->
         LazyColumn(
@@ -571,11 +567,11 @@ fun HostListingPhotosScreen(viewModel: AppViewModel, carId: String, onBack: () -
             contentPadding = PaddingValues(vertical = 12.dp),
         ) {
             item {
-                Card(shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                Card(shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = LocalHayameColors.current.cardBackground)) {
                     Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text("Photos", color = MutedText)
-                        Text("${photos.size} / $photosLimit", color = BrandNavy, fontWeight = FontWeight.Bold)
-                        Text("Maximum $photosLimit photos, up to 4MB each.", color = MutedText)
+                        Text("Photos", color = LocalHayameColors.current.mutedText)
+                        Text("${photos.size} / $photosLimit", color = LocalHayameColors.current.brandNavy, fontWeight = FontWeight.Bold)
+                        Text("Maximum $photosLimit photos, up to 4MB each.", color = LocalHayameColors.current.mutedText)
                     }
                 }
             }
@@ -586,7 +582,7 @@ fun HostListingPhotosScreen(viewModel: AppViewModel, carId: String, onBack: () -
                 UiState.Empty -> item { EmptyBlock("No photos uploaded", "Upload high-quality exterior and interior angles.") }
                 is UiState.Success -> {
                     items(photos, key = { it.id }) { photo ->
-                        Card(shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                        Card(shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = LocalHayameColors.current.cardBackground)) {
                             Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                 val resolved = resolveParityImage(photo.url)
                                 if (!resolved.isNullOrBlank()) {
@@ -661,7 +657,7 @@ fun HostAvailabilityEditorScreen(viewModel: AppViewModel, carId: String, onBack:
     }
 
     Scaffold(
-        containerColor = Color(0xFFF8FAFF),
+        containerColor = LocalHayameColors.current.pageBackground,
         topBar = { ParityTopBar(title = "Availability", onBack = onBack) },
     ) { inner ->
         LazyColumn(
@@ -673,12 +669,12 @@ fun HostAvailabilityEditorScreen(viewModel: AppViewModel, carId: String, onBack:
             contentPadding = PaddingValues(vertical = 12.dp),
         ) {
             item {
-                Card(shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                Card(shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = LocalHayameColors.current.cardBackground)) {
                     Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         OutlinedTextField(value = startDate, onValueChange = { startDate = it }, label = { Text("Start date (YYYY-MM-DD)") }, modifier = Modifier.fillMaxWidth())
                         OutlinedTextField(value = endDate, onValueChange = { endDate = it }, label = { Text("End date (YYYY-MM-DD)") }, modifier = Modifier.fillMaxWidth())
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("Mark as available", modifier = Modifier.weight(1f), color = BrandNavy)
+                            Text("Mark as available", modifier = Modifier.weight(1f), color = LocalHayameColors.current.brandNavy)
                             Switch(checked = markAvailable, onCheckedChange = { markAvailable = it })
                         }
                         Button(
@@ -692,9 +688,9 @@ fun HostAvailabilityEditorScreen(viewModel: AppViewModel, carId: String, onBack:
             }
 
             item {
-                Card(shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                Card(shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = LocalHayameColors.current.cardBackground)) {
                     Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text("Recurring weekday blocks", color = BrandNavy, fontWeight = FontWeight.Bold)
+                        Text("Recurring weekday blocks", color = LocalHayameColors.current.brandNavy, fontWeight = FontWeight.Bold)
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             weekdays.forEach { day ->
                                 val selected = selectedDays.contains(day.first)

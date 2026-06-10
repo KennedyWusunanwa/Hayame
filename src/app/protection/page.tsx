@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { AlertCircle, Shield } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { SUPPORT_EMAIL, SUPPORT_PHONE } from "@/lib/support";
+import { SUPPORT_EMAIL } from "@/lib/support";
 
 export const metadata: Metadata = {
   title: "Protection | Hayame",
@@ -77,8 +77,8 @@ export default function ProtectionPage() {
         Need booking help now? Visit the{" "}
         <Link href="/contact" className="font-semibold text-brand">
           contact page
-        </Link>{" "}
-        or call {SUPPORT_PHONE}.
+        </Link>
+        .
       </div>
     </div>
   );

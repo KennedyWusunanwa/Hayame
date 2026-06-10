@@ -36,6 +36,10 @@ type BookingRow = {
   trip_use_region?: string | null;
   trip_use_city?: string | null;
   trip_use_address?: string | null;
+  delivery_address?: string | null;
+  delivery_time?: string | null;
+  contact_phone?: string | null;
+  delivery_notes?: string | null;
   trip_outside_accra?: boolean | null;
   trip_outside_listing_region?: boolean | null;
   outside_accra_surcharge?: number | null;
@@ -193,6 +197,12 @@ export function BookingsTable({ mode = "host" }: { mode?: "host" | "renter" }) {
           ),
         );
       }
+      if (!isOwnerView && conversationId) {
+        await sendTripSummaryIfMissing(
+          conversationId,
+          buildTripMessageSummary(booking),
+        );
+      }
       router.push(`/messages?conversation=${conversationId}`);
     } catch (err: any) {
       alert(err.message ?? "Unable to open chat.");
@@ -339,8 +349,11 @@ function BookingsList({
             null;
           const durationNights = getDurationNights(booking);
           const tripMode =
-            Number(booking.delivery_fee ?? 0) > 0 ? "Delivery" : "Pickup";
+            hasDeliveryLocation(booking) || Number(booking.delivery_fee ?? 0) > 0
+              ? "Delivery"
+              : "Pickup";
           const tripUseLocation = formatTripUseLocation(booking);
+          const deliveryLocation = formatDeliveryLocation(booking);
 
           return (
             <details
@@ -475,6 +488,12 @@ function BookingsList({
                     value={formatDateLabel(booking.end_date)}
                   />
                   <Detail label="Use location" value={tripUseLocation} />
+                  {tripMode === "Delivery" ? (
+                    <Detail
+                      label="Delivery location"
+                      value={deliveryLocation}
+                    />
+                  ) : null}
                   <Detail
                     label="Daily rate"
                     value={formatCurrency(Number(booking.daily_rate ?? 0))}
@@ -578,6 +597,12 @@ function BookingsList({
                   .join(", ");
                 const durationNights = getDurationNights(booking);
                 const tripUseLocation = formatTripUseLocation(booking);
+                const tripMode =
+                  hasDeliveryLocation(booking) ||
+                  Number(booking.delivery_fee ?? 0) > 0
+                    ? "Delivery"
+                    : "Pickup";
+                const deliveryLocation = formatDeliveryLocation(booking);
 
                 return (
                   <TableRow key={booking.id}>
@@ -634,6 +659,11 @@ function BookingsList({
                             ? " (Outside Accra)"
                             : ""}
                       </div>
+                      {tripMode === "Delivery" ? (
+                        <div className="mt-1 text-xs text-gray-600">
+                          Delivery: {deliveryLocation}
+                        </div>
+                      ) : null}
                       <div className="mt-1 text-sm text-gray-600">
                         Booked: {formatDateLabel(booking.created_at)}
                       </div>
@@ -849,6 +879,96 @@ function formatTripUseLocation(
       .filter(Boolean)
       .join(", ") || "N/A"
   );
+}
+
+function hasDeliveryLocation(
+  booking: Pick<BookingRow, "delivery_address">,
+) {
+  return Boolean(booking.delivery_address?.trim());
+}
+
+function formatDeliveryLocation(
+  booking: Pick<
+    BookingRow,
+    | "delivery_address"
+    | "trip_use_address"
+    | "trip_use_city"
+    | "trip_use_region"
+  >,
+) {
+  return booking.delivery_address?.trim() || formatTripUseLocation(booking);
+}
+
+function buildTripMessageSummary(booking: BookingRow) {
+  const tripUseLocation = formatTripUseLocation(booking);
+  const deliveryLocation = formatDeliveryLocation(booking);
+  const isDelivery =
+    hasDeliveryLocation(booking) || Number(booking.delivery_fee ?? 0) > 0;
+  const mode = isDelivery ? "Delivery" : "Pickup";
+  const duration = getDurationNights(booking);
+  const lines = [
+    "Trip details",
+    `Car: ${booking.cars?.title ?? booking.car_id}`,
+    `Guest: ${booking.renter?.full_name ?? "Guest"}`,
+    `Dates: ${formatDateLabel(booking.start_date)} - ${formatDateLabel(
+      booking.end_date,
+    )}`,
+    `Duration: ${duration} day${duration === 1 ? "" : "s"}`,
+    `Time: ${booking.delivery_time?.trim() || "Not set"}`,
+    `${mode} location: ${isDelivery ? deliveryLocation : tripUseLocation}`,
+    `Trip use area: ${tripUseLocation}`,
+    `Price: ${formatCurrency(Number(booking.total_price ?? 0))}`,
+    `Daily rate: ${formatCurrency(Number(booking.daily_rate ?? 0))}`,
+    `Subtotal: ${formatCurrency(Number(booking.subtotal ?? 0))}`,
+    `Insurance: ${formatCurrency(Number(booking.insurance_fee ?? 0))}`,
+    `Delivery fee: ${formatCurrency(Number(booking.delivery_fee ?? 0))}`,
+    `Outside region fee: ${formatCurrency(
+      Number(booking.outside_accra_surcharge ?? 0),
+    )}`,
+    `Deposit: ${formatCurrency(Number(booking.deposit_amount ?? 0))}`,
+    `Payment ref: ${booking.payment_reference?.trim() || "N/A"}`,
+    `Booking ID: ${booking.id}`,
+  ];
+  if (booking.contact_phone?.trim()) {
+    lines.push(`Contact phone: ${booking.contact_phone.trim()}`);
+  }
+  if (booking.delivery_notes?.trim()) {
+    lines.push(`Notes: ${booking.delivery_notes.trim()}`);
+  }
+  return lines.join("\n");
+}
+
+async function sendTripSummaryIfMissing(conversationId: string, body: string) {
+  const trimmed = body.trim();
+  if (!trimmed) return;
+
+  const params = new URLSearchParams({
+    conversationId,
+    markRead: "false",
+    limit: "500",
+  });
+  const messagesRes = await fetch(`/api/messages?${params.toString()}`);
+  if (messagesRes.ok) {
+    const payload = (await messagesRes.json().catch(() => ({}))) as {
+      data?: Array<{ body?: string | null }>;
+    };
+    const alreadySent = (payload.data ?? []).some(
+      (message) => message.body?.trim() === trimmed,
+    );
+    if (alreadySent) return;
+  }
+
+  const sendRes = await fetch("/api/messages", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ conversationId, body: trimmed }),
+  });
+  if (!sendRes.ok) {
+    const payload = (await sendRes.json().catch(() => ({}))) as {
+      message?: string;
+    };
+    throw new Error(payload.message ?? "Unable to send trip details.");
+  }
 }
 
 function statusSummaryLabel(status?: string) {

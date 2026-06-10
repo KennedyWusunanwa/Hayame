@@ -11,6 +11,6 @@ val CardBackground = Color(0xFFFFFFFF)
 val Border = Color(0x14000000)
 val MutedText = Color(0xFF737D91)
 
-val Success = Color(0xFF1CA15F)
+val Success = Color(0xFF1CA160)
 val Warning = Color(0xFFED8F30)
-val Danger = Color(0xFFE04141)
+val Danger = Color(0xFFE04040)

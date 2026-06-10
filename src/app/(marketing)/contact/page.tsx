@@ -1,12 +1,10 @@
-import { Mail, MapPin, Phone } from "lucide-react";
+import { Mail, MapPin } from "lucide-react";
 import { ContactForm } from "@/components/contact-form";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   SUPPORT_ADDRESS,
   SUPPORT_EMAIL,
-  SUPPORT_PHONE,
   getSupportEmailHref,
-  getSupportPhoneHref,
 } from "@/lib/support";
 
 export default function ContactPage() {
@@ -23,15 +21,6 @@ export default function ContactPage() {
             reply within one business day.
           </p>
           <div className="space-y-3 text-sm text-gray-700">
-            <p className="flex items-center gap-2">
-              <Phone className="h-4 w-4 text-primary" />
-              <a
-                className="hover:text-primary hover:underline"
-                href={getSupportPhoneHref()}
-              >
-                {SUPPORT_PHONE}
-              </a>
-            </p>
             <p className="flex items-center gap-2">
               <Mail className="h-4 w-4 text-primary" />
               <a

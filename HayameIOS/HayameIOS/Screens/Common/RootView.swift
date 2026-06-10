@@ -21,8 +21,8 @@ struct RootView: View {
                 }
             }
 
-            if let announcement = appState.activeAnnouncement {
-                Color.black.opacity(0.28)
+            if let announcement = appState.activeAnnouncement, appState.canPresentActiveAnnouncement {
+                Color.black.opacity(0.36)
                     .ignoresSafeArea()
                     .onTapGesture {
                         appState.dismissActiveAnnouncement()
@@ -146,40 +146,51 @@ private struct AppAnnouncementOverlay: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .top, spacing: 14) {
+                ZStack {
+                    Circle()
+                        .fill(HayameTheme.brandBlue.opacity(0.12))
+                        .frame(width: 48, height: 48)
+                    Image(systemName: announcement.category.lowercased() == "news" ? "megaphone.fill" : "bell.badge.fill")
+                        .font(.system(size: 19, weight: .semibold))
+                        .foregroundStyle(HayameTheme.brandBlue)
+                }
+
+                VStack(alignment: .leading, spacing: 7) {
                     Text(badgeTitle)
                         .font(.system(size: 11, weight: .bold, design: .rounded))
+                        .tracking(0.6)
+                        .textCase(.uppercase)
                         .foregroundStyle(HayameTheme.brandBlue)
 
                     Text(announcement.title)
-                        .font(.system(size: 22, weight: .bold, design: .rounded))
+                        .font(.system(size: 24, weight: .bold, design: .rounded))
                         .foregroundStyle(HayameTheme.brandNavy)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
 
-                Spacer()
+                Spacer(minLength: 8)
 
                 Button(action: onDismiss) {
                     Image(systemName: "xmark")
                         .font(.system(size: 13, weight: .bold))
                         .foregroundStyle(HayameTheme.mutedText)
-                        .padding(10)
+                        .frame(width: 38, height: 38)
                         .background(Circle().fill(HayameTheme.fieldBackground))
                 }
                 .buttonStyle(.plain)
             }
 
-            ScrollView(showsIndicators: false) {
-                Text(announcement.body)
-                    .font(.system(size: 15, weight: .medium, design: .rounded))
-                    .foregroundStyle(HayameTheme.brandNavy)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .frame(maxHeight: 220)
+            Text(announcement.body)
+                .font(.system(size: 16, weight: .medium, design: .rounded))
+                .lineSpacing(3)
+                .foregroundStyle(HayameTheme.brandNavy.opacity(0.88))
+                .fixedSize(horizontal: false, vertical: true)
+                .lineLimit(8)
 
             if announcement.showOnce {
                 Text("This notice is shown once on this device.")
-                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
                     .foregroundStyle(HayameTheme.mutedText)
             }
 
@@ -192,18 +203,18 @@ private struct AppAnnouncementOverlay: View {
                     .buttonStyle(PrimaryPillButtonStyle())
                 }
 
-                Button(announcement.ctaURL == nil ? "Continue" : "Not now") {
+                Button(announcement.ctaURL == nil ? "Got it" : "Not now") {
                     onDismiss()
                 }
                 .buttonStyle(SecondaryPillButtonStyle())
             }
         }
-        .padding(22)
-        .frame(maxWidth: 420)
+        .padding(24)
+        .frame(maxWidth: 390)
         .background(
-            RoundedRectangle(cornerRadius: 26, style: .continuous)
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
                 .fill(HayameTheme.cardBackground)
-                .shadow(color: Color.black.opacity(0.16), radius: 30, x: 0, y: 18)
+                .shadow(color: Color.black.opacity(0.18), radius: 28, x: 0, y: 16)
         )
     }
 

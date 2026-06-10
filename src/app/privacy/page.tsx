@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { SUPPORT_ADDRESS, SUPPORT_EMAIL, SUPPORT_PHONE } from "@/lib/support";
+import { SUPPORT_ADDRESS, SUPPORT_EMAIL } from "@/lib/support";
 
 export const metadata: Metadata = {
   title: "Privacy Policy | Hayame",
@@ -616,10 +616,6 @@ export default function PrivacyPage() {
             >
               {SUPPORT_EMAIL}
             </a>
-          </p>
-          <p>
-            <span className="font-semibold text-foreground">Phone:</span>{" "}
-            {SUPPORT_PHONE}
           </p>
           <p>
             <span className="font-semibold text-foreground">Address:</span>{" "}

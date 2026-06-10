@@ -42,10 +42,18 @@ export async function POST(req: Request) {
     const tripUseRegion = parsed.tripUseRegion.trim();
     const tripUseCity = parsed.tripUseCity.trim();
     const tripUseAddress = parsed.tripUseAddress.trim();
+    const deliveryAddress =
+      parsed.tripMode === "delivery" ? (parsed.deliveryAddress ?? "").trim() : "";
+    const deliveryTime =
+      parsed.tripMode === "delivery" ? (parsed.deliveryTime ?? "").trim() : "";
+    const contactPhone =
+      parsed.tripMode === "delivery" ? (parsed.contactPhone ?? "").trim() : "";
+    const deliveryNotes =
+      parsed.tripMode === "delivery" ? (parsed.deliveryNotes ?? "").trim() : "";
 
     const { data: car, error: carError } = await db
       .from("cars")
-      .select("id,is_available,city,region,outside_accra_fee")
+      .select("id,is_available,city,region,outside_accra_fee,delivery_available")
       .eq("id", parsed.carId)
       .maybeSingle();
     if (carError || !car) {
@@ -55,6 +63,18 @@ export async function POST(req: Request) {
       return NextResponse.json(
         { message: "Car is unavailable" },
         { status: 409 },
+      );
+    }
+    if (parsed.tripMode === "delivery" && !(car as any).delivery_available) {
+      return NextResponse.json(
+        { message: "Delivery is not available for this car" },
+        { status: 400 },
+      );
+    }
+    if (parsed.tripMode === "delivery" && deliveryAddress.length < 3) {
+      return NextResponse.json(
+        { message: "Delivery address is required" },
+        { status: 400 },
       );
     }
 
@@ -90,7 +110,7 @@ export async function POST(req: Request) {
     const { data: existingHold } = await db
       .from("bookings")
       .select(
-        "id,hold_expires_at,trip_use_region,trip_use_city,trip_use_address,trip_outside_accra,trip_outside_listing_region,outside_accra_surcharge",
+        "id,hold_expires_at,trip_use_region,trip_use_city,trip_use_address,delivery_address,delivery_time,contact_phone,delivery_notes,trip_outside_accra,trip_outside_listing_region,outside_accra_surcharge",
       )
       .eq("car_id", parsed.carId)
       .eq("renter_id", user.id)
@@ -104,6 +124,10 @@ export async function POST(req: Request) {
         existingHold.trip_use_region !== tripUseRegion ||
         existingHold.trip_use_city !== tripUseCity ||
         existingHold.trip_use_address !== tripUseAddress ||
+        (existingHold.delivery_address ?? "") !== deliveryAddress ||
+        (existingHold.delivery_time ?? "") !== deliveryTime ||
+        (existingHold.contact_phone ?? "") !== contactPhone ||
+        (existingHold.delivery_notes ?? "") !== deliveryNotes ||
         Boolean(existingHold.trip_outside_accra) !== tripOutsideAccra ||
         Boolean(existingHold.trip_outside_listing_region) !==
           tripOutsideListingRegion ||
@@ -117,6 +141,10 @@ export async function POST(req: Request) {
             trip_use_region: tripUseRegion,
             trip_use_city: tripUseCity,
             trip_use_address: tripUseAddress,
+            delivery_address: deliveryAddress || null,
+            delivery_time: deliveryTime || null,
+            contact_phone: contactPhone || null,
+            delivery_notes: deliveryNotes || null,
             trip_outside_accra: tripOutsideAccra,
             trip_outside_listing_region: tripOutsideListingRegion,
             outside_accra_surcharge: outsideAccraSurcharge,
@@ -178,6 +206,10 @@ export async function POST(req: Request) {
         trip_use_region: tripUseRegion,
         trip_use_city: tripUseCity,
         trip_use_address: tripUseAddress,
+        delivery_address: deliveryAddress || null,
+        delivery_time: deliveryTime || null,
+        contact_phone: contactPhone || null,
+        delivery_notes: deliveryNotes || null,
         trip_outside_accra: tripOutsideAccra,
         trip_outside_listing_region: tripOutsideListingRegion,
         outside_accra_surcharge: outsideAccraSurcharge,

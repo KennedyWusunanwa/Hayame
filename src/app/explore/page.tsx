@@ -396,9 +396,16 @@ function ExploreContent() {
       const matchesQuery =
         !query ||
         normalize(car.name).includes(query) ||
+        normalize(car.description).includes(query) ||
         normalize(car.city).includes(query) ||
+        normalize(car.region).includes(query) ||
         normalize(car.brand).includes(query) ||
-        normalize(car.model).includes(query);
+        normalize(car.model).includes(query) ||
+        normalize(car.car_type).includes(query) ||
+        normalize(car.fuel_type ?? car.fuel).includes(query) ||
+        normalize(car.transmission).includes(query) ||
+        normalize(car.host?.name).includes(query) ||
+        features.some((feature) => normalize(feature).includes(query));
       const matchesRegion = !filters.region || car.region === filters.region;
       const matchesCity = !filters.city || car.city === filters.city;
       const matchesType = !filters.carType || car.car_type === filters.carType;

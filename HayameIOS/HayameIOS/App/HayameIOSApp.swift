@@ -4,15 +4,14 @@ import UIKit
 @main
 struct HayameIOSApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-    @AppStorage("hayame.appearance_intro_seen") private var hasSeenAppearanceIntro = false
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var appState = AppState()
     @State private var showSplash = true
     @State private var showAppearanceTransition = false
     @State private var appearanceTransitionTargetsDarkMode = false
     @State private var hasHandledInitialAppearance = false
-    @State private var showAppearanceIntro = false
     @State private var appearanceTransitionTask: Task<Void, Never>?
+    @State private var hasConfiguredNotifications = false
 
     var body: some Scene {
         WindowGroup {
@@ -24,7 +23,8 @@ struct HayameIOSApp: App {
 
                 if showSplash {
                     SplashScreen()
-                        .transition(.opacity.combined(with: .scale(scale: 1.02)))
+                        .transition(.opacity)
+                        .zIndex(10)
                 }
 
                 if showAppearanceTransition {
@@ -33,39 +33,32 @@ struct HayameIOSApp: App {
                         .zIndex(20)
                 }
 
-                if showAppearanceIntro {
-                    Color.black.opacity(0.34)
-                        .ignoresSafeArea()
-                        .transition(.opacity)
-                        .zIndex(30)
-
-                    AppearanceIntroPrompt(
-                        darkModeEnabled: appState.darkModeEnabled,
-                        onOpenSettings: {
-                            hasSeenAppearanceIntro = true
-                            withAnimation(.easeInOut(duration: 0.18)) {
-                                showAppearanceIntro = false
-                            }
-                            appState.openAppearanceSettings()
-                        },
-                        onTryLater: {
-                            hasSeenAppearanceIntro = true
-                            withAnimation(.easeInOut(duration: 0.18)) {
-                                showAppearanceIntro = false
-                            }
-                        }
-                    )
-                    .padding(20)
-                    .transition(.scale(scale: 0.96).combined(with: .opacity))
-                    .zIndex(31)
-                }
             }
             .preferredColorScheme(appState.darkModeEnabled ? .dark : .light)
             .onAppear {
+                logSplash("root appeared")
                 applyWindowStyle(appState.darkModeEnabled)
-                presentAppearanceIntroIfNeeded()
+            }
+            .task {
+                guard showSplash else { return }
+                logSplash("root timer started")
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
+                guard !Task.isCancelled else {
+                    logSplash("root timer cancelled")
+                    return
+                }
+                logSplash("root timer finished")
+                withAnimation(.easeOut(duration: 0.45)) {
+                    showSplash = false
+                }
+                hasHandledInitialAppearance = true
+                configureNotificationsIfNeeded()
             }
             .onChange(of: appState.darkModeEnabled) { _, enabled in
+                if showSplash {
+                    applyWindowStyle(enabled)
+                    return
+                }
                 if hasHandledInitialAppearance {
                     presentAppearanceTransition(targetsDarkMode: enabled)
                 } else {
@@ -74,22 +67,30 @@ struct HayameIOSApp: App {
                 applyWindowStyle(enabled)
             }
             .onChange(of: scenePhase) { _, phase in
-                if phase != .active {
+                if phase == .active {
+                    applyWindowStyle(appState.darkModeEnabled)
+                } else {
                     dismissAppearanceTransition()
                 }
-            }
-            .task {
-                try? await Task.sleep(nanoseconds: 5_000_000_000)
-                withAnimation(.easeOut(duration: 0.45)) {
-                    showSplash = false
-                }
-                hasHandledInitialAppearance = true
             }
         }
     }
 
     private func applyWindowStyle(_ darkMode: Bool) {
         HayameSystemAppearance.configure(darkMode: darkMode)
+    }
+
+    private func logSplash(_ message: String) {
+        #if DEBUG
+        print("[HayameSplash] \(message)")
+        #endif
+    }
+
+    private func configureNotificationsIfNeeded() {
+        guard !hasConfiguredNotifications else { return }
+        hasConfiguredNotifications = true
+        logSplash("configuring notifications")
+        NotificationManager.shared.configure(launchOptions: AppDelegate.consumePendingLaunchOptions())
     }
 
     private func presentAppearanceTransition(targetsDarkMode: Bool) {
@@ -117,69 +118,6 @@ struct HayameIOSApp: App {
         }
     }
 
-    private func presentAppearanceIntroIfNeeded() {
-        guard !hasSeenAppearanceIntro, !showAppearanceIntro else { return }
-        Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 1_100_000_000)
-            guard !hasSeenAppearanceIntro else { return }
-            withAnimation(.easeInOut(duration: 0.18)) {
-                showAppearanceIntro = true
-            }
-        }
-    }
-}
-
-private struct AppearanceIntroPrompt: View {
-    let darkModeEnabled: Bool
-    let onOpenSettings: () -> Void
-    let onTryLater: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            HStack(alignment: .top, spacing: 14) {
-                ZStack {
-                    Circle()
-                        .fill(HayameTheme.brandBlue.opacity(0.14))
-                        .frame(width: 56, height: 56)
-                    Image(systemName: darkModeEnabled ? "moon.stars.fill" : "sun.max.fill")
-                        .font(.system(size: 24, weight: .semibold))
-                        .foregroundStyle(HayameTheme.brandBlue)
-                }
-
-                VStack(alignment: .leading, spacing: 5) {
-                    Text("Choose your look")
-                        .font(.system(size: 22, weight: .bold, design: .rounded))
-                        .foregroundStyle(HayameTheme.brandNavy)
-                    Text("Hayame now supports light and dark mode. You can change it anytime in Appearance.")
-                        .font(.system(size: 14, weight: .medium, design: .rounded))
-                        .foregroundStyle(HayameTheme.mutedText)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-
-            VStack(spacing: 10) {
-                Button {
-                    onOpenSettings()
-                } label: {
-                    Label("Open Appearance settings", systemImage: "slider.horizontal.3")
-                }
-                .buttonStyle(PrimaryPillButtonStyle())
-
-                Button("Try later") {
-                    onTryLater()
-                }
-                .buttonStyle(SecondaryPillButtonStyle())
-                .frame(maxWidth: .infinity, alignment: .center)
-            }
-        }
-        .padding(22)
-        .frame(maxWidth: 420)
-        .background(
-            RoundedRectangle(cornerRadius: 26, style: .continuous)
-                .fill(HayameTheme.cardBackground)
-                .shadow(color: Color.black.opacity(0.22), radius: 32, x: 0, y: 18)
-        )
-    }
 }
 
 private struct AppearanceTransitionOverlay: View {

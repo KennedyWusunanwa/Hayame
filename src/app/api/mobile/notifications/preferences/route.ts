@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
+  DEFAULT_NOTIFICATION_PREFERENCES,
   getUserNotificationPreferences,
   isMissingNotificationStorageError,
   parseNotificationPreferences,
@@ -63,13 +64,13 @@ export async function POST(req: Request) {
 
     if (error) {
       if (isMissingNotificationStorageError(error)) {
-        return NextResponse.json(
-          {
-            message:
-              "Notification preferences storage is not set up yet. Apply the latest database migration first.",
+        return NextResponse.json({
+          data: {
+            ...DEFAULT_NOTIFICATION_PREFERENCES,
+            ...data,
           },
-          { status: 503 },
-        );
+          persisted: false,
+        });
       }
       return NextResponse.json(
         { message: error.message ?? "Failed to save notification preferences." },

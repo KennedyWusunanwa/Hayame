@@ -1,0 +1,15 @@
+<resources>
+    <style name="Theme.Hayame" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="android:windowSplashScreenBackground">#0F85E3</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_system_logo</item>
+        <item name="android:windowSplashScreenIconBackgroundColor">@android:color/transparent</item>
+        <item name="android:windowBackground">@drawable/splash_window_background</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:navigationBarColor">#0F85E3</item>
+        <item name="android:navigationBarDividerColor">#0F85E3</item>
+        <item name="android:statusBarColor">#0F85E3</item>
+        <item name="android:enforceNavigationBarContrast">false</item>
+        <item name="android:enforceStatusBarContrast">false</item>
+    </style>
+</resources>
