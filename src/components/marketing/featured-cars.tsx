@@ -5,19 +5,7 @@ import { deriveHostBadgeType } from "@/lib/host-badges";
 import { createSupabasePublicClient } from "@/lib/supabase/public";
 import { mockCars } from "@/lib/mock-data";
 
-type FeaturedRow = Database["public"]["Tables"]["cars"]["Row"] & {
-  image_url?: string | null;
-  avg_rating?: number | null;
-  reviews_count?: number | null;
-  host_name?: string | null;
-  host_avatar?: string | null;
-  host_type?: string | null;
-  host_level?: string | null;
-  is_host?: boolean | null;
-  id_verified?: boolean | null;
-  phone_verified?: boolean | null;
-  email_verified?: boolean | null;
-};
+type FeaturedRow = Database["public"]["Views"]["car_search_view"]["Row"];
 
 type FeaturedCar = {
   id: string;
@@ -51,7 +39,6 @@ const FEATURED_SELECT = [
   "host_avatar",
   "host_type",
   "host_level",
-  "is_host",
   "id_verified",
   "phone_verified",
   "email_verified",
@@ -85,50 +72,56 @@ async function loadFeaturedCars() {
   }
 
   let featured: FeaturedCar[] = fallbackFeaturedCars();
+  let loadedLiveCars = false;
   try {
     const supabase = createSupabasePublicClient();
-    const { data } = await (supabase as any)
+    const { data, error } = await (supabase as any)
       .from("car_search_view")
       .select(FEATURED_SELECT)
       .eq("approval_status", "approved")
       .order("created_at", { ascending: false })
       .limit(8);
+    if (error) throw error;
     if (data && data.length > 0) {
-      featured = (data as FeaturedRow[]).map((car) => ({
-        id: car.id,
-        title: car.title,
-        city: car.city ?? "",
-        region: car.region ?? "",
-        daily_price: Number(car.daily_price ?? 0),
-        rating:
-          typeof car.avg_rating === "number"
-            ? Number(car.avg_rating)
-            : undefined,
-        reviews: Number(car.reviews_count ?? 0),
-        car_type: car.car_type ?? "",
-        description: car.description ?? "",
-        image_url: car.image_url ?? "",
-        host_name: car.host_name ?? "Host",
-        host_avatar: car.host_avatar ?? "",
-        host_type: deriveHostBadgeType({
-          hostType: car.host_type,
-          hostLevel: car.host_level,
-          isHost: car.is_host,
-          idVerified: car.id_verified,
-          phoneVerified: car.phone_verified,
-          emailVerified: car.email_verified,
-        }),
-        isFavorite: false,
-      }));
+      featured = (data as FeaturedRow[])
+        .filter((car) => car.id)
+        .map((car) => ({
+          id: car.id ?? "",
+          title: car.title ?? "Car listing",
+          city: car.city ?? "",
+          region: car.region ?? "",
+          daily_price: Number(car.daily_price ?? 0),
+          rating:
+            typeof car.avg_rating === "number"
+              ? Number(car.avg_rating)
+              : undefined,
+          reviews: Number(car.reviews_count ?? 0),
+          car_type: car.car_type ?? "",
+          description: car.description ?? "",
+          image_url: car.image_url ?? "",
+          host_name: car.host_name ?? "Host",
+          host_avatar: car.host_avatar ?? "",
+          host_type: deriveHostBadgeType({
+            hostType: car.host_type,
+            hostLevel: car.host_level,
+            idVerified: car.id_verified,
+            phoneVerified: car.phone_verified,
+            emailVerified: car.email_verified,
+          }),
+          isFavorite: false,
+        }));
+      loadedLiveCars = featured.length > 0;
     }
   } catch {
     // fall back to mock data
   }
 
-  cachedFeatured = {
-    expiresAt: Date.now() + FEATURED_CACHE_TTL_MS,
-    cars: featured,
-  };
+  if (loadedLiveCars) {
+    cachedFeatured = {
+      expiresAt: Date.now() + FEATURED_CACHE_TTL_MS,
+      cars: featured,
+    };
+  }
   return featured;
 }
 
