@@ -83,7 +83,7 @@ export function HeroSearchBar() {
   };
 
   return (
-    <div className="-mt-4 w-full sm:-mt-6 lg:-mt-8">
+    <div className="-mt-4 w-full sm:-mt-5 lg:-mt-6">
       <div className="mx-auto max-w-5xl overflow-visible rounded-3xl border border-white/10 bg-[#0a2137] px-3 py-3 text-white shadow-xl sm:px-4 sm:py-4">
         <div className="lg:hidden">
           <form
