@@ -7,6 +7,8 @@ import { MobileAppRedirect } from "@/components/marketing/mobile-app-redirect";
 import { TrustStrip } from "@/components/marketing/trust-strip";
 import { WhyChoose } from "@/components/marketing/why-choose";
 
+export const revalidate = 300;
+
 export default function MarketingHome() {
   return (
     <div className="bg-[#f6f7fb]">

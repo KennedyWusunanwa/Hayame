@@ -29,7 +29,8 @@ class CarsRepository(
 
     suspend fun getCars(params: Map<String, String> = emptyMap()): CarsEnvelope {
         val auth = sessionStore.authHeader()
-        return api.getCars(auth = auth, params = params)
+        val mobileParams = mapOf("mobile" to "1", "limit" to "48") + params
+        return api.getCars(auth = auth, params = mobileParams)
     }
 
     suspend fun getCarDetail(carId: String): CarDetailEnvelope {

@@ -71,6 +71,8 @@ data class AuthPromptRequest(
     val destination: String? = null,
 )
 
+private const val WrongEmailOrPasswordMessage = "Wrong email or password."
+
 class AppViewModel(
     private val authRepository: AuthRepository,
     private val carsRepository: CarsRepository,
@@ -250,7 +252,12 @@ class AppViewModel(
         refreshActiveAnnouncements()
     }
 
-    fun login(email: String, password: String, onSuccess: () -> Unit = {}) {
+    fun login(
+        email: String,
+        password: String,
+        onSuccess: () -> Unit = {},
+        onFailure: (String) -> Unit = { _snackbar.value = it },
+    ) {
         viewModelScope.launch {
             _bootstrapping.value = true
             runCatching { authRepository.login(email, password) }
@@ -262,7 +269,7 @@ class AppViewModel(
                     registerPushIfAvailable()
                     onSuccess()
                 }
-                .onFailure { _snackbar.value = it.readableMessage("Login failed") }
+                .onFailure { onFailure(it.loginFailureMessage()) }
             _bootstrapping.value = false
         }
     }
@@ -416,12 +423,22 @@ class AppViewModel(
 
     fun loadCars(params: Map<String, String> = emptyMap()) {
         viewModelScope.launch {
-            _carsState.value = UiState.Loading
+            val hasExistingCars = _carsState.value is UiState.Success<List<CarDto>>
+            if (!hasExistingCars) {
+                _carsState.value = UiState.Loading
+            }
             runCatching { carsRepository.getCars(params) }
                 .onSuccess { envelope ->
                     _carsState.value = if (envelope.data.isEmpty()) UiState.Empty else UiState.Success(envelope.data)
                 }
-                .onFailure { _carsState.value = UiState.Error(it.readableMessage("Unable to load cars.")) }
+                .onFailure {
+                    val message = it.readableMessage("Unable to load cars.")
+                    if (hasExistingCars) {
+                        _snackbar.value = message
+                    } else {
+                        _carsState.value = UiState.Error(message)
+                    }
+                }
         }
     }
 
@@ -1288,4 +1305,15 @@ private fun Throwable.readableMessage(fallback: String): String {
         .replace("}", "")
         .replace("\"", "")
         .trim()
+}
+
+private fun Throwable.loginFailureMessage(): String {
+    val message = readableMessage(WrongEmailOrPasswordMessage)
+    val lowered = message.lowercase()
+    val statusCode = (this as? HttpException)?.code()
+    return if (statusCode == 401 || (lowered.contains("invalid") && lowered.contains("credential"))) {
+        WrongEmailOrPasswordMessage
+    } else {
+        message
+    }
 }

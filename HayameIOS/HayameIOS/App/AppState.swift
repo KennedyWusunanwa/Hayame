@@ -2,6 +2,9 @@ import Foundation
 import SwiftUI
 import UIKit
 
+private let wrongEmailOrPasswordMessage = "Wrong email or password."
+private let missingLoginFieldsMessage = "Enter your email and password."
+
 enum ExploreSortOption: String, CaseIterable, Identifiable {
     case recommended = "Recommended"
     case priceLow = "Price: Low to High"
@@ -63,6 +66,7 @@ final class AppState: ObservableObject {
     @Published var apiBaseURL: String = AppState.defaultAPIBaseURL()
     @Published var isSyncingRemote = false
     @Published var syncErrorMessage: String?
+    @Published var loginErrorAlertMessage: String?
     @Published var authInfoMessage: String?
     @Published var signupConfirmationPromptMessage: String?
     @Published var paymentFlowNotice: String?
@@ -319,8 +323,12 @@ final class AppState: ObservableObject {
     }
 
     func signIn(email: String, password: String, onSuccess: @escaping () -> Void = {}) {
-        guard !email.isEmpty, !password.isEmpty else { return }
-        Task { await signInRemote(email: email, password: password, onSuccess: onSuccess) }
+        let normalizedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedEmail.isEmpty, !password.isEmpty else {
+            loginErrorAlertMessage = missingLoginFieldsMessage
+            return
+        }
+        Task { await signInRemote(email: normalizedEmail, password: password, onSuccess: onSuccess) }
     }
 
     func signUp(firstName: String, lastName: String, email: String, city: String, region: String, password: String) {
@@ -361,6 +369,10 @@ final class AppState: ObservableObject {
 
     func consumeSignupConfirmationPrompt() {
         signupConfirmationPromptMessage = nil
+    }
+
+    func consumeLoginErrorAlert() {
+        loginErrorAlertMessage = nil
     }
 
     func signOut() {
@@ -1559,6 +1571,7 @@ final class AppState: ObservableObject {
     private func signInRemote(email: String, password: String, onSuccess: @escaping () -> Void = {}) async {
         isSyncingRemote = true
         syncErrorMessage = nil
+        loginErrorAlertMessage = nil
         authInfoMessage = nil
         signupConfirmationPromptMessage = nil
         defer { isSyncingRemote = false }
@@ -1582,11 +1595,11 @@ final class AppState: ObservableObject {
                     onSuccess()
                     return
                 } catch {
-                    syncErrorMessage = errorMessage(error, fallback: "Unable to sign in.")
+                    loginErrorAlertMessage = loginErrorMessage(error)
                     return
                 }
             }
-            syncErrorMessage = errorMessage(error, fallback: "Unable to sign in.")
+            loginErrorAlertMessage = loginErrorMessage(error)
         }
     }
 
@@ -2161,23 +2174,23 @@ final class AppState: ObservableObject {
         cars = response.data.map(mapCar)
         publicCarsLoadState = cars.isEmpty ? .empty : .loaded
 
-        let imageURLs = cars.prefix(80).compactMap { car in
+        let imageURLs = cars.prefix(24).compactMap { car in
             RemoteImageURLResolver.resolve(car.imageNames.first)
         }
-        let avatarURLs = cars.prefix(80).compactMap { car in
+        let avatarURLs = cars.prefix(24).compactMap { car in
             RemoteImageURLResolver.resolve(car.hostAvatar)
         }
         await RemoteImagePipeline.shared.prefetch(
             urls: imageURLs,
-            limit: 80,
-            targetPixelSize: CGSize(width: 900, height: 620),
-            maxConcurrent: 8
+            limit: 24,
+            targetPixelSize: CGSize(width: 560, height: 400),
+            maxConcurrent: 4
         )
         await RemoteImagePipeline.shared.prefetch(
             urls: avatarURLs,
-            limit: 80,
+            limit: 24,
             targetPixelSize: CGSize(width: 140, height: 140),
-            maxConcurrent: 6
+            maxConcurrent: 3
         )
     }
 
@@ -3228,6 +3241,18 @@ final class AppState: ObservableObject {
             return "Poor network, please refresh."
         }
         return error.localizedDescription.isEmpty ? fallback : error.localizedDescription
+    }
+
+    private func loginErrorMessage(_ error: Error) -> String {
+        let message = errorMessage(error, fallback: wrongEmailOrPasswordMessage)
+        let lowered = message.lowercased()
+        if let apiError = error as? APIError, apiError.statusCode == 401 {
+            return wrongEmailOrPasswordMessage
+        }
+        if lowered.contains("invalid") && lowered.contains("credential") {
+            return wrongEmailOrPasswordMessage
+        }
+        return message
     }
 
     deinit {

@@ -371,8 +371,23 @@ fun LoginScreen(
     var passwordVisible by rememberSaveable { mutableStateOf(false) }
     var saveLoginWithBiometrics by rememberSaveable { mutableStateOf(true) }
     var hasBiometricCredentials by remember { mutableStateOf(hasStoredBiometricCredentials(context)) }
+    var loginErrorMessage by rememberSaveable { mutableStateOf<String?>(null) }
     val biometricsAvailable = Build.VERSION.SDK_INT >= Build.VERSION_CODES.P
     val bootstrapping by viewModel.bootstrapping.collectAsState()
+    val activeLoginErrorMessage = loginErrorMessage
+
+    if (activeLoginErrorMessage != null) {
+        AlertDialog(
+            onDismissRequest = { loginErrorMessage = null },
+            title = { Text("Unable to log in") },
+            text = { Text(activeLoginErrorMessage) },
+            confirmButton = {
+                TextButton(onClick = { loginErrorMessage = null }) {
+                    Text("OK")
+                }
+            },
+        )
+    }
 
     AuthScaffold(
         title = "Welcome back.",
@@ -398,12 +413,17 @@ fun LoginScreen(
             text = if (bootstrapping) "Please wait..." else "Log in",
             enabled = !bootstrapping,
         ) {
-            viewModel.login(email, password) {
-                if (saveLoginWithBiometrics && biometricsAvailable) {
-                    saveBiometricCredentials(context, email, password)
-                    hasBiometricCredentials = true
-                }
-            }
+            viewModel.login(
+                email = email,
+                password = password,
+                onSuccess = {
+                    if (saveLoginWithBiometrics && biometricsAvailable) {
+                        saveBiometricCredentials(context, email, password)
+                        hasBiometricCredentials = true
+                    }
+                },
+                onFailure = { loginErrorMessage = it },
+            )
         }
 
         OutlinedButton(
@@ -457,7 +477,11 @@ fun LoginScreen(
                     onCredentials = { savedEmail, savedPassword ->
                         email = savedEmail
                         password = savedPassword
-                        viewModel.login(savedEmail, savedPassword)
+                        viewModel.login(
+                            email = savedEmail,
+                            password = savedPassword,
+                            onFailure = { loginErrorMessage = it },
+                        )
                     },
                     onUnavailable = {
                         hasBiometricCredentials = hasStoredBiometricCredentials(context)

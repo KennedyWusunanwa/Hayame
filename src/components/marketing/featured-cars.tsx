@@ -2,7 +2,7 @@ import { CarCard } from "@/components/car-card";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { Database } from "@/lib/database.types";
 import { deriveHostBadgeType } from "@/lib/host-badges";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabasePublicClient } from "@/lib/supabase/public";
 import { mockCars } from "@/lib/mock-data";
 
 type FeaturedRow = Database["public"]["Tables"]["cars"]["Row"] & {
@@ -36,8 +36,32 @@ type FeaturedCar = {
   isFavorite: boolean;
 };
 
-export async function FeaturedCars() {
-  let featured: FeaturedCar[] = mockCars.slice(0, 12).map((car) => ({
+const FEATURED_SELECT = [
+  "id",
+  "title",
+  "city",
+  "region",
+  "daily_price",
+  "avg_rating",
+  "reviews_count",
+  "car_type",
+  "description",
+  "image_url",
+  "host_name",
+  "host_avatar",
+  "host_type",
+  "host_level",
+  "is_host",
+  "id_verified",
+  "phone_verified",
+  "email_verified",
+].join(",");
+const FEATURED_CACHE_TTL_MS = 5 * 60 * 1000;
+
+let cachedFeatured: { expiresAt: number; cars: FeaturedCar[] } | null = null;
+
+function fallbackFeaturedCars() {
+  return mockCars.slice(0, 8).map((car) => ({
     id: car.id,
     title: car.name,
     city: car.city,
@@ -53,29 +77,22 @@ export async function FeaturedCars() {
     host_type: "",
     isFavorite: false,
   }));
+}
 
+async function loadFeaturedCars() {
+  if (cachedFeatured && cachedFeatured.expiresAt > Date.now()) {
+    return cachedFeatured.cars;
+  }
+
+  let featured: FeaturedCar[] = fallbackFeaturedCars();
   try {
-    const supabase = await createSupabaseServerClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    const favoriteIds = new Set<string>();
-    if (user) {
-      const { data: favorites } = await supabase
-        .from("favorites")
-        .select("car_id")
-        .eq("user_id", user.id);
-      favorites?.forEach((fav: { car_id: string }) =>
-        favoriteIds.add(fav.car_id),
-      );
-    }
-
+    const supabase = createSupabasePublicClient();
     const { data } = await (supabase as any)
       .from("car_search_view")
-      .select("*")
+      .select(FEATURED_SELECT)
       .eq("approval_status", "approved")
       .order("created_at", { ascending: false })
-      .limit(12);
+      .limit(8);
     if (data && data.length > 0) {
       featured = (data as FeaturedRow[]).map((car) => ({
         id: car.id,
@@ -101,12 +118,22 @@ export async function FeaturedCars() {
           phoneVerified: car.phone_verified,
           emailVerified: car.email_verified,
         }),
-        isFavorite: favoriteIds.has(car.id),
+        isFavorite: false,
       }));
     }
   } catch {
     // fall back to mock data
   }
+
+  cachedFeatured = {
+    expiresAt: Date.now() + FEATURED_CACHE_TTL_MS,
+    cars: featured,
+  };
+  return featured;
+}
+
+export async function FeaturedCars() {
+  const featured = await loadFeaturedCars();
 
   return (
     <section className="mx-auto max-w-6xl px-6 pt-14 pb-14 sm:pt-16 lg:pt-18">

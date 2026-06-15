@@ -14,6 +14,10 @@ import { MapPanel } from "@/components/map/map-panel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import {
+  ExplorePageSkeleton,
+  ListingGridSkeleton,
+} from "@/components/skeletons/page-loading-skeletons";
 import { deriveHostBadgeType } from "@/lib/host-badges";
 import { mockCars, type MockCar } from "@/lib/mock-data";
 import { siteFlags } from "@/lib/site-flags";
@@ -287,7 +291,10 @@ function ExploreContent() {
 
   useEffect(() => {
     setLoading(true);
-    fetch(searchKey ? `/api/cars?${searchKey}` : "/api/cars")
+    const params = new URLSearchParams(searchKey);
+    params.set("mobile", "1");
+    if (!params.has("limit")) params.set("limit", "48");
+    fetch(`/api/cars?${params.toString()}`)
       .then((res) => res.json())
       .then((res) => {
         setMeta(res.meta ?? {});
@@ -668,37 +675,37 @@ function ExploreContent() {
               <MapPanel markers={markers} className="h-full" />
             </div>
           ) : null}
-          <div className="grid items-start gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            {loading ? (
-              <div className="col-span-full rounded-2xl border border-border bg-white p-6 text-center text-sm text-gray-600">
-                Loading cars...
-              </div>
-            ) : sorted.length === 0 ? (
-              <div className="col-span-full rounded-2xl border border-border bg-white p-6 text-center text-sm text-gray-600">
-                No cars found. Try adjusting your filters.
-              </div>
-            ) : (
-              sorted.map((car) => (
-                <CarCard
-                  key={car.id}
-                  car={{
-                    id: car.id,
-                    title: car.name,
-                    city: car.city,
-                    region: car.region,
-                    daily_price: car.daily_price,
-                    rating: getComparableRating(car) ?? undefined,
-                    car_type: car.car_type,
-                    description: car.description,
-                    image_url: car.image,
-                    host_type: car.host_type,
-                  }}
-                  isFavorite={favoriteIds.includes(car.id)}
-                  onToggleFavorite={toggleFavorite}
-                />
-              ))
-            )}
-          </div>
+          {loading ? (
+            <ListingGridSkeleton />
+          ) : (
+            <div className="grid items-start gap-5 sm:grid-cols-2 lg:grid-cols-3">
+              {sorted.length === 0 ? (
+                <div className="col-span-full rounded-2xl border border-border bg-white p-6 text-center text-sm text-gray-600">
+                  No cars found. Try adjusting your filters.
+                </div>
+              ) : (
+                sorted.map((car) => (
+                  <CarCard
+                    key={car.id}
+                    car={{
+                      id: car.id,
+                      title: car.name,
+                      city: car.city,
+                      region: car.region,
+                      daily_price: car.daily_price,
+                      rating: getComparableRating(car) ?? undefined,
+                      car_type: car.car_type,
+                      description: car.description,
+                      image_url: car.image,
+                      host_type: car.host_type,
+                    }}
+                    isFavorite={favoriteIds.includes(car.id)}
+                    onToggleFavorite={toggleFavorite}
+                  />
+                ))
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -707,9 +714,7 @@ function ExploreContent() {
 
 export default function ExplorePage() {
   return (
-    <Suspense
-      fallback={<div className="px-4 py-10 sm:px-6 lg:px-8">Loading...</div>}
-    >
+    <Suspense fallback={<ExplorePageSkeleton />}>
       <ExploreContent />
     </Suspense>
   );

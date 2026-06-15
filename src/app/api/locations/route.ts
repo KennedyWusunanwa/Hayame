@@ -2,24 +2,45 @@ import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { fallbackCities } from "@/lib/utils";
 
+type LocationsPayload = { data: Record<string, string[]>; message?: string };
+
+const CACHE_HEADERS = {
+  "Cache-Control": "public, max-age=600, stale-while-revalidate=3600",
+};
+const SERVER_CACHE_TTL_MS = 10 * 60 * 1000;
+
+let cachedPayload: { expiresAt: number; payload: LocationsPayload } | null =
+  null;
+
+function fallbackLocations(): Record<string, string[]> {
+  const grouped: Record<string, string[]> = {};
+  fallbackCities.forEach((c) => {
+    if (!grouped[c.region]) grouped[c.region] = [];
+    grouped[c.region].push(c.city);
+  });
+  return grouped;
+}
+
 export async function GET(req: Request) {
   const strict = new URL(req.url).searchParams.get("strict") === "true";
+  if (!strict && cachedPayload && cachedPayload.expiresAt > Date.now()) {
+    return NextResponse.json(cachedPayload.payload, { headers: CACHE_HEADERS });
+  }
+
   try {
     const supabase = await createSupabaseServerClient();
-    const { data: regionsData, error: regionError } = await supabase
-      .from("gh_regions")
-      .select("id,name")
-      .order("name");
+    const [regionsResult, districtsResult] = await Promise.all([
+      supabase.from("gh_regions").select("id,name").order("name"),
+      supabase.from("gh_districts").select("name,region_id").order("name"),
+    ]);
 
+    const { data: regionsData, error: regionError } = regionsResult;
     if (regionError) throw regionError;
     if (!regionsData || regionsData.length === 0) {
       throw new Error("No regions found");
     }
 
-    const { data: districtsData, error: districtError } = await supabase
-      .from("gh_districts")
-      .select("name,region_id")
-      .order("name");
+    const { data: districtsData, error: districtError } = districtsResult;
     if (districtError) throw districtError;
 
     const regionMap = new Map<number, string>();
@@ -38,7 +59,15 @@ export async function GET(req: Request) {
       grouped[loc.region].push(loc.city);
     });
 
-    return NextResponse.json({ data: grouped });
+    const payload = { data: grouped };
+    if (!strict) {
+      cachedPayload = {
+        expiresAt: Date.now() + SERVER_CACHE_TTL_MS,
+        payload,
+      };
+    }
+
+    return NextResponse.json(payload, { headers: CACHE_HEADERS });
   } catch {
     if (strict) {
       return NextResponse.json(
@@ -47,14 +76,10 @@ export async function GET(req: Request) {
       );
     }
     // Fallback to static list so UI still works
-    const grouped: Record<string, string[]> = {};
-    fallbackCities.forEach((c) => {
-      if (!grouped[c.region]) grouped[c.region] = [];
-      grouped[c.region].push(c.city);
-    });
-    return NextResponse.json({
-      data: grouped,
+    const payload = {
+      data: fallbackLocations(),
       message: "Using fallback locations",
-    });
+    };
+    return NextResponse.json(payload, { headers: CACHE_HEADERS });
   }
 }

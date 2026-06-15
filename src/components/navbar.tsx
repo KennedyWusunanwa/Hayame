@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Menu, MessageCircle } from "lucide-react";
+import { ArrowRight, Menu, MessageCircle } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Sheet,
@@ -158,6 +158,18 @@ export function Navbar() {
 
   return (
     <header className="sticky top-0 z-30 border-b border-border bg-white/90 backdrop-blur-md shadow-sm">
+      <div className="hidden border-b border-sky-100 bg-sky-50 md:block">
+        <Link
+          href="/become-host"
+          className="mx-auto flex max-w-6xl items-center justify-center gap-3 px-4 py-2 text-sm font-semibold text-sky-900 hover:text-brand"
+        >
+          <span>Join Hayame hosts already earning from their cars</span>
+          <span className="inline-flex items-center gap-1 text-brand">
+            Apply to list your car
+            <ArrowRight className="h-4 w-4" aria-hidden="true" />
+          </span>
+        </Link>
+      </div>
       <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
         <Link href="/" className="flex items-center gap-3" aria-label="Hayame">
           <Image

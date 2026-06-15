@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { ConversationList } from "@/components/messages/conversation-list";
 import { ChatThread } from "@/components/messages/chat-thread";
 import { useMessaging } from "@/components/messages/messaging-provider";
+import { MessagesPageSkeleton } from "@/components/skeletons/page-loading-skeletons";
 import { Button } from "@/components/ui/button";
 
 export default function MessagesPage() {
@@ -20,11 +21,7 @@ export default function MessagesPage() {
   }, [activeConversationId, openConversation, searchParams]);
 
   if (loading) {
-    return (
-      <div className="mx-auto flex max-w-6xl items-center justify-center px-4 py-10">
-        <div className="loading-spinner" />
-      </div>
-    );
+    return <MessagesPageSkeleton />;
   }
 
   return (

@@ -634,7 +634,7 @@ struct APIClient {
     // MARK: - Cars
 
     func getCars(baseURL: String, token: String?) async throws -> CarsEnvelopeDTO {
-        try await request(path: "/api/cars", method: .GET, body: nil as EmptyResponse?, baseURL: baseURL, token: token)
+        try await request(path: "/api/cars?mobile=1&limit=48", method: .GET, body: nil as EmptyResponse?, baseURL: baseURL, token: token)
     }
 
     func getCarDetail(baseURL: String, token: String?, carID: String) async throws -> CarDetailEnvelopeDTO {

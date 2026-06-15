@@ -61,6 +61,52 @@ function rowMatchesSearch(row: any, tokens: string[]) {
   return tokens.every((token) => haystack.includes(token));
 }
 
+const MOBILE_CAR_LIST_SELECT = [
+  "id",
+  "owner_id",
+  "title",
+  "description",
+  "brand",
+  "model",
+  "daily_price",
+  "city",
+  "region",
+  "latitude",
+  "longitude",
+  "lat",
+  "lng",
+  "car_type",
+  "seats",
+  "transmission",
+  "fuel_type",
+  "features",
+  "year",
+  "car_year",
+  "delivery_fee",
+  "insurance_fee",
+  "deposit_amount",
+  "outside_accra_fee",
+  "cancellation_policy",
+  "is_available",
+  "instant_book",
+  "delivery_available",
+  "air_conditioning",
+  "approval_status",
+  "created_at",
+  "avg_rating",
+  "reviews_count",
+  "favorites_count",
+  "host_name",
+  "host_avatar",
+  "host_level",
+  "host_type",
+  "id_verified",
+  "phone_verified",
+  "email_verified",
+  "image_url",
+  "car_photos",
+].join(",");
+
 async function getPlatformFeePercent(supa: any) {
   const envValue = Number(
     process.env.NEXT_PUBLIC_PLATFORM_FEE_PERCENT ??
@@ -87,6 +133,7 @@ export async function GET(req: Request) {
     const q = (searchParams.get("q") ?? "").trim();
     const qTokens = searchTokens(q);
     const sort = (searchParams.get("sort") ?? "").trim();
+    const mobileList = parseBoolean(searchParams.get("mobile")) === true;
 
     let ownerId: string | null = null;
     if (mineOnly) {
@@ -98,7 +145,7 @@ export async function GET(req: Request) {
 
     let query = supa
       .from("car_search_view")
-      .select("*")
+      .select(mobileList ? MOBILE_CAR_LIST_SELECT : "*")
       .limit(qTokens.length > 0 ? 1000 : Number.isFinite(limit) ? limit : 48);
     if (mineOnly) {
       query = query.eq("owner_id", ownerId);
@@ -251,30 +298,39 @@ export async function GET(req: Request) {
       (row: any) => row?.instant_book === true,
     );
 
-    return NextResponse.json({
-      data: normalizedRows,
-      meta: {
-        platform_fee_percent: platformFeePercent,
-        capabilities: {
-          instantBook: hasInstantBookListings,
-          deliveryAvailable: true,
-          transmission: true,
-          fuelType: true,
-          seats: true,
-          year: true,
-          airConditioning: true,
-          rating: true,
-          hostType: true,
-          sorts: {
-            price_low: true,
-            price_high: true,
-            most_booked: true,
-            top_rated: true,
-            new_listings: true,
+    return NextResponse.json(
+      {
+        data: normalizedRows,
+        meta: {
+          platform_fee_percent: platformFeePercent,
+          capabilities: {
+            instantBook: hasInstantBookListings,
+            deliveryAvailable: true,
+            transmission: true,
+            fuelType: true,
+            seats: true,
+            year: true,
+            airConditioning: true,
+            rating: true,
+            hostType: true,
+            sorts: {
+              price_low: true,
+              price_high: true,
+              most_booked: true,
+              top_rated: true,
+              new_listings: true,
+            },
           },
         },
       },
-    });
+      {
+        headers: {
+          "Cache-Control": mineOnly
+            ? "private, max-age=30, stale-while-revalidate=120"
+            : "public, max-age=60, stale-while-revalidate=300",
+        },
+      },
+    );
   } catch (error: any) {
     return NextResponse.json({ message: error.message }, { status: 500 });
   }

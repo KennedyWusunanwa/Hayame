@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
+import { NavigationSkeletonOverlay } from "@/components/skeletons/page-loading-skeletons";
 
 const HIDE_TIMEOUT_MS = 8000;
 
@@ -45,8 +46,17 @@ function shouldTrackAnchor(anchor: HTMLAnchorElement) {
   }
 }
 
+function targetPathFromAnchor(anchor: HTMLAnchorElement) {
+  try {
+    return new URL(anchor.href, window.location.href).pathname;
+  } catch {
+    return null;
+  }
+}
+
 export function NavigationLoader() {
   const [loading, setLoading] = useState(false);
+  const [targetPath, setTargetPath] = useState<string | null>(null);
   const timerRef = useRef<number | null>(null);
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -54,10 +64,10 @@ export function NavigationLoader() {
   useEffect(() => {
     if (!loading) return;
     if (timerRef.current) window.clearTimeout(timerRef.current);
-    timerRef.current = window.setTimeout(
-      () => setLoading(false),
-      HIDE_TIMEOUT_MS,
-    );
+    timerRef.current = window.setTimeout(() => {
+      setLoading(false);
+      setTargetPath(null);
+    }, HIDE_TIMEOUT_MS);
     return () => {
       if (timerRef.current) window.clearTimeout(timerRef.current);
     };
@@ -66,7 +76,10 @@ export function NavigationLoader() {
   useEffect(() => {
     if (!loading) return;
 
-    const frame = window.requestAnimationFrame(() => setLoading(false));
+    const frame = window.requestAnimationFrame(() => {
+      setLoading(false);
+      setTargetPath(null);
+    });
     return () => window.cancelAnimationFrame(frame);
   }, [pathname, searchParams, loading]);
 
@@ -81,6 +94,7 @@ export function NavigationLoader() {
       const anchor = target.closest("a") as HTMLAnchorElement | null;
       if (!anchor || !shouldTrackAnchor(anchor)) return;
 
+      setTargetPath(targetPathFromAnchor(anchor));
       setLoading(true);
     };
 
@@ -90,6 +104,7 @@ export function NavigationLoader() {
       if (form.hasAttribute("data-no-loading")) return;
 
       setLoading(true);
+      setTargetPath(null);
     };
 
     document.addEventListener("click", handleClick, true);
@@ -102,9 +117,5 @@ export function NavigationLoader() {
 
   if (!loading) return null;
 
-  return (
-    <div className="loading-overlay" aria-live="polite" aria-busy="true">
-      <div className="loading-spinner" aria-label="Loading" />
-    </div>
-  );
+  return <NavigationSkeletonOverlay path={targetPath} />;
 }

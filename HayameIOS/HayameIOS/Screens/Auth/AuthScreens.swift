@@ -38,6 +38,7 @@ private struct LoginScreenView: View {
     @State private var hasSavedBiometricLogin = false
     @State private var saveLoginWithBiometrics = true
     @State private var biometricMessage: String?
+    @State private var showLoginErrorAlert = false
 
     let goToSignup: () -> Void
     let onContinueAsGuest: () -> Void
@@ -116,12 +117,25 @@ private struct LoginScreenView: View {
                 }
                 .frame(maxWidth: .infinity)
 
-                AuthMessages(error: appState.syncErrorMessage, info: appState.authInfoMessage ?? biometricMessage)
+                AuthMessages(error: nil, info: appState.authInfoMessage ?? biometricMessage)
             }
 
             AuthGuestButton(action: onContinueAsGuest)
         }
-        .onAppear(perform: refreshBiometricState)
+        .onAppear {
+            refreshBiometricState()
+            showLoginErrorAlert = appState.loginErrorAlertMessage != nil
+        }
+        .onChange(of: appState.loginErrorAlertMessage) { _, newValue in
+            showLoginErrorAlert = newValue != nil
+        }
+        .alert("Unable to log in", isPresented: $showLoginErrorAlert) {
+            Button("OK") {
+                appState.consumeLoginErrorAlert()
+            }
+        } message: {
+            Text(appState.loginErrorAlertMessage ?? "Wrong email or password.")
+        }
     }
 
     private var biometricName: String {

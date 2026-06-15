@@ -31,8 +31,8 @@ export function HeroSearchBar() {
     "h-12 w-full min-w-0 text-sm border-0 bg-transparent text-white placeholder:text-white/50 focus-visible:ring-0 dark-select";
 
   const router = useRouter();
-  const { regions, citiesByRegion } = useLocations();
-  const { makes } = useCarCatalog();
+  const { regions, citiesByRegion } = useLocations({ defer: true });
+  const { makes } = useCarCatalog({ defer: true });
 
   const [region, setRegion] = useState("");
   const [city, setCity] = useState("");

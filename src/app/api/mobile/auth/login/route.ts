@@ -6,6 +6,8 @@ type Body = {
   password?: string;
 };
 
+const WRONG_EMAIL_OR_PASSWORD_MESSAGE = "Wrong email or password.";
+
 function methodNotAllowed() {
   return NextResponse.json({ message: "Method not allowed" }, { status: 405 });
 }
@@ -37,7 +39,7 @@ export async function POST(req: Request) {
 
     if (error || !data.session || !data.user) {
       return NextResponse.json(
-        { message: error?.message ?? "Invalid credentials" },
+        { message: WRONG_EMAIL_OR_PASSWORD_MESSAGE },
         { status: 401 },
       );
     }
