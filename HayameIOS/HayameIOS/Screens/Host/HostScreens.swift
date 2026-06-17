@@ -68,17 +68,11 @@ struct HostTabShell: View {
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        VStack(spacing: 0) {
-            activeContent
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .clipped()
-            if !appState.listingEditorActive {
-                HayameBottomTabBar(selection: $appState.hostTab, items: hostTabItems)
-            }
-        }
-        .background(HayameTheme.pageBackground.ignoresSafeArea())
-        .tint(HayameTheme.brandBlue)
-        .hayameNavigationChrome(colorScheme: colorScheme)
+        activeContent
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(HayameTheme.pageBackground.ignoresSafeArea())
+            .tint(HayameTheme.brandBlue)
+            .hayameNavigationChrome(colorScheme: colorScheme)
     }
 
     private var hostTabItems: [HayameBottomTabItem<HostTab>] {
@@ -101,17 +95,32 @@ struct HostTabShell: View {
     private var activeContent: some View {
         switch appState.hostTab {
         case .dashboard:
-            NavigationStack { HostDashboardScreen() }
+            hostStack { HostDashboardScreen() }
         case .cars:
-            NavigationStack { HostCarsScreen() }
+            hostStack { HostCarsScreen() }
         case .bookings:
-            NavigationStack { HostBookingsScreen() }
+            hostStack { HostBookingsScreen() }
         case .earnings:
-            NavigationStack { HostEarningsScreen() }
+            hostStack { HostEarningsScreen() }
         case .inbox:
-            NavigationStack { InboxScreen() }
+            hostStack { InboxScreen() }
         case .profile:
-            NavigationStack { HostProfileScreen() }
+            hostStack { HostProfileScreen() }
+        }
+    }
+
+    // Hosts the floating tab bar as a bottom safe-area inset *inside* the
+    // navigation stack so each root screen reserves space for it (nothing hides
+    // behind the bar) while content still scrolls under the glass. The bar is
+    // suppressed while the listing editor is active.
+    private func hostStack<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        NavigationStack {
+            content()
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    if !appState.listingEditorActive {
+                        HayameBottomTabBar(selection: $appState.hostTab, items: hostTabItems)
+                    }
+                }
         }
     }
 }
@@ -433,6 +442,7 @@ struct HostCarsScreen: View {
                 }
                 .buttonStyle(.plain)
             }
+            .listRowBackground(HayameTheme.cardBackground)
 
             Section("My car listings") {
                 if case .loading = appState.publicCarsLoadState, appState.hostCars.isEmpty {
@@ -506,6 +516,7 @@ struct HostCarsScreen: View {
                     }
                 }
             }
+            .listRowBackground(HayameTheme.cardBackground)
         }
         .scrollContentBackground(.hidden)
         .background(HayameTheme.pageBackground)

@@ -16,15 +16,11 @@ struct RenterTabShell: View {
     @State private var moreRoute: MoreRoute?
 
     var body: some View {
-        VStack(spacing: 0) {
-            activeContent
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .clipped()
-            HayameBottomTabBar(selection: $appState.renterTab, items: renterTabItems)
-        }
-        .background(HayameTheme.pageBackground.ignoresSafeArea())
-        .tint(HayameTheme.brandBlue)
-        .hayameNavigationChrome(colorScheme: colorScheme)
+        activeContent
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(HayameTheme.pageBackground.ignoresSafeArea())
+            .tint(HayameTheme.brandBlue)
+            .hayameNavigationChrome(colorScheme: colorScheme)
         .onAppear {
             routeLegacyTabIfNeeded(appState.renterTab)
         }
@@ -37,15 +33,28 @@ struct RenterTabShell: View {
     private var activeContent: some View {
         switch appState.renterTab {
         case .home:
-            NavigationStack { RenterHomeScreen() }
+            renterStack { RenterHomeScreen() }
         case .explore:
-            NavigationStack { ExploreScreen() }
+            renterStack { ExploreScreen() }
         case .trips:
-            NavigationStack { TripsScreen() }
+            renterStack { TripsScreen() }
         case .favorites:
-            NavigationStack { FavoritesScreen() }
+            renterStack { FavoritesScreen() }
         case .more, .inbox, .profile, .dashboard:
-            NavigationStack { GuestProfileScreen(requestedRoute: $moreRoute) }
+            renterStack { GuestProfileScreen(requestedRoute: $moreRoute) }
+        }
+    }
+
+    // Hosts the floating tab bar as a bottom safe-area inset *inside* the
+    // navigation stack so each root screen's scroll content reserves space for
+    // it (nothing hides behind the bar) while still scrolling under the glass.
+    // The bar tucks away when a detail screen is pushed.
+    private func renterStack<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        NavigationStack {
+            content()
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    HayameBottomTabBar(selection: $appState.renterTab, items: renterTabItems)
+                }
         }
     }
 
@@ -5485,6 +5494,7 @@ struct GuestProfileScreen: View {
 private struct ProfileEditSheet: View {
     @EnvironmentObject private var appState: AppState
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
 
     @State private var fullName = ""
     @State private var phone = ""
@@ -5551,6 +5561,8 @@ private struct ProfileEditSheet: View {
             .background(HayameTheme.pageBackground)
             .navigationTitle("Edit Profile")
             .toolbarBackground(HayameTheme.pageBackground, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
+            .toolbarColorScheme(colorScheme, for: .navigationBar)
             .tint(HayameTheme.brandBlue)
             .onChange(of: region) { _, newValue in
                 let options = MockDataService.cities(for: newValue, preferred: city)

@@ -23,6 +23,7 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -128,7 +129,9 @@ import androidx.compose.material3.TextButton
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
@@ -159,6 +162,8 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -250,9 +255,11 @@ import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
 import java.time.temporal.ChronoUnit
 import java.util.Locale
+import kotlin.math.PI
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
+import kotlin.math.sin
 
 @Composable
 fun SplashScreen() {
@@ -261,16 +268,20 @@ fun SplashScreen() {
     val appColors = LocalHayameColors.current
     val darkMode = LocalDarkMode.current
 
+    // Color used for the system status / navigation bars while the splash is on
+    // screen, so they blend into the adaptive splash background.
+    val splashBarColor = if (darkMode) Color(0xFF06141F) else splashBlue
+
     val activity = context as? Activity
     val window = activity?.window
 
     SideEffect {
         if (window != null) {
             WindowCompat.setDecorFitsSystemWindows(window, false)
-            window.statusBarColor = splashBlue.toArgb()
-            window.navigationBarColor = splashBlue.toArgb()
+            window.statusBarColor = splashBarColor.toArgb()
+            window.navigationBarColor = splashBarColor.toArgb()
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                window.navigationBarDividerColor = splashBlue.toArgb()
+                window.navigationBarDividerColor = splashBarColor.toArgb()
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 window.isNavigationBarContrastEnforced = false
@@ -286,10 +297,10 @@ fun SplashScreen() {
     LaunchedEffect(window) {
         while (window != null) {
             WindowCompat.setDecorFitsSystemWindows(window, false)
-            window.statusBarColor = splashBlue.toArgb()
-            window.navigationBarColor = splashBlue.toArgb()
+            window.statusBarColor = splashBarColor.toArgb()
+            window.navigationBarColor = splashBarColor.toArgb()
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                window.navigationBarDividerColor = splashBlue.toArgb()
+                window.navigationBarDividerColor = splashBarColor.toArgb()
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 window.isNavigationBarContrastEnforced = false
@@ -306,10 +317,10 @@ fun SplashScreen() {
     DisposableEffect(window, appColors, darkMode) {
         if (window != null) {
             WindowCompat.setDecorFitsSystemWindows(window, false)
-            window.statusBarColor = splashBlue.toArgb()
-            window.navigationBarColor = splashBlue.toArgb()
+            window.statusBarColor = splashBarColor.toArgb()
+            window.navigationBarColor = splashBarColor.toArgb()
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                window.navigationBarDividerColor = splashBlue.toArgb()
+                window.navigationBarDividerColor = splashBarColor.toArgb()
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 window.isNavigationBarContrastEnforced = false
@@ -342,21 +353,193 @@ fun SplashScreen() {
         }
     }
 
+    // Deterministic decorative "bokeh" pattern (relative to canvas size) so the
+    // layout never jitters between launches.
+    val bokeh = remember {
+        listOf(
+            SplashBokeh(0.16f, 0.18f, 0.30f, 0.10f, 22f, 0.0f),
+            SplashBokeh(0.84f, 0.12f, 0.22f, 0.12f, 18f, 0.6f),
+            SplashBokeh(0.90f, 0.46f, 0.40f, 0.08f, 28f, 1.2f),
+            SplashBokeh(0.10f, 0.62f, 0.34f, 0.09f, 24f, 1.8f),
+            SplashBokeh(0.74f, 0.82f, 0.26f, 0.11f, 20f, 2.4f),
+            SplashBokeh(0.30f, 0.88f, 0.20f, 0.10f, 16f, 3.0f),
+            SplashBokeh(0.50f, 0.30f, 0.16f, 0.10f, 14f, 3.6f),
+        )
+    }
+
+    val transition = rememberInfiniteTransition(label = "splash")
+    val ripple by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(2800, easing = LinearEasing)),
+        label = "ripple",
+    )
+    val breathe by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(2400, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "breathe",
+    )
+    val drift by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = (2f * PI).toFloat(),
+        animationSpec = infiniteRepeatable(tween(7000, easing = LinearEasing)),
+        label = "drift",
+    )
+    val dotPulse by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 3f,
+        animationSpec = infiniteRepeatable(tween(1080, easing = LinearEasing)),
+        label = "dots",
+    )
+
+    var started by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { started = true }
+    val logoScale by animateFloatAsState(
+        targetValue = if (started) 1f else 0.6f,
+        animationSpec = spring(dampingRatio = 0.55f, stiffness = Spring.StiffnessLow),
+        label = "logoScale",
+    )
+    val logoAlpha by animateFloatAsState(
+        targetValue = if (started) 1f else 0f,
+        animationSpec = tween(700),
+        label = "logoAlpha",
+    )
+
+    // Adaptive palette so the splash matches the user's selected mode.
+    val backgroundBrush = if (darkMode) {
+        Brush.verticalGradient(
+            listOf(Color(0xFF0D2A49), Color(0xFF081A2E), Color(0xFF03101D)),
+        )
+    } else {
+        Brush.verticalGradient(
+            listOf(Color(0xFF29A3F5), Color(0xFF148AE6), Color(0xFF0D70CC)),
+        )
+    }
+    val accent = if (darkMode) Color(0xFF4DB3FF) else Color.White
+
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(splashBlue),
+            .background(backgroundBrush),
     ) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val minSide = size.minDimension
+            val center = Offset(size.width / 2f, size.height / 2f)
+
+            // Soft off-center light so the gradient feels smooth, not flat.
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        Color.White.copy(alpha = if (darkMode) 0.05f else 0.14f),
+                        Color.Transparent,
+                    ),
+                    center = Offset(size.width * 0.5f, size.height * 0.38f),
+                    radius = minSide * 0.95f,
+                ),
+                radius = minSide * 0.95f,
+                center = Offset(size.width * 0.5f, size.height * 0.38f),
+            )
+
+            // Gentle, diffuse glow that adds depth behind the logo without a hard
+            // bright disc or a heavy dark backing.
+            val glowRadius = minSide * (0.46f + breathe * 0.04f)
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        accent.copy(alpha = if (darkMode) 0.24f else 0.15f),
+                        Color.Transparent,
+                    ),
+                    center = center,
+                    radius = glowRadius,
+                ),
+                radius = glowRadius,
+                center = center,
+            )
+
+            // Floating bokeh pattern — soft-edged via radial gradients.
+            bokeh.forEach { dot ->
+                val phase = drift + dot.phase
+                val dy = sin(phase) * dot.drift
+                val pulse = 0.6f + 0.4f * ((sin(phase) + 1f) / 2f)
+                val r = dot.size * minSide * 0.6f
+                val c = Offset(dot.x * size.width, dot.y * size.height + dy)
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            Color.White.copy(alpha = dot.opacity * pulse),
+                            Color.Transparent,
+                        ),
+                        center = c,
+                        radius = r,
+                    ),
+                    radius = r,
+                    center = c,
+                )
+            }
+
+            // Subtle expanding rings — quiet rather than busy.
+            for (i in 0 until 2) {
+                val p = (ripple + i / 2f) % 1f
+                drawCircle(
+                    color = accent.copy(alpha = (1f - p) * if (darkMode) 0.22f else 0.18f),
+                    radius = minSide * (0.18f + p * 0.40f),
+                    center = center,
+                    style = Stroke(width = 1.5f),
+                )
+            }
+        }
+
         Image(
             painter = painterResource(id = R.drawable.splash_system_logo),
             contentDescription = "Hayame",
             modifier = Modifier
                 .align(Alignment.Center)
-                .size(216.dp),
+                .size(216.dp)
+                .graphicsLayer {
+                    val pulse = 0.98f + breathe * 0.04f
+                    scaleX = logoScale * pulse
+                    scaleY = logoScale * pulse
+                    alpha = logoAlpha
+                },
             contentScale = ContentScale.Fit,
         )
+
+        Row(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 96.dp)
+                .alpha(logoAlpha),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            for (i in 0 until 3) {
+                // Triangle wave so each dot eases up then down, staggered by index.
+                val t = ((dotPulse - i * 0.2f) % 1f + 1f) % 1f
+                val wave = 1f - kotlin.math.abs(t - 0.5f) * 2f
+                Box(
+                    modifier = Modifier
+                        .size(7.dp)
+                        .graphicsLayer {
+                            val s = 0.82f + wave * 0.18f
+                            scaleX = s
+                            scaleY = s
+                            alpha = 0.32f + wave * 0.63f
+                        }
+                        .background(Color.White, shape = androidx.compose.foundation.shape.CircleShape),
+                )
+            }
+        }
     }
 }
+
+private data class SplashBokeh(
+    val x: Float,
+    val y: Float,
+    val size: Float,
+    val opacity: Float,
+    val drift: Float,
+    val phase: Float,
+)
 
 @Composable
 fun LoginScreen(

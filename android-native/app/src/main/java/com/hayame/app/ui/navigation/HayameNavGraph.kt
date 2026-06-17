@@ -492,7 +492,12 @@ fun HayameNavApp(
                         },
                         onOpenCarDetail = { navController.navigate(NavRoutes.carDetail(it)) },
                         onOpenConversation = { navController.navigate(NavRoutes.conversation(it)) },
-                        onOpenMessages = { navController.navigate(NavRoutes.Messages) },
+                        // Land on the More tab when returning from Messages by
+                        // placing it beneath Messages on the back stack.
+                        onOpenMessages = {
+                            navController.navigate(NavRoutes.main(MainTab.MORE))
+                            navController.navigate(NavRoutes.Messages)
+                        },
                         onOpenDashboard = { navController.navigate(NavRoutes.Dashboard) },
                         onOpenBecomeHost = { navController.navigate(NavRoutes.BecomeHost) },
                         onOpenHostDashboard = { navController.navigate(NavRoutes.HostShell) },
@@ -517,7 +522,10 @@ fun HayameNavApp(
                         onBack = { navController.popBackStack() },
                         onOpenTrips = { navController.navigate(NavRoutes.main(MainTab.TRIPS)) },
                         onOpenSaved = { navController.navigate(NavRoutes.main(MainTab.SAVED)) },
-                        onOpenMessages = { navController.navigate(NavRoutes.Messages) },
+                        onOpenMessages = {
+                            navController.navigate(NavRoutes.main(MainTab.MORE))
+                            navController.navigate(NavRoutes.Messages)
+                        },
                         onOpenBecomeHost = {
                             if (hostStatus == "pending") {
                                 navController.navigate(NavRoutes.HostPending)

@@ -92,7 +92,7 @@ fun AuthScaffold(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(colors.brandBlue)
+                .background(colors.authHeaderBackground)
                 .statusBarsPadding()
                 .padding(bottom = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,

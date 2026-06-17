@@ -47,7 +47,7 @@ struct AuthScaffold<Content: View>: View {
                 .padding(.top, 76)
                 .padding(.bottom, 26)
                 .frame(maxWidth: .infinity)
-                .background(HayameTheme.brandBlue)
+                .background(HayameTheme.authHeaderBackground)
 
                 VStack(alignment: .leading, spacing: 20) {
                     VStack(alignment: .leading, spacing: 4) {

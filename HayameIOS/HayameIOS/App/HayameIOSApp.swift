@@ -22,7 +22,7 @@ struct HayameIOSApp: App {
                     .animation(.easeOut(duration: 0.45), value: showSplash)
 
                 if showSplash {
-                    SplashScreen()
+                    SplashScreen(darkMode: appState.darkModeEnabled)
                         .transition(.opacity)
                         .zIndex(10)
                 }

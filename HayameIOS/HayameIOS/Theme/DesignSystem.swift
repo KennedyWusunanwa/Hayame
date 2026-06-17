@@ -6,6 +6,9 @@ enum HayameTheme {
     static let brandNavy = adaptiveColor(light: UIColor(hex: 0x0A2B54), dark: UIColor(hex: 0xEAF4FF))
     static let primaryButtonEnd = adaptiveColor(light: UIColor(hex: 0x0A2B54), dark: UIColor(hex: 0x1484D9))
     static let brandLight = adaptiveColor(light: UIColor(hex: 0xEDF7FF), dark: UIColor(hex: 0x123452))
+    // Auth (sign in / sign up) header band. Bright brand blue in light mode, but
+    // a deep, muted blue in dark mode so it reads as premium instead of glaring.
+    static let authHeaderBackground = adaptiveColor(light: UIColor(hex: 0x1484D9), dark: UIColor(hex: 0x0E3A66))
     static let mutedText = adaptiveColor(light: UIColor(hex: 0x737D91), dark: UIColor(hex: 0xA8B4C8))
     static let success = adaptiveColor(light: UIColor(hex: 0x1CA160), dark: UIColor(hex: 0x4DDB93))
     static let warning = adaptiveColor(light: UIColor(hex: 0xED8F30), dark: UIColor(hex: 0xFFB35C))
@@ -324,57 +327,102 @@ struct HayameBottomTabItem<Selection: Hashable>: Identifiable {
     }
 }
 
+/// Floating glass navigation bar shared by the renter, host, and admin shells.
+///
+/// The bar renders as a detached, rounded "pill" that floats above the page
+/// background with side margins, a translucent material fill, a hairline
+/// border, and a soft shadow. All colors and the material adapt automatically
+/// to light/dark mode through `HayameTheme`. The selected tab is marked with a
+/// single pill indicator that slides between tabs via `matchedGeometryEffect`.
+///
+/// The component reserves its own height wherever it is hosted (inside a
+/// `VStack` or a `.safeAreaInset(edge: .bottom)`), so page content is never
+/// drawn underneath the floating bar.
 struct HayameBottomTabBar<Selection: Hashable>: View {
     @Binding var selection: Selection
     let items: [HayameBottomTabItem<Selection>]
 
+    @Namespace private var indicatorNamespace
+
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 2) {
             ForEach(items) { item in
-                let selected = item.id == selection
-                Button {
-                    withAnimation(.spring(response: 0.28, dampingFraction: 0.72)) {
-                        selection = item.id
-                    }
-                } label: {
-                    VStack(spacing: 4) {
-                        Image(systemName: item.systemImage)
-                            .font(.system(size: 22, weight: selected ? .bold : .semibold))
-                            .overlay(alignment: .topTrailing) {
-                                if item.badgeCount > 0 {
-                                    Text(item.badgeCount > 99 ? "99+" : "\(item.badgeCount)")
-                                        .font(.system(size: 9, weight: .bold, design: .rounded))
-                                        .foregroundStyle(.white)
-                                        .padding(.horizontal, 5)
-                                        .padding(.vertical, 2)
-                                        .background(HayameTheme.danger, in: Capsule())
-                                        .offset(x: 12, y: -8)
-                                }
-                            }
-                        Text(item.title)
-                            .font(.system(size: 11, weight: .semibold, design: .rounded))
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.75)
-                    }
-                    .foregroundStyle(selected ? HayameTheme.brandBlue : HayameTheme.mutedText)
-                    .frame(maxWidth: .infinity, minHeight: 58)
-                    .background(
-                        Capsule()
-                            .fill(selected ? HayameTheme.brandLight : Color.clear)
-                    )
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(item.title)
+                tabButton(for: item)
             }
         }
-        .padding(.horizontal, 10)
-        .padding(.top, 8)
-        .padding(.bottom, 8)
-        .background(HayameTheme.cardBackground.ignoresSafeArea(edges: .bottom))
-        .overlay(alignment: .top) {
-            Rectangle()
-                .fill(HayameTheme.cardStroke)
-                .frame(height: 1)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 6)
+        .background(floatingBackground)
+        .padding(.horizontal, 16)
+        .padding(.top, 6)
+        .padding(.bottom, 4)
+        // Keep the floating bar visually clear of whatever it floats over so the
+        // page background shows through its side margins in both color schemes.
+        .background(Color.clear)
+    }
+
+    private func tabButton(for item: HayameBottomTabItem<Selection>) -> some View {
+        let selected = item.id == selection
+        return Button {
+            guard selection != item.id else { return }
+            UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+            withAnimation(.spring(response: 0.32, dampingFraction: 0.74)) {
+                selection = item.id
+            }
+        } label: {
+            VStack(spacing: 3) {
+                Image(systemName: item.systemImage)
+                    .font(.system(size: 20, weight: selected ? .semibold : .regular))
+                    .symbolVariant(selected ? .fill : .none)
+                    .frame(height: 24)
+                    .overlay(alignment: .topTrailing) { badge(for: item) }
+
+                Text(item.title)
+                    .font(.system(size: 10, weight: selected ? .bold : .semibold, design: .rounded))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            }
+            .foregroundStyle(selected ? HayameTheme.brandBlue : HayameTheme.mutedText)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 7)
+            .background {
+                if selected {
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .fill(HayameTheme.brandLight)
+                        .matchedGeometryEffect(id: "hayameTabIndicator", in: indicatorNamespace)
+                }
+            }
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
+        .accessibilityLabel(item.title)
+        .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
+    }
+
+    @ViewBuilder
+    private func badge(for item: HayameBottomTabItem<Selection>) -> some View {
+        if item.badgeCount > 0 {
+            Text(item.badgeCount > 99 ? "99+" : "\(item.badgeCount)")
+                .font(.system(size: 9, weight: .bold, design: .rounded))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 4)
+                .padding(.vertical, 1.5)
+                .background(HayameTheme.danger, in: Capsule())
+                .offset(x: 10, y: -7)
+        }
+    }
+
+    private var floatingBackground: some View {
+        Capsule(style: .continuous)
+            .fill(.ultraThinMaterial)
+            .overlay(
+                Capsule(style: .continuous)
+                    .fill(HayameTheme.floatingControlBackground)
+            )
+            .overlay(
+                Capsule(style: .continuous)
+                    .strokeBorder(HayameTheme.controlStroke, lineWidth: 1)
+            )
+            .shadow(color: HayameTheme.cardShadow, radius: 20, x: 0, y: 10)
     }
 }
