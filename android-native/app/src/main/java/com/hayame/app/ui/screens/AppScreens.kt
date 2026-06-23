@@ -6283,7 +6283,10 @@ fun BookingScreen(
             val outsideSurcharge = if (outsideListingRegion) outsideRegionFee else 0
             val nights = max(1, ChronoUnit.DAYS.between(startDate, endDate).toInt())
             val subtotal = pricePerDay * nights
-            val totalAmount = subtotal + insuranceFee + deliveryFee + outsideSurcharge + depositAmount
+            // 10% service fee — mirrors the server total (NEXT_PUBLIC_PLATFORM_FEE_PERCENT).
+            // The server is authoritative; this keeps the displayed total honest.
+            val platformFee = (subtotal * 0.10).roundToInt()
+            val totalAmount = subtotal + platformFee + insuranceFee + deliveryFee + outsideSurcharge + depositAmount
             val locationHelperText = if (outsideListingRegion) {
                 if (outsideRegionFee > 0) "Outside listing region (+GHS $outsideRegionFee)" else "Outside listing region"
             } else {
@@ -6914,6 +6917,7 @@ fun BookingScreen(
                                             )
                                             InfoLine(label = "Daily rate × $nights", value = "GHS $subtotal")
                                             InfoLine(label = "Insurance", value = "GHS $insuranceFee")
+                                            InfoLine(label = "Service fee", value = "GHS $platformFee")
                                             if (selectedTripMode == CheckoutTripMode.DELIVERY) {
                                                 InfoLine(label = "Delivery", value = "GHS $deliveryFee")
                                             }

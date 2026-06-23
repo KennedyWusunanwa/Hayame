@@ -2571,6 +2571,12 @@ private struct BookingSheet: View {
         max(car.insuranceFee, 0)
     }
 
+    // 10% service fee — mirrors the server total (NEXT_PUBLIC_PLATFORM_FEE_PERCENT).
+    // The server is authoritative; this keeps the displayed total honest.
+    private var platformFee: Int {
+        Int(Double(subtotal) * 0.10)
+    }
+
     private var selectedTripMode: BookingTripMode {
         tripMode ?? .pickup
     }
@@ -2596,7 +2602,7 @@ private struct BookingSheet: View {
     }
 
     private var totalAmount: Int {
-        subtotal + insuranceFee + deliveryFee + outsideAccraSurcharge + depositAmount
+        subtotal + platformFee + insuranceFee + deliveryFee + outsideAccraSurcharge + depositAmount
     }
 
     private var deliveryDetailsPayload: BookingDeliveryDetails {
@@ -3198,6 +3204,7 @@ private struct BookingSheet: View {
 
                             InfoLine(label: "Daily rate × \(nights)", value: "GHS \(subtotal)")
                             InfoLine(label: "Insurance", value: "GHS \(insuranceFee)")
+                            InfoLine(label: "Service fee", value: "GHS \(platformFee)")
                             if selectedTripMode == .delivery {
                                 InfoLine(label: "Delivery", value: "GHS \(deliveryFee)")
                             }
