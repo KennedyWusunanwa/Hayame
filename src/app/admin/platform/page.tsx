@@ -18,7 +18,11 @@ import {
   sanitizeAnnouncementUrl,
 } from "@/lib/notifications";
 import { resolveCarImage } from "@/lib/car-images";
-import { sendBroadcastPushNotifications } from "@/lib/push";
+import {
+  sendBroadcastPushNotifications,
+  sendPushNotificationsToUsers,
+} from "@/lib/push";
+import { buildListingDecisionEmail, sendEmailSafe } from "@/lib/email";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { refundPaystack } from "@/lib/paystack";
 import { getInitials } from "@/lib/utils";
@@ -449,6 +453,12 @@ async function listingReviewAction(formData: FormData) {
     redirectToAdminPlatform();
   }
 
+  const { data: car } = await admin
+    .from("cars")
+    .select("id,title,owner_id")
+    .eq("id", carId)
+    .maybeSingle();
+
   await admin
     .from("cars")
     .update({
@@ -467,6 +477,61 @@ async function listingReviewAction(formData: FormData) {
     performed_by: getAdminReviewerName(),
     metadata: action === "reject" ? { reason } : null,
   });
+
+  // Notify the host that their listing was approved / rejected (email + push).
+  const ownerId = (car as { owner_id?: string } | null)?.owner_id ?? null;
+  if (ownerId) {
+    const carTitle = (car as { title?: string | null } | null)?.title ?? null;
+    try {
+      const { data: hostAuth } = await admin.auth.admin.getUserById(ownerId);
+      const { data: hostProfile } = await admin
+        .from("profiles")
+        .select("full_name")
+        .eq("id", ownerId)
+        .maybeSingle();
+      const hostEmail = hostAuth?.user?.email ?? null;
+      const hostName =
+        (hostProfile as { full_name?: string | null } | null)?.full_name ??
+        null;
+      if (hostEmail) {
+        const email = buildListingDecisionEmail({
+          approved: action === "approve",
+          hostName,
+          carTitle,
+          reason: action === "reject" ? reason || "Rejected by admin" : null,
+        });
+        await sendEmailSafe({
+          to: hostEmail,
+          ...email,
+          idempotencyKey: `listing:${carId}:${action}`,
+        });
+      }
+    } catch (emailError) {
+      console.error("[admin] listing decision email failed", emailError);
+    }
+
+    try {
+      await sendPushNotificationsToUsers({
+        adminClient: admin,
+        userIds: [ownerId],
+        title: action === "approve" ? "Listing approved" : "Listing needs changes",
+        body:
+          action === "approve"
+            ? `${carTitle ?? "Your listing"} is approved and now live for renters.`
+            : `${carTitle ?? "Your listing"} was not approved.${reason ? ` Reason: ${reason}` : ""}`,
+        collapseId: `listing:${carId}`,
+        preferenceKey: "account_security",
+        notificationCategory: "account_security",
+        data: {
+          type: "listing_status",
+          carId: String(carId),
+          status: action === "approve" ? "approved" : "rejected",
+        },
+      });
+    } catch (pushError) {
+      console.error("[admin] listing decision push failed", pushError);
+    }
+  }
 
   redirectToAdminPlatform({
     notice: action === "approve" ? "listing-approved" : "listing-rejected",

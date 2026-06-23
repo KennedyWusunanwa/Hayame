@@ -488,3 +488,94 @@ export function buildSupportAcknowledgementEmail(params: {
   const text = `Hi ${params.name},\n\nThanks for contacting ${appName}. Our support team has your message and will reply within one business day.\n\nIf your issue is urgent, you can also reach us at ${params.supportEmail}.`;
   return { subject, ...withOfficialFooter(html, text) };
 }
+
+export function buildListingDecisionEmail(params: {
+  approved: boolean;
+  hostName?: string | null;
+  carTitle?: string | null;
+  reason?: string | null;
+}) {
+  const hostName = escapeHtml(params.hostName || "Host");
+  const carTitle = params.carTitle ? escapeHtml(params.carTitle) : "your listing";
+  const subject = params.approved
+    ? `${appName}: Listing approved`
+    : `${appName}: Listing needs changes`;
+  const decisionLine = params.approved
+    ? `Your listing ${carTitle} has been approved and is now live for renters.`
+    : `Your listing ${carTitle} was not approved.`;
+  const reasonLine =
+    !params.approved && params.reason
+      ? `<p><strong>Reason:</strong> ${escapeHtml(params.reason)}</p>`
+      : "";
+
+  const html = `
+    <div style="font-family: Arial, sans-serif; line-height: 1.5;">
+      <h2>${params.approved ? "Listing approved" : "Listing update"}</h2>
+      <p>Hi ${hostName},</p>
+      <p>${decisionLine}</p>
+      ${reasonLine}
+      <p><a href="${siteUrl}/host/cars" style="color:#2563eb;">Manage your listings</a></p>
+      <p style="color:#6b7280; font-size: 12px;">${appName}</p>
+    </div>
+  `;
+  const text = `${params.approved ? "Listing approved" : "Listing update"}\nHi ${
+    params.hostName ?? "Host"
+  },\n${params.approved ? `Your listing ${params.carTitle ?? "your listing"} has been approved and is now live for renters.` : `Your listing ${params.carTitle ?? "your listing"} was not approved.`}${
+    !params.approved && params.reason ? `\nReason: ${params.reason}` : ""
+  }\nManage your listings: ${siteUrl}/host/cars\n\n${appName}`;
+
+  return { subject, ...withOfficialFooter(html, text) };
+}
+
+export function buildBookingCancelledEmail(params: {
+  recipientRole: "host" | "renter";
+  carTitle?: string | null;
+  startDate: string;
+  endDate: string;
+  totalPrice: number;
+  refundAmount: number;
+  policyLabel?: string | null;
+  bookingId?: string | null;
+}) {
+  const carTitle = params.carTitle ? escapeHtml(params.carTitle) : "the booking";
+  const isHost = params.recipientRole === "host";
+  const subject = isHost
+    ? `${appName}: A booking was cancelled`
+    : `${appName}: Your booking was cancelled`;
+  const heading = isHost ? "Booking cancelled by guest" : "Booking cancelled";
+  const intro = isHost
+    ? `The guest cancelled their booking for <strong>${carTitle}</strong>. These dates are now open again.`
+    : `Your booking for <strong>${carTitle}</strong> has been cancelled.`;
+  const refundLine = isHost
+    ? ""
+    : `<p><strong>Refund:</strong> ${formatCurrency(params.refundAmount)} of ${formatCurrency(params.totalPrice)}${
+        params.policyLabel
+          ? ` (per the ${escapeHtml(params.policyLabel)} cancellation policy)`
+          : ""
+      }. Refunds are returned to your original payment method by Paystack.</p>`;
+
+  const html = `
+    <div style="font-family: Arial, sans-serif; line-height: 1.5;">
+      <h2>${heading}</h2>
+      <p>${intro}</p>
+      <p><strong>Dates:</strong> ${escapeHtml(params.startDate)} to ${escapeHtml(params.endDate)}</p>
+      ${refundLine}
+      ${params.bookingId ? `<p><strong>Booking ID:</strong> ${escapeHtml(params.bookingId)}</p>` : ""}
+      <p><a href="${siteUrl}/${isHost ? "host/bookings" : "dashboard/bookings"}" style="color:#2563eb;">View bookings</a></p>
+      <p style="color:#6b7280; font-size: 12px;">${appName}</p>
+    </div>
+  `;
+  const text = `${heading}\n${
+    isHost
+      ? `The guest cancelled their booking for ${params.carTitle ?? "the booking"}. These dates are now open again.`
+      : `Your booking for ${params.carTitle ?? "the booking"} has been cancelled.`
+  }\nDates: ${params.startDate} to ${params.endDate}${
+    isHost
+      ? ""
+      : `\nRefund: ${formatCurrency(params.refundAmount)} of ${formatCurrency(params.totalPrice)}${
+          params.policyLabel ? ` (per the ${params.policyLabel} cancellation policy)` : ""
+        }.`
+  }\nView bookings: ${siteUrl}/${isHost ? "host/bookings" : "dashboard/bookings"}\n\n${appName}`;
+
+  return { subject, ...withOfficialFooter(html, text) };
+}

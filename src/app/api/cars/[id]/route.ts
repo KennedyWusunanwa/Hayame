@@ -108,12 +108,13 @@ export async function PUT(req: Request, context: Params) {
       );
     }
 
-    // Ensure profile exists to satisfy FK on related operations
+    // Ensure profile exists to satisfy FK on related operations. `is_host` is
+    // NOT set here — it is owned by the host-application approval flow and is
+    // protected by a DB trigger (db/launch_security_hardening.sql).
     await supa.from("profiles").upsert(
       {
         id: user.id,
         full_name: (user.user_metadata as any)?.full_name ?? user.email,
-        is_host: true,
       },
       { onConflict: "id" },
     );

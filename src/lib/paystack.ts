@@ -61,16 +61,27 @@ export async function initializePaystackTransaction(params: {
   return payload.data;
 }
 
-export async function refundPaystack(reference: string) {
+export async function refundPaystack(reference: string, amountMinor?: number) {
   const secret = getSecretKey();
+  // Paystack expects `transaction` (a transaction ID or reference string).
+  // `amount` (in the smallest currency unit / pesewas) is OPTIONAL — when
+  // omitted Paystack refunds the full captured amount; when provided it issues
+  // a partial refund (used by the tiered cancellation policy).
+  const body: Record<string, unknown> = { transaction: reference };
+  if (
+    typeof amountMinor === "number" &&
+    Number.isFinite(amountMinor) &&
+    amountMinor > 0
+  ) {
+    body.amount = Math.round(amountMinor);
+  }
   const res = await fetch(`${PAYSTACK_BASE}/refund`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${secret}`,
       "Content-Type": "application/json",
     },
-    // Paystack expects `transaction` (can be transaction ID or reference string)
-    body: JSON.stringify({ transaction: reference }),
+    body: JSON.stringify(body),
   });
   const payload = (await res.json()) as any;
   const message = String(payload?.message ?? "");

@@ -119,7 +119,7 @@ export async function POST(req: Request) {
     const { data: car, error: carError } = await db
       .from("cars")
       .select(
-        "id,title,daily_price,is_available,region,outside_accra_fee,delivery_fee,insurance_fee,deposit_amount",
+        "id,title,daily_price,owner_id,is_available,approval_status,region,outside_accra_fee,delivery_fee,insurance_fee,deposit_amount",
       )
       .eq("id", booking.car_id)
       .single();
@@ -130,6 +130,21 @@ export async function POST(req: Request) {
     if (car.is_available === false) {
       return NextResponse.json(
         { message: "Car is unavailable" },
+        { status: 409 },
+      );
+    }
+    if ((car as any).owner_id === user.id) {
+      return NextResponse.json(
+        { message: "You cannot book your own car." },
+        { status: 403 },
+      );
+    }
+    if (
+      (car as any).approval_status === "pending" ||
+      (car as any).approval_status === "rejected"
+    ) {
+      return NextResponse.json(
+        { message: "This listing is not available for booking." },
         { status: 409 },
       );
     }

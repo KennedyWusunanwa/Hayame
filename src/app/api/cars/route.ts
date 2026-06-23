@@ -369,11 +369,13 @@ export async function POST(req: Request) {
       );
     }
 
+    // Ensure a profile row exists to satisfy FKs. `is_host` is intentionally
+    // NOT set here — it is owned by the host-application approval flow and is
+    // protected by a DB trigger (db/launch_security_hardening.sql).
     await supa.from("profiles").upsert(
       {
         id: user.id,
         full_name: (user.user_metadata as any)?.full_name ?? user.email,
-        is_host: true,
       },
       { onConflict: "id" },
     );

@@ -3,7 +3,7 @@ import { differenceInCalendarDays } from "date-fns";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getRequestUser } from "@/lib/supabase/request-auth";
-import { verifyPaystackTransaction } from "@/lib/paystack";
+import { verifyPaystackTransaction, refundPaystack } from "@/lib/paystack";
 import { isLocationOutsideAccra, isOutsideListingRegion } from "@/lib/utils";
 import {
   buildBookingInvoiceEmail,
@@ -114,6 +114,19 @@ export async function POST(req: Request) {
     if (!user)
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
 
+    // Privileged (service-role) client for all booking money/status writes.
+    // The DB guard trigger (db/launch_security_hardening.sql) rejects these
+    // column changes from the anon/authenticated role, so every confirm,
+    // cancel, and refund transition must run through the service role.
+    const admin = (() => {
+      try {
+        return createSupabaseAdminClient() as any;
+      } catch {
+        return null;
+      }
+    })();
+    const writeDb = admin ?? supa;
+
     // Ensure profile exists for renter_id FK
     await supa.from("profiles").upsert(
       {
@@ -163,6 +176,15 @@ export async function POST(req: Request) {
         return NextResponse.json({ message: "Forbidden" }, { status: 403 });
       }
       if (booking.status !== "pending") {
+        // The Paystack webhook may have already confirmed this booking before
+        // the client callback arrived. Treat that as success (idempotent)
+        // instead of a confusing "hold expired" error.
+        if (
+          ["confirmed", "awaiting_host"].includes(String(booking.status)) &&
+          String(booking.payment_reference ?? "") === reference.trim()
+        ) {
+          return NextResponse.json({ data: booking, alreadyConfirmed: true });
+        }
         return NextResponse.json(
           { message: "Booking hold is no longer valid" },
           { status: 400 },
@@ -172,7 +194,7 @@ export async function POST(req: Request) {
         booking.hold_expires_at &&
         new Date(booking.hold_expires_at) <= new Date()
       ) {
-        await supa
+        await writeDb
           .from("bookings")
           .update({
             status: "cancelled",
@@ -188,7 +210,7 @@ export async function POST(req: Request) {
       const expectedReference = String(booking.payment_reference ?? "").trim();
       const expectedProvider = String(booking.payment_provider ?? "").trim();
       if (!expectedReference) {
-        const { error: bindReferenceError } = await supa
+        const { error: bindReferenceError } = await writeDb
           .from("bookings")
           .update({
             payment_reference: reference.trim(),
@@ -252,7 +274,7 @@ export async function POST(req: Request) {
     const { data: carData, error: carError } = await supa
       .from("cars")
       .select(
-        "id,title,daily_price,owner_id,instant_book,is_available,city,region,delivery_fee,insurance_fee,deposit_amount,outside_accra_fee",
+        "id,title,daily_price,owner_id,instant_book,is_available,approval_status,city,region,delivery_fee,insurance_fee,deposit_amount,outside_accra_fee",
       )
       .eq("id", carId)
       .single();
@@ -260,7 +282,7 @@ export async function POST(req: Request) {
     if (carError || !car) throw carError ?? new Error("Car not found");
     if (car.is_available === false) {
       if (bookingId) {
-        await supa
+        await writeDb
           .from("bookings")
           .update({
             status: "cancelled",
@@ -271,6 +293,43 @@ export async function POST(req: Request) {
       }
       return NextResponse.json(
         { message: "Car is unavailable" },
+        { status: 409 },
+      );
+    }
+
+    if (car.owner_id === user.id) {
+      if (bookingId) {
+        await writeDb
+          .from("bookings")
+          .update({
+            status: "cancelled",
+            payment_status: "failed",
+            hold_expires_at: null,
+          })
+          .eq("id", bookingId);
+      }
+      return NextResponse.json(
+        { message: "You cannot book your own car." },
+        { status: 403 },
+      );
+    }
+
+    if (
+      car.approval_status === "pending" ||
+      car.approval_status === "rejected"
+    ) {
+      if (bookingId) {
+        await writeDb
+          .from("bookings")
+          .update({
+            status: "cancelled",
+            payment_status: "failed",
+            hold_expires_at: null,
+          })
+          .eq("id", bookingId);
+      }
+      return NextResponse.json(
+        { message: "This listing is not available for booking." },
         { status: 409 },
       );
     }
@@ -292,7 +351,7 @@ export async function POST(req: Request) {
     deliveryNotes = deliveryAddress ? (deliveryNotes ?? "").trim() : "";
     if (!tripUseRegion || !tripUseCity || tripUseAddress.length < 3) {
       if (bookingId) {
-        await supa
+        await writeDb
           .from("bookings")
           .update({
             status: "cancelled",
@@ -319,13 +378,6 @@ export async function POST(req: Request) {
       listingRegion: car.region ?? null,
     });
 
-    const admin = (() => {
-      try {
-        return createSupabaseAdminClient() as any;
-      } catch {
-        return null;
-      }
-    })();
     const conflictClient = admin ?? supa;
     if (admin) {
       const nowIso = new Date().toISOString();
@@ -359,7 +411,7 @@ export async function POST(req: Request) {
     );
     if (activeConflicts.length > 0) {
       if (bookingId) {
-        await supa
+        await writeDb
           .from("bookings")
           .update({
             status: "cancelled",
@@ -383,7 +435,7 @@ export async function POST(req: Request) {
       .gt("end_date", startDate);
     if (blocked && blocked.length > 0) {
       if (bookingId) {
-        await supa
+        await writeDb
           .from("bookings")
           .update({
             status: "cancelled",
@@ -441,6 +493,54 @@ export async function POST(req: Request) {
       depositAmount;
     const expectedAmount = Math.round(total * 100);
 
+    // Once verifyPaystackTransaction succeeds the customer's card HAS been
+    // charged. Any reason we then decline to confirm the booking MUST refund
+    // the money — otherwise the renter is debited with nothing to show.
+    const refundAfterChargeFailure = async (cause: any) => {
+      // Atomically claim the booking FIRST so a concurrent finalize/webhook
+      // cannot also refund the same charge (the claim flips payment_status to
+      // 'refunded'; the loser's `.neq('payment_status','refunded')` matches 0
+      // rows and skips its refund).
+      if (bookingId) {
+        const { data: claimed } = await writeDb
+          .from("bookings")
+          .update({
+            status: "cancelled",
+            payment_status: "refunded",
+            refund_reference: reference,
+            hold_expires_at: null,
+          })
+          .eq("id", bookingId)
+          .neq("payment_status", "refunded")
+          .select("id")
+          .maybeSingle();
+        if (!claimed) return; // another path already refunded this charge
+      }
+      try {
+        await refundPaystack(reference);
+      } catch (refundError) {
+        // Money is still held by Paystack. Persist a durable, queryable state
+        // so reconciliation can retry — never leave this to logs alone.
+        console.error(
+          "[bookings/paystack] AUTO-REFUND FAILED — manual refund required",
+          { reference, cause: cause?.message ?? cause, refundError },
+        );
+        if (bookingId) {
+          try {
+            await writeDb
+              .from("bookings")
+              .update({ payment_status: "refund_failed" })
+              .eq("id", bookingId);
+          } catch (markError) {
+            console.error(
+              "[bookings/paystack] failed to mark refund_failed",
+              markError,
+            );
+          }
+        }
+      }
+    };
+
     let tx: any;
     try {
       tx = await verifyPaystackTransaction(reference);
@@ -454,62 +554,54 @@ export async function POST(req: Request) {
       );
     }
     if (String(tx.reference ?? "") !== reference) {
-      if (bookingId) {
-        await supa
-          .from("bookings")
-          .update({
-            status: "cancelled",
-            payment_status: "failed",
-            hold_expires_at: null,
-          })
-          .eq("id", bookingId);
-      }
+      await refundAfterChargeFailure("reference mismatch");
       return NextResponse.json(
-        { message: "Payment reference mismatch. Please try checkout again." },
+        {
+          message:
+            "Payment reference mismatch. Your payment has been refunded.",
+          refunded: true,
+        },
         { status: 400 },
       );
     }
     const txBookingId = metadataValue(tx.metadata, "bookingId");
-    if (
-      bookingId &&
-      reference.startsWith("hym-") &&
-      txBookingId !== bookingId
-    ) {
-      await supa
-        .from("bookings")
-        .update({
-          status: "cancelled",
-          payment_status: "failed",
-          hold_expires_at: null,
-        })
-        .eq("id", bookingId);
+    if (bookingId && txBookingId !== null && txBookingId !== bookingId) {
+      await refundAfterChargeFailure("booking metadata mismatch");
       return NextResponse.json(
         {
           message:
-            "Payment does not match this booking. Please try checkout again.",
+            "Payment does not match this booking. Your payment has been refunded.",
+          refunded: true,
         },
         { status: 400 },
       );
     }
     if (tx.amount !== expectedAmount) {
-      if (bookingId) {
-        await supa
-          .from("bookings")
-          .update({
-            status: "cancelled",
-            payment_status: "failed",
-            hold_expires_at: null,
-          })
-          .eq("id", bookingId);
-      }
+      await refundAfterChargeFailure(
+        `amount mismatch: charged ${tx.amount} expected ${expectedAmount}`,
+      );
       return NextResponse.json(
-        { message: "Payment amount mismatch. Please contact support." },
+        {
+          message:
+            "Payment amount mismatch. Your payment has been refunded — please try again.",
+          refunded: true,
+        },
+        { status: 400 },
+      );
+    }
+    if (String(tx.currency ?? "GHS").toUpperCase() !== "GHS") {
+      await refundAfterChargeFailure(`currency mismatch: ${tx.currency}`);
+      return NextResponse.json(
+        {
+          message: "Payment currency mismatch. Your payment has been refunded.",
+          refunded: true,
+        },
         { status: 400 },
       );
     }
     if (tx.status !== "success") {
       if (bookingId) {
-        await supa
+        await writeDb
           .from("bookings")
           .update({
             status: "cancelled",
@@ -529,30 +621,13 @@ export async function POST(req: Request) {
     const tripUseLocationLine = [tripUseAddress, tripUseCity, tripUseRegion]
       .filter(Boolean)
       .join(", ");
-    const maybeAdmin = (() => {
-      try {
-        return createSupabaseAdminClient() as any;
-      } catch {
-        return null;
-      }
-    })();
+    const maybeAdmin = admin;
 
-    const markBookingDatesUnavailable = async () => {
-      const availabilityClient = maybeAdmin ?? supa;
-      try {
-        await availabilityClient.from("car_availability").insert({
-          car_id: carId,
-          start_date: startDate,
-          end_date: endDate,
-          available: false,
-        });
-      } catch (availabilityError) {
-        console.error(
-          "[bookings/paystack] failed to mark booking dates unavailable",
-          availabilityError,
-        );
-      }
-    };
+    // Note: booked dates are blocked by the booking row itself (the
+    // availability check and the DB overlap trigger both read active bookings),
+    // so we intentionally do NOT insert a separate car_availability block here.
+    // Doing so previously orphaned available=false rows that were never cleaned
+    // up on reject/cancel, permanently blocking the calendar.
 
     const sendBookingEmails = async (
       booking: any,
@@ -784,7 +859,7 @@ export async function POST(req: Request) {
     };
 
     if (bookingId) {
-      const { data, error } = await supa
+      const { data, error } = await writeDb
         .from("bookings")
         .update({
           status: finalStatus,
@@ -815,10 +890,49 @@ export async function POST(req: Request) {
         })
         .eq("id", bookingId)
         .eq("payment_reference", reference)
+        .eq("status", "pending")
         .select()
-        .single();
-      if (error) throw error;
-      await markBookingDatesUnavailable();
+        .maybeSingle();
+      if (error) {
+        // The charge already succeeded; the most common cause here is the DB
+        // overlap trigger (errcode 23514) firing because another renter
+        // confirmed these dates a moment earlier. Refund so the renter is never
+        // left charged with no booking.
+        await refundAfterChargeFailure(error);
+        const overlap =
+          String((error as any)?.code) === "23514" ||
+          /overlap/i.test(String((error as any)?.message ?? ""));
+        return NextResponse.json(
+          {
+            message: overlap
+              ? "Those dates were just booked by someone else. Your payment has been fully refunded."
+              : "We couldn't confirm your booking, so your payment has been refunded. Please try again.",
+            refunded: true,
+          },
+          { status: 409 },
+        );
+      }
+      if (!data) {
+        // No pending row was updated — the webhook (or a prior call) already
+        // finalized this booking. Re-fetch and return idempotently WITHOUT
+        // refunding (the money was correctly applied or already refunded).
+        const { data: current } = await writeDb
+          .from("bookings")
+          .select("*")
+          .eq("id", bookingId)
+          .maybeSingle();
+        if (
+          current &&
+          ["confirmed", "awaiting_host"].includes(String(current.status)) &&
+          String(current.payment_reference ?? "") === reference.trim()
+        ) {
+          return NextResponse.json({ data: current, alreadyConfirmed: true });
+        }
+        return NextResponse.json(
+          { message: "This booking was already processed.", data: current ?? null },
+          { status: 409 },
+        );
+      }
       const conversationId = await ensureBookingConversation({
         primaryClient: supa,
         fallbackClient: maybeAdmin,
@@ -850,7 +964,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ data: existing, conversationId });
     }
 
-    const { data, error } = await supa
+    const { data, error } = await writeDb
       .from("bookings")
       .insert({
         car_id: carId,
@@ -885,8 +999,17 @@ export async function POST(req: Request) {
       .select()
       .single();
 
-    if (error) throw error;
-    await markBookingDatesUnavailable();
+    if (error || !data) {
+      await refundAfterChargeFailure(error ?? "insert returned no row");
+      return NextResponse.json(
+        {
+          message:
+            "We couldn't create your booking, so your payment has been refunded. Please try again.",
+          refunded: true,
+        },
+        { status: 409 },
+      );
+    }
     const conversationId = await ensureBookingConversation({
       primaryClient: supa,
       fallbackClient: maybeAdmin,
