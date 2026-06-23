@@ -4,7 +4,11 @@ import Security
 
 struct AuthFlowScreen: View {
     @EnvironmentObject private var appState: AppState
-    @State private var selectedTab: AuthTab = .login
+    @State private var selectedTab: AuthTab
+
+    init(initialTab: AuthTab = .login) {
+        _selectedTab = State(initialValue: initialTab)
+    }
 
     var body: some View {
         NavigationStack {

@@ -272,6 +272,37 @@ actor RemoteImagePipeline {
             }
         }
     }
+
+    /// Loads every `(url, pixelSize)` pair into the in-memory cache and awaits
+    /// completion. Unlike `prefetch`, this blocks the caller until all images
+    /// are decoded and cached — used by screenshot mode so screens never render
+    /// before their real listing photos are available.
+    func warm(_ items: [(url: URL, pixelSize: CGSize?)], maxConcurrent: Int = 6) async {
+        var seen = Set<String>()
+        var unique: [(url: URL, pixelSize: CGSize?)] = []
+        for item in items {
+            let key = cacheKey(for: item.url, targetPixelSize: item.pixelSize)
+            if seen.insert(key).inserted {
+                unique.append(item)
+            }
+        }
+        guard !unique.isEmpty else { return }
+
+        let safeConcurrency = max(1, min(maxConcurrent, unique.count))
+        var index = 0
+        while index < unique.count {
+            let batchEnd = min(index + safeConcurrency, unique.count)
+            let batch = unique[index..<batchEnd]
+            await withTaskGroup(of: Void.self) { group in
+                for item in batch {
+                    group.addTask {
+                        _ = await self.loadImage(from: item.url, targetPixelSize: item.pixelSize)
+                    }
+                }
+            }
+            index = batchEnd
+        }
+    }
 }
 
 struct CachedRemoteImage<Placeholder: View, Failure: View>: View {

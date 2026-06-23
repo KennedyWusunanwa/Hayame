@@ -27,6 +27,7 @@
 		A0227C9F0F57B9B47C6CC29B /* HayameIOSApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 374D26C81A3EC27AE6793B1C /* HayameIOSApp.swift */; };
 		A91D257DEB78EA4977168D2C /* SplashScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF07E8B98C809F2333ACF8E0 /* SplashScreen.swift */; };
 		AACF7916269FF138234FE1DE /* HostScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = C43DD509D97C8BC09DFDAEEC /* HostScreens.swift */; };
+		B6C48E671D8A40FBA7E2C119 /* ScreenshotRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6C48E661D8A40FBA7E2C119 /* ScreenshotRootView.swift */; };
 		DA39E78681979B4160CB9FB2 /* LegalAndSupportScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95B87581576C44D745F473DF /* LegalAndSupportScreens.swift */; };
 		F3981DBDFEC268A6B1D19D41 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D724F9AC0077635E90869BDD /* RootView.swift */; };
 /* End PBXBuildFile section */
@@ -48,6 +49,7 @@
 		90869CE125FCD22FD5450526 /* NotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationManager.swift; sourceTree = "<group>"; };
 		95B87581576C44D745F473DF /* LegalAndSupportScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegalAndSupportScreens.swift; sourceTree = "<group>"; };
 		A74C04F09A7EB5CEF79E3165 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		B6C48E661D8A40FBA7E2C119 /* ScreenshotRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotRootView.swift; sourceTree = "<group>"; };
 		C33845704864DBB28CA7565E /* Hayame.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Hayame.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C35FF516F27CD52298E15051 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
 		C43DD509D97C8BC09DFDAEEC /* HostScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostScreens.swift; sourceTree = "<group>"; };
@@ -80,6 +82,7 @@
 			children = (
 				C35FF516F27CD52298E15051 /* AppState.swift */,
 				374D26C81A3EC27AE6793B1C /* HayameIOSApp.swift */,
+				B6C48E661D8A40FBA7E2C119 /* ScreenshotRootView.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -274,6 +277,7 @@
 				2FB9D38448C3276E9C41BEA9 /* NotificationManager.swift in Sources */,
 				35FB37750EC2804DD870B5C2 /* RenterScreens.swift in Sources */,
 				F3981DBDFEC268A6B1D19D41 /* RootView.swift in Sources */,
+				B6C48E671D8A40FBA7E2C119 /* ScreenshotRootView.swift in Sources */,
 				A91D257DEB78EA4977168D2C /* SplashScreen.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

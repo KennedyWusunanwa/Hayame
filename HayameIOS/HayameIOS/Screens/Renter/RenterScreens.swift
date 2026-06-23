@@ -89,6 +89,196 @@ struct RenterTabShell: View {
     }
 }
 
+#if DEBUG
+struct ScreenshotRenterRouteView: View {
+    @EnvironmentObject private var appState: AppState
+    let route: ScreenshotRoute
+    @State private var isPreparingLiveListings = true
+    @State private var liveListingError: String?
+
+    private var screenshotCar: Car {
+        appState.cars.first(where: { $0.id == "car-001" }) ??
+            appState.cars.first ??
+            MockDataService.cars[0]
+    }
+
+    private var startDate: Date {
+        bookingAddingDays(2, to: Date())
+    }
+
+    private var endDate: Date {
+        bookingAddingDays(4, to: Date())
+    }
+
+    private var blockedDates: Set<Date> {
+        [
+            bookingAddingDays(5, to: Date()),
+            bookingAddingDays(9, to: Date()),
+            bookingAddingDays(16, to: Date())
+        ]
+    }
+
+    var body: some View {
+        Group {
+            if isPreparingLiveListings {
+                ScreenshotLiveListingsLoadingView()
+            } else if let liveListingError {
+                ScreenshotLiveListingsErrorView(message: liveListingError)
+            } else {
+                routeContent
+            }
+        }
+        .background(HayameTheme.pageBackground.ignoresSafeArea())
+        .task {
+            guard isPreparingLiveListings else { return }
+            let ready = await appState.prepareScreenshotLiveData()
+            if ready {
+                liveListingError = nil
+            } else {
+                liveListingError = appState.syncErrorMessage ?? "Live listings did not load."
+            }
+            isPreparingLiveListings = false
+        }
+    }
+
+    @ViewBuilder
+    private var routeContent: some View {
+        switch route {
+        case .home:
+            renterTab(.home)
+
+        case .explore:
+            renterTab(.explore)
+
+        case .trips:
+            renterTab(.trips)
+
+        case .favorites:
+            renterTab(.favorites)
+
+        case .messages:
+            NavigationStack {
+                InboxScreen()
+            }
+
+        case .profile:
+            renterTab(.more)
+
+        case .renterDashboard:
+            NavigationStack {
+                RenterDashboardScreen()
+            }
+
+        case .exploreFilters:
+            NavigationStack {
+                ExploreFilterSheet()
+            }
+            .onAppear {
+                appState.exploreFilters.region = "Greater Accra Region"
+                appState.exploreFilters.city = "Accra"
+                appState.exploreFilters.carType = "SUV"
+                appState.exploreFilters.instantBookOnly = true
+                appState.exploreFilters.deliveryOnly = true
+            }
+
+        case .carDetail:
+            NavigationStack {
+                CarDetailScreen(car: screenshotCar)
+            }
+
+        case .bookingTrip:
+            bookingSheet(step: .tripDetails)
+
+        case .bookingCalendar:
+            BookingAvailabilityCalendarSheet(
+                title: "Choose start date",
+                selectedDate: startDate,
+                selectionRange: startDate...endDate,
+                blockedDates: blockedDates,
+                minimumDate: bookingDay(Date()),
+                canSelectDate: { date in
+                    isBookableStartDate(date, blockedDates: blockedDates)
+                },
+                onSelect: { _ in }
+            )
+
+        case .bookingLocation:
+            bookingSheet(step: .location)
+
+        case .bookingReview:
+            bookingSheet(step: .review)
+
+        case .bookingPayment:
+            bookingSheet(step: .payment)
+
+        case .paymentProcessing:
+            bookingSheet(step: .payment, processing: true)
+
+        case .splash, .authLogin, .authSignup:
+            EmptyView()
+        }
+    }
+
+    private func renterTab(_ tab: RenterTab) -> some View {
+        RenterTabShell()
+            .onAppear {
+                appState.renterTab = tab
+            }
+    }
+
+    private func bookingSheet(step: BookingCheckoutStep, processing: Bool = false) -> some View {
+        BookingSheet(
+            car: screenshotCar,
+            startDate: startDate,
+            endDate: endDate,
+            region: "Greater Accra Region",
+            city: "Accra",
+            address: "Airport Residential",
+            blockedDates: blockedDates,
+            screenshotStep: step,
+            screenshotTripMode: .delivery,
+            screenshotProcessing: processing
+        )
+    }
+}
+
+private struct ScreenshotLiveListingsLoadingView: View {
+    var body: some View {
+        VStack(spacing: 14) {
+            ProgressView()
+                .tint(HayameTheme.brandBlue)
+            Text("Loading live car listings")
+                .font(.system(size: 16, weight: .bold, design: .rounded))
+                .foregroundStyle(HayameTheme.brandNavy)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(HayameTheme.pageBackground)
+    }
+}
+
+private struct ScreenshotLiveListingsErrorView: View {
+    let message: String
+
+    var body: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 28, weight: .bold))
+                .foregroundStyle(HayameTheme.warning)
+            Text("Live listings unavailable")
+                .font(.system(size: 18, weight: .bold, design: .rounded))
+                .foregroundStyle(HayameTheme.brandNavy)
+            Text(message)
+                .font(.system(size: 13, weight: .medium, design: .rounded))
+                .foregroundStyle(HayameTheme.mutedText)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 24)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(HayameTheme.pageBackground)
+    }
+}
+#endif
+
 struct RenterHomeScreen: View {
     @EnvironmentObject private var appState: AppState
     @StateObject private var locationManager = HomeLocationManager()
@@ -310,6 +500,9 @@ struct RenterHomeScreen: View {
             }
         }
         .onAppear {
+            #if DEBUG
+            if AppState.isScreenshotMode { return }
+            #endif
             locationManager.requestIfNeeded()
         }
         .onChange(of: availableCategories) { _, newCats in
@@ -2536,6 +2729,40 @@ private struct BookingSheet: View {
         _tripMode = State(initialValue: car.deliveryAvailable ? nil : .pickup)
         _deliveryTimeSelection = State(initialValue: Self.defaultDeliveryTime())
     }
+
+    #if DEBUG
+    init(
+        car: Car,
+        startDate: Date,
+        endDate: Date,
+        region: String,
+        city: String,
+        address: String,
+        blockedDates: Set<Date> = [],
+        screenshotStep: BookingCheckoutStep,
+        screenshotTripMode: BookingTripMode? = .delivery,
+        screenshotProcessing: Bool = false
+    ) {
+        self.car = car
+        _startDate = State(initialValue: startDate)
+        _endDate = State(initialValue: endDate > startDate ? endDate : (Calendar.current.date(byAdding: .day, value: 1, to: startDate) ?? startDate))
+        _blockedDates = State(initialValue: blockedDates)
+        _region = State(initialValue: MockDataService.normalizedRegion(region))
+        _city = State(initialValue: city)
+        _address = State(initialValue: address)
+        _tripMode = State(initialValue: screenshotTripMode)
+        _deliveryDetails = State(initialValue: BookingDeliveryDetails(
+            address: "22 Airport Bypass, Accra",
+            time: "10:00",
+            contactPhone: "+233 24 555 0001",
+            notes: "Meet at the main gate."
+        ))
+        _deliveryTimeSelection = State(initialValue: Self.defaultDeliveryTime())
+        _isProcessingPayment = State(initialValue: screenshotProcessing)
+        _currentStep = State(initialValue: screenshotStep)
+        _selectedQuickDuration = State(initialValue: 2)
+    }
+    #endif
 
     private static func defaultDeliveryTime() -> Date {
         let calendar = Calendar.current

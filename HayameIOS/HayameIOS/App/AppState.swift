@@ -130,8 +130,37 @@ final class AppState: ObservableObject {
     }()
     static let productionBaseURL = "https://www.hayamegh.com"
 
+    #if DEBUG
+    static var isScreenshotMode: Bool {
+        ProcessInfo.processInfo.arguments.contains("-HAYAME_SCREENSHOT_ROUTE")
+    }
+
+    private static var screenshotDarkModeEnabled: Bool {
+        if let theme = screenshotArgumentValue(for: "-HAYAME_SCREENSHOT_THEME")?.lowercased() {
+            return theme == "dark"
+        }
+        return ProcessInfo.processInfo.arguments.contains("-HAYAME_SCREENSHOT_DARK")
+    }
+
+    private static func screenshotArgumentValue(for key: String) -> String? {
+        let args = ProcessInfo.processInfo.arguments
+        guard let index = args.firstIndex(of: key), args.indices.contains(index + 1) else {
+            return nil
+        }
+        return args[index + 1].trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+    #endif
+
     init() {
         ensureFirstLaunchTimestamp()
+
+        #if DEBUG
+        if Self.isScreenshotMode {
+            configureForScreenshots()
+            return
+        }
+        #endif
+
         if let persistedBaseURL = defaults.string(forKey: apiBaseURLKey) {
             let trimmed = persistedBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)
             if !trimmed.isEmpty {
@@ -212,6 +241,171 @@ final class AppState: ObservableObject {
             _ = await (referenceTask, publicCarsTask, bootstrapTask, announcementTask)
         }
     }
+
+    #if DEBUG
+    private func configureForScreenshots() {
+        stopPolling()
+        stopRealtimeMessages()
+        darkModeEnabled = Self.screenshotDarkModeEnabled
+        apiBaseURL = Self.productionBaseURL
+        isAuthenticated = true
+        isGuestMode = false
+        currentUser = .demoGuest
+        currentUser.role = .guest
+        renterTab = .home
+        hostTab = .dashboard
+        hostAccessState = .renter
+        hostModeEnabled = false
+
+        cars = []
+        ownedCars = []
+        favoriteCarIDs = []
+        renterBookings = []
+        hostBookings = []
+        hostReviews = []
+        listingReviewsByCarID = [:]
+        conversations = MockDataService.conversations
+        messagesByConversation = MockDataService.messagesByConversation
+        notificationPreferences = .defaults
+        activeAnnouncement = nil
+        syncErrorMessage = nil
+        authInfoMessage = nil
+        paymentFlowNotice = "Payment started. Your booking will appear here after checkout."
+        paymentFlowNoticeIsError = false
+
+        publicCarsLoadState = .loading
+        bookingsLoadState = .loaded
+        conversationsLoadState = .loaded
+        favoritesLoadState = .loaded
+    }
+
+    func prepareScreenshotLiveData() async -> Bool {
+        guard Self.isScreenshotMode else { return true }
+
+        if case .loaded = publicCarsLoadState, !cars.isEmpty {
+            return true
+        }
+
+        publicCarsLoadState = .loading
+        syncErrorMessage = nil
+        await syncPublicCars()
+
+        let liveCarsWithPhotos = cars.filter { car in
+            RemoteImageURLResolver.resolve(car.imageNames.first) != nil
+        }
+
+        guard !liveCarsWithPhotos.isEmpty else {
+            syncErrorMessage = "No live listings with photos were returned from the database."
+            cars = []
+            publicCarsLoadState = .error(syncErrorMessage ?? "No live listings with photos were returned from the database.")
+            return false
+        }
+
+        cars = liveCarsWithPhotos
+        publicCarsLoadState = .loaded
+        favoriteCarIDs = Set(liveCarsWithPhotos.prefix(2).map(\.id))
+        renterBookings = Self.screenshotRenterBookings(from: liveCarsWithPhotos)
+        bookingsLoadState = renterBookings.isEmpty ? .empty : .loaded
+        favoritesLoadState = favoriteCarIDs.isEmpty ? .empty : .loaded
+
+        await warmScreenshotImages(for: liveCarsWithPhotos)
+        return true
+    }
+
+    /// Synchronously warms the in-memory image cache for every size the
+    /// screenshot routes actually request (the cache key is `url#pixelWxpixelH`,
+    /// so each display size needs its own entry). Blocks until the real listing
+    /// photos are decoded and cached, so screens never render with empty/spinner
+    /// image slots.
+    private func warmScreenshotImages(for cars: [Car]) async {
+        let scale = UIScreen.main.scale
+        func px(_ width: CGFloat, _ height: CGFloat) -> CGSize {
+            CGSize(width: width * scale, height: height * scale)
+        }
+
+        // Sizes requested by home / explore / trips / favorites list & grid cards.
+        let listSizes = [px(520, 320), px(420, 300), px(320, 240), px(188, 144), px(180, 140)]
+        // Sizes requested by the car-detail hero, booking hero, and detail thumbnails.
+        let detailSizes = [px(900, 620), px(1206, 874), px(156, 112)]
+
+        var work: [(url: URL, pixelSize: CGSize?)] = []
+
+        for car in cars.prefix(8) {
+            guard let url = RemoteImageURLResolver.resolve(car.imageNames.first) else { continue }
+            for size in listSizes {
+                work.append((url, size))
+            }
+        }
+
+        if let detailCar = cars.first {
+            for name in detailCar.imageNames.prefix(6) {
+                guard let url = RemoteImageURLResolver.resolve(name) else { continue }
+                for size in detailSizes {
+                    work.append((url, size))
+                }
+            }
+        }
+
+        guard !work.isEmpty else { return }
+        await RemoteImagePipeline.shared.warm(work, maxConcurrent: 6)
+    }
+
+    private static func screenshotRenterBookings(from cars: [Car]) -> [Booking] {
+        cars.prefix(2).enumerated().map { index, car in
+            let start = Calendar.current.date(byAdding: .day, value: index == 0 ? 2 : -15, to: .now) ?? .now
+            let end = Calendar.current.date(byAdding: .day, value: index == 0 ? 5 : -12, to: .now) ?? .now
+            let nights = max(1, Calendar.current.dateComponents([.day], from: start, to: end).day ?? 1)
+            let subtotal = car.dailyPrice * nights
+            let platformFee = Int(Double(subtotal) * 0.10)
+            let deliveryFee = index == 0 && car.deliveryAvailable ? max(car.deliveryFee, 0) : 0
+            let insuranceFee = max(car.insuranceFee, 0)
+            let depositAmount = max(car.depositAmount, 0)
+            var value = Booking(
+                id: "shot-booking-\(index + 1)",
+                carID: car.id,
+                renterID: UserProfile.demoGuest.id,
+                hostID: car.ownerID.isEmpty ? "live-host-\(index + 1)" : car.ownerID,
+                conversationID: MockDataService.conversations.indices.contains(index) ? MockDataService.conversations[index].id : nil,
+                carTitle: car.displayTitle,
+                carBrand: car.brand,
+                carImageNames: car.imageNames,
+                renterName: UserProfile.demoGuest.fullName,
+                hostName: car.hostName,
+                startDate: start,
+                endDate: end,
+                status: index == 0 ? .confirmed : .completed,
+                paymentStatus: .paid,
+                totalPrice: subtotal + platformFee + deliveryFee + insuranceFee + depositAmount,
+                deliveryAddress: index == 0 && car.deliveryAvailable ? "22 Airport Bypass, Accra" : "",
+                deliveryTime: index == 0 && car.deliveryAvailable ? "10:00" : "",
+                contactPhone: index == 0 && car.deliveryAvailable ? UserProfile.demoGuest.phone : "",
+                deliveryNotes: index == 0 && car.deliveryAvailable ? "Meet at the main gate." : "",
+                tripUseRegion: car.region,
+                tripUseCity: car.city,
+                tripUseAddress: index == 0 ? "Airport Residential" : car.city,
+                dailyRate: car.dailyPrice,
+                subtotal: subtotal,
+                platformFee: platformFee,
+                insuranceFee: insuranceFee,
+                deliveryFee: deliveryFee,
+                depositAmount: depositAmount,
+                paymentReference: "HYM-LIVE-\(index + 1)",
+                createdAt: Calendar.current.date(byAdding: .day, value: index == 0 ? -2 : -20, to: .now) ?? .now
+            )
+            value.deliveryAddress = index == 0 ? "22 Airport Bypass, Accra" : ""
+            return value
+        }
+    }
+
+    private static func screenshotAvailabilitySnapshot(start: Date) -> AvailabilitySnapshot {
+        let formatter = Self.dateOnlyFormatter
+        let calendar = Calendar.current
+        let blocked = [3, 4, 9, 16, 23].compactMap { offset in
+            calendar.date(byAdding: .day, value: offset, to: start).map(formatter.string(from:))
+        }
+        return AvailabilitySnapshot(blockedDates: blocked, available: true, reason: nil)
+    }
+    #endif
 
     var isHostApproved: Bool {
         hostAccessState == .host
@@ -688,6 +882,10 @@ final class AppState: ObservableObject {
     }
 
     func refreshConversationsNow() {
+        #if DEBUG
+        if Self.isScreenshotMode { return }
+        #endif
+
         guard isAuthenticated else { return }
         Task {
             await syncConversations()
@@ -1425,6 +1623,10 @@ final class AppState: ObservableObject {
     }
 
     func refreshCarDetail(carID: String) async {
+        #if DEBUG
+        if Self.isScreenshotMode { return }
+        #endif
+
         do {
             let response = try await api.getCarDetail(baseURL: apiBaseURL, token: authToken, carID: carID)
             let mapped = mapCar(response.data)
@@ -1471,6 +1673,12 @@ final class AppState: ObservableObject {
     }
 
     func checkAvailability(carID: String, start: Date, end: Date) async -> AvailabilitySnapshot? {
+        #if DEBUG
+        if Self.isScreenshotMode {
+            return Self.screenshotAvailabilitySnapshot(start: start)
+        }
+        #endif
+
         let startDate = Self.dateOnlyFormatter.string(from: start)
         let endDate = Self.dateOnlyFormatter.string(from: end)
         do {
@@ -2069,6 +2277,10 @@ final class AppState: ObservableObject {
     // MARK: - Sync
 
     func refreshAllRemoteData() async {
+        #if DEBUG
+        if Self.isScreenshotMode { return }
+        #endif
+
         guard isAuthenticated else {
             await syncPublicCars()
             await refreshActiveAnnouncements()

@@ -15,7 +15,30 @@ struct HayameIOSApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ZStack {
+            rootContent
+        }
+    }
+
+    @ViewBuilder
+    private var rootContent: some View {
+        #if DEBUG
+        if let screenshotRoute = ScreenshotRoute.current {
+            ScreenshotRootView(route: screenshotRoute)
+                .environmentObject(appState)
+                .preferredColorScheme(appState.darkModeEnabled ? .dark : .light)
+                .onAppear {
+                    applyWindowStyle(appState.darkModeEnabled)
+                }
+        } else {
+            liveRoot
+        }
+        #else
+        liveRoot
+        #endif
+    }
+
+    private var liveRoot: some View {
+        ZStack {
                 RootView()
                     .environmentObject(appState)
                     .opacity(showSplash ? 0 : 1)
@@ -69,9 +92,8 @@ struct HayameIOSApp: App {
             .onChange(of: scenePhase) { _, phase in
                 if phase == .active {
                     applyWindowStyle(appState.darkModeEnabled)
-                } else {
-                    dismissAppearanceTransition()
-                }
+            } else {
+                dismissAppearanceTransition()
             }
         }
     }
