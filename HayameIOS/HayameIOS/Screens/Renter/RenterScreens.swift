@@ -333,7 +333,10 @@ struct RenterHomeScreen: View {
             browseRegion.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
             cachedDetectedCity.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
             cachedDetectedRegion.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-            locationManager.isResolvingLocation
+            // Hold the skeleton until the FIRST location attempt finishes (success
+            // or failure). Gating on isResolvingLocation alone left a gap before
+            // the request kicks off, flashing the generic first-5 "near you" cars.
+            !locationManager.didResolveLocation
     }
 
     private var availableCategories: [String] {
