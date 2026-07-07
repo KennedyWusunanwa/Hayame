@@ -1,14 +1,13 @@
 import { NextResponse } from "next/server";
-import { failJson } from "@/lib/api-errors";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getRequestUser } from "@/lib/supabase/request-auth";
 import { refundPaystack } from "@/lib/paystack";
+import { failJson } from "@/lib/api-errors";
 import {
   buildBookingCancelledEmail,
   buildHostDecisionEmail,
   sendEmailSafe,
-  sendRefundReceiptEmails,
 } from "@/lib/email";
 import { sendPushNotificationsToUsers } from "@/lib/push";
 
@@ -167,14 +166,12 @@ export async function PATCH(req: Request, { params }: Params) {
         );
       }
 
-      let refundSucceeded = false;
       if (willRefund) {
         try {
           await refundPaystack(
             booking.payment_reference,
             refundAmount >= total ? undefined : Math.round(refundAmount * 100),
           );
-          refundSucceeded = true;
         } catch (refundError) {
           console.error(
             "[bookings/:id] CRITICAL: refund failed after cancel — manual refund required",
@@ -194,49 +191,12 @@ export async function PATCH(req: Request, { params }: Params) {
       // Notify host + renter (best effort).
       if (admin) {
         try {
-          const [renterAuth, hostAuth, renterProfile, hostProfile] =
-            await Promise.all([
-              admin.auth.admin.getUserById(booking.renter_id).catch(() => null),
-              admin.auth.admin.getUserById(ownerId).catch(() => null),
-              admin
-                .from("profiles")
-                .select("full_name")
-                .eq("id", booking.renter_id)
-                .maybeSingle()
-                .then((r: any) => r?.data ?? null)
-                .catch(() => null),
-              admin
-                .from("profiles")
-                .select("full_name")
-                .eq("id", ownerId)
-                .maybeSingle()
-                .then((r: any) => r?.data ?? null)
-                .catch(() => null),
-            ]);
+          const [renterAuth, hostAuth] = await Promise.all([
+            admin.auth.admin.getUserById(booking.renter_id).catch(() => null),
+            admin.auth.admin.getUserById(ownerId).catch(() => null),
+          ]);
           const renterEmail = extractAuthEmail(renterAuth);
           const hostEmail = extractAuthEmail(hostAuth);
-
-          // Official refund receipt to both parties (only when money moved).
-          if (refundSucceeded) {
-            await sendRefundReceiptEmails({
-              renterEmail,
-              hostEmail,
-              renterName: renterProfile?.full_name ?? null,
-              hostName: hostProfile?.full_name ?? null,
-              carTitle,
-              bookingId: booking.id,
-              paymentReference: booking.payment_reference,
-              refundReference: booking.payment_reference,
-              refundAmount,
-              totalPaid: total,
-              reason:
-                policyLabel === "host-approval-pending"
-                  ? "Booking cancelled by guest before host approval (full refund)"
-                  : `Booking cancelled by guest (${policyLabel} cancellation policy)`,
-              startDate: booking.start_date,
-              endDate: booking.end_date,
-            });
-          }
           if (renterEmail) {
             const email = buildBookingCancelledEmail({
               recipientRole: "renter",
@@ -413,11 +373,9 @@ export async function PATCH(req: Request, { params }: Params) {
       );
     }
 
-    let refundSucceeded = false;
     if (wasPaid) {
       try {
         await refundPaystack(booking.payment_reference);
-        refundSucceeded = true;
       } catch (refundError) {
         console.error(
           "[bookings/:id] CRITICAL: refund failed after reject — manual refund required",
@@ -436,39 +394,24 @@ export async function PATCH(req: Request, { params }: Params) {
 
     if (admin) {
       const renterId = booking.renter_id;
-      const [renterAuthResult, hostAuthResult, renterProfileResult, hostProfileResult] =
-        await Promise.all([
-          admin.auth.admin.getUserById(renterId).catch(() => null),
-          admin.auth.admin.getUserById(ownerId).catch(() => null),
-          admin
-            .from("profiles")
-            .select("full_name")
-            .eq("id", renterId)
-            .maybeSingle(),
-          admin
-            .from("profiles")
-            .select("full_name")
-            .eq("id", ownerId)
-            .maybeSingle(),
-        ]);
+      const [renterAuthResult, hostProfileResult] = await Promise.all([
+        admin.auth.admin.getUserById(renterId).catch(() => null),
+        admin
+          .from("profiles")
+          .select("full_name")
+          .eq("id", ownerId)
+          .maybeSingle(),
+      ]);
       const renterEmail = extractAuthEmail(renterAuthResult);
-      const hostEmail = extractAuthEmail(hostAuthResult);
-      const hostName =
-        (
-          (hostProfileResult as any)?.data as {
-            full_name?: string | null;
-          } | null
-        )?.full_name ?? null;
-      const renterName =
-        (
-          (renterProfileResult as any)?.data as {
-            full_name?: string | null;
-          } | null
-        )?.full_name ?? null;
       if (renterEmail) {
         const email = buildHostDecisionEmail({
           approved: false,
-          hostName,
+          hostName:
+            (
+              (hostProfileResult as any)?.data as {
+                full_name?: string | null;
+              } | null
+            )?.full_name ?? null,
           carTitle: booking?.car_id ? (booking?.cars?.title ?? null) : null,
           startDate: booking.start_date,
           endDate: booking.end_date,
@@ -479,32 +422,6 @@ export async function PATCH(req: Request, { params }: Params) {
           ...email,
           idempotencyKey: `booking:${booking.id}:rejected`,
         });
-      }
-
-      // Official refund receipt to both parties (only when money moved).
-      if (refundSucceeded) {
-        try {
-          await sendRefundReceiptEmails({
-            renterEmail,
-            hostEmail,
-            renterName,
-            hostName,
-            carTitle,
-            bookingId: booking.id,
-            paymentReference: booking.payment_reference,
-            refundReference: booking.payment_reference,
-            refundAmount: Number(booking.total_price ?? 0),
-            totalPaid: Number(booking.total_price ?? 0),
-            reason: "Booking request rejected by host (full refund)",
-            startDate: booking.start_date,
-            endDate: booking.end_date,
-          });
-        } catch (receiptError) {
-          console.error(
-            "[bookings/:id] refund receipt emails failed",
-            receiptError,
-          );
-        }
       }
     }
 
@@ -541,13 +458,13 @@ export async function PATCH(req: Request, { params }: Params) {
     }
 
     return NextResponse.json({ data });
-  } catch (error: any) {
+  } catch (error) {
     return failJson({
       error,
       req,
       route: "/api/bookings/[id]",
       status: 400,
-      userMessage: "Couldn't update this booking. Please try again.",
+      userMessage: "Couldn't update the booking. Please try again.",
     });
   }
 }

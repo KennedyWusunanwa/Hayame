@@ -1,17 +1,16 @@
 import { NextResponse } from "next/server";
 import { differenceInCalendarDays } from "date-fns";
-import { failJson } from "@/lib/api-errors";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getRequestUser } from "@/lib/supabase/request-auth";
 import { verifyPaystackTransaction, refundPaystack } from "@/lib/paystack";
 import { isLocationOutsideAccra, isOutsideListingRegion } from "@/lib/utils";
+import { failJson } from "@/lib/api-errors";
 import {
   buildBookingInvoiceEmail,
   buildBookingPaidEmail,
   buildHostBookingNoticeEmail,
   sendEmailSafe,
-  sendRefundReceiptEmails,
 } from "@/lib/email";
 import { sendPushNotificationsToUsers } from "@/lib/push";
 
@@ -495,8 +494,6 @@ export async function POST(req: Request) {
       depositAmount;
     const expectedAmount = Math.round(total * 100);
 
-    let tx: any;
-
     // Once verifyPaystackTransaction succeeds the customer's card HAS been
     // charged. Any reason we then decline to confirm the booking MUST refund
     // the money — otherwise the renter is debited with nothing to show.
@@ -522,29 +519,6 @@ export async function POST(req: Request) {
       }
       try {
         await refundPaystack(reference);
-        // Official receipt so the renter has a record of the automatic refund.
-        try {
-          const refundAmountMajor =
-            Number(tx?.amount ?? expectedAmount ?? 0) / 100;
-          await sendRefundReceiptEmails({
-            renterEmail: user.email ?? null,
-            carTitle: car?.title ?? null,
-            bookingId: bookingId ?? null,
-            paymentReference: reference,
-            refundReference: reference,
-            refundAmount: refundAmountMajor,
-            totalPaid: refundAmountMajor,
-            reason:
-              "Payment could not be applied to your booking and was automatically refunded in full",
-            startDate: startDate ?? null,
-            endDate: endDate ?? null,
-          });
-        } catch (receiptError) {
-          console.error(
-            "[bookings/paystack] auto-refund receipt email failed",
-            receiptError,
-          );
-        }
       } catch (refundError) {
         // Money is still held by Paystack. Persist a durable, queryable state
         // so reconciliation can retry — never leave this to logs alone.
@@ -568,6 +542,7 @@ export async function POST(req: Request) {
       }
     };
 
+    let tx: any;
     try {
       tx = await verifyPaystackTransaction(reference);
     } catch {
@@ -1047,13 +1022,13 @@ export async function POST(req: Request) {
     await sendBookingEmails(data, conversationId);
     await sendBookingPushNotifications(data, conversationId);
     return NextResponse.json({ data, conversationId });
-  } catch (error: any) {
+  } catch (error) {
     return failJson({
       error,
       req,
       route: "/api/bookings/paystack",
       status: 400,
-      userMessage: "We couldn't create your booking. Please try again.",
+      userMessage: "Couldn't create your booking. Please try again.",
     });
   }
 }
