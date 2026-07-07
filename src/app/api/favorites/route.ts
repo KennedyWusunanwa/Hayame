@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { failJson } from "@/lib/api-errors";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getRequestUser } from "@/lib/supabase/request-auth";
@@ -26,10 +27,13 @@ export async function GET(req: Request) {
     if (error) throw error;
     return NextResponse.json({ data });
   } catch (error: any) {
-    return NextResponse.json(
-      { message: error.message ?? "Failed to load favorites" },
-      { status: 400 },
-    );
+    return failJson({
+      error,
+      req,
+      route: "/api/favorites",
+      status: 400,
+      userMessage: "Couldn't load your favorites. Please try again.",
+    });
   }
 }
 
@@ -67,9 +71,12 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ ok: true });
   } catch (error: any) {
-    return NextResponse.json(
-      { message: error.message ?? "Failed to update favorite" },
-      { status: 400 },
-    );
+    return failJson({
+      error,
+      req,
+      route: "/api/favorites",
+      status: 400,
+      userMessage: "Couldn't update your favorite. Please try again.",
+    });
   }
 }

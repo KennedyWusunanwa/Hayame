@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { failJson } from "@/lib/api-errors";
 
 type Body = {
   email?: string;
@@ -49,19 +50,25 @@ export async function POST(req: Request) {
     });
 
     if (error) {
-      return NextResponse.json(
-        { message: error.message ?? "Unable to resend confirmation email" },
-        { status: 400 },
-      );
+      return failJson({
+        error,
+        req,
+        route: "/api/mobile/auth/resend-confirmation",
+        status: 400,
+        userMessage: "We couldn't resend your confirmation email. Please try again.",
+      });
     }
 
     return NextResponse.json({
       message: "If this account exists, a confirmation email has been sent.",
     });
   } catch (error: any) {
-    return NextResponse.json(
-      { message: error?.message ?? "Unable to resend confirmation email" },
-      { status: 400 },
-    );
+    return failJson({
+      error,
+      req,
+      route: "/api/mobile/auth/resend-confirmation",
+      status: 400,
+      userMessage: "We couldn't resend your confirmation email. Please try again.",
+    });
   }
 }

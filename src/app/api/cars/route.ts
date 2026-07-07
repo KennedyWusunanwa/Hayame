@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { failJson } from "@/lib/api-errors";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getRequestUser } from "@/lib/supabase/request-auth";
@@ -332,7 +333,13 @@ export async function GET(req: Request) {
       },
     );
   } catch (error: any) {
-    return NextResponse.json({ message: error.message }, { status: 500 });
+    return failJson({
+      error,
+      req,
+      route: "/api/cars",
+      status: 500,
+      userMessage: "Couldn't load cars right now. Please try again.",
+    });
   }
 }
 
@@ -410,9 +417,12 @@ export async function POST(req: Request) {
     if (error) throw error;
     return NextResponse.json({ data });
   } catch (error: any) {
-    return NextResponse.json(
-      { message: error.message ?? "Failed to create car" },
-      { status: 400 },
-    );
+    return failJson({
+      error,
+      req,
+      route: "/api/cars",
+      status: 400,
+      userMessage: "Couldn't create your listing. Please try again.",
+    });
   }
 }

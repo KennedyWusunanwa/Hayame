@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { failJson } from "@/lib/api-errors";
 
 type Body = {
   refresh_token?: string;
@@ -31,10 +32,13 @@ export async function POST(req: Request) {
     });
 
     if (error || !data.session) {
-      return NextResponse.json(
-        { message: error?.message ?? "Unable to refresh session" },
-        { status: 401 },
-      );
+      return failJson({
+        error,
+        req,
+        route: "/api/mobile/auth/refresh",
+        status: 401,
+        userMessage: "We couldn't refresh your session. Please sign in again.",
+      });
     }
 
     return NextResponse.json({
@@ -42,9 +46,12 @@ export async function POST(req: Request) {
       refresh_token: data.session.refresh_token,
     });
   } catch (error: any) {
-    return NextResponse.json(
-      { message: error?.message ?? "Unable to refresh session" },
-      { status: 400 },
-    );
+    return failJson({
+      error,
+      req,
+      route: "/api/mobile/auth/refresh",
+      status: 400,
+      userMessage: "We couldn't refresh your session. Please try again.",
+    });
   }
 }

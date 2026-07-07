@@ -5,6 +5,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getRequestUser } from "@/lib/supabase/request-auth";
 import { initializePaystackTransaction } from "@/lib/paystack";
 import { isLocationOutsideAccra, isOutsideListingRegion } from "@/lib/utils";
+import { failJson } from "@/lib/api-errors";
 
 type Body = {
   bookingId?: string;
@@ -265,9 +266,12 @@ export async function POST(req: Request) {
       },
     });
   } catch (error: any) {
-    return NextResponse.json(
-      { message: error.message ?? "Failed to initialize payment" },
-      { status: 400 },
-    );
+    return failJson({
+      error,
+      req,
+      route: "/api/mobile/bookings/paystack/initiate",
+      status: 400,
+      userMessage: "We couldn't start your payment. Please try again.",
+    });
   }
 }

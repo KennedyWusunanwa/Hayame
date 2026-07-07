@@ -3,6 +3,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { fetchActiveAnnouncements } from "@/lib/notifications";
 import { getRequestUser } from "@/lib/supabase/request-auth";
+import { failJson } from "@/lib/api-errors";
 
 export async function GET(req: Request) {
   try {
@@ -28,9 +29,12 @@ export async function GET(req: Request) {
     });
     return NextResponse.json({ data });
   } catch (error: any) {
-    return NextResponse.json(
-      { message: error.message ?? "Failed to load announcements." },
-      { status: 400 },
-    );
+    return failJson({
+      error,
+      req,
+      route: "/api/mobile/announcements",
+      status: 400,
+      userMessage: "Couldn't load announcements. Please try again.",
+    });
   }
 }

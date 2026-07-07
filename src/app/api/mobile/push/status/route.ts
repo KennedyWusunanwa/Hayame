@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getRequestUser } from "@/lib/supabase/request-auth";
+import { failJson } from "@/lib/api-errors";
 
 function isPlaceholderValue(value: string) {
   const normalized = value.trim().toLowerCase();
@@ -50,10 +51,13 @@ export async function GET(req: Request) {
       .eq("user_id", user.id)
       .order("updated_at", { ascending: false });
     if (error) {
-      return NextResponse.json(
-        { message: error.message ?? "Failed to load push status" },
-        { status: 400 },
-      );
+      return failJson({
+        error,
+        req,
+        route: "/api/mobile/push/status",
+        status: 400,
+        userMessage: "Couldn't load your push notification status. Please try again.",
+      });
     }
 
     const apnsConfigured =
@@ -98,9 +102,12 @@ export async function GET(req: Request) {
       },
     });
   } catch (error: any) {
-    return NextResponse.json(
-      { message: error.message ?? "Failed to fetch push status." },
-      { status: 400 },
-    );
+    return failJson({
+      error,
+      req,
+      route: "/api/mobile/push/status",
+      status: 400,
+      userMessage: "Couldn't fetch your push notification status. Please try again.",
+    });
   }
 }

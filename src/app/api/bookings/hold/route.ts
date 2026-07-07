@@ -5,6 +5,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getRequestUser } from "@/lib/supabase/request-auth";
 import { bookingSchema } from "@/lib/validators";
 import { isLocationOutsideAccra, isOutsideListingRegion } from "@/lib/utils";
+import { failJson } from "@/lib/api-errors";
 
 const BLOCKING_STATUSES = ["pending", "awaiting_host", "confirmed"];
 const HOLD_MINUTES = 15;
@@ -240,9 +241,12 @@ export async function POST(req: Request) {
       hold_expires_at: hold.hold_expires_at,
     });
   } catch (error: any) {
-    return NextResponse.json(
-      { message: error.message ?? "Failed to create hold" },
-      { status: 400 },
-    );
+    return failJson({
+      error,
+      req,
+      route: "/api/bookings/hold",
+      status: 400,
+      userMessage: "We couldn't hold this car for you. Please try again.",
+    });
   }
 }

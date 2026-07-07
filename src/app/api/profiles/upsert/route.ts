@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getRequestUser } from "@/lib/supabase/request-auth";
+import { failJson } from "@/lib/api-errors";
 
 export async function POST(req: Request) {
   try {
@@ -42,9 +43,12 @@ export async function POST(req: Request) {
     if (error) throw error;
     return NextResponse.json({ ok: true });
   } catch (error: any) {
-    return NextResponse.json(
-      { message: error.message ?? "Failed to save profile" },
-      { status: 400 },
-    );
+    return failJson({
+      error,
+      req,
+      route: "/api/profiles/upsert",
+      status: 400,
+      userMessage: "Couldn't save your profile. Please try again.",
+    });
   }
 }

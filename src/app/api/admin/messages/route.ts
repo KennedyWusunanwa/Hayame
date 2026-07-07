@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { failJson } from "@/lib/api-errors";
 import { requireAdminApi } from "@/lib/admin-auth";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import {
@@ -296,10 +297,13 @@ export async function GET(req: Request) {
       })),
     });
   } catch (error: any) {
-    return NextResponse.json(
-      { message: error.message ?? "Failed to fetch admin messages" },
-      { status: 400 },
-    );
+    return failJson({
+      error,
+      req,
+      route: "/api/admin/messages",
+      status: 400,
+      userMessage: "Couldn't load admin messages. Please try again.",
+    });
   }
 }
 
@@ -417,9 +421,12 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ message: "Invalid action" }, { status: 400 });
   } catch (error: any) {
-    return NextResponse.json(
-      { message: error.message ?? "Failed to process admin message" },
-      { status: 400 },
-    );
+    return failJson({
+      error,
+      req,
+      route: "/api/admin/messages",
+      status: 400,
+      userMessage: "Couldn't send your message. Please try again.",
+    });
   }
 }

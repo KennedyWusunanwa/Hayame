@@ -3,6 +3,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { markAnnouncementSeen } from "@/lib/notifications";
 import { getRequestUser } from "@/lib/supabase/request-auth";
+import { failJson } from "@/lib/api-errors";
 
 type Context = {
   params: Promise<{ id: string }> | { id: string };
@@ -34,9 +35,12 @@ export async function POST(req: Request, context: Context) {
 
     return NextResponse.json({ seen: true });
   } catch (error: any) {
-    return NextResponse.json(
-      { message: error.message ?? "Failed to mark announcement as seen." },
-      { status: 400 },
-    );
+    return failJson({
+      error,
+      req,
+      route: "/api/mobile/announcements/[id]/seen",
+      status: 400,
+      userMessage: "Couldn't mark the announcement as seen. Please try again.",
+    });
   }
 }

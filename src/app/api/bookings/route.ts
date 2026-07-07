@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getRequestUser } from "@/lib/supabase/request-auth";
+import { failJson } from "@/lib/api-errors";
 
 export async function GET(req: Request) {
   try {
@@ -122,10 +123,13 @@ export async function GET(req: Request) {
     });
     return NextResponse.json({ data: sorted });
   } catch (error: any) {
-    return NextResponse.json(
-      { message: error.message ?? "Failed to load bookings" },
-      { status: 400 },
-    );
+    return failJson({
+      error,
+      req,
+      route: "/api/bookings",
+      status: 400,
+      userMessage: "Couldn't load your bookings. Please try again.",
+    });
   }
 }
 

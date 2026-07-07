@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAdminApi } from "@/lib/admin-auth";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { failJson } from "@/lib/api-errors";
 
 export async function GET(req: Request) {
   const admin = await requireAdminApi();
@@ -13,7 +14,13 @@ export async function GET(req: Request) {
   if (makeId) query = query.eq("make_id", makeId);
   const { data, error } = await query;
   if (error)
-    return NextResponse.json({ message: error.message }, { status: 400 });
+    return failJson({
+      error,
+      req,
+      route: "/api/admin/car-models",
+      status: 400,
+      userMessage: "Couldn't load the car models. Please try again.",
+    });
   return NextResponse.json({ data });
 }
 
@@ -36,7 +43,13 @@ export async function POST(req: Request) {
     .select("id,name,make_id")
     .single();
   if (error)
-    return NextResponse.json({ message: error.message }, { status: 400 });
+    return failJson({
+      error,
+      req,
+      route: "/api/admin/car-models",
+      status: 400,
+      userMessage: "Couldn't add the car model. Please try again.",
+    });
   return NextResponse.json({ data });
 }
 
@@ -58,7 +71,13 @@ export async function PATCH(req: Request) {
     .select("id,name,make_id")
     .single();
   if (error)
-    return NextResponse.json({ message: error.message }, { status: 400 });
+    return failJson({
+      error,
+      req,
+      route: "/api/admin/car-models",
+      status: 400,
+      userMessage: "Couldn't update the car model. Please try again.",
+    });
   return NextResponse.json({ data });
 }
 
@@ -72,6 +91,12 @@ export async function DELETE(req: Request) {
   const supa = createSupabaseAdminClient() as any;
   const { error } = await supa.from("car_models").delete().eq("id", body.id);
   if (error)
-    return NextResponse.json({ message: error.message }, { status: 400 });
+    return failJson({
+      error,
+      req,
+      route: "/api/admin/car-models",
+      status: 400,
+      userMessage: "Couldn't delete the car model. Please try again.",
+    });
   return NextResponse.json({ ok: true });
 }

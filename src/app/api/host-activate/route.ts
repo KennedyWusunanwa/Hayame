@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getRequestUser } from "@/lib/supabase/request-auth";
 import { getHostStatus } from "@/lib/host-status";
+import { failJson } from "@/lib/api-errors";
 
 export async function POST(req: Request) {
   try {
@@ -29,9 +30,12 @@ export async function POST(req: Request) {
     }
     return NextResponse.json({ is_host: isHost, status: "approved" });
   } catch (error: any) {
-    return NextResponse.json(
-      { message: error?.message ?? "Unable to activate host access." },
-      { status: 500 },
-    );
+    return failJson({
+      error,
+      req,
+      route: "/api/host-activate",
+      status: 500,
+      userMessage: "Unable to activate host access. Please try again.",
+    });
   }
 }

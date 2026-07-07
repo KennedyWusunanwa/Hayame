@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { failJson } from "@/lib/api-errors";
 import { getAdminReviewerName, requireAdminApi } from "@/lib/admin-auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
@@ -38,7 +39,13 @@ export async function GET(req: Request, context: Params) {
     }
     return NextResponse.json({ data });
   } catch (error: any) {
-    return NextResponse.json({ message: error.message }, { status: 404 });
+    return failJson({
+      error,
+      req,
+      route: "/api/cars/[id]",
+      status: 404,
+      userMessage: "Couldn't load this car. Please try again.",
+    });
   }
 }
 
@@ -150,10 +157,13 @@ export async function PUT(req: Request, context: Params) {
     if (error) throw error;
     return NextResponse.json({ data });
   } catch (error: any) {
-    return NextResponse.json(
-      { message: error.message ?? "Failed to update car" },
-      { status: 400 },
-    );
+    return failJson({
+      error,
+      req,
+      route: "/api/cars/[id]",
+      status: 400,
+      userMessage: "Couldn't update the car. Please try again.",
+    });
   }
 }
 
@@ -193,9 +203,12 @@ export async function DELETE(req: Request, context: Params) {
     if (error) throw error;
     return NextResponse.json({ ok: true });
   } catch (error: any) {
-    return NextResponse.json(
-      { message: error.message ?? "Failed to delete car" },
-      { status: 400 },
-    );
+    return failJson({
+      error,
+      req,
+      route: "/api/cars/[id]",
+      status: 400,
+      userMessage: "Couldn't delete the car. Please try again.",
+    });
   }
 }

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { failJson } from "@/lib/api-errors";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
@@ -31,13 +32,13 @@ export async function GET(req: Request) {
     });
     return NextResponse.json({ data });
   } catch (error: any) {
-    return NextResponse.json(
-      {
-        message:
-          error.message ?? "Failed to load notification preferences.",
-      },
-      { status: 400 },
-    );
+    return failJson({
+      error,
+      req,
+      route: "/api/mobile/notifications/preferences",
+      status: 400,
+      userMessage: "Couldn't load your notification preferences. Please try again.",
+    });
   }
 }
 
@@ -72,17 +73,23 @@ export async function POST(req: Request) {
           persisted: false,
         });
       }
-      return NextResponse.json(
-        { message: error.message ?? "Failed to save notification preferences." },
-        { status: 400 },
-      );
+      return failJson({
+        error,
+        req,
+        route: "/api/mobile/notifications/preferences",
+        status: 400,
+        userMessage: "Couldn't save your notification preferences. Please try again.",
+      });
     }
 
     return NextResponse.json({ data });
   } catch (error: any) {
-    return NextResponse.json(
-      { message: error.message ?? "Failed to save notification preferences." },
-      { status: 400 },
-    );
+    return failJson({
+      error,
+      req,
+      route: "/api/mobile/notifications/preferences",
+      status: 400,
+      userMessage: "Couldn't save your notification preferences. Please try again.",
+    });
   }
 }

@@ -6,6 +6,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getRequestUser } from "@/lib/supabase/request-auth";
 import { availabilitySchema } from "@/lib/validators";
 import { getHostStatus } from "@/lib/host-status";
+import { failJson } from "@/lib/api-errors";
 
 const BLOCKING_STATUSES = ["pending", "awaiting_host", "confirmed"];
 
@@ -122,10 +123,13 @@ export async function GET(req: Request) {
 
     return NextResponse.json({ blockedDates: blocked, available: isAvailable });
   } catch (error: any) {
-    return NextResponse.json(
-      { message: error.message ?? "Failed to load availability" },
-      { status: 400 },
-    );
+    return failJson({
+      error,
+      req,
+      route: "/api/availability",
+      status: 400,
+      userMessage: "Couldn't load availability. Please try again.",
+    });
   }
 }
 
@@ -222,10 +226,13 @@ export async function POST(req: Request) {
     if (error) throw error;
     return NextResponse.json({ data: availability });
   } catch (error: any) {
-    return NextResponse.json(
-      { message: error.message ?? "Failed to save availability" },
-      { status: 400 },
-    );
+    return failJson({
+      error,
+      req,
+      route: "/api/availability",
+      status: 400,
+      userMessage: "Couldn't save availability. Please try again.",
+    });
   }
 }
 

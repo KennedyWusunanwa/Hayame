@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { failJson } from "@/lib/api-errors";
 
 type CarCatalogPayload = {
   makes: Array<{
@@ -52,9 +53,11 @@ export async function GET() {
 
     return NextResponse.json(payload, { headers: CACHE_HEADERS });
   } catch (error: any) {
-    return NextResponse.json(
-      { message: error.message ?? "Failed to load catalog" },
-      { status: 400 },
-    );
+    return failJson({
+      error,
+      route: "/api/car-catalog",
+      status: 400,
+      userMessage: "Couldn't load the car catalog. Please try again.",
+    });
   }
 }

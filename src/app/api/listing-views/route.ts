@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getRequestUser } from "@/lib/supabase/request-auth";
+import { failJson } from "@/lib/api-errors";
 
 export async function POST(req: Request) {
   try {
@@ -32,9 +33,12 @@ export async function POST(req: Request) {
     }
     return NextResponse.json({ ok: true });
   } catch (error: any) {
-    return NextResponse.json(
-      { message: error.message ?? "Failed to save listing view" },
-      { status: 400 },
-    );
+    return failJson({
+      error,
+      req,
+      route: "/api/listing-views",
+      status: 400,
+      userMessage: "Couldn't save the listing view. Please try again.",
+    });
   }
 }

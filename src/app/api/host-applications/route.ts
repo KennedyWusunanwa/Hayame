@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { failJson } from "@/lib/api-errors";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getRequestUser } from "@/lib/supabase/request-auth";
@@ -31,10 +32,13 @@ export async function GET(req: Request) {
 
     return NextResponse.json({ data: data ?? null });
   } catch (error: any) {
-    return NextResponse.json(
-      { message: error.message ?? "Failed to load application" },
-      { status: 400 },
-    );
+    return failJson({
+      error,
+      req,
+      route: "/api/host-applications",
+      status: 400,
+      userMessage: "Couldn't load your host application. Please try again.",
+    });
   }
 }
 
@@ -129,9 +133,12 @@ export async function POST(req: Request) {
         { status: 400 },
       );
     }
-    return NextResponse.json(
-      { message: error.message ?? "Failed to submit application" },
-      { status: 400 },
-    );
+    return failJson({
+      error,
+      req,
+      route: "/api/host-applications",
+      status: 400,
+      userMessage: "Couldn't submit your host application. Please try again.",
+    });
   }
 }

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getRequestUser } from "@/lib/supabase/request-auth";
 import { reviewSchema } from "@/lib/validators";
+import { failJson } from "@/lib/api-errors";
 
 export async function GET(req: Request) {
   try {
@@ -64,10 +65,13 @@ export async function GET(req: Request) {
 
     return NextResponse.json({ data: data ?? [] });
   } catch (error: any) {
-    return NextResponse.json(
-      { message: error.message ?? "Failed to load reviews" },
-      { status: 400 },
-    );
+    return failJson({
+      error,
+      req,
+      route: "/api/reviews",
+      status: 400,
+      userMessage: "Couldn't load reviews. Please try again.",
+    });
   }
 }
 
@@ -125,9 +129,12 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ data });
   } catch (error: any) {
-    return NextResponse.json(
-      { message: error.message ?? "Failed to submit review" },
-      { status: 400 },
-    );
+    return failJson({
+      error,
+      req,
+      route: "/api/reviews",
+      status: 400,
+      userMessage: "Couldn't submit your review. Please try again.",
+    });
   }
 }

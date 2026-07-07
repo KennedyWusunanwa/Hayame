@@ -9,6 +9,7 @@ import {
   isContactSpamTrapTriggered,
 } from "@/lib/contact-support";
 import { SUPPORT_EMAIL } from "@/lib/support";
+import { failJson } from "@/lib/api-errors";
 
 const supportInboxEmail =
   process.env.SUPPORT_INBOX_EMAIL?.trim() || SUPPORT_EMAIL;
@@ -94,8 +95,12 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ sent: true });
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Unable to send your message.";
-    return NextResponse.json({ message }, { status: 400 });
+    return failJson({
+      error,
+      req,
+      route: "/api/contact",
+      status: 400,
+      userMessage: "Unable to send your message. Please try again.",
+    });
   }
 }

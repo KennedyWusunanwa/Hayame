@@ -3,6 +3,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getRequestUser } from "@/lib/supabase/request-auth";
 import { buildConversationStartedEmail, sendEmailSafe } from "@/lib/email";
+import { failJson } from "@/lib/api-errors";
 
 const SITE_URL =
   process.env.NEXT_PUBLIC_SITE_URL ??
@@ -121,10 +122,13 @@ export async function GET(req: Request) {
 
     return NextResponse.json({ data: normalized });
   } catch (error: any) {
-    return NextResponse.json(
-      { message: error.message ?? "Failed to load conversations" },
-      { status: 400 },
-    );
+    return failJson({
+      error,
+      req,
+      route: "/api/conversations",
+      status: 400,
+      userMessage: "Couldn't load your conversations. Please try again.",
+    });
   }
 }
 
@@ -294,9 +298,12 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ id: data.id });
   } catch (error: any) {
-    return NextResponse.json(
-      { message: error.message ?? "Failed to create conversation" },
-      { status: 400 },
-    );
+    return failJson({
+      error,
+      req,
+      route: "/api/conversations",
+      status: 400,
+      userMessage: "Couldn't start the conversation. Please try again.",
+    });
   }
 }

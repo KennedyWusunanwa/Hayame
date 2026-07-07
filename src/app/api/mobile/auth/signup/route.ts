@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { failJson } from "@/lib/api-errors";
 
 type Body = {
   email?: string;
@@ -67,10 +68,13 @@ export async function POST(req: Request) {
     });
 
     if (error || !data.user) {
-      return NextResponse.json(
-        { message: error?.message ?? "Unable to sign up" },
-        { status: 400 },
-      );
+      return failJson({
+        error,
+        req,
+        route: "/api/mobile/auth/signup",
+        status: 400,
+        userMessage: "We couldn't create your account. Please try again.",
+      });
     }
 
     return NextResponse.json({
@@ -80,9 +84,12 @@ export async function POST(req: Request) {
       requires_email_confirmation: !data.session,
     });
   } catch (error: any) {
-    return NextResponse.json(
-      { message: error?.message ?? "Unable to sign up" },
-      { status: 400 },
-    );
+    return failJson({
+      error,
+      req,
+      route: "/api/mobile/auth/signup",
+      status: 400,
+      userMessage: "We couldn't create your account. Please try again.",
+    });
   }
 }

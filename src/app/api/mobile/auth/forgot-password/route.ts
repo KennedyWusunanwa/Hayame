@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { failJson } from "@/lib/api-errors";
 
 type Body = {
   email?: string;
@@ -43,19 +44,25 @@ export async function POST(req: Request) {
       redirectTo: resolveResetRedirectURL(req),
     });
     if (error) {
-      return NextResponse.json(
-        { message: error.message ?? "Unable to send reset email" },
-        { status: 400 },
-      );
+      return failJson({
+        error,
+        req,
+        route: "/api/mobile/auth/forgot-password",
+        status: 400,
+        userMessage: "We couldn't send the password reset email. Please try again.",
+      });
     }
 
     return NextResponse.json({
       message: "If this account exists, a password reset email has been sent.",
     });
   } catch (error: any) {
-    return NextResponse.json(
-      { message: error?.message ?? "Unable to send reset email" },
-      { status: 400 },
-    );
+    return failJson({
+      error,
+      req,
+      route: "/api/mobile/auth/forgot-password",
+      status: 400,
+      userMessage: "We couldn't send the password reset email. Please try again.",
+    });
   }
 }

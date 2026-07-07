@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { failJson } from "@/lib/api-errors";
 import { requireAdminApi } from "@/lib/admin-auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
@@ -118,10 +119,13 @@ export async function GET(req: Request, context: Params) {
       },
     });
   } catch (error: any) {
-    return NextResponse.json(
-      { message: error.message ?? "Failed to load photos" },
-      { status: 400 },
-    );
+    return failJson({
+      error,
+      req,
+      route: "/api/cars/[id]/photos",
+      status: 400,
+      userMessage: "Couldn't load the car photos. Please try again.",
+    });
   }
 }
 
@@ -235,7 +239,13 @@ export async function POST(req: Request, context: Params) {
   } catch (error: any) {
     const message = error?.message ?? "Failed to upload photo";
     const status = /too large/i.test(message) ? 413 : 400;
-    return NextResponse.json({ message }, { status });
+    return failJson({
+      error,
+      req,
+      route: "/api/cars/[id]/photos",
+      status,
+      userMessage: "Couldn't upload the photo. Please try again.",
+    });
   }
 }
 
@@ -282,9 +292,12 @@ export async function DELETE(req: Request, context: Params) {
 
     return NextResponse.json({ ok: true });
   } catch (error: any) {
-    return NextResponse.json(
-      { message: error.message ?? "Failed to delete photo" },
-      { status: 400 },
-    );
+    return failJson({
+      error,
+      req,
+      route: "/api/cars/[id]/photos",
+      status: 400,
+      userMessage: "Couldn't delete the photo. Please try again.",
+    });
   }
 }

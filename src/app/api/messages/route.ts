@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { failJson } from "@/lib/api-errors";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getRequestUser } from "@/lib/supabase/request-auth";
@@ -101,10 +102,13 @@ export async function GET(req: Request) {
 
     return NextResponse.json({ data: orderedMessages });
   } catch (error: any) {
-    return NextResponse.json(
-      { message: error.message ?? "Failed to load messages" },
-      { status: 400 },
-    );
+    return failJson({
+      error,
+      req,
+      route: "/api/messages",
+      status: 400,
+      userMessage: "Couldn't load messages. Please try again.",
+    });
   }
 }
 
@@ -234,9 +238,12 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ data: message });
   } catch (error: any) {
-    return NextResponse.json(
-      { message: error.message ?? "Failed to send message" },
-      { status: 400 },
-    );
+    return failJson({
+      error,
+      req,
+      route: "/api/messages",
+      status: 400,
+      userMessage: "Couldn't send your message. Please try again.",
+    });
   }
 }

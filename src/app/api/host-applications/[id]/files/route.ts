@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { failJson } from "@/lib/api-errors";
 import { requireAdminApi } from "@/lib/admin-auth";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -53,9 +54,12 @@ export async function GET(
     if (error) throw error;
     return NextResponse.redirect(data.signedUrl);
   } catch (error: any) {
-    return NextResponse.json(
-      { message: error.message ?? "Failed to load file" },
-      { status: 400 },
-    );
+    return failJson({
+      error,
+      req,
+      route: "/api/host-applications/[id]/files",
+      status: 400,
+      userMessage: "Couldn't load the file. Please try again.",
+    });
   }
 }

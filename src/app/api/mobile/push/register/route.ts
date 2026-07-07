@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { failJson } from "@/lib/api-errors";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getRequestUser } from "@/lib/supabase/request-auth";
@@ -91,18 +92,30 @@ export async function POST(req: Request) {
           warning: "mobile_push_tokens table is not set up yet.",
         });
       }
-      return NextResponse.json({ message }, { status: 400 });
+      return failJson({
+        error,
+        req,
+        route: "/api/mobile/push/register",
+        status: 400,
+        userMessage: "Couldn't save your device for notifications. Please try again.",
+      });
     }
 
-    // Clean up the previous token so stale entries don't accumulate
+    // Clean up the previous token so stale entries don't accumulate.
+    // Best-effort: the new token is already saved above, so a stale row is
+    // harmless. Wrap in try/catch because the Supabase query builder is
+    // thenable but has no .catch() method — chaining .catch() on it throws.
     if (previousDeviceToken && previousDeviceToken !== deviceToken) {
-      await admin
-        .from("mobile_push_tokens")
-        .delete()
-        .eq("user_id", user.id)
-        .eq("platform", platform)
-        .eq("device_token", previousDeviceToken)
-        .catch(() => {});
+      try {
+        await admin
+          .from("mobile_push_tokens")
+          .delete()
+          .eq("user_id", user.id)
+          .eq("platform", platform)
+          .eq("device_token", previousDeviceToken);
+      } catch {
+        // ignore cleanup failures
+      }
     }
 
     const apnsConfigured =
@@ -130,9 +143,12 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ registered: true });
   } catch (error: any) {
-    return NextResponse.json(
-      { message: error.message ?? "Failed to register push token." },
-      { status: 400 },
-    );
+    return failJson({
+      error,
+      req,
+      route: "/api/mobile/push/register",
+      status: 400,
+      userMessage: "Couldn't register your device for notifications. Please try again.",
+    });
   }
 }

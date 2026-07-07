@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { failJson } from "@/lib/api-errors";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getRequestUser } from "@/lib/supabase/request-auth";
@@ -57,10 +58,13 @@ export async function GET(req: Request) {
 
     return NextResponse.json({ data: data ?? [] });
   } catch (error: any) {
-    return NextResponse.json(
-      { message: error.message ?? "Failed to load disputes" },
-      { status: 400 },
-    );
+    return failJson({
+      error,
+      req,
+      route: "/api/disputes",
+      status: 400,
+      userMessage: "Couldn't load your disputes. Please try again.",
+    });
   }
 }
 
@@ -131,9 +135,12 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ data: created });
   } catch (error: any) {
-    return NextResponse.json(
-      { message: error.message ?? "Failed to open dispute" },
-      { status: 400 },
-    );
+    return failJson({
+      error,
+      req,
+      route: "/api/disputes",
+      status: 400,
+      userMessage: "Couldn't open your dispute. Please try again.",
+    });
   }
 }

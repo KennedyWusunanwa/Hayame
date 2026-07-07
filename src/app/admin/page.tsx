@@ -3,6 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
 import {
+  AlertTriangle,
   Bell,
   BarChart3,
   Car,
@@ -317,6 +318,11 @@ function AdminWorkspace({
       label: "Platform controls",
       href: "/admin/platform",
       icon: Settings2,
+    },
+    {
+      label: "Error reports",
+      href: "/admin/errors",
+      icon: AlertTriangle,
     },
   ];
   const activeSectionLabel =

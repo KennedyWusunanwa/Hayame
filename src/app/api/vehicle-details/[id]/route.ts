@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { failJson } from "@/lib/api-errors";
 import type { Database } from "@/lib/database.types";
 
 type Params = {
@@ -34,9 +35,12 @@ export async function GET(_: Request, context: Params) {
 
     return NextResponse.json({ data });
   } catch (error: any) {
-    return NextResponse.json(
-      { message: error?.message ?? "Server error" },
-      { status: 500 },
-    );
+    return failJson({
+      error,
+      req: _,
+      route: "/api/vehicle-details/[id]",
+      status: 500,
+      userMessage: "Something went wrong loading the vehicle details. Please try again.",
+    });
   }
 }

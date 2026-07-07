@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { failJson } from "@/lib/api-errors";
 
 type Body = {
   email?: string;
@@ -50,9 +51,12 @@ export async function POST(req: Request) {
       user: data.user,
     });
   } catch (error: any) {
-    return NextResponse.json(
-      { message: error?.message ?? "Unable to login" },
-      { status: 400 },
-    );
+    return failJson({
+      error,
+      req,
+      route: "/api/mobile/auth/login",
+      status: 400,
+      userMessage: "We couldn't log you in. Please try again.",
+    });
   }
 }

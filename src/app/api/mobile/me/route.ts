@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { failJson } from "@/lib/api-errors";
 
 function extractBearerToken(req: Request): string | null {
   const raw = req.headers.get("authorization") ?? "";
@@ -77,10 +78,13 @@ export async function GET(req: Request) {
     } = await supabase.auth.getUser(token);
 
     if (userError || !user) {
-      return NextResponse.json(
-        { message: userError?.message ?? "Unauthorized" },
-        { status: 401 },
-      );
+      return failJson({
+        error: userError,
+        req,
+        route: "/api/mobile/me",
+        status: 401,
+        userMessage: "Your session has expired. Please sign in again.",
+      });
     }
 
     let admin: any = null;
@@ -112,10 +116,13 @@ export async function GET(req: Request) {
         .eq("id", user.id)
         .maybeSingle();
       if (profileError && profileError.code !== "PGRST116") {
-        return NextResponse.json(
-          { message: profileError.message ?? "Failed to load profile" },
-          { status: 400 },
-        );
+        return failJson({
+          error: profileError,
+          req,
+          route: "/api/mobile/me",
+          status: 400,
+          userMessage: "We couldn't load your profile. Please try again.",
+        });
       }
       profile = (profileRow ?? null) as {
         avatar_url?: string | null;
@@ -170,9 +177,12 @@ export async function GET(req: Request) {
       host_application: hostApplication ?? null,
     });
   } catch (error: any) {
-    return NextResponse.json(
-      { message: error?.message ?? "Failed to load user" },
-      { status: 400 },
-    );
+    return failJson({
+      error,
+      req,
+      route: "/api/mobile/me",
+      status: 400,
+      userMessage: "We couldn't load your account details. Please try again.",
+    });
   }
 }

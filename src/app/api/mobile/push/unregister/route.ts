@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { failJson } from "@/lib/api-errors";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getRequestUser } from "@/lib/supabase/request-auth";
@@ -69,14 +70,23 @@ export async function DELETE(req: Request) {
           warning: "mobile_push_tokens table is not set up yet.",
         });
       }
-      return NextResponse.json({ message }, { status: 400 });
+      return failJson({
+        error,
+        req,
+        route: "/api/mobile/push/unregister",
+        status: 400,
+        userMessage: "Couldn't unregister your push token. Please try again.",
+      });
     }
 
     return NextResponse.json({ unregistered: true, removed: count ?? 0 });
   } catch (error: any) {
-    return NextResponse.json(
-      { message: error.message ?? "Failed to unregister push token." },
-      { status: 400 },
-    );
+    return failJson({
+      error,
+      req,
+      route: "/api/mobile/push/unregister",
+      status: 400,
+      userMessage: "Couldn't unregister your push token. Please try again.",
+    });
   }
 }
