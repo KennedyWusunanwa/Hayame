@@ -90,10 +90,32 @@ function deriveRoute(input: FailInput): string | null {
 }
 
 /**
+ * Expired/invalid tokens and missing-auth 401s are routine client conditions,
+ * not actionable server bugs. Skipping them keeps the diagnostics dashboard
+ * focused on real problems (and Vercel logs quiet) instead of flooding it every
+ * time a session token expires.
+ */
+function isExpectedAuthError(input: FailInput): boolean {
+  if (input.status === 401) return true;
+  const message = extractMessage(input.error).toLowerCase();
+  const code = (extractCode(input.error) ?? "").toLowerCase();
+  return (
+    code === "pgrst303" ||
+    code === "bad_jwt" ||
+    message.includes("jwt expired") ||
+    message.includes("token is expired") ||
+    message.includes("invalid jwt") ||
+    message.includes("token has invalid claims") ||
+    message.includes("refresh token")
+  );
+}
+
+/**
  * Persist a server-side error for admin diagnostics. Best-effort: this never
  * throws, so a logging failure can never break the request it is reporting on.
  */
 export async function logServerError(input: FailInput): Promise<void> {
+  if (isExpectedAuthError(input)) return;
   const route = deriveRoute(input);
   const method = input.method ?? input.req?.method ?? null;
   const message = truncate(extractMessage(input.error), 4000);

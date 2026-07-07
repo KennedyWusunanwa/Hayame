@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { failJson } from "@/lib/api-errors";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabasePublicClient } from "@/lib/supabase/public";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getRequestUser } from "@/lib/supabase/request-auth";
 import { carFormSchema } from "@/lib/validators";
@@ -127,7 +128,6 @@ async function getPlatformFeePercent(supa: any) {
 export async function GET(req: Request) {
   try {
     const supabase = await createSupabaseServerClient();
-    const supa = supabase as any;
     const { searchParams } = new URL(req.url);
     const mineOnly = parseBoolean(searchParams.get("mine")) === true;
     const limit = Math.min(Number(searchParams.get("limit") ?? 48), 100);
@@ -143,6 +143,15 @@ export async function GET(req: Request) {
         return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
       ownerId = user.id;
     }
+
+    // Public browsing must not depend on the caller's session. A browser with a
+    // fully-expired session would otherwise attach a stale JWT that PostgREST
+    // rejects (PGRST303) before the "cars readable by anyone" policy runs,
+    // turning a public list into a 500. Use the anon client for public browse;
+    // the authenticated client only for "my cars".
+    const supa = (
+      mineOnly ? supabase : createSupabasePublicClient()
+    ) as any;
 
     let query = supa
       .from("car_search_view")
