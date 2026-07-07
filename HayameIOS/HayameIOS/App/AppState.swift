@@ -469,7 +469,7 @@ final class AppState: ObservableObject {
                 return false
             }
             if !exploreFilters.city.isEmpty &&
-                car.city.caseInsensitiveCompare(exploreFilters.city) != .orderedSame {
+                !MockDataService.cityMatches(car.city, selected: exploreFilters.city) {
                 return false
             }
             if !exploreFilters.carType.isEmpty && car.type != exploreFilters.carType { return false }

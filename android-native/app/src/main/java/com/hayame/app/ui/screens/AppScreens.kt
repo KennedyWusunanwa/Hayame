@@ -42,6 +42,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
@@ -85,8 +86,10 @@ import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.LightMode
+import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.LocationOn
 import androidx.compose.material.icons.outlined.MailOutline
+import androidx.compose.material.icons.outlined.MyLocation
 import androidx.compose.material.icons.outlined.MoreHoriz
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.PhoneIphone
@@ -1278,15 +1281,23 @@ private fun HomeTab(
     var homeAcOnly by rememberSaveable { mutableStateOf(false) }
     var homeLocation by remember { mutableStateOf<HomeLocation?>(null) }
     var detectedCityName by remember { mutableStateOf<String?>(null) }
+    var homeLocationResolving by rememberSaveable { mutableStateOf(false) }
+    val browseLocation by viewModel.browseLocation.collectAsState()
+    var showLocationSheet by rememberSaveable { mutableStateOf(false) }
+    val locationSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val colors = LocalHayameColors.current
     val locationPermission = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { granted ->
         if (granted) {
             scope.launch {
+                homeLocationResolving = true
                 homeLocation = fetchHomeLocation(context)
-                detectedCityName = homeLocation?.cityName
+                detectedCityName = homeLocation?.cityName ?: homeLocation?.regionName
+                homeLocationResolving = false
             }
+        } else {
+            homeLocationResolving = false
         }
     }
 
@@ -1344,27 +1355,44 @@ private fun HomeTab(
             ?: emptyList()
         (AndroidReferenceData.fuels + liveValues).distinctBy { it.lowercase(Locale.US) }
     }
-    val nearYouCars = remember(homeCars, homeLocation) {
+    // Browse location: the manually chosen city/region wins; otherwise the
+    // GPS-detected one. Never sourced from (or written to) the profile city.
+    val browseCity = browseLocation.first
+    val browseRegion = browseLocation.second
+    val effectiveCity = browseCity.ifBlank { homeLocation?.cityName?.trim().orEmpty() }
+    val effectiveRegion = browseRegion.ifBlank { homeLocation?.regionName?.trim().orEmpty() }
+    val isWaitingForInitialBrowseLocation =
+        browseCity.isBlank() &&
+            browseRegion.isBlank() &&
+            homeLocation == null &&
+            homeLocationResolving
+    val nearYouCars = remember(homeCars, homeLocation, effectiveCity, effectiveRegion) {
         val loc = homeLocation
-        if (loc == null) {
+        // Cars carry no coordinates from the API today, so proximity is
+        // city-match first, region-match second; distance is a tiebreaker
+        // that activates automatically if coordinates ever appear.
+        fun locationRank(car: CarDto): Int = when {
+            effectiveCity.isNotBlank() &&
+                AndroidReferenceData.cityMatches(car.city.orEmpty(), effectiveCity) -> 0
+            effectiveRegion.isNotBlank() &&
+                car.region.orEmpty().trim().equals(effectiveRegion, ignoreCase = true) -> 1
+            else -> 2
+        }
+        fun distance(car: CarDto): Double {
+            val lat = car.latitude ?: car.lat
+            val lng = car.longitude ?: car.lng
+            return if (loc != null && lat != null && lng != null) {
+                distanceKm(loc.lat, loc.lng, lat, lng)
+            } else {
+                999.0
+            }
+        }
+        if (effectiveCity.isBlank() && effectiveRegion.isBlank() && loc == null) {
             homeCars.take(5)
         } else {
             homeCars
-                .map { car ->
-                    val lat = car.latitude ?: car.lat
-                    val lng = car.longitude ?: car.lng
-                    val dist = if (lat != null && lng != null) {
-                        distanceKm(loc.lat, loc.lng, lat, lng)
-                    } else if (car.city.orEmpty().equals(loc.cityName.orEmpty(), ignoreCase = true)) {
-                        0.0
-                    } else {
-                        999.0
-                    }
-                    car to dist
-                }
-                .sortedBy { it.second }
+                .sortedWith(compareBy({ locationRank(it) }, { distance(it) }))
                 .take(5)
-                .map { it.first }
         }
     }
     val carsListed = (carsState as? UiState.Success<List<CarDto>>)?.data?.size ?: 0
@@ -1405,9 +1433,11 @@ private fun HomeTab(
     }
 
     LaunchedEffect(Unit) {
+        homeLocationResolving = true
         locationPermission.launch(Manifest.permission.ACCESS_COARSE_LOCATION)
         homeLocation = fetchHomeLocation(context)
-        detectedCityName = homeLocation?.cityName
+        detectedCityName = homeLocation?.cityName ?: homeLocation?.regionName
+        homeLocationResolving = false
         viewModel.loadReferenceData()
         viewModel.loadCars(mapOf("sort" to "new_listings", "limit" to "48"))
         viewModel.loadFavorites()
@@ -1463,38 +1493,42 @@ private fun HomeTab(
 	                            "Sign in or sign up"
 	                        }
 	                        val locationText = listOfNotNull(
+	                            browseCity.takeIf { it.isNotBlank() }
+	                                ?.let(AndroidReferenceData::cityDisplayName),
+	                            browseRegion.takeIf { it.isNotBlank() },
+	                            detectedCityName?.trim()?.takeIf { it.isNotBlank() }
+	                                ?.let(AndroidReferenceData::cityDisplayName),
 	                            me?.profile?.city?.trim()?.takeIf { it.isNotBlank() },
 	                            me?.profile?.region?.trim()?.takeIf { it.isNotBlank() },
-                        ).firstOrNull() ?: detectedCityName ?: "Ghana"
+                        ).firstOrNull() ?: "Ghana"
 	                        Text(
                             text = displayName,
                             style = MaterialTheme.typography.titleMedium.copy(fontSize = 16.sp),
 	                            color = colors.brandNavy,
 	                            fontWeight = FontWeight.Bold,
 	                        )
-	                        if (isAuthenticated) {
-	                            Row(
-	                                horizontalArrangement = Arrangement.spacedBy(4.dp),
-	                                verticalAlignment = Alignment.CenterVertically,
-	                            ) {
-	                                Icon(
-	                                    Icons.Outlined.LocationOn,
-	                                    contentDescription = null,
-	                                    tint = colors.mutedText,
-	                                    modifier = Modifier.size(12.dp),
-	                                )
-	                                Text(
-	                                    text = locationText,
-	                                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
-	                                    color = colors.mutedText,
-	                                )
-	                                Icon(
-	                                    Icons.Outlined.ExpandMore,
-	                                    contentDescription = null,
-	                                    tint = LocalHayameColors.current.brandBlue,
-	                                    modifier = Modifier.size(12.dp),
-	                                )
-	                            }
+	                        Row(
+	                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+	                            verticalAlignment = Alignment.CenterVertically,
+	                            modifier = Modifier.clickable { showLocationSheet = true },
+	                        ) {
+	                            Icon(
+	                                Icons.Outlined.LocationOn,
+	                                contentDescription = null,
+	                                tint = colors.mutedText,
+	                                modifier = Modifier.size(12.dp),
+	                            )
+	                            Text(
+	                                text = locationText,
+	                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
+	                                color = colors.mutedText,
+	                            )
+	                            Icon(
+	                                Icons.Outlined.ExpandMore,
+	                                contentDescription = "Change location",
+	                                tint = LocalHayameColors.current.brandBlue,
+	                                modifier = Modifier.size(12.dp),
+	                            )
 	                        }
 	                    }
 	                }
@@ -1626,19 +1660,29 @@ private fun HomeTab(
             UiState.Empty -> item { EmptyBlock("No cars yet", "No listings are available right now.") }
             is UiState.Success -> {
                 item {
-                    HomeNearYouSection(
-                        cars = nearYouCars,
-                        favoriteIds = favoriteIds,
-                        onOpen = onOpenCarDetail,
-                        onFavorite = { car ->
-                            viewModel.toggleFavorite(
-                                carId = car.id,
-                                currentlyFavorite = favoriteIds.contains(car.id),
-                                authDestination = NavRoutes.main(MainTab.HOME),
-                            )
-                        },
-                        onSeeAll = onOpenExplore,
-                    )
+                    if (isWaitingForInitialBrowseLocation) {
+                        HomeNearYouPlaceholderSection()
+                    } else {
+                        HomeNearYouSection(
+                            cars = nearYouCars,
+                            title = when {
+                                effectiveCity.isNotBlank() ->
+                                    "Near ${AndroidReferenceData.cityDisplayName(effectiveCity)}"
+                                effectiveRegion.isNotBlank() -> "Near $effectiveRegion"
+                                else -> "Near you"
+                            },
+                            favoriteIds = favoriteIds,
+                            onOpen = onOpenCarDetail,
+                            onFavorite = { car ->
+                                viewModel.toggleFavorite(
+                                    carId = car.id,
+                                    currentlyFavorite = favoriteIds.contains(car.id),
+                                    authDestination = NavRoutes.main(MainTab.HOME),
+                                )
+                            },
+                            onSeeAll = onOpenExplore,
+                        )
+                    }
                 }
                 item {
                     HomeSectionTitlePlaceholderAware(title = "Popular picks", onSeeAll = onOpenExplore)
@@ -1671,6 +1715,35 @@ private fun HomeTab(
             )
         }
         item { Spacer(modifier = Modifier.height(24.dp)) }
+        }
+
+        if (showLocationSheet) {
+            ModalBottomSheet(
+                onDismissRequest = { showLocationSheet = false },
+                sheetState = locationSheetState,
+            ) {
+                HomeLocationPickerContent(
+                    locations = locations,
+                    selectedCity = browseCity,
+                    selectedRegion = browseRegion,
+                    detectedCity = detectedCityName,
+                    onUseCurrentLocation = {
+                        viewModel.setBrowseLocation("", "")
+                        locationPermission.launch(Manifest.permission.ACCESS_COARSE_LOCATION)
+                        scope.launch {
+                            homeLocationResolving = true
+                            homeLocation = fetchHomeLocation(context)
+                            detectedCityName = homeLocation?.cityName ?: homeLocation?.regionName
+                            homeLocationResolving = false
+                        }
+                        showLocationSheet = false
+                    },
+                    onSelect = { city, region ->
+                        viewModel.setBrowseLocation(city, region)
+                        showLocationSheet = false
+                    },
+                )
+            }
         }
 
         if (showHomeFilterSheet) {
@@ -1732,6 +1805,191 @@ private fun HomeTab(
                     onDismiss = { showHomeFilterSheet = false },
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun HomeLocationPickerContent(
+    locations: Map<String, List<String>>,
+    selectedCity: String,
+    selectedRegion: String,
+    detectedCity: String?,
+    onUseCurrentLocation: () -> Unit,
+    onSelect: (String, String) -> Unit,
+) {
+    val colors = LocalHayameColors.current
+    var query by rememberSaveable { mutableStateOf("") }
+    val stableLocations = remember { locations }
+    val filtered = remember(stableLocations, query) {
+        val q = query.trim()
+        if (q.isEmpty()) {
+            stableLocations
+        } else {
+            stableLocations.mapNotNull { (region, cities) ->
+                val cityMatches = cities.filter {
+                    AndroidReferenceData.citySearchText(it).contains(q, ignoreCase = true)
+                }
+                when {
+                    region.contains(q, ignoreCase = true) -> region to cities
+                    cityMatches.isNotEmpty() -> region to cityMatches
+                    else -> null
+                }
+            }.toMap()
+        }
+    }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text(
+            "Choose location",
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.SemiBold,
+            color = colors.brandNavy,
+        )
+        Text(
+            "Vehicles near this location are shown first. This does not change the location on your profile.",
+            style = MaterialTheme.typography.bodySmall,
+            color = colors.mutedText,
+        )
+        Surface(
+            onClick = onUseCurrentLocation,
+            shape = RoundedCornerShape(14.dp),
+            color = colors.cardBackground,
+            border = BorderStroke(1.dp, colors.border),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    Icons.Outlined.MyLocation,
+                    contentDescription = null,
+                    tint = LocalHayameColors.current.brandBlue,
+                    modifier = Modifier.size(18.dp),
+                )
+                Column {
+                    Text(
+                        "Use my current location",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium,
+                        color = colors.brandNavy,
+                    )
+                    if (!detectedCity.isNullOrBlank()) {
+                        Text(
+                            "Detected: $detectedCity",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = colors.mutedText,
+                        )
+                    }
+                }
+            }
+        }
+        OutlinedTextField(
+            value = query,
+            onValueChange = { query = it },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            shape = RoundedCornerShape(14.dp),
+            placeholder = { Text("Search city or region...", color = colors.mutedText) },
+            leadingIcon = {
+                Icon(Icons.Outlined.Search, contentDescription = null, tint = colors.mutedText)
+            },
+            trailingIcon = {
+                if (query.isNotEmpty()) {
+                    IconButton(onClick = { query = "" }) {
+                        Icon(Icons.Outlined.Close, contentDescription = "Clear", tint = colors.mutedText)
+                    }
+                }
+            },
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = LocalHayameColors.current.brandBlue,
+                unfocusedBorderColor = colors.border,
+                focusedContainerColor = colors.fieldBackground,
+                unfocusedContainerColor = colors.fieldBackground,
+                focusedTextColor = colors.brandNavy,
+                unfocusedTextColor = colors.brandNavy,
+            ),
+        )
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 380.dp),
+        ) {
+            if (filtered.isEmpty()) {
+                item {
+                    Text(
+                        "No matching locations.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = colors.mutedText,
+                        modifier = Modifier.padding(vertical = 16.dp),
+                    )
+                }
+            }
+            filtered.forEach { (region, cities) ->
+                item(key = "region-$region") {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onSelect("", region) }
+                            .padding(vertical = 10.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            region,
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.SemiBold,
+                            color = colors.mutedText,
+                        )
+                        if (selectedRegion.equals(region, ignoreCase = true) && selectedCity.isBlank()) {
+                            Icon(
+                                Icons.Outlined.Check,
+                                contentDescription = "Selected",
+                                tint = LocalHayameColors.current.brandBlue,
+                                modifier = Modifier.size(16.dp),
+                            )
+                        } else {
+                            Text(
+                                "All of $region",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = LocalHayameColors.current.brandBlue,
+                            )
+                        }
+                    }
+                }
+                items(cities, key = { "city-$region-$it" }) { city ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onSelect(city, region) }
+                            .padding(start = 12.dp)
+                            .padding(vertical = 12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            AndroidReferenceData.cityDisplayName(city),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = colors.brandNavy,
+                        )
+                        if (selectedCity.equals(city, ignoreCase = true)) {
+                            Icon(
+                                Icons.Outlined.Check,
+                                contentDescription = "Selected",
+                                tint = LocalHayameColors.current.brandBlue,
+                                modifier = Modifier.size(16.dp),
+                            )
+                        }
+                    }
+                }
+            }
+            item { Spacer(modifier = Modifier.height(28.dp)) }
         }
     }
 }
@@ -2273,6 +2531,7 @@ private fun HomeNearYouSection(
     onOpen: (String) -> Unit,
     onFavorite: (CarDto) -> Unit,
     onSeeAll: () -> Unit,
+    title: String = "Near you",
 ) {
     val colors = LocalHayameColors.current
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -2282,7 +2541,7 @@ private fun HomeNearYouSection(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                "Near you",
+                title,
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.SemiBold,
                 color = colors.brandNavy,

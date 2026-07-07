@@ -20,6 +20,14 @@ Set these Gradle properties (for example in `~/.gradle/gradle.properties` or pro
 - `HAYAME_SUPABASE_STORAGE_BUCKET` (optional, default `car-photos`)
 - `HAYAME_SUPABASE_HOST_ID_BUCKET` (optional, default `host-ids`)
 
+## Payments
+
+Android does not embed Paystack keys. Booking payments use the backend
+`/api/mobile/bookings/paystack/initiate` and
+`/api/mobile/bookings/paystack/finalize` endpoints, so live/test mode is
+controlled by the web backend's `PAYSTACK_SECRET_KEY`. The default production
+API base URL is `https://www.hayamegh.com`.
+
 ## Run
 
 1. Open `android-native` in Android Studio.

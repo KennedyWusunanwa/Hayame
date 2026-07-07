@@ -8,6 +8,7 @@ struct HayameIOSApp: App {
     @StateObject private var appState = AppState()
     @State private var showSplash = true
     @State private var showAppearanceTransition = false
+    @State private var hideContentForAppearanceTransition = false
     @State private var appearanceTransitionTargetsDarkMode = false
     @State private var hasHandledInitialAppearance = false
     @State private var appearanceTransitionTask: Task<Void, Never>?
@@ -41,7 +42,7 @@ struct HayameIOSApp: App {
         ZStack {
                 RootView()
                     .environmentObject(appState)
-                    .opacity(showSplash ? 0 : 1)
+                    .opacity(showSplash || hideContentForAppearanceTransition ? 0 : 1)
                     .animation(.easeOut(duration: 0.45), value: showSplash)
 
                 if showSplash {
@@ -52,6 +53,7 @@ struct HayameIOSApp: App {
 
                 if showAppearanceTransition {
                     AppearanceTransitionOverlay(targetsDarkMode: appearanceTransitionTargetsDarkMode)
+                        .id(appearanceTransitionTargetsDarkMode)
                         .transition(.opacity)
                         .zIndex(20)
                 }
@@ -118,15 +120,15 @@ struct HayameIOSApp: App {
     private func presentAppearanceTransition(targetsDarkMode: Bool) {
         appearanceTransitionTask?.cancel()
         appearanceTransitionTargetsDarkMode = targetsDarkMode
-        withAnimation(.easeOut(duration: 0.28)) {
-            showAppearanceTransition = true
-        }
+        hideContentForAppearanceTransition = true
+        showAppearanceTransition = true
 
         appearanceTransitionTask = Task { @MainActor in
             try? await Task.sleep(nanoseconds: 1_420_000_000)
             guard !Task.isCancelled else { return }
             withAnimation(.easeInOut(duration: 0.42)) {
                 showAppearanceTransition = false
+                hideContentForAppearanceTransition = false
             }
             appearanceTransitionTask = nil
         }
@@ -138,6 +140,7 @@ struct HayameIOSApp: App {
         if showAppearanceTransition {
             showAppearanceTransition = false
         }
+        hideContentForAppearanceTransition = false
     }
 
 }

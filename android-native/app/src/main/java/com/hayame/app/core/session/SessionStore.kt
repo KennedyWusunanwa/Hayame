@@ -32,6 +32,9 @@ class SessionStore(private val context: Context) {
         val seenAnnouncements = stringSetPreferencesKey("seen_announcement_ids")
         val firstLaunchAtMillis = longPreferencesKey("first_launch_at_millis")
         val darkMode = booleanPreferencesKey("dark_mode_enabled")
+        // Home browse location — deliberately separate from the profile city.
+        val browseCity = stringPreferencesKey("browse_city")
+        val browseRegion = stringPreferencesKey("browse_region")
     }
 
     val sessionFlow: Flow<SessionState> = context.dataStore.data
@@ -105,6 +108,20 @@ class SessionStore(private val context: Context) {
 
     suspend fun setDarkMode(enabled: Boolean) {
         context.dataStore.edit { prefs -> prefs[Keys.darkMode] = enabled }
+    }
+
+    suspend fun browseLocation(): Pair<String, String> {
+        return context.dataStore.data
+            .catch { emit(emptyPreferences()) }
+            .map { prefs -> (prefs[Keys.browseCity] ?: "") to (prefs[Keys.browseRegion] ?: "") }
+            .first()
+    }
+
+    suspend fun setBrowseLocation(city: String, region: String) {
+        context.dataStore.edit { prefs ->
+            putOrRemove(prefs, Keys.browseCity, city)
+            putOrRemove(prefs, Keys.browseRegion, region)
+        }
     }
 
     suspend fun authHeader(): String? = current().accessToken?.let { "Bearer $it" }

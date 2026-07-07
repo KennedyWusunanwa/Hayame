@@ -8,10 +8,16 @@ import androidx.core.content.ContextCompat
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.CancellationTokenSource
+import com.hayame.app.ui.reference.AndroidReferenceData
 import kotlinx.coroutines.tasks.await
 import java.util.Locale
 
-data class HomeLocation(val lat: Double, val lng: Double, val cityName: String?)
+data class HomeLocation(
+    val lat: Double,
+    val lng: Double,
+    val cityName: String?,
+    val regionName: String? = null,
+)
 
 suspend fun fetchHomeLocation(context: Context): HomeLocation? {
     val hasPermission = ContextCompat.checkSelfPermission(
@@ -28,8 +34,23 @@ suspend fun fetchHomeLocation(context: Context): HomeLocation? {
         val geocoder = Geocoder(context, Locale.getDefault())
         @Suppress("DEPRECATION")
         val addresses = geocoder.getFromLocation(loc.latitude, loc.longitude, 1)
-        val city = addresses?.firstOrNull()?.locality ?: addresses?.firstOrNull()?.adminArea
-        HomeLocation(loc.latitude, loc.longitude, city)
+        val address = addresses?.firstOrNull()
+        val countryCode = address?.countryCode?.trim()?.uppercase(Locale.US)
+        if (!countryCode.isNullOrBlank() && countryCode != "GH") return null
+
+        val rawRegion = address?.adminArea?.trim().orEmpty()
+        val strippedRegion = rawRegion.removeSuffix(" Region").trim()
+        val region = AndroidReferenceData.regions.firstOrNull { known ->
+            known.equals(rawRegion, ignoreCase = true) ||
+                known.removeSuffix(" Region").equals(strippedRegion, ignoreCase = true)
+        }
+        val city = listOf(address?.locality, address?.subAdminArea)
+            .mapNotNull { it?.trim()?.takeIf(String::isNotBlank) }
+            .firstNotNullOfOrNull { candidate ->
+                AndroidReferenceData.canonicalCity(candidate, region)
+            }
+        if (countryCode != "GH" && city == null && region == null) return null
+        HomeLocation(loc.latitude, loc.longitude, city, region)
     } catch (_: Exception) {
         null
     }

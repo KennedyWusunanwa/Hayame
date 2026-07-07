@@ -173,6 +173,11 @@ class AppViewModel(
     private val _darkModeEnabled = MutableStateFlow(false)
     val darkModeEnabled: StateFlow<Boolean> = _darkModeEnabled.asStateFlow()
 
+    // Home browse location (city to region) — deliberately separate from the
+    // profile city; only affects which vehicles are ranked "near you".
+    private val _browseLocation = MutableStateFlow("" to "")
+    val browseLocation: StateFlow<Pair<String, String>> = _browseLocation.asStateFlow()
+
     private val _appearanceTransitionEvents = MutableSharedFlow<Boolean>(extraBufferCapacity = 1)
     val appearanceTransitionEvents: SharedFlow<Boolean> = _appearanceTransitionEvents.asSharedFlow()
 
@@ -204,11 +209,18 @@ class AppViewModel(
         viewModelScope.launch { sessionStore.setDarkMode(enabled) }
     }
 
+    fun setBrowseLocation(city: String, region: String) {
+        val next = city.trim() to region.trim()
+        _browseLocation.value = next
+        viewModelScope.launch { sessionStore.setBrowseLocation(next.first, next.second) }
+    }
+
     fun bootstrap() {
         viewModelScope.launch {
             _bootstrapping.value = true
             try {
                 _darkModeEnabled.value = sessionStore.darkMode()
+                _browseLocation.value = sessionStore.browseLocation()
                 val loggedIn = authRepository.isLoggedIn()
                 _isAuthenticated.value = loggedIn
                 if (loggedIn) {
