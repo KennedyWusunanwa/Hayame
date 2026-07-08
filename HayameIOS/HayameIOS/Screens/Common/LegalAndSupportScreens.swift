@@ -700,7 +700,7 @@ struct BecomeHostScreen: View {
                 idBackPath = storagePath
             }
         } catch {
-            let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            let message = AppState.userFacingMessage(error, fallback: "Something went wrong. Please try again.")
             uploadErrorMessage = message.isEmpty ? "Unable to upload ID image." : message
         }
     }
@@ -725,7 +725,7 @@ struct BecomeHostScreen: View {
             )
             facePhotoURL = uploadedURL
         } catch {
-            let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            let message = AppState.userFacingMessage(error, fallback: "Something went wrong. Please try again.")
             uploadErrorMessage = message.isEmpty ? "Unable to upload face photo." : message
         }
     }

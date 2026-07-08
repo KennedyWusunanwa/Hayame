@@ -543,7 +543,9 @@ struct HostCarsScreen: View {
                     do {
                         try await appState.deleteListingNow(target)
                     } catch {
-                        appState.syncErrorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                        if !appState.isCancellation(error) {
+                            appState.syncErrorMessage = AppState.userFacingMessage(error, fallback: "Something went wrong. Please try again.")
+                        }
                     }
                     deleteTarget = nil
                 }
@@ -1495,7 +1497,7 @@ struct ListingEditorScreen: View {
                 dismiss()
             }
         } catch {
-            editorError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            editorError = AppState.userFacingMessage(error, fallback: "Something went wrong. Please try again.")
         }
     }
 
@@ -1516,7 +1518,7 @@ struct ListingEditorScreen: View {
                     replacePhotoID: nil
                 )
             } catch {
-                uploadFailures.append((error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
+                uploadFailures.append(AppState.userFacingMessage(error, fallback: "Something went wrong. Please try again."))
             }
         }
 
@@ -1538,7 +1540,7 @@ struct ListingEditorScreen: View {
                 appendPendingUpload(data: prepared, name: "photo-\(pendingUploads.count + 1).jpg")
                 imported += 1
             } catch {
-                editorError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                editorError = AppState.userFacingMessage(error, fallback: "Something went wrong. Please try again.")
             }
         }
 
@@ -1552,7 +1554,7 @@ struct ListingEditorScreen: View {
         guard case .create = mode else { return }
         switch result {
         case .failure(let error):
-            editorError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            editorError = AppState.userFacingMessage(error, fallback: "Something went wrong. Please try again.")
         case .success(let urls):
             var imported = 0
             for url in urls {
@@ -1564,7 +1566,7 @@ struct ListingEditorScreen: View {
                     appendPendingUpload(data: prepared, name: url.lastPathComponent)
                     imported += 1
                 } catch {
-                    editorError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                    editorError = AppState.userFacingMessage(error, fallback: "Something went wrong. Please try again.")
                 }
                 if secured {
                     url.stopAccessingSecurityScopedResource()
@@ -3226,7 +3228,7 @@ struct HostListingPhotosScreen: View {
             photos = result.0
             maxPhotos = result.1
         } catch {
-            errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            errorMessage = AppState.userFacingMessage(error, fallback: "Something went wrong. Please try again.")
         }
     }
 
@@ -3249,7 +3251,7 @@ struct HostListingPhotosScreen: View {
             }
             try await uploadPhotoData(data: data, fileName: "car-photo-\(UUID().uuidString).jpg", replacePhotoID: replacePhotoID)
         } catch {
-            errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            errorMessage = AppState.userFacingMessage(error, fallback: "Something went wrong. Please try again.")
         }
     }
 
@@ -3267,7 +3269,7 @@ struct HostListingPhotosScreen: View {
 
         switch result {
         case .failure(let error):
-            errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            errorMessage = AppState.userFacingMessage(error, fallback: "Something went wrong. Please try again.")
         case .success(let urls):
             var uploadedCount = 0
             for url in urls {
@@ -3282,7 +3284,7 @@ struct HostListingPhotosScreen: View {
                     )
                     uploadedCount += 1
                 } catch {
-                    errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                    errorMessage = AppState.userFacingMessage(error, fallback: "Something went wrong. Please try again.")
                 }
                 if secured {
                     url.stopAccessingSecurityScopedResource()
@@ -3331,7 +3333,7 @@ struct HostListingPhotosScreen: View {
             photos.removeAll { $0.id == photoID }
             successMessage = "Photo deleted."
         } catch {
-            errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            errorMessage = AppState.userFacingMessage(error, fallback: "Something went wrong. Please try again.")
         }
     }
 }
@@ -3499,7 +3501,7 @@ struct HostAvailabilityEditorScreen: View {
             )
             message = markAvailable ? "Availability window saved." : "Blocked date range saved."
         } catch {
-            errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            errorMessage = AppState.userFacingMessage(error, fallback: "Something went wrong. Please try again.")
         }
     }
 
@@ -3520,7 +3522,7 @@ struct HostAvailabilityEditorScreen: View {
             )
             message = "Recurring weekday blocks saved."
         } catch {
-            errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            errorMessage = AppState.userFacingMessage(error, fallback: "Something went wrong. Please try again.")
         }
     }
 }

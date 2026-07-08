@@ -173,6 +173,11 @@ class AppViewModel(
     private val _darkModeEnabled = MutableStateFlow(false)
     val darkModeEnabled: StateFlow<Boolean> = _darkModeEnabled.asStateFlow()
 
+    // Home browse location (city to region) — deliberately separate from the
+    // profile city; only affects which vehicles are ranked "near you".
+    private val _browseLocation = MutableStateFlow("" to "")
+    val browseLocation: StateFlow<Pair<String, String>> = _browseLocation.asStateFlow()
+
     private val _appearanceTransitionEvents = MutableSharedFlow<Boolean>(extraBufferCapacity = 1)
     val appearanceTransitionEvents: SharedFlow<Boolean> = _appearanceTransitionEvents.asSharedFlow()
 
@@ -204,11 +209,18 @@ class AppViewModel(
         viewModelScope.launch { sessionStore.setDarkMode(enabled) }
     }
 
+    fun setBrowseLocation(city: String, region: String) {
+        val next = city.trim() to region.trim()
+        _browseLocation.value = next
+        viewModelScope.launch { sessionStore.setBrowseLocation(next.first, next.second) }
+    }
+
     fun bootstrap() {
         viewModelScope.launch {
             _bootstrapping.value = true
             try {
                 _darkModeEnabled.value = sessionStore.darkMode()
+                _browseLocation.value = sessionStore.browseLocation()
                 val loggedIn = authRepository.isLoggedIn()
                 _isAuthenticated.value = loggedIn
                 if (loggedIn) {
@@ -1292,19 +1304,40 @@ private fun AppAnnouncementDto.shouldDisplay(locallySeen: Set<String>, installed
     return id !in locallySeen
 }
 
+/**
+ * A cancellation (coroutine job cancelled, or an OkHttp "Canceled" call) is benign —
+ * it happens when a refresh supersedes an in-flight request or a scope is torn down.
+ * It must never surface to the user.
+ */
+private fun Throwable.isCancellation(): Boolean {
+    if (this is java.util.concurrent.CancellationException) return true
+    val msg = message?.trim()?.lowercase()
+    return msg == "canceled" || msg == "cancelled"
+}
+
 private fun Throwable.readableMessage(fallback: String): String {
-    val http = this as? HttpException
-    val detail = http?.response()?.errorBody()?.string()?.trim().orEmpty()
-    val message = when {
-        detail.isNotBlank() -> detail
-        this.message?.isNotBlank() == true -> this.message!!
-        else -> fallback
-    }
-    return message
-        .replace("{\"message\":", "")
-        .replace("}", "")
-        .replace("\"", "")
-        .trim()
+    // Trust by ORIGIN, not type. The ONLY user-safe message is the sanitized `message`
+    // field our own backend returns (via failJson) — which reaches us as an HttpException
+    // body from Retrofit (Retrofit only talks to our API host). Every other throwable —
+    // OkHttp/IO/DNS/TLS/timeout, kotlinx SerializationException, cancellation, or a raw
+    // Vercel/gateway HTML body — carries developer-facing text and must NEVER surface.
+    if (isCancellation()) return fallback
+    val http = this as? HttpException ?: return fallback
+    val body = http.response()?.errorBody()?.string()?.trim().orEmpty()
+    return extractApiMessage(body) ?: fallback
+}
+
+/**
+ * Extracts the sanitized `message` from our backend's JSON error envelope
+ * (`{"message":"..."}`). Returns null for HTML/gateway/non-envelope bodies so the caller
+ * falls back to a friendly string.
+ */
+private fun extractApiMessage(body: String): String? {
+    if (body.isBlank() || body.startsWith("<")) return null
+    val raw = Regex("\"message\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"")
+        .find(body)?.groupValues?.getOrNull(1) ?: return null
+    val decoded = raw.replace("\\\"", "\"").replace("\\n", " ").replace("\\/", "/").trim()
+    return decoded.takeIf { it.isNotBlank() && it.length <= 200 }
 }
 
 private fun Throwable.loginFailureMessage(): String {

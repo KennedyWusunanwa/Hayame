@@ -2399,41 +2399,41 @@ struct APIClient {
     private func decodeError(from data: Data, statusCode: Int, contentType: String? = nil) -> String? {
         let normalizedContentType = contentType?.lowercased() ?? ""
         if normalizedContentType.contains("text/html") {
-            if statusCode == 404 {
-                return "Server route not found (404). Deploy latest API routes."
-            }
-            return "Server returned an HTML error page (status \(statusCode))."
+            return nil
         }
 
+        // Collect the most specific candidate message, then sanitize it. This message
+        // may come from our own (sanitized) backend OR — on direct-Supabase fallback
+        // paths — from PostgREST/GoTrue, which return raw DB/auth text. So NOTHING here
+        // is displayed until it passes `sanitizedServerMessage`.
+        var candidate: String?
         if let envelope = try? decoder.decode(APIErrorEnvelope.self, from: data), let message = envelope.message, !message.isEmpty {
-            return message
+            candidate = message
+        } else if let supabaseError = try? decoder.decode(SupabaseAuthErrorEnvelope.self, from: data) {
+            candidate = supabaseError.msg ?? supabaseError.error_description ?? supabaseError.error
+        } else if let plain = String(data: data, encoding: .utf8) {
+            candidate = plain.trimmingCharacters(in: .whitespacesAndNewlines)
         }
-        if let supabaseError = try? decoder.decode(SupabaseAuthErrorEnvelope.self, from: data) {
-            if let msg = supabaseError.msg, !msg.isEmpty {
-                return msg
-            }
-            if let description = supabaseError.error_description, !description.isEmpty {
-                return description
-            }
-            if let error = supabaseError.error, !error.isEmpty {
-                return error
-            }
-        }
-        if let plain = String(data: data, encoding: .utf8) {
-            let trimmed = plain.trimmingCharacters(in: .whitespacesAndNewlines)
-            if trimmed.isEmpty {
-                return nil
-            }
-            let lowered = trimmed.lowercased()
-            if lowered.contains("<!doctype html") || lowered.contains("<html") || lowered.contains("<head") || lowered.contains("<body") {
-                if statusCode == 404 {
-                    return "Server route not found (404). Deploy latest API routes."
-                }
-                return "Server returned an HTML error page (status \(statusCode))."
-            }
-            return String(trimmed.prefix(240))
-        }
-        return nil
+
+        // Returns nil (→ caller's friendly fallback) for anything that looks technical.
+        return candidate.flatMap { Self.sanitizedServerMessage($0) }
+    }
+
+    /// Allows through only short, single-line, human-readable messages. Rejects raw DB /
+    /// PostgREST / GoTrue / HTML / JSON / stack text so it can never reach the UI.
+    static func sanitizedServerMessage(_ raw: String) -> String? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        if trimmed.count > 160 || trimmed.contains("\n") { return nil }
+        let lowered = trimmed.lowercased()
+        let technicalMarkers = [
+            "violates", "constraint", "duplicate key", "null value", "column ", "relation ",
+            "syntax error", "permission denied", "row-level security", "sqlstate", "postgres",
+            "pgrst", "exception", "traceback", "flow state", "econnrefused", "enotfound",
+            "etimedout", "0x", "://", "{\"", "<", "undefined"
+        ]
+        if technicalMarkers.contains(where: { lowered.contains($0) }) { return nil }
+        return trimmed
     }
 
     private func normalizeBaseURL(_ value: String) -> String {

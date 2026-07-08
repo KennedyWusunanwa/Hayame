@@ -51,9 +51,7 @@ final class InAppBrowserAuthenticator: NSObject {
                         return
                     }
                     continuation.resume(
-                        throwing: InAppBrowserAuthenticatorError.message(
-                            error.localizedDescription.isEmpty ? "Unable to complete payment authentication." : error.localizedDescription
-                        )
+                        throwing: InAppBrowserAuthenticatorError.message("Unable to complete payment authentication.")
                     )
                     return
                 }

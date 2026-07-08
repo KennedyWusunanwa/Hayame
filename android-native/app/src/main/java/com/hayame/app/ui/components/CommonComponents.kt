@@ -37,6 +37,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.shadow
@@ -189,6 +190,24 @@ fun CarCard(
             ) {
                 val imageUrl = resolvedCarImageUrl(car)
                 if (!imageUrl.isNullOrBlank()) {
+                    // Blur-up LQIP: a tiny variant blurred behind the full image. Only when
+                    // a real (smaller) thumbnail variant exists — otherwise it would just
+                    // load the full original twice (transforms are currently disabled).
+                    val thumbUrl = RemoteImageUrlResolver.transformed(
+                        RemoteImageUrlResolver.originalUrl(imageUrl),
+                        width = 40,
+                        quality = 40,
+                    )
+                    if (thumbUrl != null && thumbUrl != imageUrl) {
+                        AsyncImage(
+                            model = thumbUrl,
+                            contentDescription = null,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .blur(14.dp),
+                            contentScale = ContentScale.Crop,
+                        )
+                    }
                     AsyncImage(
                         model = imageUrl,
                         contentDescription = car.title,

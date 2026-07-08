@@ -24,6 +24,13 @@ Set API values in `HayameIOS/Info.plist`:
 
 Default production API base URL is `https://www.hayamegh.com`.
 
+## Payments
+
+iOS does not embed Paystack keys. Booking payments use the backend
+`/api/mobile/bookings/paystack/initiate` and
+`/api/mobile/bookings/paystack/finalize` endpoints, so live/test mode is
+controlled by the web backend's `PAYSTACK_SECRET_KEY`.
+
 ## Push Notifications
 
 - APNs is configured through:

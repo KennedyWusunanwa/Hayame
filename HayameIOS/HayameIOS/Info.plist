@@ -17,7 +17,7 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.0.2</string>
+	<string>1.0.4</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -31,7 +31,7 @@
 		</dict>
 	</array>
 	<key>CFBundleVersion</key>
-	<string>5</string>
+	<string>7</string>
 	<key>HAYAMEAPIBaseURL</key>
 	<string>https://hayamegh.com</string>
 	<key>HAYAMEDevMachineIP</key>
@@ -51,7 +51,7 @@
 	<key>NSFaceIDUsageDescription</key>
 	<string>Hayame uses Face ID to unlock saved login credentials on this device.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Hayame uses your location to show nearby cars.</string>
+	<string>Hayame uses your location to show vehicles available near you.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Hayame needs photo library access for profile and listing images.</string>
 	<key>UIApplicationSceneManifest</key>

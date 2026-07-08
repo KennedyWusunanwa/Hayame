@@ -174,7 +174,10 @@ private struct LoginScreenView: View {
         context.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, localizedReason: reason) { success, authError in
             DispatchQueue.main.async {
                 guard success else {
-                    biometricMessage = authError?.localizedDescription ?? "Biometric login was cancelled."
+                    // Never surface the raw LAError text (e.g. "Biometry is locked out…").
+                    biometricMessage = authError == nil
+                        ? "Biometric login was cancelled."
+                        : "Couldn't sign in with biometrics. Please use your email and password."
                     return
                 }
                 guard let credentials = BiometricCredentialStore.load() else {

@@ -41,7 +41,7 @@ class HayameApplication : Application(), ImageLoaderFactory {
             }
             .okHttpClient { NetworkClient.imageOkHttpClient(this) }
             .respectCacheHeaders(false)
-            .crossfade(false)
+            .crossfade(true)
             .build()
     }
 }

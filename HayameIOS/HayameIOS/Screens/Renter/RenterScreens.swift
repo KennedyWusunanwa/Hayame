@@ -96,6 +96,11 @@ struct ScreenshotRenterRouteView: View {
     @State private var isPreparingLiveListings = true
     @State private var liveListingError: String?
 
+    init(route: ScreenshotRoute) {
+        self.route = route
+        _isPreparingLiveListings = State(initialValue: route != .exploreFilters)
+    }
+
     private var screenshotCar: Car {
         appState.cars.first(where: { $0.id == "car-001" }) ??
             appState.cars.first ??
@@ -135,7 +140,8 @@ struct ScreenshotRenterRouteView: View {
             if ready {
                 liveListingError = nil
             } else {
-                liveListingError = appState.syncErrorMessage ?? "Live listings did not load."
+                let syncMessage = appState.syncErrorMessage
+                liveListingError = (syncMessage?.isEmpty == false) ? syncMessage : "Live listings did not load."
             }
             isPreparingLiveListings = false
         }
@@ -285,6 +291,54 @@ struct RenterHomeScreen: View {
     @State private var selectedCategory = "All"
     @State private var homeSearchText = ""
     @State private var showHomeFilters = false
+    @State private var showLocationPicker = false
+    // Browse location — deliberately separate from the profile city. A manual
+    // choice wins; otherwise the GPS-detected city/region is used.
+    @AppStorage("hayame.browse_city") private var browseCity = ""
+    @AppStorage("hayame.browse_region") private var browseRegion = ""
+    @AppStorage("hayame.detected_browse_city") private var cachedDetectedCity = ""
+    @AppStorage("hayame.detected_browse_region") private var cachedDetectedRegion = ""
+
+    private var detectedCity: String {
+        let live = locationManager.cityName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !live.isEmpty { return live }
+        return cachedDetectedCity.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var detectedRegion: String {
+        let live = locationManager.regionName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !live.isEmpty { return live }
+        return cachedDetectedRegion.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var effectiveCity: String {
+        let manual = browseCity.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !manual.isEmpty { return manual }
+        return detectedCity
+    }
+
+    private var effectiveRegion: String {
+        let manual = browseRegion.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !manual.isEmpty { return manual }
+        return detectedRegion
+    }
+
+    private var nearYouTitle: String {
+        if !effectiveCity.isEmpty { return "Near \(MockDataService.cityDisplayName(effectiveCity))" }
+        if !effectiveRegion.isEmpty { return "Near \(effectiveRegion)" }
+        return "Near you"
+    }
+
+    private var isWaitingForInitialBrowseLocation: Bool {
+        browseCity.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+            browseRegion.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+            cachedDetectedCity.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+            cachedDetectedRegion.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+            // Hold the skeleton until the FIRST location attempt finishes (success
+            // or failure). Gating on isResolvingLocation alone left a gap before
+            // the request kicks off, flashing the generic first-5 "near you" cars.
+            !locationManager.didResolveLocation
+    }
 
     private var availableCategories: [String] {
         let defaultTypes = ["SUV", "Sedan", "Electric", "Luxury", "Pickup", "Van", "Compact", "Convertible", "Minivan", "Crossover"]
@@ -296,49 +350,64 @@ struct RenterHomeScreen: View {
     }
 
     private var nearYouCars: [Car] {
-        guard let coord = locationManager.coordinate else {
-            let city = locationManager.cityName?.lowercased() ?? ""
-            if city.isEmpty {
-                return Array(appState.cars.prefix(5))
-            }
-            return appState.cars
-                .map { car -> (Car, Double) in
-                    (car, car.city.lowercased() == city ? 0.0 : 999.0)
-                }
-                .sorted { $0.1 < $1.1 }
-                .prefix(5)
-                .map { $0.0 }
+        let city = effectiveCity.lowercased()
+        let region = effectiveRegion.lowercased()
+        let coord = locationManager.coordinate
+        if city.isEmpty && region.isEmpty && coord == nil {
+            return Array(appState.cars.prefix(5))
         }
 
-        let userLocation = CLLocation(latitude: coord.latitude, longitude: coord.longitude)
-        return appState.cars
-            .map { car -> (Car, Double) in
-                guard let lat = car.latitude, let lng = car.longitude else {
-                    let city = locationManager.cityName?.lowercased() ?? ""
-                    let score = !city.isEmpty && car.city.lowercased() == city ? 0.0 : 999.0
-                    return (car, score)
-                }
-                let carLocation = CLLocation(latitude: lat, longitude: lng)
-                return (car, userLocation.distance(from: carLocation))
+        // Listings carry no coordinates from the API today, so proximity is
+        // city-match first, region-match second; real distance acts as a
+        // tiebreaker that activates automatically if coordinates ever appear.
+        let userLocation = coord.map { CLLocation(latitude: $0.latitude, longitude: $0.longitude) }
+        func locationRank(_ car: Car) -> Int {
+            if !city.isEmpty,
+               MockDataService.cityMatches(car.city, selected: effectiveCity) {
+                return 0
             }
-            .sorted { $0.1 < $1.1 }
+            if !region.isEmpty,
+               car.region.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == region {
+                return 1
+            }
+            return 2
+        }
+        func distance(_ car: Car) -> Double {
+            guard let userLocation, let lat = car.latitude, let lng = car.longitude else {
+                return 999_000
+            }
+            return userLocation.distance(from: CLLocation(latitude: lat, longitude: lng))
+        }
+        return appState.cars
+            .sorted { (locationRank($0), distance($0)) < (locationRank($1), distance($1)) }
             .prefix(5)
-            .map { $0.0 }
+            .map { $0 }
     }
 
     var body: some View {
+        ZStack(alignment: .topLeading) {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 16) {
                 HomeTopHeader(
                     user: appState.currentUser,
                     unreadCount: appState.unreadMessagesCount,
                     isAuthenticated: appState.isAuthenticated,
-                    detectedCityName: locationManager.cityName,
+                    detectedCityName: detectedCity.isEmpty
+                        ? detectedRegion
+                        : MockDataService.cityDisplayName(detectedCity),
+                    browseLocationText: browseCity.isEmpty
+                        ? browseRegion
+                        : MockDataService.cityDisplayName(browseCity),
                     onProfileTap: {
                         if appState.isAuthenticated {
                             appState.renterTab = .more
                         } else {
                             appState.returnToAuth()
+                        }
+                    },
+                    onLocationTap: {
+                        withAnimation(.spring(response: 0.26, dampingFraction: 0.88)) {
+                            showLocationPicker.toggle()
                         }
                     },
                     onChatTap: {
@@ -405,9 +474,12 @@ struct RenterHomeScreen: View {
                     HomeNearYouPlaceholderSection()
                     HomePopularPicksPlaceholderSection()
                 } else {
-                    if !nearYouCars.isEmpty {
+                    if isWaitingForInitialBrowseLocation {
+                        HomeNearYouPlaceholderSection()
+                    } else if !nearYouCars.isEmpty {
                         HomeNearYouSection(
                             cars: nearYouCars,
+                            title: nearYouTitle,
                             favoriteIDs: appState.favoriteCarIDs,
                             onOpen: { car in
                                 appState.renterTab = .explore
@@ -493,6 +565,49 @@ struct RenterHomeScreen: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(HayameTheme.pageBackground)
         .toolbar(.hidden, for: .navigationBar)
+        if showLocationPicker {
+            Color.black.opacity(0.001)
+                .ignoresSafeArea()
+                .onTapGesture {
+                    withAnimation(.easeOut(duration: 0.18)) {
+                        showLocationPicker = false
+                    }
+                }
+                .zIndex(8)
+
+            HomeLocationPickerDropdown(
+                selectedCity: browseCity,
+                selectedRegion: browseRegion,
+                detectedCity: detectedCity.isEmpty
+                    ? detectedRegion
+                    : MockDataService.cityDisplayName(detectedCity),
+                onUseCurrentLocation: {
+                    browseCity = ""
+                    browseRegion = ""
+                    locationManager.requestIfNeeded()
+                    withAnimation(.easeOut(duration: 0.18)) {
+                        showLocationPicker = false
+                    }
+                },
+                onSelect: { city, region in
+                    browseCity = city
+                    browseRegion = region
+                    withAnimation(.easeOut(duration: 0.18)) {
+                        showLocationPicker = false
+                    }
+                },
+                onDismiss: {
+                    withAnimation(.easeOut(duration: 0.18)) {
+                        showLocationPicker = false
+                    }
+                }
+            )
+            .padding(.top, 64)
+            .padding(.horizontal, 16)
+            .transition(.move(edge: .top).combined(with: .opacity))
+            .zIndex(9)
+        }
+        }
         .sheet(isPresented: $showHomeFilters) {
             NavigationStack {
                 ExploreFilterSheet()
@@ -513,6 +628,10 @@ struct RenterHomeScreen: View {
         .refreshable {
             await appState.refreshAllRemoteData()
         }
+        .onChange(of: locationManager.didResolveLocation) { _, didResolve in
+            guard didResolve else { return }
+            syncDetectedBrowseCache()
+        }
     }
 
     private func applyHomeSearchToExplore() {
@@ -527,6 +646,18 @@ struct RenterHomeScreen: View {
         )
         appState.renterTab = .explore
     }
+
+    private func syncDetectedBrowseCache() {
+        let city = locationManager.cityName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let region = locationManager.regionName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if city.isEmpty && region.isEmpty {
+            cachedDetectedCity = ""
+            cachedDetectedRegion = ""
+        } else {
+            cachedDetectedCity = city
+            cachedDetectedRegion = region
+        }
+    }
 }
 
 private struct HomeTopHeader: View {
@@ -534,7 +665,9 @@ private struct HomeTopHeader: View {
     let unreadCount: Int
     let isAuthenticated: Bool
     let detectedCityName: String?
+    let browseLocationText: String
     let onProfileTap: () -> Void
+    let onLocationTap: () -> Void
     let onChatTap: () -> Void
 
     private var displayName: String {
@@ -544,13 +677,17 @@ private struct HomeTopHeader: View {
     }
 
     private var locationText: String {
+        // Browse location first (manual choice, then GPS), profile last —
+        // the header reflects where the user is browsing, not their profile.
+        let manual = browseLocationText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !manual.isEmpty { return manual }
+        let detected = detectedCityName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !detected.isEmpty { return detected }
         let city = user.city.trimmingCharacters(in: .whitespacesAndNewlines)
-        let region = user.region.trimmingCharacters(in: .whitespacesAndNewlines)
         if !city.isEmpty { return city }
+        let region = user.region.trimmingCharacters(in: .whitespacesAndNewlines)
         if !region.isEmpty { return region }
-        return detectedCityName?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
-            ? detectedCityName!
-            : "Ghana"
+        return "Ghana"
     }
 
     private var initials: String {
@@ -564,32 +701,38 @@ private struct HomeTopHeader: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Button(action: onProfileTap) {
-                HStack(spacing: 10) {
+            HStack(spacing: 10) {
+                Button(action: onProfileTap) {
                     avatarView
+                }
+                .buttonStyle(.plain)
 
-                    VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Button(action: onProfileTap) {
                         Text(displayName)
                             .font(.system(size: 16, weight: .bold, design: .rounded))
                             .foregroundStyle(HayameTheme.brandNavy)
                             .lineLimit(1)
-                        if isAuthenticated {
-                            HStack(spacing: 4) {
-                                Image(systemName: "mappin.circle.fill")
-                                    .font(.system(size: 11))
-                                    .foregroundStyle(HayameTheme.mutedText)
-                                Text(locationText)
-                                    .font(.system(size: 13, weight: .medium, design: .rounded))
-                                    .foregroundStyle(HayameTheme.mutedText)
-                                Image(systemName: "chevron.down")
-                                    .font(.system(size: 10, weight: .bold))
-                                    .foregroundStyle(HayameTheme.brandBlue)
-                            }
+                    }
+                    .buttonStyle(.plain)
+
+                    Button(action: onLocationTap) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "mappin.circle.fill")
+                                .font(.system(size: 11))
+                                .foregroundStyle(HayameTheme.mutedText)
+                            Text(locationText)
+                                .font(.system(size: 13, weight: .medium, design: .rounded))
+                                .foregroundStyle(HayameTheme.mutedText)
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(HayameTheme.brandBlue)
                         }
                     }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Change browse location, currently \(locationText)")
                 }
             }
-            .buttonStyle(.plain)
 
             Spacer()
 
@@ -686,8 +829,214 @@ private struct HomeCategoryPills: View {
     }
 }
 
+private struct HomeLocationPickerDropdown: View {
+    let selectedCity: String
+    let selectedRegion: String
+    let detectedCity: String?
+    let onUseCurrentLocation: () -> Void
+    let onSelect: (String, String) -> Void
+    let onDismiss: () -> Void
+    @State private var query = ""
+    @State private var frozenCitiesByRegion = MockDataService.citiesByRegion
+
+    private var regionsWithCities: [(region: String, cities: [String])] {
+        let byRegion = frozenCitiesByRegion
+        let ordered = byRegion.keys.sorted { $0.caseInsensitiveCompare($1) == .orderedAscending }
+        let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        return ordered.compactMap { region in
+            let cities = (byRegion[region] ?? []).sorted {
+                $0.caseInsensitiveCompare($1) == .orderedAscending
+            }
+            guard !trimmedQuery.isEmpty else { return (region, cities) }
+            if region.localizedCaseInsensitiveContains(trimmedQuery) {
+                return (region, cities)
+            }
+            let matches = cities.filter {
+                MockDataService.citySearchText($0).localizedCaseInsensitiveContains(trimmedQuery)
+            }
+            return matches.isEmpty ? nil : (region, matches)
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Browse location")
+                        .font(.system(size: 16, weight: .bold, design: .rounded))
+                        .foregroundStyle(HayameTheme.brandNavy)
+                    Text("Changes nearby cars only, not your profile.")
+                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                        .foregroundStyle(HayameTheme.mutedText)
+                }
+
+                Spacer()
+
+                Button(action: onDismiss) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(HayameTheme.mutedText)
+                        .frame(width: 30, height: 30)
+                        .background(HayameTheme.subtleFill)
+                        .clipShape(Circle())
+                }
+                .buttonStyle(.plain)
+            }
+
+            Button(action: onUseCurrentLocation) {
+                HStack(spacing: 10) {
+                    Image(systemName: "location.fill")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(HayameTheme.brandBlue)
+                        .frame(width: 30, height: 30)
+                        .background(HayameTheme.brandLight)
+                        .clipShape(Circle())
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Use my current location")
+                            .font(.system(size: 14, weight: .semibold, design: .rounded))
+                            .foregroundStyle(HayameTheme.brandNavy)
+                        Text(detectedCity?.isEmpty == false ? "Detected: \(detectedCity!)" : "Uses a Ghana location when available")
+                            .font(.system(size: 12, weight: .medium, design: .rounded))
+                            .foregroundStyle(HayameTheme.mutedText)
+                    }
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(HayameTheme.mutedText)
+            }
+            .buttonStyle(.plain)
+            .padding(10)
+            .background(HayameTheme.fieldBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(HayameTheme.controlStroke, lineWidth: 1)
+            )
+
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(HayameTheme.mutedText)
+                TextField("Search city or region", text: $query)
+                    .font(.system(size: 14, weight: .medium, design: .rounded))
+                    .foregroundStyle(HayameTheme.brandNavy)
+                    .textInputAutocapitalization(.words)
+                    .autocorrectionDisabled()
+                if !query.isEmpty {
+                    Button {
+                        query = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(HayameTheme.mutedText)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(HayameTheme.fieldBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(HayameTheme.controlStroke, lineWidth: 1)
+            )
+
+            ScrollView(showsIndicators: true) {
+                LazyVStack(alignment: .leading, spacing: 8) {
+                    if regionsWithCities.isEmpty {
+                        Text("No matching locations.")
+                            .font(.system(size: 13, weight: .medium, design: .rounded))
+                            .foregroundStyle(HayameTheme.mutedText)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.vertical, 12)
+                    }
+
+                    ForEach(regionsWithCities, id: \.region) { entry in
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(entry.region)
+                                .font(.system(size: 12, weight: .bold, design: .rounded))
+                                .foregroundStyle(HayameTheme.mutedText)
+                                .textCase(.uppercase)
+                                .padding(.top, 4)
+
+                            locationRow(
+                                title: "All of \(entry.region)",
+                                subtitle: "Show vehicles across this region",
+                                isSelected: selectedCity.isEmpty &&
+                                    selectedRegion.caseInsensitiveCompare(entry.region) == .orderedSame
+                            ) {
+                                onSelect("", entry.region)
+                            }
+
+                            ForEach(entry.cities, id: \.self) { city in
+                                locationRow(
+                                    title: MockDataService.cityDisplayName(city),
+                                    subtitle: entry.region,
+                                    isSelected: selectedCity.caseInsensitiveCompare(city) == .orderedSame
+                                ) {
+                                    onSelect(city, entry.region)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            .frame(maxHeight: 360)
+        }
+        .padding(14)
+        .frame(maxWidth: 390, alignment: .leading)
+        .background(HayameTheme.elevatedBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(HayameTheme.controlStroke, lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(0.22), radius: 20, x: 0, y: 10)
+    }
+
+    private func locationRow(
+        title: String,
+        subtitle: String,
+        isSelected: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.system(size: 14, weight: .semibold, design: .rounded))
+                        .foregroundStyle(isSelected ? HayameTheme.brandBlue : HayameTheme.brandNavy)
+                        .lineLimit(2)
+                    Text(subtitle)
+                        .font(.system(size: 11, weight: .medium, design: .rounded))
+                        .foregroundStyle(HayameTheme.mutedText)
+                        .lineLimit(1)
+                }
+                Spacer()
+                if isSelected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(HayameTheme.brandBlue)
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 9)
+            .background(isSelected ? HayameTheme.brandLight : HayameTheme.cardBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(isSelected ? HayameTheme.brandBlue.opacity(0.28) : HayameTheme.cardStroke, lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+}
+
 private struct HomeNearYouSection: View {
     let cars: [Car]
+    var title: String = "Near you"
     let favoriteIDs: Set<String>
     let onOpen: (Car) -> Void
     let onToggleFavorite: (String) -> Void
@@ -696,7 +1045,7 @@ private struct HomeNearYouSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("Near you")
+                Text(title)
                     .font(.system(size: 18, weight: .semibold, design: .rounded))
                     .foregroundStyle(HayameTheme.brandNavy)
                 Spacer()
@@ -926,10 +1275,18 @@ private struct HomeQuickFiltersCard: View {
                 Menu {
                     Button("Any city") { appState.exploreFilters.city = "" }
                     ForEach(cityOptions, id: \.self) { city in
-                        Button(city) { appState.exploreFilters.city = city }
+                        Button {
+                            appState.exploreFilters.city = city
+                        } label: {
+                            Text(MockDataService.cityDisplayName(city))
+                        }
                     }
                 } label: {
-                    filterPill(title: appState.exploreFilters.city.isEmpty ? "Any city" : appState.exploreFilters.city)
+                    filterPill(
+                        title: appState.exploreFilters.city.isEmpty
+                            ? "Any city"
+                            : MockDataService.cityDisplayName(appState.exploreFilters.city)
+                    )
                 }
 
                 Menu {
@@ -1464,151 +1821,560 @@ private struct ExploreListRow: View {
 private struct ExploreFilterSheet: View {
     @EnvironmentObject private var appState: AppState
     @Environment(\.dismiss) private var dismiss
+    @State private var draft = ExploreFilterState()
+    @State private var frozenCitiesByRegion: [String: [String]] = [:]
+    @State private var frozenMakes: [String] = []
+    @State private var frozenModelsByMake: [String: [String]] = [:]
+    @State private var isInitialized = false
 
-    private var modelOptions: [String] {
-        MockDataService.models(
-            for: appState.exploreFilters.brand,
-            preferred: appState.exploreFilters.model
+    private var regionOptions: [String] {
+        withCurrentOption(
+            frozenCitiesByRegion.keys.sorted {
+                $0.caseInsensitiveCompare($1) == .orderedAscending
+            },
+            current: draft.region
         )
     }
 
+    private var cityOptions: [String] {
+        withCurrentOption(catalogCities(for: draft.region), current: draft.city)
+            .sorted {
+                MockDataService.cityDisplayName($0).caseInsensitiveCompare(
+                    MockDataService.cityDisplayName($1)
+                ) == .orderedAscending
+            }
+    }
+
+    private var makeOptions: [String] {
+        withCurrentOption(frozenMakes, current: draft.brand)
+    }
+
+    private var modelOptions: [String] {
+        let make = canonicalValue(draft.brand, in: frozenMakes) ?? draft.brand
+        return withCurrentOption(frozenModelsByMake[make] ?? [], current: draft.model)
+    }
+
     var body: some View {
-        Form {
-            Section("Location") {
-                Picker("Region", selection: $appState.exploreFilters.region) {
-                    Text("Any").tag("")
-                    ForEach(MockDataService.regionsIncluding(appState.exploreFilters.region), id: \.self) { region in
-                        Text(region).tag(region)
+        ScrollView(showsIndicators: false) {
+            VStack(spacing: 18) {
+                ExploreFilterSection(title: "Location") {
+                    NavigationLink {
+                        ExploreFilterOptionList(
+                            title: "Region",
+                            options: regionOptions,
+                            selection: $draft.region
+                        )
+                    } label: {
+                        ExploreFilterNavigationRow(
+                            title: "Region",
+                            value: draft.region.isEmpty ? "Any" : draft.region
+                        )
                     }
+                    .buttonStyle(.plain)
+
+                    ExploreFilterDivider()
+
+                    NavigationLink {
+                        ExploreFilterOptionList(
+                            title: "City",
+                            options: cityOptions,
+                            selection: $draft.city,
+                            displayName: MockDataService.cityDisplayName
+                        )
+                    } label: {
+                        ExploreFilterNavigationRow(
+                            title: "City",
+                            value: draft.city.isEmpty
+                                ? "Any"
+                                : MockDataService.cityDisplayName(draft.city)
+                        )
+                    }
+                    .buttonStyle(.plain)
                 }
 
-                Picker("City", selection: $appState.exploreFilters.city) {
-                    Text("Any").tag("")
-                    ForEach(
-                        MockDataService.cities(
-                            for: appState.exploreFilters.region,
-                            preferred: appState.exploreFilters.city
-                        ) + [""],
-                        id: \.self
-                    ) { city in
-                        if !city.isEmpty {
-                            Text(city).tag(city)
-                        }
+                ExploreFilterSection(title: "Vehicle") {
+                    NavigationLink {
+                        ExploreFilterOptionList(
+                            title: "Make",
+                            options: makeOptions,
+                            selection: $draft.brand
+                        )
+                    } label: {
+                        ExploreFilterNavigationRow(
+                            title: "Make",
+                            value: draft.brand.isEmpty ? "Any" : draft.brand
+                        )
                     }
-                }
-            }
-            .listRowBackground(HayameTheme.cardBackground)
+                    .buttonStyle(.plain)
 
-            Section("Vehicle") {
-                Picker("Make", selection: $appState.exploreFilters.brand) {
-                    Text("Any").tag("")
-                    ForEach(MockDataService.makesIncluding(appState.exploreFilters.brand), id: \.self) { make in
-                        Text(make).tag(make)
-                    }
-                }
-                Picker("Model", selection: $appState.exploreFilters.model) {
-                    Text("Any").tag("")
-                    ForEach(modelOptions + [""], id: \.self) { model in
-                        if !model.isEmpty {
-                            Text(model).tag(model)
-                        }
-                    }
-                }
-                Picker("Type", selection: $appState.exploreFilters.carType) {
-                    Text("Any").tag("")
-                    ForEach(MockDataService.carTypes, id: \.self) { type in
-                        Text(type).tag(type)
-                    }
-                }
-                Picker("Transmission", selection: $appState.exploreFilters.transmission) {
-                    Text("Any").tag("")
-                    ForEach(MockDataService.transmissions, id: \.self) { value in
-                        Text(value).tag(value)
-                    }
-                }
-                Picker("Fuel", selection: $appState.exploreFilters.fuelType) {
-                    Text("Any").tag("")
-                    ForEach(MockDataService.fuels, id: \.self) { fuel in
-                        Text(fuel).tag(fuel)
-                    }
-                }
-            }
-            .listRowBackground(HayameTheme.cardBackground)
+                    ExploreFilterDivider()
 
-            Section("Price") {
-                Stepper("Min price: GHS\(appState.exploreFilters.minPrice)", value: $appState.exploreFilters.minPrice, in: 50...5000, step: 50)
-                Stepper("Max price: GHS\(appState.exploreFilters.maxPrice)", value: $appState.exploreFilters.maxPrice, in: 100...8000, step: 50)
-            }
-            .listRowBackground(HayameTheme.cardBackground)
+                    NavigationLink {
+                        ExploreFilterOptionList(
+                            title: "Model",
+                            options: modelOptions,
+                            selection: $draft.model
+                        )
+                    } label: {
+                        ExploreFilterNavigationRow(
+                            title: "Model",
+                            value: draft.model.isEmpty ? "Any" : draft.model
+                        )
+                    }
+                    .buttonStyle(.plain)
 
-            Section("Options") {
-                Toggle("Instant Book", isOn: $appState.exploreFilters.instantBookOnly)
-                Toggle("Delivery available", isOn: $appState.exploreFilters.deliveryOnly)
-                Toggle("Air conditioning", isOn: $appState.exploreFilters.acOnly)
+                    ExploreFilterDivider()
+
+                    NavigationLink {
+                        ExploreFilterOptionList(
+                            title: "Type",
+                            options: MockDataService.carTypes,
+                            selection: $draft.carType
+                        )
+                    } label: {
+                        ExploreFilterNavigationRow(
+                            title: "Type",
+                            value: draft.carType.isEmpty ? "Any" : draft.carType
+                        )
+                    }
+                    .buttonStyle(.plain)
+
+                    ExploreFilterDivider()
+
+                    NavigationLink {
+                        ExploreFilterOptionList(
+                            title: "Transmission",
+                            options: MockDataService.transmissions,
+                            selection: $draft.transmission
+                        )
+                    } label: {
+                        ExploreFilterNavigationRow(
+                            title: "Transmission",
+                            value: draft.transmission.isEmpty ? "Any" : draft.transmission
+                        )
+                    }
+                    .buttonStyle(.plain)
+
+                    ExploreFilterDivider()
+
+                    NavigationLink {
+                        ExploreFilterOptionList(
+                            title: "Fuel",
+                            options: MockDataService.fuels,
+                            selection: $draft.fuelType
+                        )
+                    } label: {
+                        ExploreFilterNavigationRow(
+                            title: "Fuel",
+                            value: draft.fuelType.isEmpty ? "Any" : draft.fuelType
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                ExploreFilterSection(title: "Price") {
+                    ExploreFilterStepperRow(
+                        title: "Minimum price",
+                        value: "GHS\(draft.minPrice)",
+                        canDecrease: draft.minPrice > 50,
+                        onDecrease: { draft.minPrice = max(50, draft.minPrice - 50) },
+                        onIncrease: { draft.minPrice = min(5000, draft.minPrice + 50) }
+                    )
+
+                    ExploreFilterDivider()
+
+                    ExploreFilterStepperRow(
+                        title: "Maximum price",
+                        value: "GHS\(draft.maxPrice)",
+                        canDecrease: draft.maxPrice > 100,
+                        onDecrease: { draft.maxPrice = max(100, draft.maxPrice - 50) },
+                        onIncrease: { draft.maxPrice = min(8000, draft.maxPrice + 50) }
+                    )
+                }
+
+                ExploreFilterSection(title: "Options") {
+                    Toggle("Instant Book", isOn: $draft.instantBookOnly)
+                        .toggleStyle(HayameSwitchToggleStyle())
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 12)
+
+                    ExploreFilterDivider()
+
+                    Toggle("Delivery available", isOn: $draft.deliveryOnly)
+                        .toggleStyle(HayameSwitchToggleStyle())
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 12)
+
+                    ExploreFilterDivider()
+
+                    Toggle("Air conditioning", isOn: $draft.acOnly)
+                        .toggleStyle(HayameSwitchToggleStyle())
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 12)
+                }
+                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                .foregroundStyle(HayameTheme.brandNavy)
             }
-            .listRowBackground(HayameTheme.cardBackground)
+            .padding(16)
         }
-        .scrollContentBackground(.hidden)
-        .background(HayameTheme.pageBackground)
-        .foregroundStyle(HayameTheme.brandNavy)
-        .tint(HayameTheme.brandBlue)
+        .background(HayameTheme.pageBackground.ignoresSafeArea())
         .navigationTitle("Filters")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(HayameTheme.pageBackground, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 Button("Reset") {
-                    appState.exploreFilters = ExploreFilterState()
+                    draft = ExploreFilterState()
                 }
             }
             ToolbarItem(placement: .topBarTrailing) {
-                Button("Done") { dismiss() }
+                Button("Done") {
+                    appState.exploreFilters = validatedDraft()
+                    dismiss()
+                }
                     .bold()
             }
         }
         .onAppear {
-            if !appState.exploreFilters.region.isEmpty {
-                appState.exploreFilters.region = MockDataService.normalizedRegion(appState.exploreFilters.region)
-            }
-            let cities = MockDataService.cities(
-                for: appState.exploreFilters.region,
-                preferred: appState.exploreFilters.city
-            )
-            if !cities.contains(where: { $0.caseInsensitiveCompare(appState.exploreFilters.city) == .orderedSame }) {
-                appState.exploreFilters.city = ""
-            }
-            if !appState.exploreFilters.brand.isEmpty {
-                appState.exploreFilters.brand = MockDataService.normalizedMake(appState.exploreFilters.brand)
-            }
-            let models = MockDataService.models(
-                for: appState.exploreFilters.brand,
-                preferred: appState.exploreFilters.model
-            )
-            if !models.contains(where: { $0.caseInsensitiveCompare(appState.exploreFilters.model) == .orderedSame }) {
-                appState.exploreFilters.model = ""
-            }
+            initializeIfNeeded()
         }
-        .onChange(of: appState.exploreFilters.region) { _, newValue in
+        .onChange(of: draft.region) { _, newValue in
+            guard isInitialized else { return }
             guard !newValue.isEmpty else { return }
             let normalized = MockDataService.normalizedRegion(newValue)
-            if normalized != appState.exploreFilters.region {
-                appState.exploreFilters.region = normalized
+            if normalized != draft.region {
+                draft.region = normalized
                 return
             }
-            let cities = MockDataService.cities(for: normalized, preferred: appState.exploreFilters.city)
-            if !cities.contains(where: { $0.caseInsensitiveCompare(appState.exploreFilters.city) == .orderedSame }) {
-                appState.exploreFilters.city = ""
+            let cities = catalogCities(for: normalized)
+            if let canonical = canonicalValue(draft.city, in: cities) ??
+                MockDataService.canonicalCity(draft.city, region: normalized) {
+                draft.city = canonical
+            } else if !draft.city.isEmpty {
+                draft.city = ""
             }
         }
-        .onChange(of: appState.exploreFilters.brand) { _, newValue in
-            let normalized = MockDataService.normalizedMake(newValue)
-            if normalized != appState.exploreFilters.brand {
-                appState.exploreFilters.brand = normalized
+        .onChange(of: draft.brand) { _, newValue in
+            guard isInitialized else { return }
+            let normalized = canonicalValue(newValue, in: frozenMakes) ?? newValue
+            if normalized != draft.brand {
+                draft.brand = normalized
                 return
             }
-            let models = MockDataService.models(for: normalized, preferred: appState.exploreFilters.model)
-            if !models.contains(where: { $0.caseInsensitiveCompare(appState.exploreFilters.model) == .orderedSame }) {
-                appState.exploreFilters.model = ""
+            let models = frozenModelsByMake[normalized] ?? []
+            if canonicalValue(draft.model, in: models) == nil, !draft.model.isEmpty {
+                draft.model = ""
             }
         }
+    }
+
+    private func initializeIfNeeded() {
+        guard !isInitialized else { return }
+        frozenCitiesByRegion = MockDataService.citiesByRegion
+        frozenMakes = MockDataService.carMakes
+        frozenModelsByMake = MockDataService.carModelsByMake
+        draft = appState.exploreFilters
+        isInitialized = true
+        draft = validatedDraft()
+    }
+
+    private func catalogCities(for region: String) -> [String] {
+        let trimmed = region.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            return caseInsensitiveUnique(frozenCitiesByRegion.values.flatMap { $0 })
+        }
+        let normalized = MockDataService.normalizedRegion(trimmed)
+        let matchingKey = frozenCitiesByRegion.keys.first {
+            $0.caseInsensitiveCompare(normalized) == .orderedSame
+        }
+        return caseInsensitiveUnique(matchingKey.flatMap { frozenCitiesByRegion[$0] } ?? [])
+    }
+
+    private func validatedDraft() -> ExploreFilterState {
+        var result = draft
+        if !result.region.isEmpty {
+            result.region = MockDataService.normalizedRegion(result.region)
+        }
+
+        let cities = catalogCities(for: result.region)
+        if !result.city.isEmpty {
+            result.city = canonicalValue(result.city, in: cities) ??
+                MockDataService.canonicalCity(result.city, region: result.region) ?? ""
+        }
+
+        if !result.brand.isEmpty {
+            result.brand = canonicalValue(result.brand, in: frozenMakes) ?? result.brand
+        }
+        let models = frozenModelsByMake[result.brand] ?? []
+        if !result.model.isEmpty {
+            result.model = canonicalValue(result.model, in: models) ?? ""
+        }
+        result.minPrice = min(result.minPrice, result.maxPrice)
+        result.maxPrice = max(result.maxPrice, result.minPrice)
+        return result
+    }
+
+    private func withCurrentOption(_ values: [String], current: String) -> [String] {
+        var result = caseInsensitiveUnique(values)
+        let trimmed = current.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty, canonicalValue(trimmed, in: result) == nil {
+            result.insert(trimmed, at: 0)
+        }
+        return result
+    }
+
+    private func canonicalValue(_ value: String, in options: [String]) -> String? {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        return options.first { $0.caseInsensitiveCompare(trimmed) == .orderedSame }
+    }
+
+    private func caseInsensitiveUnique(_ values: [String]) -> [String] {
+        var seen = Set<String>()
+        return values.filter { value in
+            let key = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            return !key.isEmpty && seen.insert(key).inserted
+        }
+    }
+}
+
+private struct ExploreFilterSection<Content: View>: View {
+    let title: String
+    let content: Content
+
+    init(title: String, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title.uppercased())
+                .font(.system(size: 12, weight: .bold, design: .rounded))
+                .foregroundStyle(HayameTheme.mutedText)
+                .padding(.horizontal, 4)
+
+            VStack(spacing: 0) {
+                content
+            }
+            .background(HayameTheme.cardBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(HayameTheme.cardStroke, lineWidth: 1)
+            )
+        }
+    }
+}
+
+private struct ExploreFilterNavigationRow: View {
+    let title: String
+    let value: String
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text(title)
+                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                .foregroundStyle(HayameTheme.brandNavy)
+
+            Spacer(minLength: 12)
+
+            Text(value)
+                .font(.system(size: 13, weight: .medium, design: .rounded))
+                .foregroundStyle(HayameTheme.mutedText)
+                .multilineTextAlignment(.trailing)
+                .lineLimit(2)
+
+            Image(systemName: "chevron.right")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(HayameTheme.mutedText)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 14)
+        .contentShape(Rectangle())
+    }
+}
+
+private struct ExploreFilterStepperRow: View {
+    let title: String
+    let value: String
+    let canDecrease: Bool
+    let onDecrease: () -> Void
+    let onIncrease: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                    .foregroundStyle(HayameTheme.brandNavy)
+                Text(value)
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .foregroundStyle(HayameTheme.mutedText)
+            }
+
+            Spacer()
+
+            HStack(spacing: 8) {
+                stepButton(systemName: "minus", enabled: canDecrease, action: onDecrease)
+                stepButton(systemName: "plus", enabled: true, action: onIncrease)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+    }
+
+    private func stepButton(
+        systemName: String,
+        enabled: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(enabled ? HayameTheme.brandBlue : HayameTheme.mutedText)
+                .frame(width: 32, height: 32)
+                .background(HayameTheme.fieldBackground)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .stroke(HayameTheme.controlStroke, lineWidth: 1)
+                )
+        }
+        .buttonStyle(.plain)
+        .disabled(!enabled)
+        .opacity(enabled ? 1 : 0.5)
+    }
+}
+
+private struct ExploreFilterDivider: View {
+    var body: some View {
+        Rectangle()
+            .fill(HayameTheme.cardStroke)
+            .frame(height: 1)
+            .padding(.leading, 14)
+    }
+}
+
+private struct ExploreFilterOptionList: View {
+    @Environment(\.dismiss) private var dismiss
+    let title: String
+    let options: [String]
+    @Binding var selection: String
+    let displayName: (String) -> String
+    @State private var query = ""
+
+    init(
+        title: String,
+        options: [String],
+        selection: Binding<String>,
+        displayName: @escaping (String) -> String = { $0 }
+    ) {
+        self.title = title
+        self.options = options
+        _selection = selection
+        self.displayName = displayName
+    }
+
+    private var filteredOptions: [String] {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return options }
+        return options.filter { option in
+            option.localizedCaseInsensitiveContains(trimmed) ||
+                displayName(option).localizedCaseInsensitiveContains(trimmed)
+        }
+    }
+
+    var body: some View {
+        VStack(spacing: 12) {
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(HayameTheme.mutedText)
+                TextField("Search \(title.lowercased())", text: $query)
+                    .font(.system(size: 14, weight: .medium, design: .rounded))
+                    .foregroundStyle(HayameTheme.brandNavy)
+                    .autocorrectionDisabled()
+                if !query.isEmpty {
+                    Button {
+                        query = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(HayameTheme.mutedText)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(HayameTheme.fieldBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(HayameTheme.controlStroke, lineWidth: 1)
+            )
+
+            ScrollView(showsIndicators: true) {
+                LazyVStack(spacing: 8) {
+                    if query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        optionRow(value: "", label: "Any")
+                    }
+
+                    ForEach(filteredOptions, id: \.self) { option in
+                        optionRow(value: option, label: displayName(option))
+                    }
+
+                    if filteredOptions.isEmpty {
+                        Text("No matching options.")
+                            .font(.system(size: 13, weight: .medium, design: .rounded))
+                            .foregroundStyle(HayameTheme.mutedText)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.vertical, 16)
+                    }
+                }
+            }
+            .scrollDismissesKeyboard(.interactively)
+        }
+        .padding(16)
+        .background(HayameTheme.pageBackground.ignoresSafeArea())
+        .navigationTitle(title)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(HayameTheme.pageBackground, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
+    }
+
+    private func optionRow(value: String, label: String) -> some View {
+        let selected = selection.caseInsensitiveCompare(value) == .orderedSame
+        return Button {
+            selection = value
+            dismiss()
+        } label: {
+            HStack(spacing: 12) {
+                Text(label)
+                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                    .foregroundStyle(selected ? HayameTheme.brandBlue : HayameTheme.brandNavy)
+                    .multilineTextAlignment(.leading)
+                Spacer()
+                if selected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(HayameTheme.brandBlue)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 12)
+            .background(selected ? HayameTheme.brandLight : HayameTheme.cardBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(
+                        selected ? HayameTheme.brandBlue.opacity(0.3) : HayameTheme.cardStroke,
+                        lineWidth: 1
+                    )
+            )
+        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -2600,6 +3366,16 @@ private struct CarImageGalleryFullScreen: View {
                 }
             }
             .tabViewStyle(.page(indexDisplayMode: .always))
+
+            // Brand watermark — white Hayame logo, centered over the image at low opacity.
+            Image("hayame_logo_white")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 150)
+                .opacity(0.16)
+                .shadow(color: .black.opacity(0.25), radius: 5, x: 0, y: 1)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .allowsHitTesting(false)
 
             Button {
                 dismiss()
@@ -3634,7 +4410,7 @@ private struct BookingSheet: View {
                 throw error
             }
         } catch {
-            let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            let message = AppState.userFacingMessage(error, fallback: "Something went wrong. Please try again.")
             paymentMessage = message.isEmpty ? "Unable to complete payment." : message
             appState.paymentFlowNotice = paymentMessage
             appState.paymentFlowNoticeIsError = true
@@ -5477,7 +6253,7 @@ struct GuestProfileScreen: View {
                         .font(.system(size: 14, weight: .semibold, design: .rounded))
                         .foregroundStyle(HayameTheme.brandNavy)
                     }
-                    .toggleStyle(SwitchToggleStyle(tint: HayameTheme.brandBlue))
+                    .toggleStyle(HayameSwitchToggleStyle())
 
                     Text("Switch between light and dark appearance.")
                         .font(.system(size: 12, weight: .medium, design: .rounded))
@@ -5725,6 +6501,32 @@ struct GuestProfileScreen: View {
     }
 }
 
+private struct HayameSwitchToggleStyle: ToggleStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        Button {
+            configuration.isOn.toggle()
+        } label: {
+            HStack(spacing: 12) {
+                configuration.label
+                Spacer()
+                Capsule()
+                    .fill(configuration.isOn ? HayameTheme.brandBlue : HayameTheme.controlStroke)
+                    .frame(width: 50, height: 30)
+                    .overlay {
+                        Circle()
+                            .fill(Color.white)
+                            .frame(width: 24, height: 24)
+                            .shadow(color: Color.black.opacity(0.16), radius: 2, x: 0, y: 1)
+                            .offset(x: configuration.isOn ? 10 : -10)
+                    }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityValue(configuration.isOn ? "On" : "Off")
+    }
+}
+
 private struct ProfileEditSheet: View {
     @EnvironmentObject private var appState: AppState
     @Environment(\.dismiss) private var dismiss
@@ -5901,7 +6703,7 @@ private struct ProfileEditSheet: View {
             )
             avatarURL = uploaded
         } catch {
-            let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            let message = AppState.userFacingMessage(error, fallback: "Something went wrong. Please try again.")
             avatarUploadError = message.isEmpty ? "Unable to upload profile photo." : message
         }
     }

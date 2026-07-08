@@ -80,6 +80,63 @@ enum MockDataService {
         return values
     }
 
+    static func cityDisplayName(_ district: String) -> String {
+        let trimmed = district.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              let capital = districtCapital(for: trimmed),
+              capital.caseInsensitiveCompare(trimmed) != .orderedSame else {
+            return trimmed
+        }
+        return "\(capital) (\(trimmed))"
+    }
+
+    static func citySearchText(_ district: String) -> String {
+        let capital = districtCapital(for: district) ?? ""
+        return "\(district) \(capital)"
+    }
+
+    static func canonicalCity(_ raw: String, region: String? = nil) -> String? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        let regionValue = region?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let candidates = regionValue.isEmpty
+            ? citiesByRegion.values.flatMap { $0 }
+            : cities(for: regionValue)
+
+        if let exact = candidates.first(where: {
+            $0.caseInsensitiveCompare(trimmed) == .orderedSame
+        }) {
+            return exact
+        }
+        return candidates.first(where: { district in
+            guard let capital = districtCapital(for: district) else { return false }
+            return capital.caseInsensitiveCompare(trimmed) == .orderedSame ||
+                cityDisplayName(district).caseInsensitiveCompare(trimmed) == .orderedSame
+        })
+    }
+
+    static func cityMatches(_ candidate: String, selected: String) -> Bool {
+        let candidateValue = candidate.trimmingCharacters(in: .whitespacesAndNewlines)
+        let selectedValue = selected.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !candidateValue.isEmpty, !selectedValue.isEmpty else { return false }
+        if candidateValue.caseInsensitiveCompare(selectedValue) == .orderedSame {
+            return true
+        }
+        let candidateCanonical = canonicalCity(candidateValue) ?? candidateValue
+        let selectedCanonical = canonicalCity(selectedValue) ?? selectedValue
+        return candidateCanonical.caseInsensitiveCompare(selectedCanonical) == .orderedSame
+    }
+
+    private static func districtCapital(for district: String) -> String? {
+        if let exact = DatabaseReferenceData.districtCapitals[district] {
+            return exact
+        }
+        return DatabaseReferenceData.districtCapitals.first(where: {
+            $0.key.caseInsensitiveCompare(district) == .orderedSame
+        })?.value
+    }
+
     static func normalizedMake(_ raw: String) -> String {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return "" }

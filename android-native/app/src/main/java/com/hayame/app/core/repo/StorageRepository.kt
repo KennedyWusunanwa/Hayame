@@ -68,7 +68,7 @@ class StorageRepository(
             }
         }
 
-        throw IllegalStateException(lastError?.message ?: "Unable to upload avatar")
+        throw IllegalStateException("Unable to upload avatar")
     }
 
     suspend fun findLatestAvatarUrl(userId: String): String? {
@@ -147,7 +147,10 @@ class StorageRepository(
         val response = httpClient.newCall(request).execute()
         if (!response.isSuccessful) {
             val raw = response.body?.string().orEmpty()
-            throw IllegalStateException(raw.ifBlank { "Storage upload failed (${response.code})" })
+            // Preserve bucket-fallback detection, but never let the raw Supabase body
+            // (a direct-to-Supabase response, not sanitized by our backend) reach the UI.
+            if (isBucketNotFound(raw)) throw IllegalStateException("bucket not found")
+            throw IllegalStateException("Storage upload failed (${response.code})")
         }
     }
 
@@ -179,7 +182,7 @@ class StorageRepository(
         val raw = response.body?.string().orEmpty()
         if (!response.isSuccessful) {
             if (isBucketNotFound(raw)) return emptyList()
-            throw IllegalStateException(raw.ifBlank { "Storage list failed (${response.code})" })
+            throw IllegalStateException("Storage list failed (${response.code})")
         }
         if (raw.isBlank()) return emptyList()
         return NetworkClient.json.decodeFromString(raw)

@@ -7,9 +7,54 @@ object RemoteImageUrlResolver {
     private const val defaultBaseUrl = "https://www.hayamegh.com"
     private const val urlEncodingAllowlist = ":/?#[]@!$&'()*+,;=%-._~"
 
-    fun resolve(raw: String?): String? {
+    const val OBJECT_PUBLIC = "/storage/v1/object/public/"
+    const val WESERV_BASE = "https://images.weserv.nl/"
+
+    /** Master switch for the image resizer (weserv CDN). ON: fetch small WebP variants
+     *  sized per view; if a variant fails, [SupabaseTransformFallbackInterceptor] refetches
+     *  the original, so images can't break. (We use weserv because Supabase's own render
+     *  endpoint was unreliable + distorted aspect ratios.) */
+    private const val enableImageTransforms = true
+    /** Default variant width for cards/thumbnails; big enough for full-width cards on 3x screens. */
+    private const val defaultImageWidth = 900
+    private const val defaultImageQuality = 68
+
+    fun resolve(raw: String?): String? = resolve(raw, defaultImageWidth, defaultImageQuality)
+
+    fun resolve(raw: String?, width: Int, quality: Int = defaultImageQuality): String? {
         val canonical = canonicalString(raw) ?: return null
-        return sanitizeAbsoluteUrl(canonical)
+        val sanitized = sanitizeAbsoluteUrl(canonical) ?: return null
+        return transformed(sanitized, width, quality)
+    }
+
+    /**
+     * Builds a right-sized WebP URL via the weserv image CDN for a Supabase public object,
+     * so we download a small variant sized to [width] instead of the multi-MB original.
+     * Non-Supabase URLs (and already-proxied URLs) pass through unchanged. weserv preserves
+     * aspect ratio (width only). If it ever fails, the fallback interceptor refetches the
+     * original, so there is no regression.
+     */
+    fun transformed(absoluteUrl: String?, width: Int, quality: Int = defaultImageQuality): String? {
+        val url = absoluteUrl ?: return null
+        if (!enableImageTransforms) return url
+        if (!url.contains(OBJECT_PUBLIC) || url.startsWith(WESERV_BASE)) return url
+        val cappedWidth = width.coerceIn(1, 2000)
+        val encoded = java.net.URLEncoder.encode(url, "UTF-8")
+        return "$WESERV_BASE?url=$encoded&w=$cappedWidth&output=webp&q=$quality"
+    }
+
+    /** Reverses [transformed] to recover the original object URL for fallback fetches. */
+    fun originalUrl(transformedUrl: String): String {
+        if (!transformedUrl.startsWith(WESERV_BASE)) return transformedUrl
+        val marker = "url="
+        val start = transformedUrl.indexOf(marker)
+        if (start < 0) return transformedUrl
+        val encoded = transformedUrl.substring(start + marker.length).substringBefore("&")
+        return try {
+            java.net.URLDecoder.decode(encoded, "UTF-8")
+        } catch (_: Exception) {
+            transformedUrl
+        }
     }
 
     fun canonicalString(raw: String?): String? {

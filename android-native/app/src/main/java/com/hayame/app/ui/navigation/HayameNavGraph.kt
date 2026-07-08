@@ -206,7 +206,11 @@ fun HayameNavApp(
     }
 
     LaunchedEffect(snackbarMessage) {
-        val message = snackbarMessage ?: return@LaunchedEffect
+        val message = snackbarMessage?.takeIf { it.isNotBlank() }
+        if (message == null) {
+            if (snackbarMessage != null) viewModel.dismissSnackbar()
+            return@LaunchedEffect
+        }
         snackbarHostState.showSnackbar(message)
         viewModel.dismissSnackbar()
     }

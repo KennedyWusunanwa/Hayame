@@ -205,11 +205,8 @@ final class AppState: ObservableObject {
                 return
             }
             Task { @MainActor in
-                if let message, !message.isEmpty {
-                    self.syncErrorMessage = "Push registration failed: \(message)"
-                } else {
-                    self.syncErrorMessage = "Push registration failed."
-                }
+                // Never interpolate the raw APNs error text into the UI.
+                self.syncErrorMessage = "Push registration failed."
             }
         }
         pushNotificationRouteObserver = NotificationCenter.default.addObserver(
@@ -469,7 +466,7 @@ final class AppState: ObservableObject {
                 return false
             }
             if !exploreFilters.city.isEmpty &&
-                car.city.caseInsensitiveCompare(exploreFilters.city) != .orderedSame {
+                !MockDataService.cityMatches(car.city, selected: exploreFilters.city) {
                 return false
             }
             if !exploreFilters.carType.isEmpty && car.type != exploreFilters.carType { return false }
@@ -3318,7 +3315,7 @@ final class AppState: ObservableObject {
             }
         } catch let apiError as APIError {
             // Push registration endpoint may not be deployed yet.
-            if apiError.statusCode != 404 {
+            if apiError.statusCode != 404 && !isCancellation(apiError) {
                 syncErrorMessage = apiError.message
             }
             NotificationManager.shared.markRemotePushDeliveryUnavailable()
@@ -3435,25 +3432,52 @@ final class AppState: ObservableObject {
         }
     }
 
-    private func errorMessage(_ error: Error, fallback: String) -> String {
-        if let apiError = error as? APIError {
-            return apiError.message
-        }
-        if let urlError = error as? URLError {
-            switch urlError.code {
-            case .cannotConnectToHost, .cannotFindHost, .networkConnectionLost, .notConnectedToInternet, .timedOut:
-                return "Poor network, please refresh."
-            default:
-                break
-            }
-        }
+    // MARK: - Error presentation (single source of truth)
+    //
+    // Rule: only ever show a string from a TRUSTED origin — our own backend's
+    // sanitized `APIError.message`, mapped friendly network copy, or the caller's
+    // hardcoded fallback. Never a raw `localizedDescription` / OS / decoding / file
+    // error, which is how "cancelled" and similar developer text used to leak.
 
+    /// A cancelled request is benign — a superseded refresh, a torn-down `.task`, or a
+    /// cancelled `Task`. It must never surface (its raw description is the word "cancelled").
+    static func isCancellation(_ error: Error) -> Bool {
+        if error is CancellationError { return true }
+        if let urlError = error as? URLError, urlError.code == .cancelled { return true }
         let nsError = error as NSError
-        if nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorCannotConnectToHost {
-            return "Poor network, please refresh."
+        if nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorCancelled { return true }
+        if let apiError = error as? APIError,
+           apiError.message.trimmingCharacters(in: .whitespacesAndNewlines).caseInsensitiveCompare("cancelled") == .orderedSame {
+            return true
         }
-        return error.localizedDescription.isEmpty ? fallback : error.localizedDescription
+        return false
     }
+
+    /// Any URL-loading-layer failure. All of these bridge to NSURLErrorDomain, so we
+    /// treat them uniformly and never surface their raw (developer-facing) description.
+    static func isNetworkError(_ error: Error) -> Bool {
+        if error is URLError { return true }
+        return (error as NSError).domain == NSURLErrorDomain
+    }
+
+    /// The one sanitizer every error sink funnels through — the funnel AND the ~20
+    /// former inline `error.localizedDescription` catch sites. Returns "" for
+    /// cancellations (callers guard `!isEmpty`).
+    static func userFacingMessage(_ error: Error, fallback: String) -> String {
+        if isCancellation(error) { return "" }
+        // TRUSTED: our backend's APIError message is sanitized by failJson() server-side.
+        if let apiError = error as? APIError { return apiError.message }
+        // Network/transport errors → one friendly line, never the raw OS description.
+        if isNetworkError(error) { return "Poor network. Please check your connection and try again." }
+        // UNTRUSTED unknowns (DecodingError, file/photo/biometric/OS errors) must never
+        // leak their raw description — always fall back to the caller's friendly message.
+        return fallback
+    }
+
+    // Instance conveniences for existing call sites.
+    func isCancellation(_ error: Error) -> Bool { Self.isCancellation(error) }
+    func userFacingMessage(_ error: Error, fallback: String) -> String { Self.userFacingMessage(error, fallback: fallback) }
+    private func errorMessage(_ error: Error, fallback: String) -> String { Self.userFacingMessage(error, fallback: fallback) }
 
     private func loginErrorMessage(_ error: Error) -> String {
         let message = errorMessage(error, fallback: wrongEmailOrPasswordMessage)

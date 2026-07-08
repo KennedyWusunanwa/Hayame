@@ -183,6 +183,31 @@ actor RemoteImagePipeline {
         return width * height * 4
     }
 
+    /// Master switch for the image resizer (weserv CDN). ON: fetch small WebP variants
+    /// sized per view; if a variant ever fails, `loadImage` falls back to the original
+    /// object, so images can't break. (We resize via weserv because Supabase's own render
+    /// endpoint was unreliable and distorted aspect ratios.)
+    static let imageTransformsEnabled = true
+
+    /// Builds a right-sized WebP URL via the weserv image CDN for a Supabase public object,
+    /// so we download a small variant instead of the multi-MB original. weserv preserves
+    /// aspect ratio (width only). Returns nil when transforms are off or the URL isn't a
+    /// resizable Supabase object (callers then use the original URL).
+    nonisolated private static func transformedURL(for url: URL, targetPixelSize: CGSize?) -> URL? {
+        guard imageTransformsEnabled else { return nil }
+        guard let targetPixelSize, targetPixelSize.width > 0 else { return nil }
+        let absolute = url.absoluteString
+        guard absolute.contains("/storage/v1/object/public/"),
+              !absolute.contains("images.weserv.nl") else { return nil }
+
+        let width = min(max(Int(targetPixelSize.width.rounded(.up)), 1), 2000)
+        let quality = 70
+        var allowed = CharacterSet.alphanumerics
+        allowed.insert(charactersIn: "._-~")
+        guard let encoded = absolute.addingPercentEncoding(withAllowedCharacters: allowed) else { return nil }
+        return URL(string: "https://images.weserv.nl/?url=\(encoded)&w=\(width)&output=webp&q=\(quality)")
+    }
+
     nonisolated private static func decodeImage(data: Data, targetPixelSize: CGSize?) -> UIImage? {
         if let targetPixelSize, targetPixelSize.width > 0, targetPixelSize.height > 0 {
             let maxDimension = max(targetPixelSize.width, targetPixelSize.height)
@@ -214,25 +239,44 @@ actor RemoteImagePipeline {
             return await existing.value
         }
 
-        let task = Task<UIImage?, Never> { [session] in
-            var request = URLRequest(url: url)
-            request.cachePolicy = .returnCacheDataElseLoad
-            request.timeoutInterval = 20
-
-            do {
-                let (data, response) = try await session.data(for: request)
-                guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
-                    return nil
-                }
-                guard let image = Self.decodeImage(data: data, targetPixelSize: targetPixelSize),
-                      image.size.width > 1,
-                      image.size.height > 1 else {
-                    return nil
-                }
-                return image
-            } catch {
-                return nil
+        // Prefer a right-sized Supabase transform variant; fall back to the original
+        // object URL if the variant fails (e.g. Image Transformations not enabled yet).
+        // `let` (not `var`) so it's safe to capture in the @Sendable Task under strict concurrency.
+        let candidates: [URL] = {
+            var list: [URL] = []
+            if let transformed = Self.transformedURL(for: url, targetPixelSize: targetPixelSize) {
+                list.append(transformed)
             }
+            list.append(url)
+            return list
+        }()
+
+        let task = Task<UIImage?, Never> { [session] in
+            for candidate in candidates {
+                var request = URLRequest(url: candidate)
+                request.cachePolicy = .returnCacheDataElseLoad
+                request.timeoutInterval = 20
+                // Ask Supabase's transformer for WebP (~45% smaller than the JPEG it
+                // returns for the default `*/*`). Harmless on the original-object fallback.
+                request.setValue("image/webp,image/*,*/*;q=0.8", forHTTPHeaderField: "Accept")
+
+                do {
+                    let (data, response) = try await session.data(for: request)
+                    guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+                        continue
+                    }
+                    guard let image = Self.decodeImage(data: data, targetPixelSize: targetPixelSize),
+                          image.size.width > 1,
+                          image.size.height > 1 else {
+                        continue
+                    }
+                    return image
+                } catch {
+                    if Task.isCancelled { return nil }
+                    continue
+                }
+            }
+            return nil
         }
 
         inflight[key] = task
@@ -318,18 +362,19 @@ struct CachedRemoteImage<Placeholder: View, Failure: View>: View {
     @ViewBuilder let failure: () -> Failure
 
     @State private var image: UIImage?
+    @State private var preview: UIImage?
     @State private var hasFailed = false
     private let pipeline = RemoteImagePipeline.shared
 
     var body: some View {
         Group {
             if let image {
-                switch fitMode {
-                case .fill:
-                    Image(uiImage: image).resizable().scaledToFill()
-                case .fit:
-                    Image(uiImage: image).resizable().scaledToFit()
-                }
+                imageView(image)
+            } else if let preview {
+                // Blur-up LQIP: a tiny variant shown blurred while the full image loads.
+                imageView(preview)
+                    .blur(radius: 8)
+                    .clipped()
             } else if hasFailed {
                 failure()
             } else {
@@ -339,6 +384,21 @@ struct CachedRemoteImage<Placeholder: View, Failure: View>: View {
         .task(id: taskID) {
             await load()
         }
+    }
+
+    @ViewBuilder
+    private func imageView(_ img: UIImage) -> some View {
+        switch fitMode {
+        case .fill:
+            Image(uiImage: img).resizable().scaledToFill()
+        case .fit:
+            Image(uiImage: img).resizable().scaledToFit()
+        }
+    }
+
+    private func isTransformable(_ url: URL) -> Bool {
+        let s = url.absoluteString
+        return s.contains("/storage/v1/object/public/") || s.contains("/storage/v1/render/image/public/")
     }
 
     private var taskID: String {
@@ -352,9 +412,15 @@ struct CachedRemoteImage<Placeholder: View, Failure: View>: View {
     }
 
     private func load() async {
+        // Clear stale placeholder/failure state so a recycled row can't show a leftover
+        // blur or error from a previous URL. `image` is intentionally kept until the new
+        // one loads (avoids a blank flash); it's replaced or cleared below.
+        preview = nil
+        hasFailed = false
+
         guard let url else {
-            hasFailed = true
             image = nil
+            hasFailed = true
             return
         }
 
@@ -363,11 +429,28 @@ struct CachedRemoteImage<Placeholder: View, Failure: View>: View {
             CGSize(width: max(1, size.width * scale), height: max(1, size.height * scale))
         }
 
+        // Blur-up LQIP: concurrently fetch a tiny (~40px) variant so the user sees a
+        // blurred preview near-instantly on a weak link. Runs alongside the full load
+        // (never blocks it), and only for transformable Supabase URLs — otherwise a
+        // "tiny" request would download the full original. Skipped if the full is
+        // already ready (e.g. prefetched), so it costs nothing in the fast path.
+        if image == nil, RemoteImagePipeline.imageTransformsEnabled, isTransformable(url) {
+            Task { @MainActor in
+                // Only show the preview if the full image hasn't already arrived or failed.
+                if let tiny = await pipeline.loadImage(from: url, targetPixelSize: CGSize(width: 40, height: 40)),
+                   image == nil, !hasFailed {
+                    preview = tiny
+                }
+            }
+        }
+
         if let loaded = await pipeline.loadImage(from: url, targetPixelSize: pixelSize) {
             image = loaded
             hasFailed = false
         } else {
+            // Full load failed: surface the failure state, never a stranded blur.
             image = nil
+            preview = nil
             hasFailed = true
         }
     }
