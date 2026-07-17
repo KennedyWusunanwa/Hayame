@@ -3,7 +3,6 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { Database } from "@/lib/database.types";
 import { deriveHostBadgeType } from "@/lib/host-badges";
 import { createSupabasePublicClient } from "@/lib/supabase/public";
-import { mockCars } from "@/lib/mock-data";
 
 type FeaturedRow = Database["public"]["Views"]["car_search_view"]["Row"];
 
@@ -47,31 +46,16 @@ const FEATURED_CACHE_TTL_MS = 5 * 60 * 1000;
 
 let cachedFeatured: { expiresAt: number; cars: FeaturedCar[] } | null = null;
 
-function fallbackFeaturedCars() {
-  return mockCars.slice(0, 8).map((car) => ({
-    id: car.id,
-    title: car.name,
-    city: car.city,
-    region: car.region,
-    daily_price: car.daily_price,
-    rating: car.rating,
-    reviews: car.reviews,
-    car_type: car.car_type,
-    description: car.description,
-    image_url: car.image,
-    host_name: car.host.name,
-    host_avatar: car.host.avatar,
-    host_type: "",
-    isFavorite: false,
-  }));
-}
-
 async function loadFeaturedCars() {
   if (cachedFeatured && cachedFeatured.expiresAt > Date.now()) {
     return cachedFeatured.cars;
   }
 
-  let featured: FeaturedCar[] = fallbackFeaturedCars();
+  // Starts empty and only ever holds real listings. It previously started as
+  // eight mock cars and was replaced only when the query returned rows — so an
+  // empty database (data = [], error = null) left the mocks in place and the
+  // homepage advertised cars that do not exist. Renters clicked them.
+  let featured: FeaturedCar[] = [];
   let loadedLiveCars = false;
   try {
     const supabase = createSupabasePublicClient();
@@ -113,7 +97,9 @@ async function loadFeaturedCars() {
       loadedLiveCars = featured.length > 0;
     }
   } catch {
-    // fall back to mock data
+    // Showing nothing is the honest failure mode. Inventing listings to fill
+    // the grid is not — a renter cannot tell a placeholder from a real car.
+    featured = [];
   }
 
   if (loadedLiveCars) {
@@ -127,6 +113,12 @@ async function loadFeaturedCars() {
 
 export async function FeaturedCars() {
   const featured = await loadFeaturedCars();
+
+  // No listings yet: render nothing at all rather than a "Featured cars across
+  // Ghana" heading above an empty grid. The homepage still has its hero, search,
+  // live counts, and trust sections, so it reads as a new marketplace rather
+  // than a broken page.
+  if (featured.length === 0) return null;
 
   return (
     <section className="mx-auto max-w-6xl px-6 pt-14 pb-14 sm:pt-16 lg:pt-18">

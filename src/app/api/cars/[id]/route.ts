@@ -20,14 +20,21 @@ export async function GET(req: Request, context: Params) {
     const user = await getRequestUser(supabase as any, req);
     const admin = await requireAdminApi();
 
+    // maybeSingle(), not single(): single() raises PGRST116 ("Cannot coerce the
+    // result to a single JSON object") when the row is absent, which the catch
+    // below then files as an error report. A request for a car that was deleted
+    // is a routine 404, not a server fault — it was flooding /admin/errors.
     const { data, error } = await supa
       .from("cars")
       .select(
         "*, car_photos(url), owner:profiles!cars_owner_id_fkey(id,full_name,avatar_url,city,is_host,id_verified,phone_verified,email_verified,host_level)",
       )
       .eq("id", id)
-      .single();
+      .maybeSingle();
     if (error) throw error;
+    if (!data) {
+      return NextResponse.json({ message: "Car not found" }, { status: 404 });
+    }
     const isOwner = Boolean(user?.id && data.owner_id === user.id);
     if (
       !admin &&
@@ -39,11 +46,12 @@ export async function GET(req: Request, context: Params) {
     }
     return NextResponse.json({ data });
   } catch (error: any) {
+    // Genuine faults only now — a missing car returns above without logging.
     return failJson({
       error,
       req,
       route: "/api/cars/[id]",
-      status: 404,
+      status: 500,
       userMessage: "Couldn't load this car. Please try again.",
     });
   }

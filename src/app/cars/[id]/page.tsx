@@ -17,6 +17,7 @@ import { FavoriteButton } from "@/components/favorite-button";
 import { BookingWidget } from "@/components/booking-widget";
 import { ImageGallery } from "@/components/image-gallery";
 import { ListingViewTracker } from "@/components/listing-view-tracker";
+import { priceBucket } from "@/lib/analytics/events";
 import { ReviewForm, type ReviewableBooking } from "@/components/review-form";
 import { HostMessageCard } from "@/components/messages/host-message-card";
 import { VerifiedHostIndicator } from "@/components/verified-host-indicator";
@@ -24,7 +25,6 @@ import { VerificationBadges } from "@/components/verification-badges";
 import { detailIcons, getFeatureIcon } from "@/lib/feature-icons";
 import { deriveHostBadgeType } from "@/lib/host-badges";
 import type { Database } from "@/lib/database.types";
-import { mockCars, type MockCar } from "@/lib/mock-data";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { formatCurrency, getInitials } from "@/lib/utils";
 
@@ -185,7 +185,11 @@ export default async function CarDetailPage({ params }: PageProps) {
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-10">
-      <ListingViewTracker carId={car.id} />
+      <ListingViewTracker
+        carId={car.id}
+        region={car.region}
+        priceBucket={priceBucket(car.daily_price)}
+      />
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-3">
@@ -448,21 +452,11 @@ async function loadCar(id: string): Promise<{
   platformFeePercent: number;
   existingBooking: ExistingBooking | null;
 }> {
-  const mock = mockCars.find((c) => c.id === id);
-  if (mock) {
-    console.log("[car-detail] using mock", id);
-    return {
-      car: mapMockCar(mock),
-      availability: [],
-      isFavorite: false,
-      reviews: [],
-      userId: null,
-      reviewableBookings: [],
-      platformFeePercent: 10,
-      existingBooking: null,
-    };
-  }
-
+  // The mock lookup that used to sit here ran BEFORE the UUID check and before
+  // any database call, so /cars/car-accra-1 always rendered a fully fake listing
+  // — fake price, fake host, fake reviews — no matter what was in the database.
+  // Non-UUID ids now fall straight through to notFound() below, which is what
+  // those hardcoded ids are.
   if (!isUUID(id)) {
     console.log("[car-detail] not uuid", id);
     notFound();
@@ -752,43 +746,6 @@ function mapCar(data: SupabaseCar): CarDetail {
     rating: avgRating,
     reviews: reviewCount ?? 0,
     created_at: data.created_at,
-  };
-}
-
-function mapMockCar(mock: MockCar): CarDetail {
-  return {
-    id: mock.id,
-    title: mock.name,
-    description: mock.description,
-    daily_price: mock.daily_price,
-    city: mock.city,
-    region: mock.region,
-    car_type: mock.car_type,
-    brand: null,
-    model: null,
-    fuel_type: null,
-    seats: mock.seats,
-    transmission: mock.transmission,
-    fuel: mock.fuel,
-    features: mock.features,
-    is_available: true,
-    instant_book: false,
-    delivery_available: false,
-    delivery_fee: null,
-    insurance_fee: null,
-    deposit_amount: null,
-    outside_accra_fee: null,
-    cancellation_policy: null,
-    approval_status: "approved",
-    photos: [{ url: mock.image }],
-    owner: {
-      id: "mock-owner",
-      full_name: mock.host.name,
-      avatar_url: mock.host.avatar,
-      city: mock.city,
-    },
-    rating: mock.rating,
-    reviews: mock.reviews,
   };
 }
 

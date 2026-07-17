@@ -3079,6 +3079,11 @@ struct CarDetailScreen: View {
             CarImageGalleryFullScreen(images: galleryImages, selectedIndex: $selectedImageIndex)
         }
         .task(id: seedCar.id) {
+            AnalyticsService.shared.track(AnalyticsEvent.carView, [
+                "car_id": seedCar.id,
+                "region": seedCar.region,
+                "price_bucket": AppState.analyticsPriceBucket(Double(seedCar.dailyPrice)),
+            ])
             await appState.refreshCarDetail(carID: seedCar.id)
             let latest = appState.cars.first(where: { $0.id == seedCar.id }) ??
                 appState.ownedCars.first(where: { $0.id == seedCar.id }) ??
@@ -6172,6 +6177,7 @@ struct GuestProfileScreen: View {
     @State private var showEditProfile = false
     @State private var activeMoreRoute: MoreRoute?
     @State private var glowAppearanceSettings = false
+    @State private var analyticsEnabled = AnalyticsService.shared.hasConsent
 
     init(requestedRoute: Binding<MoreRoute?> = .constant(nil)) {
         _requestedRoute = requestedRoute
@@ -6271,6 +6277,33 @@ struct GuestProfileScreen: View {
                     y: 0
                 )
                 .id("appearance-settings")
+
+                // Apple App Review Guideline 5.1.1(ii) requires an "easily
+                // accessible and understandable way to withdraw consent" for
+                // usage-data collection. This toggle is that mechanism — turning
+                // it off stops collection and deletes the stored session key.
+                SectionHeader(title: "Privacy")
+                VStack(alignment: .leading, spacing: 10) {
+                    Toggle(
+                        isOn: Binding(
+                            get: { analyticsEnabled },
+                            set: { enabled in
+                                AnalyticsService.shared.setConsent(enabled ? .granted : .denied)
+                                analyticsEnabled = enabled
+                            }
+                        )
+                    ) {
+                        Label("Share usage analytics", systemImage: "chart.bar.xaxis")
+                            .font(.system(size: 14, weight: .semibold, design: .rounded))
+                            .foregroundStyle(HayameTheme.brandNavy)
+                    }
+                    .toggleStyle(HayameSwitchToggleStyle())
+
+                    Text("Helps us see which cars people look for and where booking gets stuck. We never track you across other apps or sell your data. Turning this off deletes the analytics id stored on this device.")
+                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                        .foregroundStyle(HayameTheme.mutedText)
+                }
+                .hayameCard()
 
                 SectionHeader(title: "Hosting")
                 VStack(alignment: .leading, spacing: 10) {

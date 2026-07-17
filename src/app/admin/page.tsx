@@ -310,6 +310,11 @@ function AdminWorkspace({
       icon: MessageSquare,
     },
     {
+      label: "Analytics",
+      href: "/admin/analytics",
+      icon: BarChart3,
+    },
+    {
       label: "Manage filters",
       href: "/admin/filters",
       icon: SlidersHorizontal,

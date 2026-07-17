@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PrivacyChoices } from "@/components/privacy-choices";
 import { SUPPORT_ADDRESS, SUPPORT_EMAIL } from "@/lib/support";
 
 export const metadata: Metadata = {
@@ -9,7 +10,10 @@ export const metadata: Metadata = {
     "How Hayame collects, uses, shares, and protects your personal information across our website and iOS and Android apps, including your rights under GDPR, CCPA/CPRA, and Ghana's Data Protection Act.",
 };
 
-const LAST_UPDATED = "June 5, 2026";
+// Keep in step with CONSENT_POLICY_VERSION in src/lib/analytics/consent.ts.
+// If that constant changes, everyone is re-asked for consent — so these two
+// dates moving together is what makes the re-prompt honest.
+const LAST_UPDATED = "July 17, 2026";
 
 export default function PrivacyPage() {
   return (
@@ -200,9 +204,9 @@ export default function PrivacyPage() {
             </li>
             <li>
               <span className="font-semibold text-foreground">Consent:</span>{" "}
-              for camera, photo library, location, and notification permissions,
-              and any optional communications &mdash; which you can withdraw at
-              any time.
+              for usage analytics (see section 5), camera, photo library,
+              location, and notification permissions, and any optional
+              communications &mdash; which you can withdraw at any time.
             </li>
             <li>
               <span className="font-semibold text-foreground">
@@ -308,15 +312,45 @@ export default function PrivacyPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>5. Cookies &amp; similar technologies</CardTitle>
+          <CardTitle>5. Cookies, analytics &amp; similar technologies</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3 text-sm text-gray-700">
           <p>
-            On the web, we use strictly necessary cookies and similar
-            technologies to keep you signed in, maintain your session, and
-            secure the Service. We do not use advertising or cross-site tracking
-            cookies. You can control cookies through your browser settings,
-            though disabling necessary cookies may affect how the Service works.
+            <strong>Strictly necessary (always on).</strong> We use cookies and
+            similar technologies to keep you signed in, maintain your session,
+            and secure the Service. These are required for the Service to work
+            and cannot be turned off. Disabling them in your browser may break
+            sign-in and booking.
+          </p>
+          <p>
+            <strong>Analytics (only with your permission).</strong> If you
+            accept, we record how the Service is used: pages viewed, searches
+            made, which cars are viewed, and where a booking is abandoned. To do
+            this we store a random identifier on your device (in your browser's
+            local storage on the web, or in app storage on iOS). It is not a
+            name, an email, or an advertising ID, and it is not shared with
+            anyone. Nothing is stored and nothing is sent until you accept.
+          </p>
+          <p>
+            <strong>What we do not do.</strong> We do not use advertising or
+            cross-site tracking cookies. We do not track you across other
+            companies&apos; apps or websites. We do not use device
+            fingerprinting, session recording, or heatmaps. We do not sell your
+            data or share it with data brokers or advertising networks. Our iOS
+            app does not use the advertising identifier (IDFA), which is why it
+            does not show Apple&apos;s tracking permission prompt.
+          </p>
+          <p>
+            <strong>Changing your mind.</strong> You can turn analytics on or
+            off at any time, and turning it off deletes the identifier described
+            above. On the web, use the controls in section 11 below. On iOS, go
+            to Profile → Privacy → Share usage analytics. Declining does not
+            limit any feature of the Service.
+          </p>
+          <p>
+            We keep individual analytics events for up to 400 days, after which
+            they are deleted. Aggregate counts that cannot identify you may be
+            kept longer.
           </p>
         </CardContent>
       </Card>
@@ -541,6 +575,12 @@ export default function PrivacyPage() {
             device location, and disabling notifications stops delivery of push
             notifications. This does not delete data already collected.
           </p>
+          <div className="rounded-xl border border-border/80 bg-gray-50/60 p-4">
+            <p className="mb-3 font-semibold text-foreground">
+              Your analytics choice
+            </p>
+            <PrivacyChoices />
+          </div>
           <p>
             To request access, correction, portability, or deletion of your
             personal information &mdash; or to delete your account entirely

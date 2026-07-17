@@ -179,6 +179,7 @@ final class AppState: ObservableObject {
         }
         migrateLoopbackBaseURLIfNeeded()
         restorePersistedSession()
+        configureAnalytics()
         pushTokenObserver = NotificationCenter.default.addObserver(
             forName: .hayameDidRegisterPushToken,
             object: nil,
@@ -1497,6 +1498,13 @@ final class AppState: ObservableObject {
         paymentFlowNotice = nil
         paymentFlowNoticeIsError = false
 
+        let tripDays = max(Calendar.current.dateComponents([.day], from: start, to: end).day ?? 0, 0)
+        AnalyticsService.shared.track(AnalyticsEvent.bookingStarted, [
+            "car_id": car.id,
+            "region": MockDataService.normalizedRegion(region),
+            "days": tripDays,
+        ])
+
         let startDate = Self.dateOnlyFormatter.string(from: start)
         let endDate = Self.dateOnlyFormatter.string(from: end)
         let normalizedRegion = MockDataService.normalizedRegion(region)
@@ -1542,6 +1550,11 @@ final class AppState: ObservableObject {
                 guard !checkoutURL.isEmpty else {
                     throw APIError(message: "Missing payment URL from server.")
                 }
+
+                AnalyticsService.shared.track(AnalyticsEvent.bookingPaymentStarted, [
+                    "car_id": car.id,
+                    "price_bucket": Self.analyticsPriceBucket(Double(amountMinor) / 100.0),
+                ])
 
                 return PaystackCheckoutSession(
                     bookingID: hold.bookingId,
@@ -1605,6 +1618,10 @@ final class AppState: ObservableObject {
             guard paymentStatus == "paid" else {
                 throw APIError(message: "Payment not completed yet. Finish payment in secure checkout before verifying.")
             }
+            AnalyticsService.shared.track(AnalyticsEvent.bookingCompleted, [
+                "car_id": checkout.carID,
+                "region": checkout.tripUseRegion,
+            ])
             await syncBookings()
             await syncConversations()
             syncErrorMessage = nil
@@ -2182,6 +2199,32 @@ final class AppState: ObservableObject {
             )
         }
         await syncHostApplication()
+    }
+
+    /// Bucket a cedi amount rather than reporting it exactly. Must stay in step
+    /// with priceBucket() in src/lib/analytics/events.ts, or web and iOS rows
+    /// will not aggregate together on the dashboard.
+    static func analyticsPriceBucket(_ amountGhs: Double) -> String {
+        guard amountGhs.isFinite, amountGhs >= 0 else { return "unknown" }
+        switch amountGhs {
+        case ..<200: return "0-199"
+        case ..<500: return "200-499"
+        case ..<1000: return "500-999"
+        case ..<2000: return "1000-1999"
+        case ..<5000: return "2000-4999"
+        default: return "5000+"
+        }
+    }
+
+    /// Hand the analytics service the two things it needs, as closures, so it
+    /// never has to reach into AppState (and `authToken` can stay private).
+    private func configureAnalytics() {
+        AnalyticsService.shared.baseURLProvider = { [weak self] in
+            self?.apiBaseURL ?? Self.productionBaseURL
+        }
+        AnalyticsService.shared.tokenProvider = { [weak self] in
+            self?.authToken
+        }
     }
 
     private func restorePersistedSession() {

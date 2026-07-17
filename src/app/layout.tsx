@@ -6,6 +6,7 @@ import { Navbar } from "@/components/navbar";
 import { Footer } from "@/components/footer";
 import { NavigationLoader } from "@/components/navigation-loader";
 import { MessagingProvider } from "@/components/messages/messaging-provider";
+import { ConsentBanner } from "@/components/consent-banner";
 import { socialImageAlt } from "@/components/seo/social-preview-image";
 
 const geistSans = Geist({
@@ -115,6 +116,7 @@ export default function RootLayout({
             <main className="flex-1 page-fade">{children}</main>
             <Footer />
           </div>
+          <ConsentBanner />
         </MessagingProvider>
       </body>
     </html>

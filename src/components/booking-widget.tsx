@@ -12,12 +12,15 @@ import { DateRangePicker } from "@/components/date-range-picker";
 import { VerificationBadges } from "@/components/verification-badges";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useLocations } from "@/lib/use-locations";
+import { track } from "@/lib/analytics/client";
+import { priceBucket } from "@/lib/analytics/events";
 import {
   calculateNights,
   formatCurrency,
   isLocationOutsideAccra,
   isOutsideListingRegion,
 } from "@/lib/utils";
+import { friendlyError } from "@/lib/client-errors";
 
 type Props = {
   carId: string;
@@ -78,6 +81,12 @@ export function BookingWidget({
   );
 
   const nights = calculateNights(startDate, endDate);
+
+  // Picking valid dates is the step between "looking" and "intending to book".
+  useEffect(() => {
+    if (nights <= 0) return;
+    track("booking_dates_selected", { car_id: carId, days: nights });
+  }, [carId, nights]);
   const billableNights = Math.max(nights, 1);
   const baseTotal = billableNights * dailyPrice;
   const platformFeeAmount = baseTotal * (Math.max(platformFeePercent, 0) / 100);
@@ -192,11 +201,20 @@ export function BookingWidget({
     try {
       setLoading(true);
       setMessage(null);
+      track("booking_started", {
+        car_id: carId,
+        region: listingRegion ?? null,
+        price_bucket: priceBucket(total),
+        days: nights,
+      });
       const supabase = createSupabaseBrowserClient();
       const {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) {
+        // Bouncing to login mid-booking is a known funnel leak; recording the
+        // reason is what makes it visible on the dashboard.
+        track("booking_abandoned", { car_id: carId, reason: "not_signed_in" });
         alert("You need to sign in before you can book.");
         router.push("/auth/login");
         return;
@@ -285,20 +303,41 @@ export function BookingWidget({
             );
           }
           setHold(null);
+          track("booking_completed", {
+            car_id: carId,
+            region: listingRegion ?? null,
+            price_bucket: priceBucket(total),
+            days: nights,
+          });
           if (payload.conversationId) {
             router.push(`/messages?conversation=${payload.conversationId}`);
           } else {
             router.push("/messages");
           }
         } catch (err: any) {
+          // Paid but the booking did not land. Rare and expensive — it should be
+          // impossible to miss on the dashboard.
+          track("booking_abandoned", {
+            car_id: carId,
+            reason: "failed_after_payment",
+          });
           alert(
-            err.message ??
+            friendlyError(
+              err,
               "Booking failed after payment. Please contact support.",
+            ),
           );
         } finally {
           setLoading(false);
         }
       };
+
+      track("booking_payment_started", {
+        car_id: carId,
+        region: listingRegion ?? null,
+        price_bucket: priceBucket(total),
+        days: nights,
+      });
 
       const handler = PaystackPop.setup({
         key: publicKey,
@@ -306,17 +345,27 @@ export function BookingWidget({
         amount: amountInMinorUnit,
         currency: "GHS",
         ref: reference,
+        // Lets the Paystack webhook match this charge to the held booking and
+        // confirm it server-side even if this tab dies before the callback.
+        metadata: { bookingId },
         callback: (tran: any) => {
           void handleSuccess(tran);
         },
         onClose: () => {
+          // Closing the Paystack modal is the single most expensive drop-off in
+          // the funnel: they wanted the car and walked at the money step.
+          track("booking_abandoned", {
+            car_id: carId,
+            reason: "closed_payment_modal",
+            price_bucket: priceBucket(total),
+          });
           setLoading(false);
         },
       });
       handler.openIframe();
     } catch (error) {
       console.error(error);
-      alert((error as Error).message ?? "Please sign in and try again.");
+      alert(friendlyError(error, "Please sign in and try again."));
     } finally {
       // loading is cleared in onClose/callback, keep for safety on immediate errors
       setLoading(false);

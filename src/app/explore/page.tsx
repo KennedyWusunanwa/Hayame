@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ArrowDownAZ, Search } from "lucide-react";
+import { track } from "@/lib/analytics/client";
 import { CarCard } from "@/components/car-card";
 import {
   FiltersSidebar,
@@ -19,11 +20,11 @@ import {
   ListingGridSkeleton,
 } from "@/components/skeletons/page-loading-skeletons";
 import { deriveHostBadgeType } from "@/lib/host-badges";
-import { mockCars, type MockCar } from "@/lib/mock-data";
+import type { CarShape } from "@/lib/car-shape";
 import { siteFlags } from "@/lib/site-flags";
 import { formatCurrency } from "@/lib/utils";
 
-type ExploreCar = Omit<MockCar, "rating"> & {
+type ExploreCar = Omit<CarShape, "rating"> & {
   rating?: number;
   instant_book?: boolean;
   delivery_available?: boolean;
@@ -242,21 +243,6 @@ function mapApiCars(rows: any[]): ExploreCar[] {
   });
 }
 
-function fallbackCars() {
-  return mockCars.map((car) => ({
-    ...car,
-    instant_book: false,
-    delivery_available: undefined,
-    air_conditioning: car.features.some(
-      (feature) => normalize(feature) === "air conditioning",
-    ),
-    bookings_count: undefined,
-    trips_count: undefined,
-    avg_rating: car.rating,
-    host_type: "",
-    created_at: null,
-  }));
-}
 
 function ExploreContent() {
   const router = useRouter();
@@ -298,14 +284,13 @@ function ExploreContent() {
       .then((res) => res.json())
       .then((res) => {
         setMeta(res.meta ?? {});
-        if (Array.isArray(res.data)) {
-          setCars(mapApiCars(res.data));
-        } else {
-          setCars(fallbackCars());
-        }
+        // Both branches used to fall back to eight mock cars. A malformed
+        // response or a 500 would quietly show fake listings that link to dead
+        // detail pages — worse than showing nothing, because it looks fine.
+        setCars(Array.isArray(res.data) ? mapApiCars(res.data) : []);
       })
       .catch(() => {
-        setCars(fallbackCars());
+        setCars([]);
         setMeta({});
       })
       .finally(() => setLoading(false));
@@ -516,6 +501,36 @@ function ExploreContent() {
         return list;
     }
   }, [filtered, filters.sort]);
+
+  // Record what people searched for and how many cars came back. Debounced so
+  // typing "kia" logs one search rather than three, and skipped while loading so
+  // we never record a spurious zero-result search against an empty list.
+  useEffect(() => {
+    if (loading) return;
+    const timeout = setTimeout(() => {
+      const activeFilters = Object.entries({
+        carType: filters.carType,
+        brand: filters.brand,
+        fuelType: filters.fuelType,
+        transmission: filters.transmission,
+        instantBook: filters.instantBook,
+        deliveryAvailable: filters.deliveryAvailable,
+        price: filters.minPrice != null || filters.maxPrice != null,
+      })
+        .filter(([, value]) => Boolean(value))
+        .map(([key]) => key)
+        .join(",");
+
+      track("search", {
+        q: filters.query || null,
+        region: filters.region || null,
+        city: filters.city || null,
+        results: filtered.length,
+        filters: activeFilters || null,
+      });
+    }, 600);
+    return () => clearTimeout(timeout);
+  }, [loading, filters, filtered.length]);
 
   const markers = sorted.map((car) => ({
     id: car.id,

@@ -13,6 +13,7 @@ struct HayameIOSApp: App {
     @State private var hasHandledInitialAppearance = false
     @State private var appearanceTransitionTask: Task<Void, Never>?
     @State private var hasConfiguredNotifications = false
+    @State private var showAnalyticsConsent = false
 
     var body: some Scene {
         WindowGroup {
@@ -78,6 +79,16 @@ struct HayameIOSApp: App {
                 }
                 hasHandledInitialAppearance = true
                 configureNotificationsIfNeeded()
+                // Ask after the splash clears, not over it. Only ever asked once
+                // per policy version; declining is remembered just as firmly.
+                if AnalyticsService.shared.needsConsentDecision {
+                    showAnalyticsConsent = true
+                }
+            }
+            .sheet(isPresented: $showAnalyticsConsent) {
+                AnalyticsConsentSheet { decision in
+                    AnalyticsService.shared.setConsent(decision)
+                }
             }
             .onChange(of: appState.darkModeEnabled) { _, enabled in
                 if showSplash {
@@ -95,6 +106,9 @@ struct HayameIOSApp: App {
                 if phase == .active {
                     applyWindowStyle(appState.darkModeEnabled)
             } else {
+                // Backgrounding is the last chance to send queued events before
+                // the app may be suspended or killed.
+                AnalyticsService.shared.flush()
                 dismissAppearanceTransition()
             }
         }
