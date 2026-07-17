@@ -40,6 +40,12 @@ export type FailInput = {
   source?: string;
   /** Optional non-PII structured context. Do NOT put request bodies here. */
   context?: Jsonish;
+  /**
+   * Skip logging when the failure is only "table does not exist yet". For
+   * best-effort telemetry routes whose table arrives in a hand-run migration —
+   * otherwise every event between deploy and migration files a report.
+   */
+  skipIfTableMissing?: boolean;
 };
 
 function truncate(value: string, max: number) {
@@ -111,11 +117,32 @@ function isExpectedAuthError(input: FailInput): boolean {
 }
 
 /**
+ * True when the failure is just "this table does not exist yet".
+ *
+ * Only meaningful for callers that opt in via `skipIfTableMissing`. Those are
+ * best-effort telemetry routes whose table ships in a migration that is run by
+ * hand: between deploy and migration they would file one report per event, per
+ * visitor, and bury the real errors. The admin dashboards already surface the
+ * missing table directly, which is the honest place to learn about it.
+ */
+function isMissingTableError(input: FailInput): boolean {
+  const code = (extractCode(input.error) ?? "").toLowerCase();
+  const message = extractMessage(input.error).toLowerCase();
+  return (
+    code === "pgrst205" ||
+    code === "42p01" ||
+    message.includes("could not find the table") ||
+    message.includes("schema cache")
+  );
+}
+
+/**
  * Persist a server-side error for admin diagnostics. Best-effort: this never
  * throws, so a logging failure can never break the request it is reporting on.
  */
 export async function logServerError(input: FailInput): Promise<void> {
   if (isExpectedAuthError(input)) return;
+  if (input.skipIfTableMissing && isMissingTableError(input)) return;
   const route = deriveRoute(input);
   const method = input.method ?? input.req?.method ?? null;
   const message = truncate(extractMessage(input.error), 4000);

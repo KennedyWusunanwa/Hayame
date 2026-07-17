@@ -166,6 +166,10 @@ export async function POST(req: Request) {
       req,
       route: "/api/analytics",
       status: 204,
+      // Before db/analytics.sql is run, every event would file a report and
+      // bury the real errors. /admin/analytics already says the table is
+      // missing, in plainer words than an error row would.
+      skipIfTableMissing: true,
       context: { note: "analytics ingest failed; event dropped" },
     });
     return new NextResponse(null, { status: 204 });

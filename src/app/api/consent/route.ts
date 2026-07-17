@@ -82,6 +82,9 @@ export async function POST(req: Request) {
       req,
       route: "/api/consent",
       status: 204,
+      // The banner is live before db/analytics.sql is run, so without this every
+      // Accept/Decline from every visitor files a report.
+      skipIfTableMissing: true,
       context: { note: "consent record insert failed" },
     });
     // The visitor's choice is already applied client-side; never surface this.
