@@ -127,8 +127,7 @@ export async function POST(req: Request) {
     if (error instanceof ZodError) {
       return NextResponse.json(
         {
-          message: error.issues[0]?.message ?? "Invalid application data",
-          issues: error.issues,
+          message: "Please check the form and try again.",
         },
         { status: 400 },
       );

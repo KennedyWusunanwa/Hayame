@@ -162,6 +162,46 @@ export type Database = {
           created_at?: string | null;
         };
       };
+      gh_regions: {
+        Row: {
+          id: number;
+          name: string;
+        };
+        Insert: {
+          id?: number;
+          name: string;
+        };
+        Update: {
+          id?: number;
+          name?: string;
+        };
+      };
+      gh_districts: {
+        Row: {
+          id: number;
+          region_id: number;
+          name: string;
+          capital: string | null;
+          category: string | null;
+          established_year: number | null;
+        };
+        Insert: {
+          id?: number;
+          region_id: number;
+          name: string;
+          capital?: string | null;
+          category?: string | null;
+          established_year?: number | null;
+        };
+        Update: {
+          id?: number;
+          region_id?: number;
+          name?: string;
+          capital?: string | null;
+          category?: string | null;
+          established_year?: number | null;
+        };
+      };
       locations: {
         Row: {
           id: number;

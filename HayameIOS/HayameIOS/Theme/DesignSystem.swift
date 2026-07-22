@@ -256,6 +256,12 @@ struct PrimaryPillButtonStyle: ButtonStyle {
             .foregroundStyle(.white)
             .clipShape(Capsule())
             .shadow(color: HayameTheme.brandBlue.opacity(0.28), radius: 8, x: 0, y: 4)
+            // Tactile feedback on press, matching the bottom tab bar.
+            .onChange(of: configuration.isPressed) { _, isPressed in
+                if isPressed {
+                    UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+                }
+            }
     }
 }
 

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { fallbackCities } from "@/lib/utils";
+import { ghanaDistrictsByRegion } from "@/lib/ghana-locations";
 
 type LocationsPayload = { data: Record<string, string[]>; message?: string };
 
@@ -13,12 +13,12 @@ let cachedPayload: { expiresAt: number; payload: LocationsPayload } | null =
   null;
 
 function fallbackLocations(): Record<string, string[]> {
-  const grouped: Record<string, string[]> = {};
-  fallbackCities.forEach((c) => {
-    if (!grouped[c.region]) grouped[c.region] = [];
-    grouped[c.region].push(c.city);
-  });
-  return grouped;
+  return Object.fromEntries(
+    Object.entries(ghanaDistrictsByRegion).map(([region, cities]) => [
+      region,
+      [...cities],
+    ]),
+  );
 }
 
 export async function GET(req: Request) {

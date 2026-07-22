@@ -3,6 +3,7 @@
 import { useEffect, useState, type ChangeEvent } from "react";
 import Image from "next/image";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { friendlyError } from "@/lib/client-errors";
 
 type Props = {
   carId: string;
@@ -51,7 +52,9 @@ export function PhotoUploader({ carId }: Props) {
         const { error: uploadError } = await supabase.storage
           .from(bucket)
           .upload(path, file, {
-            cacheControl: "3600",
+            // Paths are unique per upload (timestamp + random) and never overwritten,
+            // so the content is immutable — cache it for a year on device + CDN.
+            cacheControl: "31536000",
             upsert: false,
           });
         if (uploadError) throw uploadError;
@@ -70,7 +73,7 @@ export function PhotoUploader({ carId }: Props) {
 
       setPhotos((prev) => [...prev, ...uploaded]);
     } catch (err: any) {
-      setError(err.message ?? "Upload failed");
+      setError(friendlyError(err, "Upload failed"));
     } finally {
       setUploading(false);
     }

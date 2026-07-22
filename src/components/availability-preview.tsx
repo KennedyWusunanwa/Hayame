@@ -4,6 +4,7 @@ import { useState } from "react";
 import { addDays, format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { friendlyError } from "@/lib/client-errors";
 
 type Props = {
   carId: string;
@@ -40,7 +41,7 @@ export function AvailabilityPreview({ carId }: Props) {
       setResult(payload);
     } catch (err: any) {
       setResult(null);
-      setError(err.message ?? "Availability checking coming soon.");
+      setError(friendlyError(err, "Availability checking coming soon."));
     } finally {
       setLoading(false);
     }

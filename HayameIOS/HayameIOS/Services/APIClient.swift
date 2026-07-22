@@ -3,10 +3,15 @@ import Foundation
 struct APIError: Error, LocalizedError {
     let message: String
     let statusCode: Int?
+    /// Machine-readable reason from our API, e.g. "no_account", "wrong_password",
+    /// "email_not_confirmed", "rate_limited". Lets the UI act on the specific
+    /// failure instead of pattern-matching prose.
+    let code: String?
 
-    init(message: String, statusCode: Int? = nil) {
+    init(message: String, statusCode: Int? = nil, code: String? = nil) {
         self.message = message
         self.statusCode = statusCode
+        self.code = code
     }
 
     var errorDescription: String? {
@@ -16,6 +21,7 @@ struct APIError: Error, LocalizedError {
 
 private struct APIErrorEnvelope: Decodable {
     let message: String?
+    let code: String?
 }
 
 private struct SupabaseAuthErrorEnvelope: Decodable {
@@ -2261,7 +2267,11 @@ struct APIClient {
                         statusCode: http.statusCode,
                         contentType: http.value(forHTTPHeaderField: "Content-Type")
                     ) ?? "Request failed with status \(http.statusCode)"
-                throw APIError(message: message, statusCode: http.statusCode)
+                throw APIError(
+                    message: message,
+                    statusCode: http.statusCode,
+                    code: decodeErrorCode(from: data)
+                )
             } catch {
                 if retryable && attempt + 1 < retryLimit && shouldRetry(error: error) {
                     attempt += 1
@@ -2394,6 +2404,16 @@ struct APIClient {
         } catch {
             throw APIError(message: "Unable to decode server response")
         }
+    }
+
+    /// Reads only the machine-readable `code`. Unlike the message, this is never
+    /// displayed, so it needs no sanitizing — but it must stay confined to the
+    /// small allowlist the UI knows how to act on.
+    private func decodeErrorCode(from data: Data) -> String? {
+        guard let envelope = try? decoder.decode(APIErrorEnvelope.self, from: data),
+              let code = envelope.code,
+              !code.isEmpty else { return nil }
+        return code
     }
 
     private func decodeError(from data: Data, statusCode: Int, contentType: String? = nil) -> String? {

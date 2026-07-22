@@ -9,7 +9,8 @@ screenshots/
 ├── ios-mobile/
 │   ├── light/   18 screens — full renter journey, light theme
 │   └── dark/    18 screens — full renter journey, dark theme
-└── app-store-6.5/   12 marketing images (1242×2688) for App Store Connect
+├── app-store-6.5/         12 standalone marketing images (1242×2688)
+└── app-store-6.5-story/   8 connected panels (1242×2688) that flow as a set
 ```
 
 ## ios-mobile/ — in-app screens (light + dark)

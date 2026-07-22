@@ -18,6 +18,7 @@ import {
 } from "@/lib/listing-title";
 import { useLocations } from "@/lib/use-locations";
 import { useCarCatalog } from "@/lib/use-car-catalog";
+import { friendlyError } from "@/lib/client-errors";
 
 type FormValues = z.infer<typeof carFormSchema>;
 type ExistingPhoto = {
@@ -212,7 +213,7 @@ export function CarForm({
       );
       navigateAfterSubmit(router, postSubmitRedirectPath);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Unable to save car");
+      setError(friendlyError(err, "Unable to save car"));
     } finally {
       setUploading(false);
     }
@@ -358,7 +359,7 @@ export function CarForm({
         prev.filter((item) => item.id !== photoId),
       );
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Unable to delete photo");
+      setError(friendlyError(err, "Unable to delete photo"));
     } finally {
       setPhotoMutatingId((current) => (current === photoId ? null : current));
     }
@@ -406,7 +407,7 @@ export function CarForm({
         ),
       );
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Unable to replace photo");
+      setError(friendlyError(err, "Unable to replace photo"));
     } finally {
       setPhotoMutatingId((current) => (current === photoId ? null : current));
     }

@@ -22,7 +22,11 @@ import {
   sendBroadcastPushNotifications,
   sendPushNotificationsToUsers,
 } from "@/lib/push";
-import { buildListingDecisionEmail, sendEmailSafe } from "@/lib/email";
+import {
+  buildListingDecisionEmail,
+  sendEmailSafe,
+  sendRefundReceiptEmails,
+} from "@/lib/email";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { refundPaystack } from "@/lib/paystack";
 import { getInitials } from "@/lib/utils";
@@ -569,26 +573,83 @@ async function refundAction(formData: FormData) {
 
   const { data: booking } = await admin
     .from("bookings")
-    .select("id,payment_provider,payment_reference,payment_status")
+    .select(
+      "id,payment_provider,payment_reference,payment_status,renter_id,total_price,start_date,end_date,cars:cars(owner_id,title)",
+    )
     .eq("id", bookingId)
     .maybeSingle();
   if (!booking || booking.payment_status !== "paid") {
     redirectToAdminPlatform();
   }
 
+  let refundSucceeded = true;
   if (booking.payment_provider === "paystack" && booking.payment_reference) {
-    await refundPaystack(booking.payment_reference);
+    try {
+      await refundPaystack(booking.payment_reference);
+    } catch (refundError) {
+      refundSucceeded = false;
+      console.error(
+        "[admin] CRITICAL: Paystack refund failed — manual refund required",
+        { reference: booking.payment_reference, refundError },
+      );
+    }
   }
 
   await admin
     .from("bookings")
     .update({
       status: "refunded",
-      payment_status: "refunded",
+      payment_status: refundSucceeded ? "refunded" : "refund_failed",
+      refund_reference: refundSucceeded ? booking.payment_reference : null,
       rejected_at: new Date().toISOString(),
       rejection_reason: reason,
     })
     .eq("id", bookingId);
+
+  // Official refund receipts to both parties (only when money moved).
+  if (refundSucceeded) {
+    try {
+      const ownerId = (booking as any)?.cars?.owner_id ?? null;
+      const [renterAuth, hostAuth, renterProfile, hostProfile] =
+        await Promise.all([
+          admin.auth.admin.getUserById(booking.renter_id).catch(() => null),
+          ownerId
+            ? admin.auth.admin.getUserById(ownerId).catch(() => null)
+            : null,
+          admin
+            .from("profiles")
+            .select("full_name")
+            .eq("id", booking.renter_id)
+            .maybeSingle(),
+          ownerId
+            ? admin
+                .from("profiles")
+                .select("full_name")
+                .eq("id", ownerId)
+                .maybeSingle()
+            : null,
+        ]);
+      const authEmail = (r: any) =>
+        r?.data?.user?.email ?? r?.user?.email ?? r?.email ?? null;
+      await sendRefundReceiptEmails({
+        renterEmail: authEmail(renterAuth),
+        hostEmail: authEmail(hostAuth),
+        renterName: (renterProfile as any)?.data?.full_name ?? null,
+        hostName: (hostProfile as any)?.data?.full_name ?? null,
+        carTitle: (booking as any)?.cars?.title ?? null,
+        bookingId: booking.id,
+        paymentReference: booking.payment_reference,
+        refundReference: booking.payment_reference,
+        refundAmount: Number(booking.total_price ?? 0),
+        totalPaid: Number(booking.total_price ?? 0),
+        reason,
+        startDate: booking.start_date,
+        endDate: booking.end_date,
+      });
+    } catch (emailError) {
+      console.error("[admin] refund receipt emails failed", emailError);
+    }
+  }
 
   await admin.from("admin_actions").insert({
     action: "booking_refunded",

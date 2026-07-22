@@ -5,9 +5,11 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { refundPaystack, verifyPaystackTransaction } from "@/lib/paystack";
 import { isLocationOutsideAccra, isOutsideListingRegion } from "@/lib/utils";
 import {
+  buildBookingInvoiceEmail,
   buildBookingPaidEmail,
   buildHostBookingNoticeEmail,
   sendEmailSafe,
+  sendRefundReceiptEmails,
 } from "@/lib/email";
 import { sendPushNotificationsToUsers } from "@/lib/push";
 
@@ -90,9 +92,57 @@ export async function POST(req: Request) {
   }
   const bookingId = metadataValue(data?.metadata, "bookingId");
 
+  // Official receipt for an automatic refund (best effort, never throws).
+  const sendAutoRefundReceipt = async (params: {
+    renterId?: string | null;
+    fallbackEmail?: string | null;
+    carTitle?: string | null;
+    bookingId?: string | null;
+    amountMinor?: number | null;
+    startDate?: string | null;
+    endDate?: string | null;
+  }) => {
+    try {
+      let renterEmail = params.fallbackEmail ?? null;
+      if (params.renterId) {
+        const auth = await admin.auth.admin
+          .getUserById(params.renterId)
+          .catch(() => null);
+        renterEmail = extractAuthEmail(auth) ?? renterEmail;
+      }
+      if (!renterEmail) return;
+      const amountMajor = Number(params.amountMinor ?? 0) / 100;
+      await sendRefundReceiptEmails({
+        renterEmail,
+        carTitle: params.carTitle ?? null,
+        bookingId: params.bookingId ?? null,
+        paymentReference: reference,
+        refundReference: reference,
+        refundAmount: amountMajor,
+        totalPaid: amountMajor,
+        reason:
+          "Payment could not be applied to your booking and was automatically refunded in full",
+        startDate: params.startDate ?? null,
+        endDate: params.endDate ?? null,
+      });
+    } catch (receiptError) {
+      console.error(
+        "[webhooks/paystack] auto-refund receipt email failed",
+        receiptError,
+      );
+    }
+  };
+
   const refundUnmatched = async (cause: string) => {
     try {
       await refundPaystack(reference);
+      await sendAutoRefundReceipt({
+        fallbackEmail:
+          typeof data?.customer?.email === "string"
+            ? data.customer.email
+            : null,
+        amountMinor: Number(data?.amount ?? 0),
+      });
     } catch (refundError) {
       console.error(
         "[webhooks/paystack] AUTO-REFUND FAILED — manual refund required",
@@ -104,7 +154,17 @@ export async function POST(req: Request) {
   // Atomically claim a booking, then refund once. A concurrent finalize/webhook
   // updates 0 rows (its `.neq('payment_status','refunded')` no longer matches)
   // and skips its own refund, preventing a double refund.
-  const claimAndRefund = async (claimId: string, cause: string) => {
+  const claimAndRefund = async (
+    claimId: string,
+    cause: string,
+    receiptCtx?: {
+      renterId?: string | null;
+      carTitle?: string | null;
+      amountMinor?: number | null;
+      startDate?: string | null;
+      endDate?: string | null;
+    },
+  ) => {
     const { data: claimed } = await admin
       .from("bookings")
       .update({
@@ -120,6 +180,18 @@ export async function POST(req: Request) {
     if (!claimed) return;
     try {
       await refundPaystack(reference);
+      await sendAutoRefundReceipt({
+        renterId: receiptCtx?.renterId ?? null,
+        fallbackEmail:
+          typeof data?.customer?.email === "string"
+            ? data.customer.email
+            : null,
+        carTitle: receiptCtx?.carTitle ?? null,
+        bookingId: claimId,
+        amountMinor: receiptCtx?.amountMinor ?? Number(data?.amount ?? 0),
+        startDate: receiptCtx?.startDate ?? null,
+        endDate: receiptCtx?.endDate ?? null,
+      });
     } catch (refundError) {
       console.error(
         "[webhooks/paystack] AUTO-REFUND FAILED — manual refund required",
@@ -165,19 +237,18 @@ export async function POST(req: Request) {
       return NextResponse.json({ received: true, refunded: true });
     }
 
-    // Idempotency: already finalized (paid/confirmed) or already refunded.
-    if (
+    // Idempotency: this exact charge (or its refund) was already handled.
+    const sameReference =
+      String(booking.payment_reference ?? "") === reference ||
+      String(booking.refund_reference ?? "") === reference;
+    const finalized =
       booking.payment_status === "paid" ||
       booking.payment_status === "refunded" ||
       ["confirmed", "awaiting_host", "completed", "rejected", "refunded"].includes(
         String(booking.status),
-      )
-    ) {
+      );
+    if (finalized && sameReference) {
       return NextResponse.json({ received: true, alreadyHandled: true });
-    }
-
-    if (booking.status !== "pending") {
-      return NextResponse.json({ received: true });
     }
 
     // Authoritatively re-verify the charge with Paystack (don't trust payload).
@@ -189,6 +260,30 @@ export async function POST(req: Request) {
       return NextResponse.json({ received: true });
     }
 
+    if (finalized) {
+      // A DIFFERENT captured charge for an already-finalized booking is stray
+      // money (e.g. a double payment after a transient finalize failure).
+      // Refund the stray charge and leave the booking untouched.
+      await refundUnmatched("duplicate charge for finalized booking");
+      return NextResponse.json({ received: true, refunded: true });
+    }
+
+    if (booking.status !== "pending") {
+      // Dead hold (expired or cancelled) whose charge was captured late — the
+      // renter paid for a booking that can no longer be confirmed. Refund.
+      await claimAndRefund(
+        booking.id,
+        "charge captured for non-pending booking",
+        {
+          renterId: booking.renter_id,
+          amountMinor: Number(tx?.amount ?? data?.amount ?? 0),
+          startDate: booking.start_date,
+          endDate: booking.end_date,
+        },
+      );
+      return NextResponse.json({ received: true, refunded: true });
+    }
+
     const { data: car } = await admin
       .from("cars")
       .select(
@@ -197,7 +292,12 @@ export async function POST(req: Request) {
       .eq("id", booking.car_id)
       .maybeSingle();
     if (!car) {
-      await claimAndRefund(booking.id, "car not found");
+      await claimAndRefund(booking.id, "car not found", {
+        renterId: booking.renter_id,
+        amountMinor: Number(tx?.amount ?? data?.amount ?? 0),
+        startDate: booking.start_date,
+        endDate: booking.end_date,
+      });
       return NextResponse.json({ received: true, refunded: true });
     }
 
@@ -258,6 +358,13 @@ export async function POST(req: Request) {
       await claimAndRefund(
         booking.id,
         `verification mismatch: status=${tx.status} amount=${tx.amount} expected=${expectedAmount} currency=${tx.currency}`,
+        {
+          renterId: booking.renter_id,
+          carTitle: car.title ?? null,
+          amountMinor: Number(tx?.amount ?? data?.amount ?? 0),
+          startDate: booking.start_date,
+          endDate: booking.end_date,
+        },
       );
       return NextResponse.json({ received: true, refunded: true });
     }
@@ -278,7 +385,13 @@ export async function POST(req: Request) {
         new Date(row.hold_expires_at) > new Date(),
     );
     if (activeConflicts.length > 0) {
-      await claimAndRefund(booking.id, "dates already taken");
+      await claimAndRefund(booking.id, "dates already taken", {
+        renterId: booking.renter_id,
+        carTitle: car.title ?? null,
+        amountMinor: Number(tx?.amount ?? data?.amount ?? 0),
+        startDate: booking.start_date,
+        endDate: booking.end_date,
+      });
       return NextResponse.json({ received: true, refunded: true });
     }
 
@@ -341,6 +454,13 @@ export async function POST(req: Request) {
       await claimAndRefund(
         booking.id,
         confirmError ? String(confirmError.message) : "no pending row to confirm",
+        {
+          renterId: booking.renter_id,
+          carTitle: car.title ?? null,
+          amountMinor: Number(tx?.amount ?? data?.amount ?? 0),
+          startDate: booking.start_date,
+          endDate: booking.end_date,
+        },
       );
       return NextResponse.json({ received: true, refunded: true });
     }
@@ -380,19 +500,53 @@ export async function POST(req: Request) {
 
     // Best-effort notifications (never block the confirmation).
     try {
-      const [renterAuth, hostAuth, renterProfile] = await Promise.all([
-        admin.auth.admin.getUserById(confirmed.renter_id).catch(() => null),
-        admin.auth.admin.getUserById(car.owner_id).catch(() => null),
-        admin
-          .from("profiles")
-          .select("full_name,phone")
-          .eq("id", confirmed.renter_id)
-          .maybeSingle(),
-      ]);
+      const [renterAuth, hostAuth, renterProfile, hostProfile] =
+        await Promise.all([
+          admin.auth.admin.getUserById(confirmed.renter_id).catch(() => null),
+          admin.auth.admin.getUserById(car.owner_id).catch(() => null),
+          admin
+            .from("profiles")
+            .select("full_name,phone")
+            .eq("id", confirmed.renter_id)
+            .maybeSingle(),
+          admin
+            .from("profiles")
+            .select("full_name")
+            .eq("id", car.owner_id)
+            .maybeSingle(),
+        ]);
       const renterEmail = extractAuthEmail(renterAuth);
       const hostEmail = extractAuthEmail(hostAuth);
       const renterName = (renterProfile as any)?.data?.full_name ?? "Guest";
+      const hostName = (hostProfile as any)?.data?.full_name ?? "Host";
       const renterPhone = (renterProfile as any)?.data?.phone ?? null;
+      const tripUseLocationLine = [
+        String(booking.trip_use_address ?? "").trim(),
+        String(booking.trip_use_city ?? "").trim(),
+        String(booking.trip_use_region ?? "").trim(),
+      ]
+        .filter(Boolean)
+        .join(", ");
+      const invoiceBase = {
+        carTitle: car.title ?? null,
+        bookingId: confirmed.id as string,
+        paymentReference: reference,
+        bookedAt: confirmed.paid_at ?? new Date().toISOString(),
+        startDate: booking.start_date,
+        endDate: booking.end_date,
+        nights,
+        dailyRate: Number(car.daily_price ?? 0),
+        subtotal,
+        platformFee,
+        insuranceFee,
+        deliveryFee,
+        outsideAccraSurcharge,
+        depositAmount,
+        totalPrice: total,
+        status: finalStatus,
+        conversationUrl: null,
+        tripUseLocation: tripUseLocationLine || null,
+      };
 
       if (renterEmail) {
         const email = buildBookingPaidEmail({
@@ -405,7 +559,7 @@ export async function POST(req: Request) {
           paymentReference: reference,
           bookedAt: confirmed.paid_at ?? new Date().toISOString(),
           conversationUrl: null,
-          tripUseLocation: null,
+          tripUseLocation: tripUseLocationLine || null,
         });
         await sendEmailSafe({
           to: renterEmail,
@@ -426,12 +580,41 @@ export async function POST(req: Request) {
           paymentReference: reference,
           bookedAt: confirmed.paid_at ?? new Date().toISOString(),
           conversationUrl: null,
-          tripUseLocation: null,
+          tripUseLocation: tripUseLocationLine || null,
         });
         await sendEmailSafe({
           to: hostEmail,
           ...email,
           idempotencyKey: `booking:${confirmed.id}:host-notice`,
+        });
+      }
+      // Official invoices to both parties. Same idempotency keys as the
+      // client finalize path, so whichever path runs first sends them and
+      // the other is deduplicated by Resend.
+      if (renterEmail) {
+        const invoice = buildBookingInvoiceEmail({
+          recipientRole: "renter",
+          recipientName: renterName,
+          counterpartName: hostName,
+          ...invoiceBase,
+        });
+        await sendEmailSafe({
+          to: renterEmail,
+          ...invoice,
+          idempotencyKey: `booking:${confirmed.id}:invoice:renter`,
+        });
+      }
+      if (hostEmail) {
+        const invoice = buildBookingInvoiceEmail({
+          recipientRole: "host",
+          recipientName: hostName,
+          counterpartName: renterName,
+          ...invoiceBase,
+        });
+        await sendEmailSafe({
+          to: hostEmail,
+          ...invoice,
+          idempotencyKey: `booking:${confirmed.id}:invoice:host`,
         });
       }
     } catch (emailError) {

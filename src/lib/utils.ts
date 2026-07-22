@@ -1,6 +1,7 @@
 import { clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { differenceInCalendarDays, format } from "date-fns";
+import { ghanaLocationOptions } from "./ghana-locations";
 
 export function cn(...inputs: (string | false | null | undefined)[]) {
   return twMerge(clsx(inputs));
@@ -84,14 +85,7 @@ export const carTypes = [
 
 export const fuelTypes = ["petrol", "diesel", "electric", "lpg", "hybrid"];
 
-export const fallbackCities = [
-  { city: "Accra", region: "Greater Accra" },
-  { city: "Kumasi", region: "Ashanti" },
-  { city: "Takoradi", region: "Western" },
-  { city: "Tamale", region: "Northern" },
-  { city: "Cape Coast", region: "Central" },
-  { city: "Tema", region: "Greater Accra" },
-];
+export const fallbackCities = ghanaLocationOptions;
 
 export const featureOptions = [
   "Air Conditioning",

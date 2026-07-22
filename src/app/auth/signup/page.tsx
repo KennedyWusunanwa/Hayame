@@ -1,250 +1,257 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm } from "react-hook-form";
-import { z } from "zod";
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Select } from "@/components/ui/select";
+import { Lock, Mail, User } from "lucide-react";
 import { useLocations } from "@/lib/use-locations";
+import { gradePassword } from "@/lib/password";
+import { AuthShell } from "@/components/auth/auth-shell";
+import {
+  AuthAlert,
+  AuthField,
+  AuthPasswordField,
+  AuthSubmitButton,
+  PasswordStrengthMeter,
+} from "@/components/auth/auth-fields";
 
-const schema = z.object({
-  firstName: z.string().min(2),
-  lastName: z.string().min(2),
-  email: z.string().email(),
-  password: z.string().min(6),
-  region: z.string().min(2),
-  city: z.string().min(2),
-});
-
-type FormValues = z.infer<typeof schema>;
-const EMAIL_CONFIRMATION_REDIRECT_URL =
-  process.env.NEXT_PUBLIC_AUTH_CONFIRMATION_REDIRECT_URL ??
-  "https://www.hayamegh.com";
+const SELECT_CLASS =
+  "h-12 w-full rounded-xl border border-border bg-white px-3.5 text-sm text-foreground transition-colors focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/25 disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-400";
 
 export default function SignupPage() {
-  const router = useRouter();
-  const [error, setError] = useState<string | null>(null);
-  const [info, setInfo] = useState<string | null>(null);
-  const [showPassword, setShowPassword] = useState(false);
-  const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const { regions, citiesByRegion } = useLocations();
-  const {
-    register,
-    handleSubmit,
-    setValue,
-    watch,
-    formState: { isSubmitting },
-  } = useForm<FormValues>({
-    resolver: zodResolver(schema),
-    defaultValues: {
-      email: "",
-      password: "",
-      firstName: "",
-      lastName: "",
-      region: "",
-      city: "",
-    },
-  });
 
-  const onSubmit = async (values: FormValues) => {
-    setError(null);
-    setInfo(null);
-    try {
-      const supabase = createSupabaseBrowserClient();
-      const fullName = `${values.firstName} ${values.lastName}`.trim();
-      const { data, error } = await supabase.auth.signUp({
-        email: values.email,
-        password: values.password,
-        options: {
-          emailRedirectTo: EMAIL_CONFIRMATION_REDIRECT_URL,
-          data: {
-            full_name: fullName,
-            first_name: values.firstName,
-            last_name: values.lastName,
-            city: values.city,
-            region: values.region,
-          },
-        },
-      });
-      if (error) throw error;
-      const userId = data.user?.id;
-      const session = data.session;
-      let avatarUrl: string | undefined;
-      const bucket =
-        process.env.NEXT_PUBLIC_SUPABASE_AVATAR_BUCKET ||
-        process.env.NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET ||
-        "avatars";
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [email, setEmail] = useState("");
+  const [region, setRegion] = useState("");
+  const [city, setCity] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
 
-      if (userId && session && avatarFile) {
-        const ext = avatarFile.name.split(".").pop();
-        const path = `${userId}/avatar-${Date.now()}.${ext}`;
-        const { error: uploadError } = await supabase.storage
-          .from(bucket)
-          .upload(path, avatarFile, {
-            cacheControl: "3600",
-            upsert: true,
-          });
-        if (uploadError) throw uploadError;
-        const {
-          data: { publicUrl },
-        } = supabase.storage.from(bucket).getPublicUrl(path);
-        avatarUrl = publicUrl;
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  const strength = useMemo(() => gradePassword(password), [password]);
+  const mismatch =
+    confirmPassword.length > 0 && confirmPassword !== password
+      ? "Those passwords don't match."
+      : null;
+
+  const onSubmit = useCallback(
+    async (event: React.FormEvent) => {
+      event.preventDefault();
+      setError(null);
+
+      if (!strength.meetsPolicy) {
+        setError("Please choose a stronger password — see the checklist below.");
+        return;
+      }
+      if (password !== confirmPassword) {
+        setError("Those passwords don't match.");
+        return;
       }
 
-      if (userId && session) {
-        const res = await fetch("/api/profiles/upsert", {
+      setSubmitting(true);
+      try {
+        // Same endpoint the iOS app uses, so there is one signup code path:
+        // one place that creates the account, sends the branded verification
+        // email, and writes the profile row.
+        const res = await fetch("/api/mobile/auth/signup", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            id: userId,
-            first_name: values.firstName,
-            last_name: values.lastName,
-            full_name: fullName,
-            city: values.city,
-            avatar_url: avatarUrl ?? null,
+            email,
+            password,
+            first_name: firstName,
+            last_name: lastName,
+            city,
+            region,
           }),
         });
-        if (!res.ok) {
-          const payload = await res.json().catch(() => ({}));
-          throw new Error(payload.message || "Unable to create profile");
-        }
-      }
+        const payload = await res.json().catch(() => ({}));
 
-      setInfo(
-        "Check your email to verify your account. Verification link sent.",
-      );
-      router.push("/auth/login");
-    } catch (err: any) {
-      setError(err.message ?? "Unable to sign up");
-    }
-  };
+        if (!res.ok) {
+          setError(
+            payload.message ?? "We couldn't create your account. Please try again.",
+          );
+          return;
+        }
+        setDone(true);
+      } catch {
+        setError("We couldn't create your account. Please try again.");
+      } finally {
+        setSubmitting(false);
+      }
+    },
+    [
+      city,
+      confirmPassword,
+      email,
+      firstName,
+      lastName,
+      password,
+      region,
+      strength.meetsPolicy,
+    ],
+  );
+
+  if (done) {
+    return (
+      <AuthShell active="signup">
+        <div className="rounded-2xl border border-border bg-white p-6 text-center shadow-sm sm:p-8">
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-green-100 text-xl text-green-700">
+            ✓
+          </div>
+          <h2 className="text-2xl font-bold tracking-tight text-foreground">
+            Check your email
+          </h2>
+          <p className="mt-3 text-sm leading-relaxed text-gray-600">
+            We&apos;ve sent a verification link to{" "}
+            <strong className="text-foreground">{email}</strong>. Click it to
+            activate your account, then sign in.
+          </p>
+          <p className="mt-3 text-sm text-gray-500">
+            Nothing yet? Check your spam folder — it can take a minute to
+            arrive.
+          </p>
+          <Link
+            href="/auth/login"
+            className="mt-6 inline-flex h-12 w-full items-center justify-center rounded-xl bg-brand text-sm font-semibold text-white transition-colors hover:bg-brandHover"
+          >
+            Go to sign in
+          </Link>
+        </div>
+      </AuthShell>
+    );
+  }
 
   return (
-    <div className="mx-auto flex min-h-[70vh] max-w-5xl items-center justify-center px-6 py-12">
-      <Card className="w-full max-w-md border border-border shadow-soft">
-        <CardHeader>
-          <CardTitle className="text-2xl font-semibold text-foreground">
-            Create account
-          </CardTitle>
-          <p className="text-sm text-gray-600">
-            Join Ghana&apos;s trusted car sharing network.
-          </p>
-        </CardHeader>
-        <CardContent>
-          <form className="space-y-4" onSubmit={handleSubmit(onSubmit)}>
-            <div className="space-y-2">
-              <label className="text-sm font-semibold text-gray-700">
-                First name
-              </label>
-              <Input placeholder="Ama" {...register("firstName")} required />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-semibold text-gray-700">
-                Last name
-              </label>
-              <Input placeholder="Owusu" {...register("lastName")} required />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-semibold text-gray-700">
-                Email
-              </label>
-              <Input
-                type="email"
-                placeholder="you@example.com"
-                {...register("email")}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-semibold text-gray-700">
+    <AuthShell active="signup">
+      <div className="rounded-2xl border border-border bg-white p-6 shadow-sm sm:p-8">
+        <h2 className="text-2xl font-bold tracking-tight text-foreground">
+          Create your account
+        </h2>
+        <p className="mt-1.5 text-sm text-gray-600">
+          Start renting in minutes.
+        </p>
+
+        <form className="mt-6 space-y-5" onSubmit={onSubmit}>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <AuthField
+              label="First name"
+              icon={User}
+              placeholder="Ama"
+              autoComplete="given-name"
+              value={firstName}
+              onChange={(e) => setFirstName(e.target.value)}
+              required
+            />
+            <AuthField
+              label="Last name"
+              placeholder="Owusu"
+              autoComplete="family-name"
+              value={lastName}
+              onChange={(e) => setLastName(e.target.value)}
+              required
+            />
+          </div>
+
+          <AuthField
+            label="Email address"
+            icon={Mail}
+            type="email"
+            autoComplete="email"
+            placeholder="you@example.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+          />
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label className="mb-1.5 block text-sm font-semibold text-gray-700">
                 Region
               </label>
-              <Select
-                value={watch("region") ?? ""}
+              <select
+                className={SELECT_CLASS}
+                value={region}
                 onChange={(e) => {
-                  setValue("region", e.target.value);
-                  setValue("city", "");
+                  setRegion(e.target.value);
+                  setCity("");
                 }}
+                required
               >
                 <option value="">Select region</option>
-                {regions.map((region) => (
-                  <option key={region} value={region}>
-                    {region}
+                {regions.map((item) => (
+                  <option key={item} value={item}>
+                    {item}
                   </option>
                 ))}
-              </Select>
+              </select>
             </div>
-            <div className="space-y-2">
-              <label className="text-sm font-semibold text-gray-700">
-                City / Location
+            <div>
+              <label className="mb-1.5 block text-sm font-semibold text-gray-700">
+                City
               </label>
-              <Select
-                value={watch("city") ?? ""}
-                onChange={(e) => setValue("city", e.target.value)}
-                disabled={!watch("region")}
+              <select
+                className={SELECT_CLASS}
+                value={city}
+                onChange={(e) => setCity(e.target.value)}
+                disabled={!region}
+                required
               >
                 <option value="">Select city</option>
-                {(citiesByRegion[watch("region") ?? ""] ?? []).map((city) => (
-                  <option key={city} value={city}>
-                    {city}
+                {(citiesByRegion[region] ?? []).map((item) => (
+                  <option key={item} value={item}>
+                    {item}
                   </option>
                 ))}
-              </Select>
+              </select>
             </div>
-            <div className="space-y-2">
-              <label className="text-sm font-semibold text-gray-700">
-                Profile photo (optional)
-              </label>
-              <Input
-                type="file"
-                accept="image/*"
-                onChange={(e) => setAvatarFile(e.target.files?.[0] ?? null)}
-                className="cursor-pointer"
-              />
-              <p className="text-xs text-gray-500">
-                Add a clear headshot; you can change this later.
-              </p>
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-semibold text-gray-700">
-                Password
-              </label>
-              <div className="relative">
-                <Input
-                  type={showPassword ? "text" : "password"}
-                  placeholder="••••••••"
-                  {...register("password")}
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((p) => !p)}
-                  className="absolute inset-y-0 right-3 text-xs font-semibold text-gray-600"
-                >
-                  {showPassword ? "Hide" : "Show"}
-                </button>
-              </div>
-            </div>
-            {error ? <p className="text-sm text-red-600">{error}</p> : null}
-            {info ? <p className="text-sm text-green-700">{info}</p> : null}
-            <Button className="w-full" type="submit" disabled={isSubmitting}>
-              {isSubmitting ? "Creating account..." : "Sign up"}
-            </Button>
-            <p className="text-sm text-gray-600">
-              Already registered?{" "}
-              <Link href="/auth/login" className="font-semibold text-primary">
-                Log in
-              </Link>
-            </p>
-          </form>
-        </CardContent>
-      </Card>
-    </div>
+          </div>
+
+          <div>
+            <AuthPasswordField
+              label="Password"
+              icon={Lock}
+              autoComplete="new-password"
+              placeholder="Create a password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
+            <PasswordStrengthMeter value={password} />
+          </div>
+
+          <AuthPasswordField
+            label="Confirm password"
+            icon={Lock}
+            autoComplete="new-password"
+            placeholder="Re-enter your password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            error={mismatch}
+            required
+          />
+
+          <AuthAlert tone="error">{error}</AuthAlert>
+
+          <AuthSubmitButton loading={submitting}>
+            {submitting ? "Creating account…" : "Create Account"}
+          </AuthSubmitButton>
+        </form>
+
+        <p className="mt-6 text-center text-sm text-gray-600">
+          Already registered?{" "}
+          <Link
+            href="/auth/login"
+            className="font-semibold text-brand hover:underline"
+          >
+            Sign in
+          </Link>
+        </p>
+      </div>
+    </AuthShell>
   );
 }

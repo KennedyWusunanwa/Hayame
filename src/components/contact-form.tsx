@@ -4,6 +4,7 @@ import { ChangeEvent, FormEvent, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { friendlyError } from "@/lib/client-errors";
 
 type FormState = {
   company: string;
@@ -56,11 +57,7 @@ export function ContactForm() {
       setSubmitted(true);
       setForm(initialState);
     } catch (submissionError) {
-      setError(
-        submissionError instanceof Error
-          ? submissionError.message
-          : "Unable to send message.",
-      );
+      setError(friendlyError(submissionError, "Unable to send message."));
     } finally {
       setIsSubmitting(false);
     }

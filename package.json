@@ -1,6 +1,6 @@
 {
   "name": "hayame2",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -11,6 +11,7 @@
     "test": "node tests/launch-readiness.cjs",
     "typecheck": "tsc --noEmit",
     "db:seed": "ts-node --esm db/seed.ts",
+    "db:seed:locations": "node scripts/seed-ghana-locations.mjs",
     "admin:hash": "node scripts/generate-admin-password-hash.mjs"
   },
   "dependencies": {

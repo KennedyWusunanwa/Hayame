@@ -4,6 +4,7 @@ import { useMemo, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { friendlyError } from "@/lib/client-errors";
 
 export type ReviewableBooking = {
   id: string;
@@ -69,7 +70,7 @@ export function ReviewForm({
       setSuccess(true);
       router.refresh();
     } catch (err: any) {
-      setError(err.message ?? "Unable to submit review.");
+      setError(friendlyError(err, "Unable to submit review."));
     } finally {
       setLoading(false);
     }

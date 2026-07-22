@@ -16,6 +16,7 @@
 - `SUPABASE_SERVICE_ROLE_KEY` (only if running seed/CLI tasks in CI, never exposed to the client)
 - `SUPABASE_STORAGE_BUCKET=car-photos`
 - `PAYSTACK_SECRET_KEY`
+- `NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY`
 - `NEXT_PUBLIC_SITE_URL`
 - `NEXT_PUBLIC_AUTH_CONFIRMATION_REDIRECT_URL`
 - `RESEND_API_KEY` and sender/support email variables if email notifications are enabled
@@ -40,4 +41,5 @@
 ## Payments
 
 - Booking uses the hold -> Paystack initialize -> Paystack verify/finalize flow. Verify a real low-value Paystack transaction in the launch environment before opening traffic.
+- Native iOS and Android payments do not store Paystack keys. They open checkout URLs returned by the backend, so production mobile payments use live mode when the deployed backend has a live `PAYSTACK_SECRET_KEY`.
 - Host rejection triggers the Paystack refund path for paid Paystack bookings. Confirm `PAYSTACK_SECRET_KEY` has refund permissions in the production Paystack account.

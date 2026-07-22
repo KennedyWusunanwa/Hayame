@@ -13,7 +13,10 @@ import {
 } from "@/components/ui/table";
 import { reviewHostApplication } from "@/lib/admin-host-applications";
 import { getAdminReviewerName, requireAdminPage } from "@/lib/admin-auth";
+import { friendlyError } from "@/lib/client-errors";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { sendVerificationEmail } from "@/lib/auth-mail";
+import { buildAdminBroadcastEmail, sendEmailSafe } from "@/lib/email";
 import { formatCurrency } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -195,7 +198,7 @@ async function updateUserAction(formData: FormData) {
 
     redirect(`/admin/users/${userId}?saved=1`);
   } catch (error: any) {
-    const message = encodeURIComponent(error?.message ?? "Unable to save user");
+    const message = encodeURIComponent(friendlyError(error, "Unable to save user"));
     redirect(`/admin/users/${userId}?error=${message}`);
   }
 }
@@ -229,9 +232,180 @@ async function reviewUserHostApplicationAction(formData: FormData) {
     );
   } catch (error: any) {
     const message = encodeURIComponent(
-      error?.message ?? "Unable to review host application",
+      friendlyError(error, "Unable to review host application"),
     );
     redirect(`/admin/users/${userId}?error=${message}#host-application`);
+  }
+}
+
+/**
+ * Marks the address verified without the user clicking the link.
+ *
+ * This is a real trust decision, not a formality: it asserts the person
+ * controls that inbox on nothing but an admin's say-so. Use it when you've
+ * confirmed identity another way (they're standing in front of you, or support
+ * verified them) — not to clear a backlog. Every use is written to
+ * `admin_actions` so it can be audited later.
+ */
+async function confirmUserEmailAction(formData: FormData) {
+  "use server";
+  await requireAdminPage();
+
+  const admin = createSupabaseAdminClient() as any;
+  const reviewer = getAdminReviewerName();
+  const userId = String(formData.get("user_id") ?? "").trim();
+  if (!userId) redirect("/admin");
+
+  try {
+    const { error: authError } = await admin.auth.admin.updateUserById(userId, {
+      email_confirm: true,
+    });
+    if (authError) throw authError;
+
+    // Keep the profile trust badge in step with the auth record.
+    await admin
+      .from("profiles")
+      .update({ email_verified: true, updated_at: new Date().toISOString() })
+      .eq("id", userId);
+
+    await admin.from("admin_actions").insert({
+      action: "user_email_confirmed_manually",
+      target_id: userId,
+      target_type: "profile",
+      performed_by: reviewer,
+      metadata: { reason: "manual admin confirmation" },
+    });
+
+    redirect(`/admin/users/${userId}?notice=email-confirmed#account-email`);
+  } catch (error: any) {
+    const message = encodeURIComponent(
+      friendlyError(error, "Unable to confirm this email"),
+    );
+    redirect(`/admin/users/${userId}?error=${message}#account-email`);
+  }
+}
+
+/** Re-sends the branded verification email — the preferred fix over confirming manually. */
+async function resendUserVerificationAction(formData: FormData) {
+  "use server";
+  await requireAdminPage();
+
+  const userId = String(formData.get("user_id") ?? "").trim();
+  const email = String(formData.get("email") ?? "").trim();
+  if (!userId) redirect("/admin");
+
+  try {
+    const result = await sendVerificationEmail({ email });
+    if (!result.ok) {
+      const reason =
+        result.reason === "already_verified"
+          ? "This email is already verified."
+          : result.reason === "no_account"
+            ? "No auth account exists for this email."
+            : "Unable to send the verification email.";
+      redirect(
+        `/admin/users/${userId}?error=${encodeURIComponent(reason)}#account-email`,
+      );
+    }
+    redirect(`/admin/users/${userId}?notice=verification-sent#account-email`);
+  } catch (error: any) {
+    // `redirect` throws by design — let it through.
+    if (error?.digest?.startsWith?.("NEXT_REDIRECT")) throw error;
+    const message = encodeURIComponent(
+      friendlyError(error, "Unable to send the verification email"),
+    );
+    redirect(`/admin/users/${userId}?error=${message}#account-email`);
+  }
+}
+
+/** Sends a one-off no-reply email to this user, on the Hayame template. */
+async function sendUserEmailAction(formData: FormData) {
+  "use server";
+  await requireAdminPage();
+
+  const admin = createSupabaseAdminClient() as any;
+  const reviewer = getAdminReviewerName();
+  const userId = String(formData.get("user_id") ?? "").trim();
+  const to = String(formData.get("to") ?? "").trim();
+  const subject = String(formData.get("subject") ?? "").trim();
+  const body = String(formData.get("body") ?? "").trim();
+  const ctaUrl = parseNullableString(formData.get("cta_url"));
+  const ctaLabel = parseNullableString(formData.get("cta_label"));
+  const fullName = parseNullableString(formData.get("full_name"));
+
+  if (!userId) redirect("/admin");
+
+  try {
+    if (!to || !subject || !body) {
+      redirect(
+        `/admin/users/${userId}?error=${encodeURIComponent("Subject and message are both required.")}#send-email`,
+      );
+    }
+
+    const attachments = [] as {
+      filename: string;
+      content: string;
+      contentType?: string;
+    }[];
+    let totalBytes = 0;
+    for (const entry of formData.getAll("attachments")) {
+      if (!(entry instanceof File) || entry.size === 0) continue;
+      totalBytes += entry.size;
+      // Resend caps a message at 40MB; stay well under so the send can't fail
+      // after the admin has already been told it worked.
+      if (totalBytes > 15 * 1024 * 1024) {
+        redirect(
+          `/admin/users/${userId}?error=${encodeURIComponent("Attachments must total under 15MB.")}#send-email`,
+        );
+      }
+      const buffer = Buffer.from(await entry.arrayBuffer());
+      attachments.push({
+        filename: entry.name,
+        content: buffer.toString("base64"),
+        contentType: entry.type || undefined,
+      });
+    }
+
+    const email = buildAdminBroadcastEmail({
+      subject,
+      body,
+      fullName,
+      ctaUrl,
+      ctaLabel,
+    });
+
+    const result: any = await sendEmailSafe({
+      to,
+      subject: email.subject,
+      html: email.html,
+      text: email.text,
+      attachments,
+    });
+
+    if (result?.skipped) {
+      redirect(
+        `/admin/users/${userId}?error=${encodeURIComponent("Email is not configured (missing RESEND_API_KEY or RESEND_FROM).")}#send-email`,
+      );
+    }
+    if (result?.error) {
+      throw result.error;
+    }
+
+    await admin.from("admin_actions").insert({
+      action: "user_email_sent",
+      target_id: userId,
+      target_type: "profile",
+      performed_by: reviewer,
+      metadata: { subject, attachments: attachments.length },
+    });
+
+    redirect(`/admin/users/${userId}?notice=email-sent#send-email`);
+  } catch (error: any) {
+    if (error?.digest?.startsWith?.("NEXT_REDIRECT")) throw error;
+    const message = encodeURIComponent(
+      friendlyError(error, "Unable to send this email"),
+    );
+    redirect(`/admin/users/${userId}?error=${message}#send-email`);
   }
 }
 
@@ -293,6 +467,9 @@ export default async function AdminUserDetailsPage({
 
   const profile = profileResult.data;
   const authUser = authUserResult?.data?.user ?? null;
+  // The auth record is the source of truth for whether login is possible.
+  // `profiles.email_verified` is a separate, admin-managed trust badge.
+  const emailConfirmedAt = authUser?.email_confirmed_at ?? null;
   const hostApplications = hostApplicationsResult.data ?? [];
   const cars = carsResult.data ?? [];
   const renterBookings = renterBookingsResult.data ?? [];
@@ -373,11 +550,216 @@ export default async function AdminUserDetailsPage({
           Host application rejected.
         </div>
       ) : null}
+      {resolvedSearch?.notice === "email-confirmed" ? (
+        <div className="rounded-md border border-brand/25 bg-brand/10 px-3 py-2 text-sm font-medium text-foreground">
+          Email marked as verified. This user can log in now.
+        </div>
+      ) : null}
+      {resolvedSearch?.notice === "verification-sent" ? (
+        <div className="rounded-md border border-brand/25 bg-brand/10 px-3 py-2 text-sm font-medium text-foreground">
+          Verification email sent.
+        </div>
+      ) : null}
+      {resolvedSearch?.notice === "email-sent" ? (
+        <div className="rounded-md border border-brand/25 bg-brand/10 px-3 py-2 text-sm font-medium text-foreground">
+          Email sent successfully.
+        </div>
+      ) : null}
       {resolvedSearch?.error ? (
         <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
           {resolvedSearch.error}
         </div>
       ) : null}
+
+      <Card id="account-email">
+        <CardHeader>
+          <CardTitle>Email verification</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4 px-3 sm:px-6">
+          <div className="flex flex-wrap items-center gap-3">
+            <span
+              className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                emailConfirmedAt
+                  ? "bg-green-100 text-green-700"
+                  : "bg-amber-100 text-amber-800"
+              }`}
+            >
+              {emailConfirmedAt ? "Verified" : "Not verified"}
+            </span>
+            <span className="text-sm text-gray-600">
+              {authUser?.email ?? "No auth email"}
+            </span>
+          </div>
+
+          <dl className="grid gap-3 text-sm sm:grid-cols-3">
+            <div>
+              <dt className="text-xs font-semibold text-gray-500">Verified at</dt>
+              <dd className="font-medium text-foreground">
+                {formatDateTime(emailConfirmedAt)}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs font-semibold text-gray-500">
+                Account created
+              </dt>
+              <dd className="font-medium text-foreground">
+                {formatDateTime(authUser?.created_at)}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs font-semibold text-gray-500">Last login</dt>
+              <dd className="font-medium text-foreground">
+                {authUser?.last_sign_in_at
+                  ? formatDateTime(authUser.last_sign_in_at)
+                  : "Never"}
+              </dd>
+            </div>
+          </dl>
+
+          {emailConfirmedAt ? (
+            <p className="text-sm text-gray-600">
+              This account can log in normally.
+            </p>
+          ) : (
+            <div className="space-y-3">
+              <p className="text-sm text-gray-600">
+                This user cannot log in until the address is verified. Sending a
+                fresh link is the right first move — it proves they control the
+                inbox.
+              </p>
+              <div className="flex flex-wrap gap-3">
+                <form action={resendUserVerificationAction}>
+                  <input type="hidden" name="user_id" value={userId} />
+                  <input
+                    type="hidden"
+                    name="email"
+                    value={authUser?.email ?? ""}
+                  />
+                  <PendingSubmitButton
+                    className="rounded-md bg-brand px-3 py-2 text-sm font-semibold text-white"
+                    pendingLabel="Sending..."
+                  >
+                    Resend verification email
+                  </PendingSubmitButton>
+                </form>
+                <form action={confirmUserEmailAction}>
+                  <input type="hidden" name="user_id" value={userId} />
+                  <PendingSubmitButton
+                    className="rounded-md border border-border px-3 py-2 text-sm font-semibold text-gray-700"
+                    pendingLabel="Confirming..."
+                  >
+                    Mark verified manually
+                  </PendingSubmitButton>
+                </form>
+              </div>
+              <p className="text-xs text-gray-500">
+                Marking verified manually skips the inbox check entirely — only
+                do it when you&apos;ve confirmed who they are another way. The
+                action is recorded in the admin audit log.
+              </p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card id="send-email">
+        <CardHeader>
+          <CardTitle>Send an email to this user</CardTitle>
+        </CardHeader>
+        <CardContent className="px-3 sm:px-6">
+          <form action={sendUserEmailAction} className="space-y-4">
+            <input type="hidden" name="user_id" value={userId} />
+            <input type="hidden" name="to" value={authUser?.email ?? ""} />
+            <input
+              type="hidden"
+              name="full_name"
+              value={profile.full_name ?? ""}
+            />
+
+            <p className="text-sm text-gray-600">
+              Sends from the Hayame no-reply address on the standard branded
+              template. Replies are routed to support.
+            </p>
+
+            <div>
+              <label className="text-xs font-semibold text-gray-500">
+                Subject
+              </label>
+              <input
+                name="subject"
+                required
+                maxLength={120}
+                placeholder="About your recent booking"
+                className="mt-1 w-full rounded-md border border-border px-3 py-2 text-sm"
+              />
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold text-gray-500">
+                Message
+              </label>
+              <textarea
+                name="body"
+                required
+                rows={7}
+                placeholder={"Hi,\n\nWrite your message here. Leave a blank line between paragraphs."}
+                className="mt-1 w-full rounded-md border border-border px-3 py-2 text-sm"
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                Plain text only — we format it into the Hayame template. Blank
+                lines become paragraphs.
+              </p>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className="text-xs font-semibold text-gray-500">
+                  Button label (optional)
+                </label>
+                <input
+                  name="cta_label"
+                  maxLength={40}
+                  placeholder="View your booking"
+                  className="mt-1 w-full rounded-md border border-border px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-gray-500">
+                  Button link (optional)
+                </label>
+                <input
+                  name="cta_url"
+                  type="url"
+                  placeholder="https://www.hayamegh.com/dashboard"
+                  className="mt-1 w-full rounded-md border border-border px-3 py-2 text-sm"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold text-gray-500">
+                Attachments (optional)
+              </label>
+              <input
+                name="attachments"
+                type="file"
+                multiple
+                className="mt-1 w-full cursor-pointer rounded-md border border-border px-3 py-2 text-sm"
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                Images, PDFs, documents. 15MB total across all files.
+              </p>
+            </div>
+
+            <PendingSubmitButton
+              className="rounded-md bg-brand px-3 py-2 text-sm font-semibold text-white"
+              pendingLabel="Sending..."
+            >
+              Send email
+            </PendingSubmitButton>
+          </form>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

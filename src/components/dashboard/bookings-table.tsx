@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/table";
 import { TripStatusTracker } from "@/components/trip-status-tracker";
 import { formatCurrency, getInitials } from "@/lib/utils";
+import { friendlyError } from "@/lib/client-errors";
 
 type BookingPerson = {
   id?: string | null;
@@ -91,7 +92,7 @@ export function BookingsTable({ mode = "host" }: { mode?: "host" | "renter" }) {
       const payload = (await res.json()) as { data?: BookingRow[] };
       setRows(payload.data ?? []);
     } catch (err: any) {
-      setError(err.message ?? "Failed to load bookings");
+      setError(friendlyError(err, "Failed to load bookings"));
     } finally {
       setLoading(false);
     }
@@ -127,7 +128,7 @@ export function BookingsTable({ mode = "host" }: { mode?: "host" | "renter" }) {
       }
       router.refresh();
     } catch (err: any) {
-      alert(err.message ?? "Unable to update booking");
+      alert(friendlyError(err, "Unable to update booking"));
     } finally {
       setUpdatingId(null);
     }
@@ -151,7 +152,7 @@ export function BookingsTable({ mode = "host" }: { mode?: "host" | "renter" }) {
       }
       alert("Dispute opened. Admin will review it.");
     } catch (err: any) {
-      alert(err.message ?? "Unable to open dispute");
+      alert(friendlyError(err, "Unable to open dispute"));
     } finally {
       setDisputingId(null);
     }
@@ -205,7 +206,7 @@ export function BookingsTable({ mode = "host" }: { mode?: "host" | "renter" }) {
       }
       router.push(`/messages?conversation=${conversationId}`);
     } catch (err: any) {
-      alert(err.message ?? "Unable to open chat.");
+      alert(friendlyError(err, "Unable to open chat."));
     } finally {
       setMessagingId(null);
     }

@@ -93,6 +93,27 @@ private struct LoginScreenView: View {
                     }
                 }
 
+                // When the only thing wrong is an unverified address, the fix is
+                // one tap away — so make it a real button rather than a link
+                // buried under "Forgot password?".
+                if appState.loginNeedsEmailVerification,
+                   !email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Button {
+                        appState.resendSignupConfirmation(email: email)
+                    } label: {
+                        Text("Resend verification email")
+                            .font(.system(size: 14, weight: .semibold, design: .rounded))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(HayameTheme.brandBlue, lineWidth: 1.5)
+                            )
+                            .foregroundStyle(HayameTheme.brandBlue)
+                    }
+                    .disabled(appState.isSyncingRemote)
+                }
+
                 VStack(spacing: 10) {
                     Button("Forgot password?") {
                         appState.requestPasswordReset(email: email)
@@ -101,7 +122,8 @@ private struct LoginScreenView: View {
                     .foregroundStyle(HayameTheme.brandBlue)
                     .disabled(appState.isSyncingRemote)
 
-                    if !email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    if !appState.loginNeedsEmailVerification,
+                       !email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         Button("Resend verification email") {
                             appState.resendSignupConfirmation(email: email)
                         }
@@ -200,13 +222,36 @@ private struct SignupScreenView: View {
     @State private var lastName = ""
     @State private var email = ""
     @State private var password = ""
+    @State private var confirmPassword = ""
     @State private var passwordVisible = false
+    @State private var confirmPasswordVisible = false
     @State private var region = MockDataService.defaultRegion
     @State private var city = "Accra"
     @State private var showSignupConfirmationAlert = false
 
     let goToLogin: () -> Void
     let onContinueAsGuest: () -> Void
+
+    private var passwordStrength: PasswordPolicy.Strength {
+        PasswordPolicy.grade(password)
+    }
+
+    private var passwordsMatch: Bool {
+        !confirmPassword.isEmpty && confirmPassword == password
+    }
+
+    private var mismatchMessage: String? {
+        guard !confirmPassword.isEmpty, confirmPassword != password else { return nil }
+        return "Those passwords don't match."
+    }
+
+    private var canSubmit: Bool {
+        !firstName.trimmingCharacters(in: .whitespaces).isEmpty
+            && !lastName.trimmingCharacters(in: .whitespaces).isEmpty
+            && !email.trimmingCharacters(in: .whitespaces).isEmpty
+            && passwordStrength.meetsPolicy
+            && passwordsMatch
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -229,8 +274,26 @@ private struct SignupScreenView: View {
                     AuthSelectField(label: "City", selected: $city, options: MockDataService.cities(for: region, preferred: city))
                 }
 
-                AuthSecureField(label: "Password", text: $password, isVisible: $passwordVisible)
+                VStack(alignment: .leading, spacing: 10) {
+                    AuthSecureField(label: "Password", text: $password, isVisible: $passwordVisible)
+                        .textContentType(.newPassword)
+                    PasswordStrengthView(password: password)
+                }
+
+                VStack(alignment: .leading, spacing: 6) {
+                    AuthSecureField(
+                        label: "Confirm password",
+                        text: $confirmPassword,
+                        isVisible: $confirmPasswordVisible
+                    )
                     .textContentType(.newPassword)
+
+                    if let mismatchMessage {
+                        Text(mismatchMessage)
+                            .font(.system(size: 11, weight: .semibold, design: .rounded))
+                            .foregroundStyle(HayameTheme.danger)
+                    }
+                }
 
                 AuthPrimaryButton(
                     title: appState.isSyncingRemote ? "Creating account..." : "Create account",
@@ -245,7 +308,7 @@ private struct SignupScreenView: View {
                         )
                     },
                     isLoading: appState.isSyncingRemote,
-                    isDisabled: appState.isSyncingRemote
+                    isDisabled: appState.isSyncingRemote || !canSubmit
                 )
 
                 HStack(spacing: 4) {
@@ -356,5 +419,116 @@ private enum BiometricCredentialStore {
             return nil
         }
         return (email, password)
+    }
+}
+
+/// Password rules for signup.
+///
+/// Mirrors `src/lib/password.ts` on the web — the API validates against that
+/// module, so any drift here shows up as a form that looks satisfied but is
+/// rejected on submit. Keep the two in step.
+enum PasswordPolicy {
+    struct Rule: Identifiable {
+        let id: String
+        let label: String
+        let test: (String) -> Bool
+    }
+
+    static let rules: [Rule] = [
+        Rule(id: "length", label: "At least 8 characters") { $0.count >= 8 },
+        Rule(id: "letter", label: "One letter") {
+            $0.range(of: "[A-Za-z]", options: .regularExpression) != nil
+        },
+        Rule(id: "number", label: "One number") {
+            $0.range(of: "[0-9]", options: .regularExpression) != nil
+        },
+        Rule(id: "symbol", label: "One symbol (!?@#$…)") {
+            $0.range(of: "[^A-Za-z0-9]", options: .regularExpression) != nil
+        }
+    ]
+
+    struct Strength {
+        let score: Int          // 0...4
+        let label: String
+        let meetsPolicy: Bool
+        let passedRuleIDs: Set<String>
+    }
+
+    static func grade(_ password: String) -> Strength {
+        let passed = rules.filter { $0.test(password) }
+        let passedIDs = Set(passed.map(\.id))
+        let meetsPolicy = passed.count == rules.count
+
+        var score = passed.count
+        // Length beats character-class gymnastics, but only once the basics are
+        // met — otherwise "aaaaaaaaaaaa" would read as Strong.
+        if meetsPolicy && password.count >= 12 { score += 1 }
+        if !meetsPolicy { score = min(score, 3) }
+        score = password.isEmpty ? 0 : max(0, min(4, score))
+
+        let labels = ["Too weak", "Weak", "Fair", "Good", "Strong"]
+        return Strength(
+            score: score,
+            label: labels[score],
+            meetsPolicy: meetsPolicy,
+            passedRuleIDs: passedIDs
+        )
+    }
+
+    static func color(for score: Int) -> Color {
+        switch score {
+        case 0: return Color.gray.opacity(0.35)
+        case 1: return Color.red
+        case 2: return Color.orange
+        case 3: return Color.yellow
+        default: return Color.green
+        }
+    }
+}
+
+/// Segmented strength bar plus the live rule checklist.
+struct PasswordStrengthView: View {
+    let password: String
+
+    private var strength: PasswordPolicy.Strength {
+        PasswordPolicy.grade(password)
+    }
+
+    var body: some View {
+        if !password.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    HStack(spacing: 5) {
+                        ForEach(1...4, id: \.self) { step in
+                            Capsule()
+                                .fill(
+                                    strength.score >= step
+                                        ? PasswordPolicy.color(for: strength.score)
+                                        : Color.gray.opacity(0.2)
+                                )
+                                .frame(height: 5)
+                        }
+                    }
+                    Text(strength.label)
+                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        .foregroundStyle(PasswordPolicy.color(for: strength.score))
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(PasswordPolicy.rules) { rule in
+                        let met = strength.passedRuleIDs.contains(rule.id)
+                        HStack(spacing: 6) {
+                            Image(systemName: met ? "checkmark.circle.fill" : "circle")
+                                .font(.system(size: 11))
+                                .foregroundStyle(met ? Color.green : HayameTheme.mutedText)
+                            Text(rule.label)
+                                .font(.system(size: 11, weight: .medium, design: .rounded))
+                                .foregroundStyle(met ? Color.green : HayameTheme.mutedText)
+                        }
+                    }
+                }
+            }
+            .animation(.easeOut(duration: 0.15), value: strength.score)
+        }
     }
 }

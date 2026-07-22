@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useLocations } from "@/lib/use-locations";
+import { friendlyError } from "@/lib/client-errors";
 
 type HostApplicationFormProps = {
   disabled?: boolean;
@@ -100,7 +101,7 @@ export function HostApplicationForm({
       }
       setSuccess(true);
     } catch (err: any) {
-      setError(err.message ?? "Unable to submit application.");
+      setError(friendlyError(err, "Unable to submit application."));
     } finally {
       setLoading(false);
     }
@@ -387,7 +388,7 @@ async function handleIdUpload(
     if (uploadError) throw uploadError;
     setPath(path);
   } catch (err: any) {
-    setError(err.message ?? "Upload failed.");
+    setError(friendlyError(err, "Upload failed."));
   } finally {
     setUploading(false);
   }

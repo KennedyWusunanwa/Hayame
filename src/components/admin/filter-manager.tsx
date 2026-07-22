@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import { friendlyError } from "@/lib/client-errors";
 
 type Make = { id: string; name: string };
 type Model = { id: string; name: string; make_id: string };
@@ -40,12 +41,12 @@ export function FilterManager() {
   useEffect(() => {
     setLoading(true);
     loadMakes()
-      .catch((err) => setError(err.message))
+      .catch((err) => setError(friendlyError(err)))
       .finally(() => setLoading(false));
   }, []);
 
   useEffect(() => {
-    loadModels(selectedMake).catch((err) => setError(err.message));
+    loadModels(selectedMake).catch((err) => setError(friendlyError(err)));
   }, [selectedMake]);
 
   const addMake = async () => {

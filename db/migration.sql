@@ -101,6 +101,21 @@ create table if not exists locations (
   created_at timestamptz default now()
 );
 
+create table if not exists gh_regions (
+  id serial primary key,
+  name text not null unique
+);
+
+create table if not exists gh_districts (
+  id serial primary key,
+  region_id integer not null references gh_regions(id) on delete cascade,
+  name text not null,
+  capital text,
+  category text,
+  established_year integer,
+  unique(region_id, name)
+);
+
 -- Cars
 create table if not exists cars (
   id uuid primary key default gen_random_uuid(),
@@ -273,6 +288,15 @@ alter table car_availability enable row level security;
 alter table reviews enable row level security;
 alter table host_applications enable row level security;
 alter table admin_actions enable row level security;
+alter table gh_regions enable row level security;
+alter table gh_districts enable row level security;
+
+drop policy if exists "Ghana regions readable" on gh_regions;
+create policy "Ghana regions readable" on gh_regions
+  for select using (true);
+drop policy if exists "Ghana districts readable" on gh_districts;
+create policy "Ghana districts readable" on gh_districts
+  for select using (true);
 
 -- Profiles: owners can read/update their profile
 drop policy if exists "Users can view their profile" on profiles;
@@ -445,3 +469,30 @@ create policy "Host ID owner update" on storage.objects
 drop policy if exists "Host ID owner delete" on storage.objects;
 create policy "Host ID owner delete" on storage.objects
   for delete using (bucket_id = 'host-ids' and owner = auth.uid());
+
+-- Diagnostic error reports (admin-only). First-party diagnostics only:
+-- no device tokens, emails, names, phones, or raw request bodies. RLS is
+-- enabled with no public policies, so only the service role (admin client)
+-- can read/write. See db/error-reports.sql for the full rationale.
+create table if not exists error_reports (
+  id uuid primary key default gen_random_uuid(),
+  created_at timestamptz not null default now(),
+  source text not null default 'web',
+  route text,
+  method text,
+  status integer,
+  message text,
+  code text,
+  stack text,
+  user_id uuid,
+  app_version text,
+  platform text,
+  context jsonb,
+  resolved boolean not null default false,
+  resolved_at timestamptz
+);
+create index if not exists idx_error_reports_created
+  on error_reports(created_at desc);
+create index if not exists idx_error_reports_unresolved
+  on error_reports(resolved, created_at desc);
+alter table error_reports enable row level security;

@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { useMessaging } from "@/components/messages/messaging-provider";
+import { friendlyError } from "@/lib/client-errors";
 
 type Props = {
   hostId?: string | null;
@@ -47,7 +48,7 @@ export function HostMessageCard({ hostId, hostName, carId }: Props) {
       await refreshConversations();
       router.push(`/messages?conversation=${payload.id}`);
     } catch (err: any) {
-      setError(err.message ?? "Unable to message host");
+      setError(friendlyError(err, "Unable to message host"));
     } finally {
       setSending(false);
     }

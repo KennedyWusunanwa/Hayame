@@ -5,6 +5,7 @@ import { addDays, format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { Checkbox } from "@/components/ui/checkbox";
+import { friendlyError } from "@/lib/client-errors";
 
 type Props = {
   carId: string;
@@ -49,7 +50,7 @@ export function AvailabilityForm({ carId }: Props) {
       }
       setMessage("Saved availability window.");
     } catch (error: any) {
-      setMessage(error.message ?? "Unable to save availability");
+      setMessage(friendlyError(error, "Unable to save availability"));
     } finally {
       setSaving(false);
     }
@@ -79,7 +80,7 @@ export function AvailabilityForm({ carId }: Props) {
       }
       setMessage("Saved recurring block days.");
     } catch (error: any) {
-      setMessage(error.message ?? "Unable to save recurring availability");
+      setMessage(friendlyError(error, "Unable to save recurring availability"));
     } finally {
       setSaving(false);
     }

@@ -4,6 +4,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Navbar } from "@/components/navbar";
 import { Footer } from "@/components/footer";
+import { SiteChrome } from "@/components/site-chrome";
 import { NavigationLoader } from "@/components/navigation-loader";
 import { MessagingProvider } from "@/components/messages/messaging-provider";
 import { ConsentBanner } from "@/components/consent-banner";
@@ -109,12 +110,16 @@ export default function RootLayout({
       >
         <MessagingProvider>
           <div className="flex min-h-screen flex-col">
-            <Navbar />
+            <SiteChrome>
+              <Navbar />
+            </SiteChrome>
             <Suspense fallback={null}>
               <NavigationLoader />
             </Suspense>
             <main className="flex-1 page-fade">{children}</main>
-            <Footer />
+            <SiteChrome>
+              <Footer />
+            </SiteChrome>
           </div>
           <ConsentBanner />
         </MessagingProvider>

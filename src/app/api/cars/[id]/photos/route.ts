@@ -194,7 +194,8 @@ export async function POST(req: Request, context: Params) {
     const { error: uploadError } = await client.storage
       .from(bucket)
       .upload(path, bytes, {
-        cacheControl: "3600",
+        // Unique, never-overwritten path — immutable content, cache for a year.
+        cacheControl: "31536000",
         contentType: file.type || "image/jpeg",
         upsert: false,
       });

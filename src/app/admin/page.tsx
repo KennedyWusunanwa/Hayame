@@ -625,6 +625,7 @@ export default async function AdminPage({
     q?: string;
     count?: string;
     tab?: string;
+    verified?: string;
   }>;
 }) {
   const resolvedSearchParams = await searchParams;
@@ -796,6 +797,59 @@ export default async function AdminPage({
     .select("id,full_name,avatar_url,phone,city,is_host,host_level")
     .order("full_name", { ascending: true })
     .limit(120);
+
+  // Login-blocking verification state lives on the auth record, not on
+  // `profiles.email_verified` (which is a separate, admin-set trust badge). An
+  // unverified account here means that person literally cannot get in, so it
+  // belongs on the list rather than one click deeper.
+  const authUsersById = new Map<
+    string,
+    { email: string | null; emailConfirmedAt: string | null }
+  >();
+  try {
+    for (let page = 1; page <= 10; page += 1) {
+      const { data: authPage, error: authError } =
+        await admin.auth.admin.listUsers({ page, perPage: 200 });
+      if (authError) break;
+      const pageUsers = authPage?.users ?? [];
+      pageUsers.forEach((authUser: any) => {
+        authUsersById.set(authUser.id, {
+          email: authUser.email ?? null,
+          emailConfirmedAt: authUser.email_confirmed_at ?? null,
+        });
+      });
+      if (pageUsers.length < 200) break;
+    }
+  } catch {
+    // Non-fatal: the list still renders, just without verification badges.
+  }
+
+  const verifiedFilter =
+    resolvedSearchParams.verified === "yes" ||
+    resolvedSearchParams.verified === "no"
+      ? resolvedSearchParams.verified
+      : "all";
+
+  const usersWithAuth = (users ?? []).map((user: any) => {
+    const authInfo = authUsersById.get(user.id);
+    return {
+      ...user,
+      email: authInfo?.email ?? null,
+      emailConfirmedAt: authInfo?.emailConfirmedAt ?? null,
+    };
+  });
+
+  const unverifiedCount = usersWithAuth.filter(
+    (user: any) => authUsersById.has(user.id) && !user.emailConfirmedAt,
+  ).length;
+
+  const visibleUsers = usersWithAuth.filter((user: any) => {
+    if (verifiedFilter === "all") return true;
+    if (!authUsersById.has(user.id)) return false;
+    return verifiedFilter === "yes"
+      ? Boolean(user.emailConfirmedAt)
+      : !user.emailConfirmedAt;
+  });
 
   const carsByOwner = new Map<string, number>();
   (cars ?? []).forEach((car: any) => {
@@ -1084,11 +1138,47 @@ export default async function AdminPage({
             <CardTitle>Users</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            <p className="text-xs text-gray-600">
-              Showing profile photos for the latest {users?.length ?? 0} users.
-            </p>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-xs text-gray-600">
+                Showing {visibleUsers.length} of {usersWithAuth.length} users.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {(
+                  [
+                    { key: "all", label: `All (${usersWithAuth.length})` },
+                    { key: "no", label: `Unverified (${unverifiedCount})` },
+                    {
+                      key: "yes",
+                      label: `Verified (${usersWithAuth.length - unverifiedCount})`,
+                    },
+                  ] as const
+                ).map((option) => (
+                  <Link
+                    key={option.key}
+                    href={buildAdminHref({
+                      tab: "users",
+                      verified: option.key === "all" ? undefined : option.key,
+                    })}
+                    className={`rounded-full px-3 py-1 text-[11px] font-semibold transition-colors ${
+                      verifiedFilter === option.key
+                        ? "bg-brand text-white"
+                        : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                    }`}
+                  >
+                    {option.label}
+                  </Link>
+                ))}
+              </div>
+            </div>
+            {unverifiedCount > 0 && verifiedFilter !== "no" ? (
+              <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                {unverifiedCount} {unverifiedCount === 1 ? "user" : "users"}{" "}
+                cannot log in because their email is unverified. Open a user to
+                resend the link or mark them verified.
+              </p>
+            ) : null}
             <div className="grid gap-3 sm:grid-cols-2">
-              {(users ?? []).map((user: any) => (
+              {visibleUsers.map((user: any) => (
                 <div
                   key={user.id}
                   className="flex items-center justify-between gap-3 rounded-lg border border-border p-3 transition-colors hover:bg-gray-50"
@@ -1104,7 +1194,7 @@ export default async function AdminPage({
                         {user.full_name ?? "User"}
                       </p>
                       <p className="truncate text-xs text-gray-600">
-                        {user.phone ?? "No phone"}
+                        {user.email ?? user.phone ?? "No email"}
                       </p>
                       <p className="truncate text-[11px] text-gray-500">
                         {user.city ?? "-"}
@@ -1112,15 +1202,18 @@ export default async function AdminPage({
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
+                    {user.emailConfirmedAt ? (
+                      <span className="shrink-0 rounded-full bg-green-100 px-2 py-1 text-[11px] font-semibold text-green-700">
+                        Verified
+                      </span>
+                    ) : (
+                      <span className="shrink-0 rounded-full bg-amber-100 px-2 py-1 text-[11px] font-semibold text-amber-800">
+                        Unverified
+                      </span>
+                    )}
                     <span className="shrink-0 rounded-full bg-gray-100 px-2 py-1 text-[11px] font-semibold text-gray-700">
                       {user.is_host ? "Host" : "Guest"}
                     </span>
-                    <Link
-                      href={`/admin/messages?user=${user.id}`}
-                      className="text-[11px] font-semibold text-brand"
-                    >
-                      Message
-                    </Link>
                     <Link
                       href={`/admin/users/${user.id}`}
                       className="text-[11px] font-semibold text-brand"
@@ -1131,7 +1224,7 @@ export default async function AdminPage({
                 </div>
               ))}
             </div>
-            {(users ?? []).length === 0 ? (
+            {visibleUsers.length === 0 ? (
               <p className="text-sm text-gray-600">No users found.</p>
             ) : null}
           </CardContent>

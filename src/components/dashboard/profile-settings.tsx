@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { getInitials } from "@/lib/utils";
 import { useLocations } from "@/lib/use-locations";
+import { friendlyError } from "@/lib/client-errors";
 
 type Props = {
   userId: string;
@@ -97,7 +98,7 @@ export function ProfileSettings({
       setAvatarUrl(publicUrl);
       setStatus("Photo updated");
     } catch (error: any) {
-      setStatus(error.message ?? "Upload failed");
+      setStatus(friendlyError(error, "Upload failed"));
     } finally {
       setSaving(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -145,7 +146,7 @@ export function ProfileSettings({
 
       setStatus("Profile saved");
     } catch (error: any) {
-      setStatus(error.message ?? "Could not save profile");
+      setStatus(friendlyError(error, "Could not save profile"));
     } finally {
       setSaving(false);
     }

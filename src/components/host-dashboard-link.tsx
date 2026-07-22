@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { friendlyError } from "@/lib/client-errors";
 
 export function HostDashboardLink() {
   const router = useRouter();
@@ -21,7 +22,7 @@ export function HostDashboardLink() {
       }
       router.push("/host");
     } catch (err: any) {
-      setError(err.message ?? "Unable to open host dashboard.");
+      setError(friendlyError(err, "Unable to open host dashboard."));
     } finally {
       setLoading(false);
     }

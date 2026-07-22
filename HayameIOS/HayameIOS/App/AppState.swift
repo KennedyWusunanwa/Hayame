@@ -67,6 +67,9 @@ final class AppState: ObservableObject {
     @Published var isSyncingRemote = false
     @Published var syncErrorMessage: String?
     @Published var loginErrorAlertMessage: String?
+    /// Set when a login failed *only* because the address was never verified.
+    /// The login screen promotes the resend button when this is true.
+    @Published var loginNeedsEmailVerification = false
     @Published var authInfoMessage: String?
     @Published var signupConfirmationPromptMessage: String?
     @Published var paymentFlowNotice: String?
@@ -1796,6 +1799,7 @@ final class AppState: ObservableObject {
         loginErrorAlertMessage = nil
         authInfoMessage = nil
         signupConfirmationPromptMessage = nil
+        loginNeedsEmailVerification = false
         defer { isSyncingRemote = false }
 
         do {
@@ -1817,10 +1821,12 @@ final class AppState: ObservableObject {
                     onSuccess()
                     return
                 } catch {
+                    loginNeedsEmailVerification = isUnverifiedEmailError(error)
                     loginErrorAlertMessage = loginErrorMessage(error)
                     return
                 }
             }
+            loginNeedsEmailVerification = isUnverifiedEmailError(error)
             loginErrorAlertMessage = loginErrorMessage(error)
         }
     }
@@ -3522,16 +3528,54 @@ final class AppState: ObservableObject {
     func userFacingMessage(_ error: Error, fallback: String) -> String { Self.userFacingMessage(error, fallback: fallback) }
     private func errorMessage(_ error: Error, fallback: String) -> String { Self.userFacingMessage(error, fallback: fallback) }
 
+    /// Turns a login failure into something the person can act on.
+    ///
+    /// The server distinguishes "no account here" from "wrong password" from
+    /// "never verified", so prefer its `code` and keep its wording. This used to
+    /// map every 401 to "Wrong email or password", which flattened all three
+    /// cases — including the unverified one, where the password was correct and
+    /// the fix (tap Resend) was already on screen.
     private func loginErrorMessage(_ error: Error) -> String {
         let message = errorMessage(error, fallback: wrongEmailOrPasswordMessage)
+
+        if let apiError = error as? APIError, let code = apiError.code {
+            switch code {
+            case "no_account":
+                return "We couldn't find an account with this email. Check the spelling, or sign up."
+            case "wrong_password":
+                return "Wrong password. Try again, or tap Forgot password."
+            case "email_not_confirmed":
+                return "Your email isn't verified yet. Tap \"Resend verification email\" below, then click the link we send you."
+            case "rate_limited":
+                return message
+            default:
+                break
+            }
+        }
+
+        // Direct-to-Supabase fallback path (used when the mobile route 404s):
+        // GoTrue reports codes in prose, so match on that instead.
         let lowered = message.lowercased()
-        if let apiError = error as? APIError, apiError.statusCode == 401 {
-            return wrongEmailOrPasswordMessage
+        if lowered.contains("not confirmed") || lowered.contains("not_confirmed") {
+            return "Your email isn't verified yet. Tap \"Resend verification email\" below, then click the link we send you."
         }
         if lowered.contains("invalid") && lowered.contains("credential") {
             return wrongEmailOrPasswordMessage
         }
+        if let apiError = error as? APIError, apiError.statusCode == 401 {
+            return wrongEmailOrPasswordMessage
+        }
         return message
+    }
+
+    /// True when the failure was specifically "email not verified", so the login
+    /// screen can surface the resend affordance instead of leaving a dead end.
+    func isUnverifiedEmailError(_ error: Error) -> Bool {
+        if let apiError = error as? APIError, apiError.code == "email_not_confirmed" {
+            return true
+        }
+        let lowered = errorMessage(error, fallback: "").lowercased()
+        return lowered.contains("not confirmed") || lowered.contains("isn't verified")
     }
 
     deinit {

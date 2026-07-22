@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+import { friendlyError } from "@/lib/client-errors";
+
 type CarModel = {
   id: string;
   name: string;
@@ -71,7 +73,7 @@ export function useCarCatalog(options: UseCarCatalogOptions = {}) {
         const nextMakes = await request;
         if (mounted) setMakes(nextMakes);
       } catch (err: any) {
-        if (mounted) setError(err.message ?? "Catalog unavailable");
+        if (mounted) setError(friendlyError(err, "Catalog unavailable"));
       } finally {
         inFlightCatalog = null;
         if (mounted) setLoading(false);

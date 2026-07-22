@@ -10,6 +10,7 @@ import {
   ADMIN_OFFICE_NAME,
   ADMIN_OFFICE_PROFILE_ID,
 } from "@/lib/admin-office";
+import { friendlyError } from "@/lib/client-errors";
 
 type AdminUser = {
   id: string;
@@ -191,7 +192,7 @@ export function AdminMessagesConsole({ initialUserId }: Props) {
       setMessages((prev) => [...prev, payload.data!]);
       await loadConversations();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Unable to send message");
+      setError(friendlyError(err, "Unable to send message"));
     } finally {
       setSending(false);
     }
@@ -203,9 +204,7 @@ export function AdminMessagesConsole({ initialUserId }: Props) {
         setError(null);
         await Promise.all([loadUsers(), loadConversations()]);
       } catch (err: unknown) {
-        setError(
-          err instanceof Error ? err.message : "Unable to load admin messages",
-        );
+        setError(friendlyError(err, "Unable to load admin messages"));
       }
     };
     void load();
@@ -221,7 +220,7 @@ export function AdminMessagesConsole({ initialUserId }: Props) {
       return;
     initializedUserRef.current = true;
     void startConversation(initialUserId).catch((err: unknown) => {
-      setError(err instanceof Error ? err.message : "Unable to open this user");
+      setError(friendlyError(err, "Unable to open this user"));
     });
   }, [initialUserId, usersLoading, conversationsLoading]); // eslint-disable-line react-hooks/exhaustive-deps -- bootstrap an initial conversation once loading settles
 

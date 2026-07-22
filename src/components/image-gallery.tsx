@@ -216,6 +216,7 @@ export function ImageGallery({ images, fallbackContext }: Props) {
           src={main}
           alt="Car photo"
           fill
+          priority
           className="h-full w-full object-contain"
           sizes="(max-width:768px) 100vw, (max-width:1200px) 70vw, 900px"
         />
