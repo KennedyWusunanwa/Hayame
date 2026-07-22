@@ -63,12 +63,12 @@ export function AuthShell({
       {/* On phones this collapses to a compact header — logo and headline only.
           Showing the full feature list there would push the form below the
           fold, and phones are where most Hayame signups happen. */}
-      <aside className="auth-panel relative isolate overflow-hidden px-6 py-7 sm:px-10 lg:w-[46%] lg:max-w-[640px] lg:px-12 lg:py-14">
+      <aside className="brand-panel relative isolate overflow-hidden px-6 py-7 sm:px-10 lg:w-[46%] lg:max-w-[640px] lg:px-12 lg:py-14">
         {/* Texture layers */}
-        <div aria-hidden className="auth-dots pointer-events-none absolute inset-0 -z-10" />
+        <div aria-hidden className="brand-dots pointer-events-none absolute inset-0 -z-10" />
         <div
           aria-hidden
-          className="auth-streaks pointer-events-none absolute inset-0 -z-10 opacity-70"
+          className="brand-streaks pointer-events-none absolute inset-0 -z-10 opacity-70"
         />
 
         {/* Ambient drifting light */}

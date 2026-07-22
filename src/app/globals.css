@@ -151,19 +151,18 @@ a:hover {
 }
 
 /* ---------------------------------------------------------------------
- * Auth split-screen (sign in / sign up)
+ * Shared brand surface — used by the auth split-screen and the site footer.
  *
- * The brand panel is built from brand tokens only — deep navy through
- * --brand — with two texture layers and slow ambient motion. The diagonal
- * streaks echo the motion lines in the Hayame mark rather than being generic
- * decoration.
+ * Built from brand tokens only — deep navy through --brand — with two texture
+ * layers. The diagonal streaks echo the motion lines in the Hayame mark rather
+ * than being generic decoration.
  *
  * Note: the global `h1..h4` and `p` rules above are element selectors, so they
- * beat inherited colour. Anything on the dark panel must set its colour with a
+ * beat inherited colour. Anything on this surface must set its colour with a
  * class, or it renders near-black on near-black.
  * ------------------------------------------------------------------- */
 
-.auth-panel {
+.brand-panel {
   background:
     radial-gradient(
       ellipse 80% 60% at 85% 0%,
@@ -179,7 +178,7 @@ a:hover {
 }
 
 /* Fine dot grid — reads as texture, not pattern, at arm's length. */
-.auth-dots {
+.brand-dots {
   background-image: radial-gradient(
     rgba(255, 255, 255, 0.11) 1px,
     transparent 1px
@@ -188,7 +187,7 @@ a:hover {
 }
 
 /* Diagonal speed lines, mirroring the streaks in the logo. */
-.auth-streaks {
+.brand-streaks {
   background-image: repeating-linear-gradient(
     115deg,
     transparent 0px,
@@ -274,6 +273,52 @@ a:hover {
   }
   .auth-sheen {
     display: none;
+  }
+}
+
+/* ---------------------------------------------------------------------
+ * Site footer
+ * ------------------------------------------------------------------- */
+
+/* Nudge-right on hover. The pseudo-element keeps the underline off the
+ * descenders and lets it grow from the left rather than fading in. */
+.footer-link {
+  position: relative;
+  display: inline-block;
+  transition:
+    color 160ms ease,
+    transform 160ms ease;
+}
+
+.footer-link::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: -2px;
+  height: 1px;
+  width: 100%;
+  transform: scaleX(0);
+  transform-origin: left;
+  background-color: currentColor;
+  transition: transform 200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.footer-link:hover {
+  transform: translateX(2px);
+}
+
+.footer-link:hover::after {
+  transform: scaleX(1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .footer-link,
+  .footer-link::after {
+    transition: none;
+    transform: none;
+  }
+  .footer-link:hover {
+    transform: none;
   }
 }
 
