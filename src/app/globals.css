@@ -150,6 +150,133 @@ a:hover {
   }
 }
 
+/* ---------------------------------------------------------------------
+ * Auth split-screen (sign in / sign up)
+ *
+ * The brand panel is built from brand tokens only — deep navy through
+ * --brand — with two texture layers and slow ambient motion. The diagonal
+ * streaks echo the motion lines in the Hayame mark rather than being generic
+ * decoration.
+ *
+ * Note: the global `h1..h4` and `p` rules above are element selectors, so they
+ * beat inherited colour. Anything on the dark panel must set its colour with a
+ * class, or it renders near-black on near-black.
+ * ------------------------------------------------------------------- */
+
+.auth-panel {
+  background:
+    radial-gradient(
+      ellipse 80% 60% at 85% 0%,
+      rgba(14, 134, 212, 0.45),
+      transparent 60%
+    ),
+    radial-gradient(
+      ellipse 70% 50% at 0% 100%,
+      rgba(14, 134, 212, 0.22),
+      transparent 55%
+    ),
+    linear-gradient(160deg, #06223a 0%, #0a3f68 52%, #0c5f9c 100%);
+}
+
+/* Fine dot grid — reads as texture, not pattern, at arm's length. */
+.auth-dots {
+  background-image: radial-gradient(
+    rgba(255, 255, 255, 0.11) 1px,
+    transparent 1px
+  );
+  background-size: 22px 22px;
+}
+
+/* Diagonal speed lines, mirroring the streaks in the logo. */
+.auth-streaks {
+  background-image: repeating-linear-gradient(
+    115deg,
+    transparent 0px,
+    transparent 38px,
+    rgba(255, 255, 255, 0.05) 38px,
+    rgba(255, 255, 255, 0.05) 40px
+  );
+}
+
+@keyframes auth-rise {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes auth-drift {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(24px, -32px, 0) scale(1.12);
+  }
+}
+
+@keyframes auth-drift-alt {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1.05);
+  }
+  50% {
+    transform: translate3d(-28px, 26px, 0) scale(0.92);
+  }
+}
+
+/* A single light sweep across the panel, long enough apart to feel ambient. */
+@keyframes auth-sheen {
+  0% {
+    transform: translateX(-140%) skewX(-18deg);
+    opacity: 0;
+  }
+  8% {
+    opacity: 1;
+  }
+  28% {
+    opacity: 0;
+  }
+  100% {
+    transform: translateX(420%) skewX(-18deg);
+    opacity: 0;
+  }
+}
+
+.auth-rise {
+  animation: auth-rise 0.65s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.auth-orb {
+  animation: auth-drift 18s ease-in-out infinite;
+}
+
+.auth-orb-alt {
+  animation: auth-drift-alt 24s ease-in-out infinite;
+}
+
+.auth-sheen {
+  animation: auth-sheen 14s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-rise,
+  .auth-orb,
+  .auth-orb-alt,
+  .auth-sheen {
+    animation: none !important;
+    opacity: 1;
+    transform: none;
+  }
+  .auth-sheen {
+    display: none;
+  }
+}
+
 /* Prevent iOS Safari focus-zoom when opening the keyboard on small screens. */
 @media (max-width: 767px) {
   input[type="text"],
