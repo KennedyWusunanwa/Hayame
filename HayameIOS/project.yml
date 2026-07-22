@@ -11,8 +11,8 @@ settings:
     IPHONEOS_DEPLOYMENT_TARGET: 17.0
     # Keep in step with HayameIOS.xcodeproj — regenerating from a stale value
     # here silently rolls the shipped build number backwards.
-    CURRENT_PROJECT_VERSION: 8
-    MARKETING_VERSION: 1.0.5
+    CURRENT_PROJECT_VERSION: 9
+    MARKETING_VERSION: 1.0.6
 packages: {}
 targets:
   HayameIOS:
