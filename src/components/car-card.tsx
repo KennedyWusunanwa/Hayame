@@ -1,9 +1,9 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { BadgeCheck } from "lucide-react";
 import { FavoriteButton } from "@/components/favorite-button";
+import { ProtectedVehicleImage } from "@/components/protected-vehicle-image";
 import { VehicleImageWatermark } from "@/components/vehicle-image-watermark";
 import { Badge } from "@/components/ui/badge";
 import { resolveCarImage } from "@/lib/car-images";
@@ -49,7 +49,7 @@ export function CarCard({ car, isFavorite = false, onToggleFavorite }: Props) {
       aria-label={`View ${car.title}`}
     >
       <div className="relative aspect-[4/3] w-full overflow-hidden rounded-xl bg-gray-100">
-        <Image
+        <ProtectedVehicleImage
           src={imageSrc}
           alt={car.title}
           fill

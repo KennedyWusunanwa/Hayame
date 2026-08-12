@@ -23,7 +23,7 @@ import { ListingViewTracker } from "@/components/listing-view-tracker";
 import { priceBucket } from "@/lib/analytics/events";
 import { ReviewForm, type ReviewableBooking } from "@/components/review-form";
 import { HostMessageCard } from "@/components/messages/host-message-card";
-import { VerifiedHostIndicator } from "@/components/verified-host-indicator";
+import { HostVerificationSeal } from "@/components/host-verification-seal";
 import { VerificationBadges } from "@/components/verification-badges";
 import { detailIcons, getFeatureIcon } from "@/lib/feature-icons";
 import { deriveHostBadgeType } from "@/lib/host-badges";
@@ -953,12 +953,9 @@ function HostCard({
               </div>
             )}
             <div>
-              <div className="flex flex-wrap items-center gap-2">
-                <p className="text-sm font-semibold text-foreground">
-                  {owner?.full_name ?? "Host"}
-                </p>
-                <VerifiedHostIndicator show={hostBadgeType !== "new"} />
-              </div>
+              <p className="text-sm font-semibold text-foreground">
+                {owner?.full_name ?? "Host"}
+              </p>
               <p className="flex items-center gap-2 text-xs text-gray-600">
                 {score !== null ? (
                   <span className="flex items-center gap-1 text-amber-600">
@@ -977,24 +974,7 @@ function HostCard({
             </div>
           </div>
           {hostBadgeType !== "new" ? (
-            <span
-              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#0e86d4] shadow-sm"
-              aria-label={hostLevel}
-              title={hostLevel}
-            >
-              <svg
-                aria-hidden="true"
-                viewBox="0 0 24 24"
-                className="h-5 w-5 fill-none stroke-white"
-              >
-                <path
-                  d="m7 12.5 3.1 3.1L17.5 8"
-                  strokeWidth="2.6"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </span>
+            <HostVerificationSeal label={hostLevel} />
           ) : (
             <Badge variant="outline" className="capitalize">
               {hostLevel}
