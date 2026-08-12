@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { BadgeCheck } from "lucide-react";
 import { FavoriteButton } from "@/components/favorite-button";
+import { VehicleImageWatermark } from "@/components/vehicle-image-watermark";
 import { Badge } from "@/components/ui/badge";
 import { resolveCarImage } from "@/lib/car-images";
 import { deriveHostBadgeType, hostBadgeLabel } from "@/lib/host-badges";
@@ -55,6 +56,7 @@ export function CarCard({ car, isFavorite = false, onToggleFavorite }: Props) {
           className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
           sizes="(max-width: 640px) 92vw, (max-width: 1024px) 45vw, 280px"
         />
+        <VehicleImageWatermark size="card" />
         <div
           className="absolute right-3 top-3 z-10"
           onClick={(event) => {

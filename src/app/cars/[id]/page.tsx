@@ -976,9 +976,30 @@ function HostCard({
               </p>
             </div>
           </div>
-          <Badge variant="outline" className="capitalize">
-            {hostLevel}
-          </Badge>
+          {hostBadgeType !== "new" ? (
+            <span
+              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#0e86d4] shadow-sm"
+              aria-label={hostLevel}
+              title={hostLevel}
+            >
+              <svg
+                aria-hidden="true"
+                viewBox="0 0 24 24"
+                className="h-5 w-5 fill-none stroke-white"
+              >
+                <path
+                  d="m7 12.5 3.1 3.1L17.5 8"
+                  strokeWidth="2.6"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </span>
+          ) : (
+            <Badge variant="outline" className="capitalize">
+              {hostLevel}
+            </Badge>
+          )}
         </div>
         <VerificationBadges
           idVerified={owner?.id_verified}
