@@ -65,6 +65,13 @@ struct HayameIOSApp: App {
                 logSplash("root appeared")
                 applyWindowStyle(appState.darkModeEnabled)
             }
+            .onOpenURL { url in
+                appState.handleUniversalLink(url)
+            }
+            .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
+                guard let url = activity.webpageURL else { return }
+                appState.handleUniversalLink(url)
+            }
             .task {
                 guard showSplash else { return }
                 logSplash("root timer started")

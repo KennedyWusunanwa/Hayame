@@ -47,6 +47,7 @@ final class AppState: ObservableObject {
     @Published var pendingConversationID: String?
     @Published var pendingConversationParticipantName: String?
     @Published var pendingBookingID: String?
+    @Published var pendingCarDeepLinkID: String?
 
     @Published var exploreSearchText = ""
     @Published var exploreFilters = ExploreFilterState()
@@ -1637,6 +1638,19 @@ final class AppState: ObservableObject {
             paymentFlowNoticeIsError = true
             throw error
         }
+    }
+
+    // Universal Link entry point: hayamegh.com/cars/{id} opened from Safari,
+    // Messages, WhatsApp, etc. lands here through SwiftUI's URL or web
+    // browsing-activity callbacks.
+    func handleUniversalLink(_ url: URL) {
+        guard let host = url.host?.lowercased(),
+              host == "hayamegh.com" || host == "www.hayamegh.com" else { return }
+        let segments = url.pathComponents.filter { $0 != "/" }
+        guard segments.count >= 2, segments[0] == "cars" else { return }
+        let carID = segments[1].trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !carID.isEmpty else { return }
+        pendingCarDeepLinkID = carID
     }
 
     func refreshCarDetail(carID: String) async {
