@@ -1,9 +1,9 @@
 "use client";
 
-import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
+import { ProtectedVehicleImage } from "@/components/protected-vehicle-image";
 import { VehicleImageWatermark } from "@/components/vehicle-image-watermark";
 import { resolveCarImages, type CarImageFallbackInput } from "@/lib/car-images";
 
@@ -134,7 +134,7 @@ export function ImageGallery({ images, fallbackContext }: Props) {
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
           >
-            <Image
+            <ProtectedVehicleImage
               src={main}
               alt="Car photo full screen"
               fill
@@ -182,7 +182,7 @@ export function ImageGallery({ images, fallbackContext }: Props) {
                   }`}
                   aria-label={`View image ${idx + 1}`}
                 >
-                  <Image
+                  <ProtectedVehicleImage
                     src={img}
                     alt={`Thumbnail ${idx + 1}`}
                     fill
@@ -206,7 +206,7 @@ export function ImageGallery({ images, fallbackContext }: Props) {
         onClick={() => openAt(active)}
         aria-label="Open full screen image viewer"
       >
-        <Image
+        <ProtectedVehicleImage
           src={main}
           alt="Car photo"
           fill
@@ -226,7 +226,7 @@ export function ImageGallery({ images, fallbackContext }: Props) {
             }`}
             aria-label={`View image ${idx + 1}`}
           >
-            <Image
+            <ProtectedVehicleImage
               src={img}
               alt={`Thumbnail ${idx + 1}`}
               fill
