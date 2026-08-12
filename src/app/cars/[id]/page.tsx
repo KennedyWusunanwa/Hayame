@@ -3,8 +3,10 @@
 // - Open /api/cars/<uuid>, must return 200 JSON
 // - If invalid uuid, must show Car not found
 
+import { cache } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import type { Metadata } from "next";
 import { format } from "date-fns";
 import { MapPin, Shield, Star } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -14,6 +16,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FavoriteButton } from "@/components/favorite-button";
+import { ShareCarButton } from "@/components/share-car-button";
 import { BookingWidget } from "@/components/booking-widget";
 import { ImageGallery } from "@/components/image-gallery";
 import { ListingViewTracker } from "@/components/listing-view-tracker";
@@ -27,6 +30,7 @@ import { deriveHostBadgeType } from "@/lib/host-badges";
 import type { Database } from "@/lib/database.types";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { formatCurrency, getInitials } from "@/lib/utils";
+import { carShareUrl } from "@/lib/site-url";
 
 export const dynamic = "force-dynamic";
 
@@ -34,6 +38,42 @@ type PageParams = { id: string };
 type PageProps = {
   params: PageParams | Promise<PageParams>;
 };
+
+export async function generateMetadata({
+  params,
+}: PageProps): Promise<Metadata> {
+  const resolvedParams = await params;
+  const { car } = await loadCar(resolvedParams.id).catch(() => ({
+    car: null as CarDetail | null,
+  }));
+  if (!car) return {};
+
+  const url = carShareUrl(car.id);
+  const title = `${car.title} — Rent in ${car.city ?? "Ghana"} | Hayame`;
+  const description =
+    car.description?.trim() ||
+    `Rent the ${car.title} in ${[car.city, car.region].filter(Boolean).join(", ") || "Ghana"} from ${formatCurrency(car.daily_price)}/day on Hayame.`;
+  const socialImage = `${url}/opengraph-image`;
+
+  return {
+    title,
+    description,
+    alternates: { canonical: url },
+    openGraph: {
+      title,
+      description,
+      url,
+      type: "website",
+      images: [{ url: socialImage, width: 1200, height: 630, alt: car.title }],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+      images: [socialImage],
+    },
+  };
+}
 
 type Owner = {
   id?: string;
@@ -210,6 +250,12 @@ export default async function CarDetailPage({ params }: PageProps) {
             <FavoriteButton
               carId={car.id}
               initialIsFavorited={isFavorite}
+              className="mt-1"
+            />
+            <ShareCarButton
+              url={carShareUrl(car.id)}
+              title={car.title}
+              text={`Check out this ${car.title} on Hayame`}
               className="mt-1"
             />
           </div>
@@ -442,7 +488,9 @@ async function getCarFromInternalApi(id: string): Promise<SupabaseCar | null> {
   }
 }
 
-async function loadCar(id: string): Promise<{
+// Cached so generateMetadata() and the page component (which both need the
+// same car) only hit Supabase once per request instead of twice.
+const loadCar = cache(async (id: string): Promise<{
   car: CarDetail | null;
   availability: AvailabilityWindow[];
   isFavorite: boolean;
@@ -451,7 +499,7 @@ async function loadCar(id: string): Promise<{
   reviewableBookings: ReviewableBooking[];
   platformFeePercent: number;
   existingBooking: ExistingBooking | null;
-}> {
+}> => {
   // The mock lookup that used to sit here ran BEFORE the UUID check and before
   // any database call, so /cars/car-accra-1 always rendered a fully fake listing
   // — fake price, fake host, fake reviews — no matter what was in the database.
@@ -657,7 +705,7 @@ async function loadCar(id: string): Promise<{
     platformFeePercent,
     existingBooking,
   };
-}
+});
 
 async function getCarFromSupabaseRest(id: string): Promise<SupabaseCar | null> {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
