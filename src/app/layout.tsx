@@ -9,6 +9,7 @@ import { NavigationLoader } from "@/components/navigation-loader";
 import { MessagingProvider } from "@/components/messages/messaging-provider";
 import { ConsentBanner } from "@/components/consent-banner";
 import { socialImageAlt } from "@/components/seo/social-preview-image";
+import { resolveSiteUrl } from "@/lib/site-url";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -19,19 +20,6 @@ const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
 });
-
-function resolveSiteUrl() {
-  const explicitSiteUrl = process.env.NEXT_PUBLIC_SITE_URL?.trim();
-  if (explicitSiteUrl?.startsWith("https://")) {
-    return explicitSiteUrl;
-  }
-
-  if (process.env.VERCEL_URL) {
-    return `https://${process.env.VERCEL_URL}`;
-  }
-
-  return "https://www.hayamegh.com";
-}
 
 const siteUrl = resolveSiteUrl();
 
