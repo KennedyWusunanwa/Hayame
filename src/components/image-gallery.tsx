@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
+import { VehicleImageWatermark } from "@/components/vehicle-image-watermark";
 import { resolveCarImages, type CarImageFallbackInput } from "@/lib/car-images";
 
 type Props = {
@@ -141,14 +142,7 @@ export function ImageGallery({ images, fallbackContext }: Props) {
               sizes="100vw"
               priority
             />
-            <div className="pointer-events-none absolute inset-0">
-              <div className="absolute right-6 top-6 rounded-full border border-white/30 bg-black/40 px-4 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-white/70">
-                Hayame
-              </div>
-              <div className="absolute bottom-8 left-6 text-[10px] font-semibold uppercase tracking-[0.5em] text-white/30">
-                Hayame
-              </div>
-            </div>
+            <VehicleImageWatermark />
           </div>
           <button
             type="button"
@@ -220,6 +214,7 @@ export function ImageGallery({ images, fallbackContext }: Props) {
           className="h-full w-full object-contain"
           sizes="(max-width:768px) 100vw, (max-width:1200px) 70vw, 900px"
         />
+        <VehicleImageWatermark />
       </button>
       <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-5">
         {safeImages.map((img, idx) => (
