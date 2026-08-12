@@ -6,6 +6,7 @@ struct RootView: View {
     @AppStorage("hayame.host_status.last_user_id") private var lastHostStatusUserID = ""
     @AppStorage("hayame.host_status.last_value") private var lastHostStatusValue = ""
     @State private var showHostApprovedAlert = false
+    @State private var deepLinkedCar: Car?
 
     var body: some View {
         ZStack {
@@ -55,6 +56,56 @@ struct RootView: View {
             Text("Your host application has been approved. You can now switch to host mode.")
         }
         .animation(.easeInOut(duration: 0.2), value: appState.activeAnnouncement?.id)
+        .onChange(of: appState.pendingCarDeepLinkID) { _, id in
+            resolveDeepLinkedCar(id: id)
+        }
+        .onAppear {
+            resolveDeepLinkedCar(id: appState.pendingCarDeepLinkID)
+        }
+        .fullScreenCover(item: $deepLinkedCar, onDismiss: {
+            appState.pendingCarDeepLinkID = nil
+        }) { car in
+            NavigationStack {
+                CarDetailScreen(car: car)
+                    .toolbar {
+                        ToolbarItem(placement: .topBarLeading) {
+                            Button {
+                                deepLinkedCar = nil
+                            } label: {
+                                Image(systemName: "xmark")
+                                    .font(.system(size: 13, weight: .bold))
+                                    .foregroundStyle(HayameTheme.mutedText)
+                                    .frame(width: 30, height: 30)
+                                    .background(HayameTheme.subtleFill)
+                                    .clipShape(Circle())
+                            }
+                        }
+                    }
+            }
+        }
+    }
+
+    // A Universal Link (hayamegh.com/cars/{id}) may arrive before that car
+    // is in appState.cars — fetch it directly rather than waiting on the
+    // general listings sync.
+    private func resolveDeepLinkedCar(id: String?) {
+        guard let id else {
+            deepLinkedCar = nil
+            return
+        }
+        if let existing = appState.cars.first(where: { $0.id == id }) {
+            deepLinkedCar = existing
+            return
+        }
+        Task {
+            await appState.refreshCarDetail(carID: id)
+            guard appState.pendingCarDeepLinkID == id else { return }
+            if let fetched = appState.cars.first(where: { $0.id == id }) {
+                deepLinkedCar = fetched
+            } else {
+                appState.pendingCarDeepLinkID = nil
+            }
+        }
     }
 
     private func syncHostStatusCache() {
