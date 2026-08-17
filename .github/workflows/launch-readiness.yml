@@ -10,6 +10,13 @@ on:
 jobs:
   web:
     runs-on: ubuntu-latest
+    env:
+      # Public Supabase project ref + anon key — safe to check in, they're
+      # shipped to the browser in every page load (the anon key + RLS is the
+      # actual security boundary, not its secrecy). Needed so `next build`
+      # can statically prerender pages like /auth/login without throwing.
+      NEXT_PUBLIC_SUPABASE_URL: https://osvjxsbsuixfsgadzxzo.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9zdmp4c2JzdWl4ZnNnYWR6eHpvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY3ODEwMjAsImV4cCI6MjA4MjM1NzAyMH0.C-S46gCdGSD4Bm7JZoACyMmb9hh3Mk7joGdTtEh50kc
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
