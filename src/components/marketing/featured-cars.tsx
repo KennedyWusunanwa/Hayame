@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { Database } from "@/lib/database.types";
 import { deriveHostBadgeType } from "@/lib/host-badges";
 import { createSupabasePublicClient } from "@/lib/supabase/public";
+import { Reveal } from "@/components/ui/reveal";
 
 type FeaturedRow = Database["public"]["Views"]["car_search_view"]["Row"];
 
@@ -122,53 +123,57 @@ export async function FeaturedCars() {
 
   return (
     <section className="mx-auto max-w-6xl px-6 pt-14 pb-14 sm:pt-16 lg:pt-18">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm font-semibold text-brand">Featured Vehicles</p>
-          <h2 className="text-2xl font-semibold text-foreground">
-            Featured cars across Ghana
-          </h2>
+      <Reveal>
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm font-semibold text-brand">
+              Featured Vehicles
+            </p>
+            <h2 className="text-2xl font-semibold text-foreground">
+              Featured cars across Ghana
+            </h2>
+          </div>
+          <div className="hidden items-center gap-3 md:flex">
+            <button
+              type="button"
+              aria-label="Previous featured cars"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-300/80 bg-white text-slate-600 shadow-sm transition hover:text-slate-900"
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </button>
+            <button
+              type="button"
+              aria-label="Next featured cars"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-300/80 bg-white text-slate-600 shadow-sm transition hover:text-slate-900"
+            >
+              <ChevronRight className="h-5 w-5" />
+            </button>
+          </div>
         </div>
-        <div className="hidden items-center gap-3 md:flex">
-          <button
-            type="button"
-            aria-label="Previous featured cars"
-            className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-300/80 bg-white text-slate-600 shadow-sm transition hover:text-slate-900"
-          >
-            <ChevronLeft className="h-5 w-5" />
-          </button>
-          <button
-            type="button"
-            aria-label="Next featured cars"
-            className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-300/80 bg-white text-slate-600 shadow-sm transition hover:text-slate-900"
-          >
-            <ChevronRight className="h-5 w-5" />
-          </button>
+        <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {featured.map((car) => (
+            <CarCard
+              key={car.id}
+              car={{
+                id: car.id,
+                title: car.title,
+                city: car.city,
+                region: car.region,
+                daily_price: car.daily_price,
+                rating: car.rating,
+                reviews: car.reviews,
+                car_type: car.car_type,
+                description: car.description,
+                image_url: car.image_url,
+                host_name: car.host_name,
+                host_avatar: car.host_avatar,
+                host_type: car.host_type,
+              }}
+              isFavorite={car.isFavorite}
+            />
+          ))}
         </div>
-      </div>
-      <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {featured.map((car) => (
-          <CarCard
-            key={car.id}
-            car={{
-              id: car.id,
-              title: car.title,
-              city: car.city,
-              region: car.region,
-              daily_price: car.daily_price,
-              rating: car.rating,
-              reviews: car.reviews,
-              car_type: car.car_type,
-              description: car.description,
-              image_url: car.image_url,
-              host_name: car.host_name,
-              host_avatar: car.host_avatar,
-              host_type: car.host_type,
-            }}
-            isFavorite={car.isFavorite}
-          />
-        ))}
-      </div>
+      </Reveal>
     </section>
   );
 }

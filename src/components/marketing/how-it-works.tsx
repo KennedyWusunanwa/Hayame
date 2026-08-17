@@ -1,4 +1,5 @@
 import { ShieldCheck, Clock, CarFront } from "lucide-react";
+import { Reveal } from "@/components/ui/reveal";
 
 const steps = [
   {
@@ -24,7 +25,7 @@ const steps = [
 export function HowItWorks() {
   return (
     <section className="bg-gray-50">
-      <div className="mx-auto max-w-6xl px-6 py-14">
+      <Reveal className="mx-auto max-w-6xl px-6 py-14">
         <div className="text-center">
           <h3 className="text-2xl font-semibold text-foreground">
             How Hayame Works
@@ -49,7 +50,7 @@ export function HowItWorks() {
             );
           })}
         </div>
-      </div>
+      </Reveal>
     </section>
   );
 }

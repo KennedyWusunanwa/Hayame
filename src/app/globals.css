@@ -142,11 +142,51 @@ a:hover {
   animation-delay: 300ms;
 }
 
+.page-fade > * > *:nth-child(7) {
+  animation-delay: 360ms;
+}
+
+.page-fade > * > *:nth-child(8) {
+  animation-delay: 420ms;
+}
+
+.page-fade > * > *:nth-child(9) {
+  animation-delay: 480ms;
+}
+
+.page-fade > * > *:nth-child(n + 10) {
+  animation-delay: 540ms;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .page-fade > * > * {
     animation: none;
     opacity: 1;
     transform: none;
+  }
+}
+
+/* Scroll-triggered reveal (see <Reveal>) — starts hidden in the server-rendered
+ * markup itself so there's no flash before hydration, then fades/slides in the
+ * moment it actually enters the viewport, rather than on a page-load timer
+ * that finishes long before a below-the-fold section is ever seen. */
+.reveal {
+  opacity: 0;
+  transform: translateY(18px);
+  transition:
+    opacity 600ms ease,
+    transform 600ms ease;
+  will-change: opacity, transform;
+}
+
+.reveal.is-visible {
+  opacity: 1;
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal {
+    transition: none;
   }
 }
 

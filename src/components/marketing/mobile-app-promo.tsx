@@ -1,7 +1,8 @@
-import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight, Sparkles } from "lucide-react";
 import { AppDownloadButtons } from "@/components/app-download-buttons";
+import { FadeImage } from "@/components/ui/fade-image";
+import { Reveal } from "@/components/ui/reveal";
 
 export function MobileAppPromo() {
   return (
@@ -16,14 +17,17 @@ export function MobileAppPromo() {
       />
 
       <div className="mx-auto grid max-w-6xl items-center gap-10 px-6 py-14 sm:py-[4.5rem] lg:grid-cols-[0.9fr_1.1fr] lg:gap-16 lg:py-20">
-        <div className="relative mx-auto flex w-full max-w-[430px] items-end justify-center pt-2 lg:order-2">
+        <Reveal
+          delay={80}
+          className="relative mx-auto flex w-full max-w-[430px] items-end justify-center pt-2 lg:order-2"
+        >
           <div
             aria-hidden="true"
             className="absolute bottom-1 left-1/2 h-24 w-[78%] -translate-x-1/2 rounded-full bg-sky-950/20 blur-3xl"
           />
           <div className="relative z-10 w-[42%] -rotate-[5deg] translate-x-4">
             <div className="overflow-hidden rounded-[1.7rem] border-[5px] border-[#031628] bg-[#031628] shadow-2xl sm:rounded-[2rem]">
-              <Image
+              <FadeImage
                 src="/download-app/ios-car-detail.webp"
                 alt="Hayame car details on iPhone"
                 width={828}
@@ -38,7 +42,7 @@ export function MobileAppPromo() {
           </div>
           <div className="relative z-20 w-[42%] rotate-[5deg] -translate-x-4 translate-y-5">
             <div className="overflow-hidden rounded-[1.7rem] border-[5px] border-[#031628] bg-[#031628] shadow-2xl sm:rounded-[2rem]">
-              <Image
+              <FadeImage
                 src="/download-app/android-home.webp"
                 alt="Hayame nearby cars on Android"
                 width={744}
@@ -51,9 +55,9 @@ export function MobileAppPromo() {
               Android
             </span>
           </div>
-        </div>
+        </Reveal>
 
-        <div className="lg:order-1">
+        <Reveal className="lg:order-1">
           <span className="inline-flex items-center gap-2 rounded-full border border-sky-200 bg-white/80 px-3 py-1.5 text-xs font-semibold !text-brand shadow-sm shadow-sky-950/5">
             <Sparkles className="h-3.5 w-3.5 text-brand" aria-hidden="true" />
             Hayame, wherever you are
@@ -73,7 +77,7 @@ export function MobileAppPromo() {
             See the app experience
             <ArrowRight className="h-4 w-4" aria-hidden="true" />
           </Link>
-        </div>
+        </Reveal>
       </div>
     </section>
   );

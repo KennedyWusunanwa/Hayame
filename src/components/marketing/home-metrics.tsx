@@ -1,5 +1,6 @@
 import { CheckCircle2, CreditCard, Shield } from "lucide-react";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { Reveal } from "@/components/ui/reveal";
 
 export async function HomeMetrics() {
   const metrics = await loadMetrics();
@@ -7,7 +8,7 @@ export async function HomeMetrics() {
   if (!metrics) {
     return (
       <section className="mx-auto mt-6 hidden max-w-6xl px-6 md:block lg:mt-8">
-        <div className="grid gap-3 rounded-2xl border border-border bg-white p-4 shadow-soft sm:grid-cols-3">
+        <Reveal className="grid gap-3 rounded-2xl border border-border bg-white p-4 shadow-soft sm:grid-cols-3">
           <div className="flex items-center gap-2 rounded-xl bg-gray-50 px-3 py-3 text-sm font-semibold text-foreground">
             <CreditCard className="h-4 w-4 text-brand" />
             Secure MoMo &amp; Card payments
@@ -20,14 +21,14 @@ export async function HomeMetrics() {
             <CheckCircle2 className="h-4 w-4 text-brand" />
             Host approval workflow
           </div>
-        </div>
+        </Reveal>
       </section>
     );
   }
 
   return (
     <section className="mx-auto mt-6 hidden max-w-6xl px-6 md:block lg:mt-8">
-      <div className="grid gap-3 rounded-2xl border border-border bg-white p-4 shadow-soft sm:grid-cols-3">
+      <Reveal className="grid gap-3 rounded-2xl border border-border bg-white p-4 shadow-soft sm:grid-cols-3">
         <MetricItem
           label="Cars listed"
           value={metrics.carsCount.toLocaleString()}
@@ -40,7 +41,7 @@ export async function HomeMetrics() {
           label="Approved hosts"
           value={metrics.hostsCount.toLocaleString()}
         />
-      </div>
+      </Reveal>
     </section>
   );
 }
