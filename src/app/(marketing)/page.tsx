@@ -5,6 +5,7 @@ import { HowItWorks } from "@/components/marketing/how-it-works";
 import { HomeMetrics } from "@/components/marketing/home-metrics";
 import { MobileAppRedirect } from "@/components/marketing/mobile-app-redirect";
 import { TrustStrip } from "@/components/marketing/trust-strip";
+import { MobileAppPromo } from "@/components/marketing/mobile-app-promo";
 import { WhyChoose } from "@/components/marketing/why-choose";
 
 export const revalidate = 300;
@@ -24,6 +25,7 @@ export default function MarketingHome() {
       <FeaturedCars />
       <HowItWorks />
       <WhyChoose />
+      <MobileAppPromo />
     </div>
   );
 }

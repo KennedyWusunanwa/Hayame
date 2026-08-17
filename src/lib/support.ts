@@ -4,9 +4,13 @@ export const SUPPORT_ADDRESS =
   process.env.NEXT_PUBLIC_SUPPORT_ADDRESS?.trim() ||
   "Accra Digital Centre, Ring Road West";
 export const IOS_APP_STORE_URL =
-  process.env.NEXT_PUBLIC_IOS_APP_STORE_URL?.trim() || "";
+  process.env.NEXT_PUBLIC_IOS_APP_STORE_URL?.trim() ||
+  "https://apps.apple.com/gh/app/hayame/id6760410961";
 export const ANDROID_PLAY_STORE_URL =
   process.env.NEXT_PUBLIC_ANDROID_PLAY_STORE_URL?.trim() || "";
+export const ANDROID_APK_URL =
+  process.env.NEXT_PUBLIC_ANDROID_APK_URL?.trim() ||
+  "/downloads/hayame-android.apk";
 
 export function getSupportEmailHref(value = SUPPORT_EMAIL) {
   return value ? `mailto:${value}` : "";
