@@ -105,6 +105,103 @@ export function MarketingPageSkeleton() {
   );
 }
 
+export function DownloadPageSkeleton() {
+  return (
+    <div
+      className="overflow-hidden bg-[#f6f9fc]"
+      aria-busy="true"
+      aria-label="Loading download page"
+    >
+      <section className="bg-[#06223a] px-6 py-14 sm:py-20 lg:py-24">
+        <div className="mx-auto grid max-w-6xl items-center gap-12 lg:grid-cols-[1.04fr_0.96fr] lg:gap-16">
+          <div className="space-y-5">
+            <Skeleton className="h-7 w-64 rounded-full bg-white/15" />
+            <Skeleton className="h-10 w-full max-w-lg bg-white/25" />
+            <Skeleton className="h-10 w-4/5 max-w-md bg-white/20" />
+            <Skeleton className="h-4 w-full max-w-md bg-white/15" />
+            <Skeleton className="h-4 w-3/4 max-w-sm bg-white/15" />
+            <div className="flex flex-col gap-3 pt-4 min-[460px]:flex-row">
+              <Skeleton className="h-12 w-40 rounded-2xl bg-white/15" />
+              <Skeleton className="h-14 w-52 rounded-2xl bg-white/15" />
+            </div>
+          </div>
+          <div className="mx-auto flex w-full max-w-[420px] items-end justify-center gap-4">
+            <Skeleton className="aspect-[9/19.5] w-[44%] rounded-[1.75rem] bg-white/10" />
+            <Skeleton className="aspect-[9/19.5] w-[44%] translate-y-6 rounded-[1.75rem] bg-white/10" />
+          </div>
+        </div>
+      </section>
+
+      <section className="mx-auto max-w-6xl px-6 py-16 sm:py-20">
+        <div className="mx-auto max-w-2xl space-y-3 text-center">
+          <Skeleton className="mx-auto h-3 w-48" />
+          <Skeleton className="mx-auto h-8 w-full max-w-md" />
+        </div>
+        <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <div
+              key={index}
+              className="rounded-2xl border border-sky-100 bg-white p-5 shadow-sm"
+            >
+              <Skeleton className="h-11 w-11 rounded-xl" />
+              <Skeleton className="mt-5 h-4 w-2/3" />
+              <Skeleton className="mt-2 h-3 w-full" />
+              <Skeleton className="mt-1 h-3 w-4/5" />
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {Array.from({ length: 2 }).map((_, index) => (
+        <section key={index} className="mx-auto max-w-6xl px-6 pb-7 sm:pb-10">
+          <div className="rounded-[2rem] border border-sky-100 bg-white p-5 shadow-sm sm:p-8">
+            <Skeleton className="h-3 w-32" />
+            <Skeleton className="mt-3 h-7 w-2/3 max-w-md" />
+            <Skeleton className="mt-3 h-4 w-full max-w-lg" />
+            <div className="mt-8 grid gap-4 sm:grid-cols-3">
+              {Array.from({ length: 3 }).map((_, screenIndex) => (
+                <Skeleton
+                  key={screenIndex}
+                  className="aspect-[258/560] w-full rounded-[2rem]"
+                />
+              ))}
+            </div>
+          </div>
+        </section>
+      ))}
+
+      <section className="mx-auto max-w-6xl px-6 pb-16 sm:pb-24">
+        <div className="grid overflow-hidden rounded-[2rem] bg-[#06223a] lg:grid-cols-[0.92fr_1.08fr]">
+          <div className="space-y-4 p-6 sm:p-10">
+            <Skeleton className="h-12 w-12 rounded-2xl bg-white/15" />
+            <Skeleton className="h-7 w-2/3 bg-white/20" />
+            <Skeleton className="h-4 w-full bg-white/15" />
+            <Skeleton className="h-4 w-4/5 bg-white/15" />
+          </div>
+          <div className="space-y-5 p-6 sm:p-10">
+            {Array.from({ length: 3 }).map((_, index) => (
+              <div key={index} className="flex gap-4">
+                <Skeleton className="h-7 w-7 shrink-0 rounded-full bg-white/20" />
+                <Skeleton className="h-4 w-full bg-white/15" />
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="border-t border-sky-100 bg-white">
+        <div className="mx-auto flex max-w-6xl flex-col gap-7 px-6 py-14 sm:py-16 lg:flex-row lg:items-center lg:justify-between">
+          <div className="space-y-3">
+            <Skeleton className="h-3 w-32" />
+            <Skeleton className="h-7 w-64 max-w-full" />
+          </div>
+          <Skeleton className="h-14 w-52 rounded-2xl" />
+        </div>
+      </section>
+    </div>
+  );
+}
+
 export function ExplorePageSkeleton() {
   return (
     <div
@@ -560,6 +657,7 @@ function navigationSkeletonForPath(path?: string | null) {
   if (path.startsWith("/become-host")) return <FormPageSkeleton />;
   if (path.startsWith("/messages")) return <MessagesPageSkeleton />;
   if (path.startsWith("/hosts/")) return <HostProfilePageSkeleton />;
+  if (path.startsWith("/download")) return <DownloadPageSkeleton />;
   if (
     path.startsWith("/privacy") ||
     path.startsWith("/protection") ||
