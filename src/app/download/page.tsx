@@ -13,6 +13,8 @@ import {
   Sparkles,
 } from "lucide-react";
 import { AppDownloadButtons } from "@/components/app-download-buttons";
+import { FadeImage } from "@/components/ui/fade-image";
+import { Reveal } from "@/components/ui/reveal";
 
 export const metadata: Metadata = {
   title: "Download the Hayame App | iPhone & Android",
@@ -94,7 +96,7 @@ function PhoneScreenshot({
   return (
     <figure className="w-[68vw] max-w-[258px] shrink-0 snap-center sm:w-auto sm:max-w-none">
       <div className="overflow-hidden rounded-[2rem] border-[5px] border-[#071c30] bg-[#071c30] shadow-[0_26px_70px_rgba(6,34,58,0.18)] sm:rounded-[2.35rem] sm:border-[7px]">
-        <Image
+        <FadeImage
           src={screen.src}
           alt={screen.alt}
           width={isIos ? 828 : 744}
@@ -126,26 +128,28 @@ function ScreenshotCollection({
 }) {
   return (
     <section className="rounded-[2rem] border border-sky-100 bg-white p-5 shadow-[0_24px_80px_rgba(14,134,212,0.08)] sm:p-8 lg:p-10">
-      <div className="max-w-2xl">
-        <p className="text-xs font-bold uppercase tracking-[0.2em] !text-brand">
-          {eyebrow}
-        </p>
-        <h2 className="mt-3 text-2xl font-bold tracking-tight text-[#06223a] sm:text-3xl">
-          {title}
-        </h2>
-        <p className="mt-3 max-w-xl text-sm leading-6 text-slate-600 sm:text-base">
-          {description}
-        </p>
-      </div>
-      <div className="-mx-5 mt-8 flex snap-x snap-mandatory gap-4 overflow-x-auto px-5 pb-6 sm:mx-0 sm:grid sm:grid-cols-3 sm:gap-5 sm:overflow-visible sm:px-0 sm:pb-0 lg:gap-7">
-        {screens.map((screen) => (
-          <PhoneScreenshot
-            key={screen.src}
-            screen={screen}
-            platform={platform}
-          />
-        ))}
-      </div>
+      <Reveal>
+        <div className="max-w-2xl">
+          <p className="text-xs font-bold uppercase tracking-[0.2em] !text-brand">
+            {eyebrow}
+          </p>
+          <h2 className="mt-3 text-2xl font-bold tracking-tight text-[#06223a] sm:text-3xl">
+            {title}
+          </h2>
+          <p className="mt-3 max-w-xl text-sm leading-6 text-slate-600 sm:text-base">
+            {description}
+          </p>
+        </div>
+        <div className="-mx-5 mt-8 flex snap-x snap-mandatory gap-4 overflow-x-auto px-5 pb-6 sm:mx-0 sm:grid sm:grid-cols-3 sm:gap-5 sm:overflow-visible sm:px-0 sm:pb-0 lg:gap-7">
+          {screens.map((screen) => (
+            <PhoneScreenshot
+              key={screen.src}
+              screen={screen}
+              platform={platform}
+            />
+          ))}
+        </div>
+      </Reveal>
     </section>
   );
 }
@@ -237,35 +241,37 @@ export default function DownloadPage() {
       </section>
 
       <section className="mx-auto max-w-6xl px-6 py-16 sm:py-20">
-        <div className="mx-auto max-w-2xl text-center">
-          <p className="text-xs font-bold uppercase tracking-[0.2em] !text-brand">
-            Everything travels with you
-          </p>
-          <h2 className="mt-3 text-3xl font-bold tracking-tight text-[#06223a] sm:text-4xl">
-            From searching to pickup, all in one app.
-          </h2>
-        </div>
-        <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {FEATURES.map((feature) => {
-            const Icon = feature.icon;
-            return (
-              <article
-                key={feature.title}
-                className="rounded-2xl border border-sky-100 bg-white p-5 shadow-sm"
-              >
-                <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-sky-50 text-brand">
-                  <Icon className="h-5 w-5" aria-hidden="true" />
-                </span>
-                <h3 className="mt-5 text-base font-bold text-[#06223a]">
-                  {feature.title}
-                </h3>
-                <p className="mt-2 text-sm leading-6 text-slate-600">
-                  {feature.body}
-                </p>
-              </article>
-            );
-          })}
-        </div>
+        <Reveal>
+          <div className="mx-auto max-w-2xl text-center">
+            <p className="text-xs font-bold uppercase tracking-[0.2em] !text-brand">
+              Everything travels with you
+            </p>
+            <h2 className="mt-3 text-3xl font-bold tracking-tight text-[#06223a] sm:text-4xl">
+              From searching to pickup, all in one app.
+            </h2>
+          </div>
+          <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {FEATURES.map((feature) => {
+              const Icon = feature.icon;
+              return (
+                <article
+                  key={feature.title}
+                  className="rounded-2xl border border-sky-100 bg-white p-5 shadow-sm"
+                >
+                  <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-sky-50 text-brand">
+                    <Icon className="h-5 w-5" aria-hidden="true" />
+                  </span>
+                  <h3 className="mt-5 text-base font-bold text-[#06223a]">
+                    {feature.title}
+                  </h3>
+                  <p className="mt-2 text-sm leading-6 text-slate-600">
+                    {feature.body}
+                  </p>
+                </article>
+              );
+            })}
+          </div>
+        </Reveal>
       </section>
 
       <section className="mx-auto max-w-6xl space-y-7 px-6 pb-16 sm:space-y-10 sm:pb-24">
@@ -286,7 +292,7 @@ export default function DownloadPage() {
       </section>
 
       <section className="mx-auto max-w-6xl px-6 pb-16 sm:pb-24">
-        <div className="grid overflow-hidden rounded-[2rem] bg-[#06223a] lg:grid-cols-[0.92fr_1.08fr]">
+        <Reveal className="grid overflow-hidden rounded-[2rem] bg-[#06223a] lg:grid-cols-[0.92fr_1.08fr]">
           <div className="border-b border-white/10 p-6 sm:p-10 lg:border-b-0 lg:border-r">
             <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-brand text-white">
               <Smartphone className="h-6 w-6" aria-hidden="true" />
@@ -321,11 +327,11 @@ export default function DownloadPage() {
               hayamegh.com.
             </div>
           </div>
-        </div>
+        </Reveal>
       </section>
 
       <section className="border-t border-sky-100 bg-white">
-        <div className="mx-auto flex max-w-6xl flex-col gap-7 px-6 py-14 sm:py-16 lg:flex-row lg:items-center lg:justify-between">
+        <Reveal className="mx-auto flex max-w-6xl flex-col gap-7 px-6 py-14 sm:py-16 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <div className="flex items-center gap-2 text-brand">
               <CarFront className="h-5 w-5" aria-hidden="true" />
@@ -345,7 +351,7 @@ export default function DownloadPage() {
             </Link>
           </div>
           <AppDownloadButtons tone="light" className="shrink-0" />
-        </div>
+        </Reveal>
       </section>
     </div>
   );

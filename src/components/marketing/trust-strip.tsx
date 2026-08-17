@@ -7,6 +7,7 @@ import {
   Truck,
   Zap,
 } from "lucide-react";
+import { Reveal } from "@/components/ui/reveal";
 
 const items = [
   { label: "Verified identity checks", Icon: BadgeCheck },
@@ -20,7 +21,7 @@ const items = [
 export function TrustStrip() {
   return (
     <section className="mx-auto mt-8 hidden max-w-6xl px-6 md:block">
-      <div className="rounded-2xl border border-border bg-white p-4 shadow-soft">
+      <Reveal className="rounded-2xl border border-border bg-white p-4 shadow-soft">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm font-semibold text-foreground">
             Trust &amp; protection details for every trip.
@@ -40,7 +41,7 @@ export function TrustStrip() {
             </div>
           ))}
         </div>
-      </div>
+      </Reveal>
     </section>
   );
 }
