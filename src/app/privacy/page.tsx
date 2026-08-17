@@ -326,7 +326,7 @@ export default function PrivacyPage() {
             <strong>Analytics (only with your permission).</strong> If you
             accept, we record how the Service is used: pages viewed, searches
             made, which cars are viewed, and where a booking is abandoned. To do
-            this we store a random identifier on your device (in your browser's
+            this we store a random identifier on your device (in your browser&apos;s
             local storage on the web, or in app storage on iOS). It is not a
             name, an email, or an advertising ID, and it is not shared with
             anyone. Nothing is stored and nothing is sent until you accept.
