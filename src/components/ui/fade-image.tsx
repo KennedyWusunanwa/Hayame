@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
  * instant the bytes arrive. Only meant for below-the-fold, non-priority
  * images — priority/LCP images should stay a plain <Image>.
  */
-export function FadeImage({ className, onLoad, ...props }: ImageProps) {
+export function FadeImage({ className, onLoad, alt, ...props }: ImageProps) {
   const [loaded, setLoaded] = useState(false);
 
   const checkAlreadyLoaded = useCallback((img: HTMLImageElement | null) => {
@@ -20,6 +20,7 @@ export function FadeImage({ className, onLoad, ...props }: ImageProps) {
   return (
     <Image
       {...props}
+      alt={alt}
       ref={checkAlreadyLoaded}
       onLoad={(event) => {
         setLoaded(true);
