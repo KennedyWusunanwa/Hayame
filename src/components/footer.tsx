@@ -2,9 +2,8 @@ import Link from "next/link";
 import Image from "next/image";
 import { ArrowRight, Mail, MapPin, ShieldCheck } from "lucide-react";
 import { siteFlags } from "@/lib/site-flags";
+import { AppDownloadButtons } from "@/components/app-download-buttons";
 import {
-  ANDROID_PLAY_STORE_URL,
-  IOS_APP_STORE_URL,
   SUPPORT_ADDRESS,
   SUPPORT_EMAIL,
   getSupportEmailHref,
@@ -32,6 +31,7 @@ const COMPANY_LINKS: FooterLink[] = [
     ? [{ href: "/prices", label: "Pricing" }]
     : []),
   ...(siteFlags.marketing.blogPage ? [{ href: "/blog", label: "Blog" }] : []),
+  { href: "/download", label: "Download the app" },
   { href: "/contact", label: "Contact us" },
 ];
 
@@ -42,13 +42,7 @@ const LEGAL_LINKS: FooterLink[] = [
   { href: "/contact", label: "Get support" },
 ];
 
-function LinkColumn({
-  title,
-  links,
-}: {
-  title: string;
-  links: FooterLink[];
-}) {
+function LinkColumn({ title, links }: { title: string; links: FooterLink[] }) {
   return (
     <div>
       <p className="text-xs font-semibold uppercase tracking-wider text-white/45">
@@ -72,7 +66,6 @@ function LinkColumn({
 
 export function Footer() {
   const year = new Date().getFullYear();
-  const hasAppLinks = Boolean(IOS_APP_STORE_URL || ANDROID_PLAY_STORE_URL);
 
   return (
     <footer className="brand-panel relative isolate overflow-hidden">
@@ -153,28 +146,12 @@ export function Footer() {
               </p>
             </div>
 
-            {/* Only rendered once the store URLs are configured — an empty
-                badge that goes nowhere is worse than no badge. */}
-            {hasAppLinks ? (
-              <div className="mt-5 flex flex-wrap gap-3">
-                {IOS_APP_STORE_URL ? (
-                  <a
-                    href={IOS_APP_STORE_URL}
-                    className="inline-flex h-10 items-center rounded-lg border border-white/20 px-4 text-xs font-semibold !text-white transition-colors hover:bg-white/10"
-                  >
-                    iOS app
-                  </a>
-                ) : null}
-                {ANDROID_PLAY_STORE_URL ? (
-                  <a
-                    href={ANDROID_PLAY_STORE_URL}
-                    className="inline-flex h-10 items-center rounded-lg border border-white/20 px-4 text-xs font-semibold !text-white transition-colors hover:bg-white/10"
-                  >
-                    Android app
-                  </a>
-                ) : null}
-              </div>
-            ) : null}
+            <div className="mt-7 border-t border-white/10 pt-5">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] !text-white/45">
+                Take Hayame with you
+              </p>
+              <AppDownloadButtons compact className="mt-3" />
+            </div>
           </div>
 
           <LinkColumn title="Explore" links={EXPLORE_LINKS} />

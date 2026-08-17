@@ -23,6 +23,7 @@ const navLinks = [
   { href: "/explore", label: "Explore" },
   { href: "/prices", label: "Prices", enabled: siteFlags.marketing.pricesPage },
   { href: "/blog", label: "Blog", enabled: siteFlags.marketing.blogPage },
+  { href: "/download", label: "Download app" },
   { href: "/contact", label: "Contact" },
 ].filter((link) => link.enabled ?? true);
 
@@ -181,7 +182,7 @@ export function Navbar() {
             className="h-16 w-auto object-contain"
           />
         </Link>
-        <nav className="hidden items-center gap-6 text-sm font-medium text-gray-800 md:flex">
+        <nav className="hidden items-center gap-5 text-sm font-medium text-gray-800 xl:flex">
           {navLinks.map((link) => (
             <Link
               key={link.href}
@@ -194,7 +195,7 @@ export function Navbar() {
             </Link>
           ))}
         </nav>
-        <div className="hidden items-center gap-2 md:flex">
+        <div className="hidden items-center gap-2 xl:flex">
           {userName ? (
             <>
               <div className="rounded-full bg-gray-100 px-3 py-1 text-sm font-semibold text-gray-800">
@@ -292,7 +293,7 @@ export function Navbar() {
             </>
           )}
         </div>
-        <div className="flex items-center gap-2 md:hidden">
+        <div className="flex items-center gap-2 xl:hidden">
           {userName ? (
             <Link
               href="/messages"
