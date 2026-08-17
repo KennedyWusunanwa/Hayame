@@ -5,6 +5,7 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { NavigationSkeletonOverlay } from "@/components/skeletons/page-loading-skeletons";
 
 const HIDE_TIMEOUT_MS = 8000;
+const DISMISS_TRANSITION_MS = 200;
 
 function isModifiedEvent(event: MouseEvent) {
   return (
@@ -56,18 +57,36 @@ function targetPathFromAnchor(anchor: HTMLAnchorElement) {
 
 export function NavigationLoader() {
   const [loading, setLoading] = useState(false);
+  const [dismissing, setDismissing] = useState(false);
   const [targetPath, setTargetPath] = useState<string | null>(null);
   const timerRef = useRef<number | null>(null);
+  const dismissTimerRef = useRef<number | null>(null);
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
   useEffect(() => {
+    return () => {
+      if (dismissTimerRef.current) window.clearTimeout(dismissTimerRef.current);
+    };
+  }, []);
+
+  const dismiss = () => {
+    setDismissing(true);
+    if (dismissTimerRef.current) window.clearTimeout(dismissTimerRef.current);
+    // Let the overlay's own opacity transition play instead of unmounting it
+    // outright — otherwise the destination page (already rendered behind the
+    // mask) just appears with a hard cut instead of a smooth cross-fade.
+    dismissTimerRef.current = window.setTimeout(() => {
+      setLoading(false);
+      setDismissing(false);
+      setTargetPath(null);
+    }, DISMISS_TRANSITION_MS);
+  };
+
+  useEffect(() => {
     if (!loading) return;
     if (timerRef.current) window.clearTimeout(timerRef.current);
-    timerRef.current = window.setTimeout(() => {
-      setLoading(false);
-      setTargetPath(null);
-    }, HIDE_TIMEOUT_MS);
+    timerRef.current = window.setTimeout(dismiss, HIDE_TIMEOUT_MS);
     return () => {
       if (timerRef.current) window.clearTimeout(timerRef.current);
     };
@@ -76,10 +95,7 @@ export function NavigationLoader() {
   useEffect(() => {
     if (!loading) return;
 
-    const frame = window.requestAnimationFrame(() => {
-      setLoading(false);
-      setTargetPath(null);
-    });
+    const frame = window.requestAnimationFrame(dismiss);
     return () => window.cancelAnimationFrame(frame);
   }, [pathname, searchParams, loading]);
 
@@ -94,7 +110,9 @@ export function NavigationLoader() {
       const anchor = target.closest("a") as HTMLAnchorElement | null;
       if (!anchor || !shouldTrackAnchor(anchor)) return;
 
+      if (dismissTimerRef.current) window.clearTimeout(dismissTimerRef.current);
       setTargetPath(targetPathFromAnchor(anchor));
+      setDismissing(false);
       setLoading(true);
     };
 
@@ -103,6 +121,8 @@ export function NavigationLoader() {
       if (!form) return;
       if (form.hasAttribute("data-no-loading")) return;
 
+      if (dismissTimerRef.current) window.clearTimeout(dismissTimerRef.current);
+      setDismissing(false);
       setLoading(true);
       setTargetPath(null);
     };
@@ -117,5 +137,5 @@ export function NavigationLoader() {
 
   if (!loading) return null;
 
-  return <NavigationSkeletonOverlay path={targetPath} />;
+  return <NavigationSkeletonOverlay path={targetPath} dismissing={dismissing} />;
 }
