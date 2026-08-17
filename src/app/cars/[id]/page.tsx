@@ -31,6 +31,7 @@ import type { Database } from "@/lib/database.types";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { formatCurrency, getInitials } from "@/lib/utils";
 import { carShareUrl } from "@/lib/site-url";
+import { Reveal } from "@/components/ui/reveal";
 
 export const dynamic = "force-dynamic";
 
@@ -230,7 +231,7 @@ export default async function CarDetailPage({ params }: PageProps) {
         region={car.region}
         priceBucket={priceBucket(car.daily_price)}
       />
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+      <Reveal className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-3">
             <p className="text-sm font-semibold text-brand">
@@ -280,12 +281,12 @@ export default async function CarDetailPage({ params }: PageProps) {
             {formatCurrency(car.daily_price)}
           </p>
         </div>
-      </div>
+      </Reveal>
 
       <div className="mt-8 grid gap-x-8 gap-y-6 lg:grid-cols-[1fr,360px]">
         {existingBooking ? <BookedNotice booking={existingBooking} /> : null}
         <div className="contents lg:block lg:space-y-6">
-          <div className="order-1 lg:order-none">
+          <Reveal className="order-1 lg:order-none">
             <ImageGallery
               images={galleryImages}
               fallbackContext={{
@@ -296,7 +297,7 @@ export default async function CarDetailPage({ params }: PageProps) {
                 carType: car.car_type,
               }}
             />
-          </div>
+          </Reveal>
 
           <Card className="order-3 lg:order-none">
             <CardHeader>
