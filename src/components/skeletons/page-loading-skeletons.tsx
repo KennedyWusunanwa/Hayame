@@ -674,10 +674,18 @@ function navigationSkeletonForPath(path?: string | null) {
   return <MarketingPageSkeleton />;
 }
 
-export function NavigationSkeletonOverlay({ path }: { path?: string | null }) {
+export function NavigationSkeletonOverlay({
+  path,
+  dismissing = false,
+}: {
+  path?: string | null;
+  dismissing?: boolean;
+}) {
   return (
     <div
-      className="fixed inset-0 z-50 overflow-y-auto bg-white/95 backdrop-blur-sm"
+      className={`fixed inset-0 z-50 overflow-y-auto bg-white/95 backdrop-blur-sm transition-opacity duration-200 ease-out ${
+        dismissing ? "pointer-events-none opacity-0" : "opacity-100"
+      }`}
       aria-live="polite"
       aria-busy="true"
     >

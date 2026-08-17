@@ -34,7 +34,11 @@ export function Reveal({ children, className, delay = 0 }: RevealProps) {
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
-          setVisible(true);
+          // Defer a frame so the browser has actually painted the hidden
+          // state at least once first — otherwise an element that's already
+          // in view the moment it's observed (e.g. right after a page
+          // transition) jumps straight to visible instead of transitioning.
+          requestAnimationFrame(() => setVisible(true));
           observer.unobserve(node);
         }
       },
