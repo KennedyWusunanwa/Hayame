@@ -42,7 +42,13 @@ export function Reveal({ children, className, delay = 0 }: RevealProps) {
           observer.unobserve(node);
         }
       },
-      { threshold: 0.15, rootMargin: "0px 0px -10% 0px" },
+      // threshold: 0 fires as soon as any part of the target enters the
+      // viewport. A higher threshold (e.g. 0.15 of the target's own area)
+      // breaks down for tall composite sections — on a short mobile
+      // viewport, a large wrapped block can sit with only its top sliver in
+      // frame at load, never crossing 15% of its own height until the user
+      // scrolls further, so it stays invisible even though it's on screen.
+      { threshold: 0, rootMargin: "0px 0px -10% 0px" },
     );
 
     observer.observe(node);
