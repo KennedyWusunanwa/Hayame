@@ -4,6 +4,10 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getRequestUser } from "@/lib/supabase/request-auth";
 import { disputeSchema } from "@/lib/validators";
+import {
+  buildAdminDisputeOpenedEmail,
+  sendAdminNotificationSafe,
+} from "@/lib/email";
 
 export async function GET(req: Request) {
   try {
@@ -132,6 +136,30 @@ export async function POST(req: Request) {
       .select()
       .single();
     if (error) throw error;
+
+    // Tell the office a dispute needs attention.
+    try {
+      const [carResult, profileResult] = await Promise.all([
+        db.from("cars").select("title").eq("id", booking.car_id).maybeSingle(),
+        db.from("profiles").select("full_name").eq("id", user.id).maybeSingle(),
+      ]);
+      await sendAdminNotificationSafe({
+        template: buildAdminDisputeOpenedEmail({
+          disputeId: String(created?.id ?? ""),
+          bookingId: String(booking.id),
+          carTitle: carResult?.data?.title ?? null,
+          openedByName: profileResult?.data?.full_name ?? user.email ?? null,
+          openedByEmail: user.email ?? null,
+          openedByRole: isRenter ? "renter" : "host",
+          reason: parsed.reason,
+          openedAt: created?.created_at ?? null,
+        }),
+        idempotencyKey: `dispute:${created?.id ?? booking.id}:opened`,
+        replyTo: user.email ?? undefined,
+      });
+    } catch (notifyError) {
+      console.error("[disputes] admin notice failed", notifyError);
+    }
 
     return NextResponse.json({ data: created });
   } catch (error: any) {

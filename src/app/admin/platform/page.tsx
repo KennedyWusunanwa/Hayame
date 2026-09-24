@@ -23,7 +23,9 @@ import {
   sendPushNotificationsToUsers,
 } from "@/lib/push";
 import {
+  buildAdminPlatformSettingsChangedEmail,
   buildListingDecisionEmail,
+  sendAdminNotificationSafe,
   sendEmailSafe,
   sendRefundReceiptEmails,
 } from "@/lib/email";
@@ -32,7 +34,9 @@ import { refundPaystack } from "@/lib/paystack";
 import { getInitials } from "@/lib/utils";
 
 function isChecked(formData: FormData, name: string, fallback = false) {
-  const value = String(formData.get(name) ?? "").trim().toLowerCase();
+  const value = String(formData.get(name) ?? "")
+    .trim()
+    .toLowerCase();
   if (!value) return fallback;
   return ["1", "true", "yes", "on"].includes(value);
 }
@@ -46,7 +50,9 @@ function normalizeAnnouncementCategory(raw: FormDataEntryValue | null) {
 }
 
 function normalizeAnnouncementDelivery(raw: FormDataEntryValue | null) {
-  const value = String(raw ?? "").trim().toLowerCase();
+  const value = String(raw ?? "")
+    .trim()
+    .toLowerCase();
   if (value === "push" || value === "both") return value;
   return "in_app";
 }
@@ -64,7 +70,9 @@ function announcementPreferenceKey(category: string) {
 }
 
 function normalizeDirectPushTarget(raw: FormDataEntryValue | null) {
-  const value = String(raw ?? "").trim().toLowerCase();
+  const value = String(raw ?? "")
+    .trim()
+    .toLowerCase();
   if (value === "news") return "news";
   if (value === "system") return "system";
   return "all";
@@ -166,7 +174,31 @@ function getPlatformNotice(searchParams: {
     };
   }
 
+  if (searchParams.error === "settings-invalid") {
+    return {
+      tone: "error",
+      title: "Platform fee not saved",
+      description: "Enter a fee between 0 and 100 percent.",
+    };
+  }
+
+  if (searchParams.error === "settings-save") {
+    return {
+      tone: "error",
+      title: "Platform fee not saved",
+      description:
+        "The platform_settings table could not be updated. Check the database and service role key.",
+    };
+  }
+
   switch (searchParams.notice) {
+    case "settings-saved":
+      return {
+        tone: "success",
+        title: "Platform fee saved",
+        description:
+          "New bookings now use the updated fee. An internal confirmation email was sent.",
+      };
     case "listing-approved":
       return {
         tone: "success",
@@ -446,6 +478,75 @@ async function archiveAnnouncementAction(formData: FormData) {
   redirectToAdminPlatform({ notice: "announcement-archived" });
 }
 
+function parseFeePercent(raw: FormDataEntryValue | null) {
+  const value = Number(String(raw ?? "").trim());
+  if (!Number.isFinite(value)) return null;
+  return Math.round(Math.min(Math.max(value, 0), 100) * 100) / 100;
+}
+
+async function updatePlatformSettingsAction(formData: FormData) {
+  "use server";
+  await requireAdminPage();
+  const admin = createSupabaseAdminClient() as any;
+  const nextFee = parseFeePercent(formData.get("platformFeePercent"));
+  if (nextFee === null) {
+    redirectToAdminPlatform({ error: "settings-invalid" });
+    return;
+  }
+
+  const { data: current } = await admin
+    .from("platform_settings")
+    .select("platform_fee_percent")
+    .eq("id", 1)
+    .maybeSingle();
+  const previousFee =
+    current?.platform_fee_percent === null ||
+    current?.platform_fee_percent === undefined
+      ? null
+      : Number(current.platform_fee_percent);
+
+  const changedAt = new Date().toISOString();
+  const reviewer = getAdminReviewerName();
+  const { error } = await admin.from("platform_settings").upsert(
+    {
+      id: 1,
+      platform_fee_percent: nextFee,
+      updated_at: changedAt,
+    },
+    { onConflict: "id" },
+  );
+  if (error) {
+    console.error("[admin] platform settings update failed", error);
+    redirectToAdminPlatform({ error: "settings-save" });
+    return;
+  }
+
+  await admin.from("admin_actions").insert({
+    action: "platform_settings_updated",
+    target_id: null,
+    target_type: "platform_settings",
+    performed_by: reviewer,
+    metadata: {
+      platform_fee_percent: nextFee,
+      previous_platform_fee_percent: previousFee,
+    },
+  });
+
+  if (previousFee !== nextFee) {
+    await sendAdminNotificationSafe({
+      template: buildAdminPlatformSettingsChangedEmail({
+        changedBy: reviewer,
+        previousFeePercent: previousFee,
+        nextFeePercent: nextFee,
+        changedAt,
+      }),
+      idempotencyKey: `platform-settings:fee:${changedAt}`,
+    });
+  }
+
+  redirectToAdminPlatform({ notice: "settings-saved" });
+}
+
 async function listingReviewAction(formData: FormData) {
   "use server";
   await requireAdminPage();
@@ -502,6 +603,7 @@ async function listingReviewAction(formData: FormData) {
           approved: action === "approve",
           hostName,
           carTitle,
+          carId,
           reason: action === "reject" ? reason || "Rejected by admin" : null,
         });
         await sendEmailSafe({
@@ -518,7 +620,8 @@ async function listingReviewAction(formData: FormData) {
       await sendPushNotificationsToUsers({
         adminClient: admin,
         userIds: [ownerId],
-        title: action === "approve" ? "Listing approved" : "Listing needs changes",
+        title:
+          action === "approve" ? "Listing approved" : "Listing needs changes",
         body:
           action === "approve"
             ? `${carTitle ?? "Your listing"} is approved and now live for renters.`
@@ -754,51 +857,78 @@ export default async function AdminPlatformPage({
     announcements,
     pushTokenRows,
     newsPreferenceRows,
-  ] =
-    await Promise.all([
-      admin
-        .from("cars")
-        .select(
-          "id,title,city,daily_price,approval_status,rejection_reason,owner:profiles!cars_owner_id_fkey(full_name,avatar_url,phone)",
-        )
-        .eq("approval_status", "pending")
-        .order("created_at", { ascending: false })
-        .limit(50),
-      admin
-        .from("bookings")
-        .select(
-          "id,start_date,end_date,total_price,payment_status,payment_reference,payment_provider,cars(title)",
-        )
-        .eq("payment_status", "paid")
-        .order("created_at", { ascending: false })
-        .limit(50),
-      admin
-        .from("reviews")
-        .select(
-          "id,rating,comment,is_hidden,moderation_reason,created_at,cars(title),profiles:profiles!reviews_user_id_fkey(full_name)",
-        )
-        .order("created_at", { ascending: false })
-        .limit(50),
-      admin
-        .from("disputes")
-        .select(
-          "id,booking_id,status,reason,resolution_note,created_at,cars(title)",
-        )
-        .order("created_at", { ascending: false })
-        .limit(50),
-      admin
-        .from("app_announcements")
-        .select(
-          "id,title,body,category,delivery,audience,show_once,published_at,archived_at,created_at",
-        )
-        .order("created_at", { ascending: false })
-        .limit(20),
-      admin.from("mobile_push_tokens").select("user_id"),
-      admin
-        .from("user_notification_preferences")
-        .select("user_id")
-        .eq("news_announcements", true),
-    ]);
+    platformSettingsResult,
+  ] = await Promise.all([
+    admin
+      .from("cars")
+      .select(
+        "id,title,city,daily_price,approval_status,rejection_reason,owner:profiles!cars_owner_id_fkey(full_name,avatar_url,phone)",
+      )
+      .eq("approval_status", "pending")
+      .order("created_at", { ascending: false })
+      .limit(50),
+    admin
+      .from("bookings")
+      .select(
+        "id,start_date,end_date,total_price,payment_status,payment_reference,payment_provider,cars(title)",
+      )
+      .eq("payment_status", "paid")
+      .order("created_at", { ascending: false })
+      .limit(50),
+    admin
+      .from("reviews")
+      .select(
+        "id,rating,comment,is_hidden,moderation_reason,created_at,cars(title),profiles:profiles!reviews_user_id_fkey(full_name)",
+      )
+      .order("created_at", { ascending: false })
+      .limit(50),
+    admin
+      .from("disputes")
+      .select(
+        "id,booking_id,status,reason,resolution_note,created_at,cars(title)",
+      )
+      .order("created_at", { ascending: false })
+      .limit(50),
+    admin
+      .from("app_announcements")
+      .select(
+        "id,title,body,category,delivery,audience,show_once,published_at,archived_at,created_at",
+      )
+      .order("created_at", { ascending: false })
+      .limit(20),
+    admin.from("mobile_push_tokens").select("user_id"),
+    admin
+      .from("user_notification_preferences")
+      .select("user_id")
+      .eq("news_announcements", true),
+    admin
+      .from("platform_settings")
+      .select("platform_fee_percent,updated_at")
+      .eq("id", 1)
+      .maybeSingle(),
+  ]);
+
+  const storedFeePercent = Number(
+    platformSettingsResult?.data?.platform_fee_percent ?? Number.NaN,
+  );
+  const envFeePercent = Number(
+    process.env.NEXT_PUBLIC_PLATFORM_FEE_PERCENT ??
+      process.env.PLATFORM_FEE_PERCENT ??
+      "10",
+  );
+  const effectiveFeePercent = Number.isFinite(storedFeePercent)
+    ? storedFeePercent
+    : Number.isFinite(envFeePercent)
+      ? envFeePercent
+      : 10;
+  const feeSource = Number.isFinite(storedFeePercent)
+    ? "saved in database"
+    : "environment fallback, not yet saved";
+  const feeUpdatedAt = platformSettingsResult?.data?.updated_at
+    ? new Date(platformSettingsResult.data.updated_at).toLocaleString("en-GB", {
+        timeZone: "Africa/Accra",
+      })
+    : null;
 
   const pendingCarIds = (pendingListings.data ?? []).map((car: any) => car.id);
   const { data: pendingPhotoRows } =
@@ -850,6 +980,57 @@ export default async function AdminPlatformPage({
           description={notice.description}
         />
       ) : null}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Platform fees</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-6 md:grid-cols-[1fr_auto] md:items-start">
+            <div className="space-y-2 text-sm text-gray-600">
+              <p>
+                The platform fee is charged to guests on top of the host&apos;s
+                daily rate and shown at checkout as a percentage of the trip
+                subtotal. Changing it affects new bookings only; paid bookings
+                keep the fee they were charged.
+              </p>
+              <p>
+                <span className="font-semibold text-foreground">
+                  Current fee: {effectiveFeePercent}%
+                </span>{" "}
+                <span className="text-xs text-gray-500">
+                  ({feeSource}
+                  {feeUpdatedAt ? `, last updated ${feeUpdatedAt}` : ""})
+                </span>
+              </p>
+            </div>
+            <form
+              action={updatePlatformSettingsAction}
+              className="flex items-end gap-2"
+            >
+              <label className="flex flex-col gap-1 text-xs font-semibold text-gray-700">
+                Platform fee (%)
+                <input
+                  name="platformFeePercent"
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.5"
+                  defaultValue={effectiveFeePercent}
+                  required
+                  className="w-32 rounded-md border border-border px-3 py-2 text-sm font-normal"
+                />
+              </label>
+              <PendingSubmitButton
+                pendingLabel="Saving..."
+                className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white"
+              >
+                Save fee
+              </PendingSubmitButton>
+            </form>
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
@@ -1279,7 +1460,8 @@ export default async function AdminPlatformPage({
                 `news` respects opt-in
               </p>
               <p className="mt-1 text-xs text-gray-600">
-                Use `system` for operational notices and `in_app` for one-time launch messages.
+                Use `system` for operational notices and `in_app` for one-time
+                launch messages.
               </p>
             </div>
           </div>
@@ -1358,7 +1540,10 @@ export default async function AdminPlatformPage({
             </div>
           </form>
 
-          <form action={createAnnouncementAction} className="space-y-4 rounded-2xl border border-border p-3 sm:p-4">
+          <form
+            action={createAnnouncementAction}
+            className="space-y-4 rounded-2xl border border-border p-3 sm:p-4"
+          >
             <div className="grid gap-4 md:grid-cols-2">
               <label className="space-y-2">
                 <span className="text-sm font-semibold text-foreground">
@@ -1466,7 +1651,8 @@ export default async function AdminPlatformPage({
 
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p className="text-xs text-gray-600">
-                `Push` and `both` send immediately. `news` pushes only go to users who opted into announcements.
+                `Push` and `both` send immediately. `news` pushes only go to
+                users who opted into announcements.
               </p>
               <PendingSubmitButton
                 pendingLabel="Publishing..."
@@ -1501,7 +1687,9 @@ export default async function AdminPlatformPage({
                       </TableCell>
                       <TableCell className="text-xs">
                         <div>{announcement.category}</div>
-                        <div className="text-gray-500">{announcement.delivery}</div>
+                        <div className="text-gray-500">
+                          {announcement.delivery}
+                        </div>
                       </TableCell>
                       <TableCell className="text-xs">
                         {announcement.audience}
@@ -1511,7 +1699,9 @@ export default async function AdminPlatformPage({
                         {isArchived ? "Archived" : "Active"}
                         <div className="text-gray-500">
                           {announcement.published_at
-                            ? new Date(announcement.published_at).toLocaleString()
+                            ? new Date(
+                                announcement.published_at,
+                              ).toLocaleString()
                             : "Draft"}
                         </div>
                       </TableCell>
@@ -1531,7 +1721,9 @@ export default async function AdminPlatformPage({
                             </PendingSubmitButton>
                           </form>
                         ) : (
-                          <span className="text-xs text-gray-500">Archived</span>
+                          <span className="text-xs text-gray-500">
+                            Archived
+                          </span>
                         )}
                       </TableCell>
                     </TableRow>

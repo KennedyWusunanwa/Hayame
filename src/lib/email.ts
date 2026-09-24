@@ -1,5 +1,10 @@
 import "server-only";
 import { Resend } from "resend";
+import {
+  ANDROID_APK_URL,
+  ANDROID_PLAY_STORE_URL,
+  IOS_APP_STORE_URL,
+} from "@/lib/support";
 
 export type EmailAttachment = {
   /** File name shown to the recipient, e.g. "invoice.pdf". */
@@ -35,11 +40,49 @@ const supportAddress =
   "Accra Digital Centre, Ring Road West";
 // The logo must be a publicly reachable HTTPS URL for email clients. Dev
 // site URLs are LAN addresses, so fall back to the production asset.
+// The white wordmark sits on the blue header band.
+const publicSiteUrl = siteUrl.startsWith("https://")
+  ? siteUrl.replace(/\/+$/, "")
+  : "https://www.hayamegh.com";
 const logoUrl =
-  process.env.EMAIL_LOGO_URL?.trim() ||
-  (siteUrl.startsWith("https://")
-    ? `${siteUrl}/logo.png`
-    : "https://www.hayamegh.com/logo.png");
+  process.env.EMAIL_LOGO_URL?.trim() || `${publicSiteUrl}/logo-white.png`;
+
+/**
+ * Addresses that receive internal "something happened on the platform"
+ * notices (host applications, vehicle submissions, paid bookings, disputes,
+ * fee changes). Configure ADMIN_NOTIFICATIONS_EMAIL, comma separated for
+ * several inboxes. Falls back to the support inbox.
+ */
+export function getAdminNotificationRecipients(): string[] {
+  const configured = (process.env.ADMIN_NOTIFICATIONS_EMAIL ?? "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+  if (configured.length > 0) return Array.from(new Set(configured));
+  return supportEmail ? [supportEmail] : [];
+}
+
+type AppLink = { label: string; url: string };
+
+/** App download links for the footer: App Store, then Google Play or the APK hosted on the site. */
+function getAppLinks(): AppLink[] {
+  const links: AppLink[] = [];
+  if (IOS_APP_STORE_URL) {
+    links.push({ label: "iPhone (App Store)", url: IOS_APP_STORE_URL });
+  }
+  if (ANDROID_PLAY_STORE_URL) {
+    links.push({ label: "Android (Google Play)", url: ANDROID_PLAY_STORE_URL });
+  } else if (ANDROID_APK_URL) {
+    const url = ANDROID_APK_URL.startsWith("/")
+      ? `${publicSiteUrl}${ANDROID_APK_URL}`
+      : ANDROID_APK_URL;
+    links.push({ label: "Android (download APK)", url });
+  }
+  if (links.length === 0) {
+    links.push({ label: "Download the app", url: `${publicSiteUrl}/download` });
+  }
+  return links;
+}
 
 function escapeHtml(input: string) {
   return input
@@ -110,20 +153,36 @@ function statusPill(status: string) {
 }
 
 function withOfficialFooter(html: string, text: string) {
-  const footerText = `\n\nThis is an official notification from ${appName}.\nThis email was sent from a no-reply address that is not monitored. Need help? Contact ${supportEmail}.\n${appName} · ${supportAddress}\nVisit ${siteUrl}\n`;
+  const appLinks = getAppLinks();
+  const appLinksText = appLinks
+    .map((link) => `${link.label} ${link.url}`)
+    .join(" | ");
+  const appLinksHtml = appLinks
+    .map(
+      (link) =>
+        `<a href="${escapeHtml(link.url)}" style="color:${BRAND}; text-decoration:none; font-weight:600;">${escapeHtml(link.label)}</a>`,
+    )
+    .join(" &middot; ");
+  const footerText = `\n\nThis is an official notification from ${appName}.\nThis email was sent from a no-reply address that is not monitored. Need help? Contact ${supportEmail}.\n${appName} · ${supportAddress}\nGet the ${appName} app: ${appLinksText}\nVisit ${siteUrl}\n`;
   const brandedHtml = `
   <div style="background-color:#f4f6f8; padding: 32px 16px; font-family: ${FONT_STACK};">
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width: 600px; margin: 0 auto;">
       <tr>
-        <td align="center" style="padding: 0 0 24px;">
-          <a href="${siteUrl}" style="text-decoration:none;">
-            <img src="${logoUrl}" alt="${appName}" width="132" style="display:block; width:132px; max-width:50%; height:auto; border:0;" />
-          </a>
-        </td>
-      </tr>
-      <tr>
-        <td style="background-color:#ffffff; border:1px solid ${BORDER}; border-top: 4px solid ${BRAND}; border-radius: 16px; padding: 32px; font-family: ${FONT_STACK}; color: ${INK};">
-          ${html}
+        <td style="background-color:#ffffff; border:1px solid ${BORDER}; border-radius: 16px; overflow:hidden;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+            <tr>
+              <td bgcolor="${BRAND}" style="background-color:${BRAND}; padding: 22px 32px; border-radius: 16px 16px 0 0;">
+                <a href="${siteUrl}" style="text-decoration:none; color:#ffffff;">
+                  <img src="${logoUrl}" alt="${appName}" width="124" style="display:block; width:124px; max-width:50%; height:auto; border:0; color:#ffffff; font-family: ${FONT_STACK}; font-size: 22px; font-weight: 700;" />
+                </a>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding: 32px; font-family: ${FONT_STACK}; color: ${INK};">
+                ${html}
+              </td>
+            </tr>
+          </table>
         </td>
       </tr>
       <tr>
@@ -131,6 +190,7 @@ function withOfficialFooter(html: string, text: string) {
           This is an official notification from ${appName}.<br />
           Sent from a no-reply address that is not monitored &mdash; need help? <a href="mailto:${supportEmail}" style="color:${BRAND}; text-decoration:none;">${supportEmail}</a><br />
           ${appName} &middot; ${escapeHtml(supportAddress)}<br />
+          Get the ${appName} app: ${appLinksHtml}<br />
           <a href="${siteUrl}" style="color:${BRAND}; text-decoration:none;">Visit ${appName}</a>
         </td>
       </tr>
@@ -622,29 +682,77 @@ export function buildHostApplicationDecisionEmail(params: {
   hostName?: string | null;
   reason?: string | null;
 }) {
-  const hostName = escapeHtml(params.hostName || "Host");
-  const subject = params.approved
-    ? `${appName}: Host application approved`
-    : `${appName}: Host application rejected`;
-  const decisionLine = params.approved
-    ? "Your host application has been approved."
-    : "Your host application has been rejected.";
-  const reasonLine = params.approved
-    ? ""
-    : `<p><strong>Reason:</strong> ${escapeHtml(params.reason || "No reason provided.")}</p>`;
+  const hostName = escapeHtml(params.hostName?.trim() || "there");
+  const reason = params.reason?.trim() || "No reason provided.";
 
-  const html = `
+  if (params.approved) {
+    const subject = `${appName}: You're approved to host!`;
+    const html = `
     <div style="font-family: ${FONT_STACK}; line-height: 1.6; color: ${INK};">
-      <h2>${decisionLine}</h2>
-      <p>Hi ${hostName},</p>
-      ${reasonLine}
-      <p><a href="${siteUrl}/host" style="color:${BRAND};">Go to host dashboard</a></p>
-      <p style="color:#6b7280; font-size: 12px;">${appName}</p>
+      <p style="margin: 0 0 8px; font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: ${BRAND};">Host application</p>
+      <h2 style="margin: 0 0 16px; font-size: 22px; font-weight: 600;">Welcome aboard, you're now a verified host</h2>
+      <p style="margin: 0 0 12px;">Hi ${hostName},</p>
+      <p style="margin: 0 0 12px;">Congratulations! Your identity has been verified and your host application on ${appName} is approved.</p>
+      <p style="margin: 0 0 16px;">You can now list your vehicles, set your prices and start receiving booking requests. Every listing goes through a quick review before it appears on the marketplace.</p>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-top: 1px solid ${BORDER};">
+        ${metaRow("Status", statusPill("confirmed").replace("Confirmed", "Approved"))}
+        ${metaRow("Host level", "Verified host")}
+      </table>
+      ${ctaButton(`${siteUrl}/host/cars/new`, "List your first car")}
+      <p style="margin: 12px 0 0; font-size: 13px;">
+        <a href="${siteUrl}/host" style="color:${BRAND}; text-decoration:none; font-weight:600;">Host dashboard</a>
+        <span style="color:${MUTED};">&middot;</span>
+        <a href="${siteUrl}/protection" style="color:${BRAND}; text-decoration:none; font-weight:600;">Host protection</a>
+      </p>
     </div>
   `;
-  const text = `${decisionLine}\nHi ${params.hostName ?? "Host"},${
-    params.approved ? "" : `\nReason: ${params.reason ?? "No reason provided."}`
-  }\nGo to host dashboard: ${siteUrl}/host\n\n${appName}`;
+    const text = `Welcome aboard, you're now a verified host
+
+Hi ${params.hostName?.trim() || "there"},
+
+Congratulations! Your identity has been verified and your host application on ${appName} is approved.
+
+You can now list your vehicles, set your prices and start receiving booking requests. Every listing goes through a quick review before it appears on the marketplace.
+
+Status: Approved
+Host level: Verified host
+
+List your first car: ${siteUrl}/host/cars/new
+Host dashboard: ${siteUrl}/host
+Host protection: ${siteUrl}/protection`;
+    return { subject, ...withOfficialFooter(html, text) };
+  }
+
+  const subject = `${appName}: Update on your host application`;
+  const html = `
+    <div style="font-family: ${FONT_STACK}; line-height: 1.6; color: ${INK};">
+      <p style="margin: 0 0 8px; font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #b91c1c;">Host application</p>
+      <h2 style="margin: 0 0 16px; font-size: 22px; font-weight: 600;">We could not approve your application yet</h2>
+      <p style="margin: 0 0 12px;">Hi ${hostName},</p>
+      <p style="margin: 0 0 12px;">Thank you for your interest in hosting on ${appName}. After reviewing your application, we are unable to approve it at this time.</p>
+      <p style="margin: 0 0 16px;">You are welcome to review the reason below, update your details and apply again.</p>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-top: 1px solid ${BORDER};">
+        ${metaRow("Status", statusPill("rejected").replace("Rejected", "Not approved"))}
+        ${metaRow("Reason", escapeHtml(reason))}
+      </table>
+      ${ctaButton(`${siteUrl}/become-host`, "Update and reapply")}
+      <p style="margin: 12px 0 0; font-size: 13px; color: ${MUTED};">If you believe this was a mistake, reply to this email and our team will take another look.</p>
+    </div>
+  `;
+  const text = `We could not approve your application yet
+
+Hi ${params.hostName?.trim() || "there"},
+
+Thank you for your interest in hosting on ${appName}. After reviewing your application, we are unable to approve it at this time.
+
+You are welcome to review the reason below, update your details and apply again.
+
+Status: Not approved
+Reason: ${reason}
+
+Update and reapply: ${siteUrl}/become-host
+
+If you believe this was a mistake, reply to this email and our team will take another look.`;
 
   return { subject, ...withOfficialFooter(html, text) };
 }
@@ -652,25 +760,35 @@ export function buildHostApplicationDecisionEmail(params: {
 export function buildHostApplicationSubmittedEmail(params: {
   hostName?: string | null;
 }) {
-  const hostName = escapeHtml(params.hostName || "Host");
-  const subject = `${appName}: Host application received`;
+  const hostName = escapeHtml(params.hostName?.trim() || "there");
+  const subject = `${appName}: We received your host application`;
   const html = `
     <div style="font-family: ${FONT_STACK}; line-height: 1.6; color: ${INK};">
-      <h2>Your host application has been received.</h2>
-      <p>Hi ${hostName},</p>
-      <p>Thanks for applying to become a host on ${appName}. Your request is now under review.</p>
-      <p>Most applications are reviewed within 1-2 business days.</p>
-      <p><a href="${siteUrl}/become-host" style="color:${BRAND};">View your host application</a></p>
-      <p style="color:#6b7280; font-size: 12px;">${appName}</p>
+      <p style="margin: 0 0 8px; font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: ${BRAND};">Host application</p>
+      <h2 style="margin: 0 0 16px; font-size: 22px; font-weight: 600;">Your application is under review</h2>
+      <p style="margin: 0 0 12px;">Hi ${hostName},</p>
+      <p style="margin: 0 0 12px;">Thank you for applying to host on ${appName}. Our team is now verifying the details and identity documents you submitted.</p>
+      <p style="margin: 0 0 16px;">Most applications are reviewed within 1 to 2 business days. We will email you the moment a decision is made.</p>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-top: 1px solid ${BORDER};">
+        ${metaRow("Status", statusPill("awaiting_host").replace("Awaiting host approval", "Pending review"))}
+      </table>
+      ${ctaButton(`${siteUrl}/become-host`, "View my application")}
+      <p style="margin: 12px 0 0; font-size: 13px; color: ${MUTED};">While you wait, prepare clear photos of your vehicle and its documents so you can list it right after approval.</p>
     </div>
   `;
-  const text = `Your host application has been received.
-Hi ${params.hostName ?? "Host"},
-Thanks for applying to become a host on ${appName}. Your request is now under review.
-Most applications are reviewed within 1-2 business days.
-View your host application: ${siteUrl}/become-host
+  const text = `Your application is under review
 
-${appName}`;
+Hi ${params.hostName?.trim() || "there"},
+
+Thank you for applying to host on ${appName}. Our team is now verifying the details and identity documents you submitted.
+
+Most applications are reviewed within 1 to 2 business days. We will email you the moment a decision is made.
+
+Status: Pending review
+
+View my application: ${siteUrl}/become-host
+
+While you wait, prepare clear photos of your vehicle and its documents so you can list it right after approval.`;
 
   return { subject, ...withOfficialFooter(html, text) };
 }
@@ -723,36 +841,86 @@ export function buildListingDecisionEmail(params: {
   approved: boolean;
   hostName?: string | null;
   carTitle?: string | null;
+  carId?: string | null;
   reason?: string | null;
 }) {
-  const hostName = escapeHtml(params.hostName || "Host");
-  const carTitle = params.carTitle ? escapeHtml(params.carTitle) : "your listing";
-  const subject = params.approved
-    ? `${appName}: Listing approved`
-    : `${appName}: Listing needs changes`;
-  const decisionLine = params.approved
-    ? `Your listing ${carTitle} has been approved and is now live for renters.`
-    : `Your listing ${carTitle} was not approved.`;
-  const reasonLine =
-    !params.approved && params.reason
-      ? `<p><strong>Reason:</strong> ${escapeHtml(params.reason)}</p>`
-      : "";
+  const hostName = escapeHtml(params.hostName?.trim() || "there");
+  const rawTitle = params.carTitle?.trim() || "your vehicle";
+  const carTitle = escapeHtml(rawTitle);
+  const carId = params.carId?.trim() || "";
+  const viewUrl = carId ? `${siteUrl}/cars/${carId}` : `${siteUrl}/host/cars`;
+  const editUrl = carId
+    ? `${siteUrl}/host/cars/${carId}/edit`
+    : `${siteUrl}/host/cars`;
 
-  const html = `
+  if (params.approved) {
+    const subject = `${appName}: ${rawTitle} is now live`;
+    const html = `
     <div style="font-family: ${FONT_STACK}; line-height: 1.6; color: ${INK};">
-      <h2>${params.approved ? "Listing approved" : "Listing update"}</h2>
-      <p>Hi ${hostName},</p>
-      <p>${decisionLine}</p>
-      ${reasonLine}
-      <p><a href="${siteUrl}/host/cars" style="color:${BRAND};">Manage your listings</a></p>
-      <p style="color:#6b7280; font-size: 12px;">${appName}</p>
+      <p style="margin: 0 0 8px; font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #15803d;">Vehicle approved</p>
+      <h2 style="margin: 0 0 16px; font-size: 22px; font-weight: 600;">${carTitle} is live on ${appName}</h2>
+      <p style="margin: 0 0 12px;">Hi ${hostName},</p>
+      <p style="margin: 0 0 12px;">Your vehicle passed our review and is now visible to guests searching on ${appName}.</p>
+      <p style="margin: 0 0 16px;">Keep your calendar up to date and respond quickly to requests to earn more bookings and better reviews.</p>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-top: 1px solid ${BORDER};">
+        ${metaRow("Vehicle", carTitle)}
+        ${metaRow("Status", statusPill("confirmed").replace("Confirmed", "Approved and published"))}
+      </table>
+      ${ctaButton(viewUrl, "View your listing")}
+      <p style="margin: 12px 0 0; font-size: 13px;">
+        <a href="${siteUrl}/host/cars" style="color:${BRAND}; text-decoration:none; font-weight:600;">Manage my cars</a>
+        <span style="color:${MUTED};">&middot;</span>
+        <a href="${siteUrl}/host" style="color:${BRAND}; text-decoration:none; font-weight:600;">Host dashboard</a>
+      </p>
     </div>
   `;
-  const text = `${params.approved ? "Listing approved" : "Listing update"}\nHi ${
-    params.hostName ?? "Host"
-  },\n${params.approved ? `Your listing ${params.carTitle ?? "your listing"} has been approved and is now live for renters.` : `Your listing ${params.carTitle ?? "your listing"} was not approved.`}${
-    !params.approved && params.reason ? `\nReason: ${params.reason}` : ""
-  }\nManage your listings: ${siteUrl}/host/cars\n\n${appName}`;
+    const text = `${rawTitle} is live on ${appName}
+
+Hi ${params.hostName?.trim() || "there"},
+
+Your vehicle passed our review and is now visible to guests searching on ${appName}.
+
+Keep your calendar up to date and respond quickly to requests to earn more bookings and better reviews.
+
+Vehicle: ${rawTitle}
+Status: Approved and published
+
+View your listing: ${viewUrl}
+Manage my cars: ${siteUrl}/host/cars
+Host dashboard: ${siteUrl}/host`;
+    return { subject, ...withOfficialFooter(html, text) };
+  }
+
+  const reason = params.reason?.trim() || "No reason provided.";
+  const subject = `${appName}: Changes needed for ${rawTitle}`;
+  const html = `
+    <div style="font-family: ${FONT_STACK}; line-height: 1.6; color: ${INK};">
+      <p style="margin: 0 0 8px; font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #b91c1c;">Vehicle review</p>
+      <h2 style="margin: 0 0 16px; font-size: 22px; font-weight: 600;">${carTitle} needs a few changes</h2>
+      <p style="margin: 0 0 12px;">Hi ${hostName},</p>
+      <p style="margin: 0 0 16px;">We reviewed your vehicle listing and could not approve it as submitted. Please read the note below, update the listing and resubmit it for review.</p>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-top: 1px solid ${BORDER};">
+        ${metaRow("Vehicle", carTitle)}
+        ${metaRow("Status", statusPill("rejected").replace("Rejected", "Not approved"))}
+        ${metaRow("Reason", escapeHtml(reason))}
+      </table>
+      ${ctaButton(editUrl, "Update listing")}
+      <p style="margin: 12px 0 0; font-size: 13px; color: ${MUTED};">Listings with clear photos, accurate details and valid documents are approved fastest.</p>
+    </div>
+  `;
+  const text = `${rawTitle} needs a few changes
+
+Hi ${params.hostName?.trim() || "there"},
+
+We reviewed your vehicle listing and could not approve it as submitted. Please read the note below, update the listing and resubmit it for review.
+
+Vehicle: ${rawTitle}
+Status: Not approved
+Reason: ${reason}
+
+Update listing: ${editUrl}
+
+Listings with clear photos, accurate details and valid documents are approved fastest.`;
 
   return { subject, ...withOfficialFooter(html, text) };
 }
@@ -777,8 +945,7 @@ export async function sendRefundReceiptEmails(params: {
   endDate?: string | null;
   refundedAt?: string | Date | null;
 }) {
-  const idSource =
-    params.bookingId ?? params.paymentReference ?? "unknown";
+  const idSource = params.bookingId ?? params.paymentReference ?? "unknown";
   if (params.renterEmail) {
     const receipt = buildRefundReceiptEmail({
       recipientRole: "renter",
@@ -833,7 +1000,9 @@ export function buildBookingCancelledEmail(params: {
   policyLabel?: string | null;
   bookingId?: string | null;
 }) {
-  const carTitle = params.carTitle ? escapeHtml(params.carTitle) : "the booking";
+  const carTitle = params.carTitle
+    ? escapeHtml(params.carTitle)
+    : "the booking";
   const isHost = params.recipientRole === "host";
   const subject = isHost
     ? `${appName}: A booking was cancelled`
@@ -869,7 +1038,9 @@ export function buildBookingCancelledEmail(params: {
     isHost
       ? ""
       : `\nRefund: ${formatCurrency(params.refundAmount)} of ${formatCurrency(params.totalPrice)}${
-          params.policyLabel ? ` (per the ${params.policyLabel} cancellation policy)` : ""
+          params.policyLabel
+            ? ` (per the ${params.policyLabel} cancellation policy)`
+            : ""
         }.`
   }\nView bookings: ${siteUrl}/${isHost ? "host/bookings" : "dashboard/bookings"}\n\n${appName}`;
 
@@ -1014,4 +1185,349 @@ export function buildAdminBroadcastEmail(params: {
     subject: `${appName}: ${params.subject}`,
     ...withOfficialFooter(html, text),
   };
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Internal (admin) notifications                                            */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Sends an internal notice to the configured admin inbox(es). Never throws;
+ * failures are logged so they cannot break the user-facing request.
+ */
+export async function sendAdminNotificationSafe(params: {
+  template: { subject: string; html: string; text: string };
+  idempotencyKey?: string;
+  replyTo?: string | string[];
+}) {
+  const recipients = getAdminNotificationRecipients();
+  if (recipients.length === 0) {
+    console.warn("[email] No admin notification recipients configured.", {
+      subject: params.template.subject,
+    });
+    return { skipped: true };
+  }
+  return sendEmailSafe({
+    to: recipients,
+    replyTo: params.replyTo,
+    subject: params.template.subject,
+    html: params.template.html,
+    text: params.template.text,
+    idempotencyKey: params.idempotencyKey,
+  });
+}
+
+function maskIdentifier(value?: string | null) {
+  const trimmed = String(value ?? "").trim();
+  if (!trimmed) return "Not provided";
+  if (trimmed.length <= 4) return trimmed;
+  return `${"•".repeat(Math.max(trimmed.length - 4, 2))}${trimmed.slice(-4)}`;
+}
+
+function shortId(value?: string | null) {
+  const trimmed = String(value ?? "").trim();
+  if (!trimmed) return "N/A";
+  return trimmed.slice(0, 8).toUpperCase();
+}
+
+type AdminNoticeInput = {
+  subject: string;
+  /** Small uppercase label, e.g. "Host verification". */
+  eyebrow: string;
+  heading: string;
+  intro: string;
+  /** Free text written by a user (rendered as a quote, escaped). */
+  quote?: string | null;
+  rows: Array<{ label: string; value: string }>;
+  cta: { label: string; url: string };
+  links?: Array<{ label: string; url: string }>;
+};
+
+function renderAdminNotice(input: AdminNoticeInput) {
+  const rows = input.rows.filter((row) => row.value && row.value.trim());
+  const quote = input.quote?.trim() || "";
+  const links = input.links ?? [];
+  const html = `
+    <div style="font-family: ${FONT_STACK}; line-height: 1.6; color: ${INK};">
+      <p style="margin: 0 0 8px; font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: ${BRAND};">${escapeHtml(input.eyebrow)} <span style="display:inline-block; margin-left: 8px; padding: 2px 8px; border-radius: 999px; background:#fef3c7; color:#92400e; font-size: 11px; letter-spacing: .04em; vertical-align: middle;">Internal notification</span></p>
+      <h2 style="margin: 0 0 12px; font-size: 20px; font-weight: 600;">${escapeHtml(input.heading)}</h2>
+      <p style="margin: 0 0 16px;">${escapeHtml(input.intro)}</p>
+      ${
+        quote
+          ? `<blockquote style="margin: 0 0 16px; padding: 12px 16px; border-left: 4px solid ${BRAND}; background: #f8fafc; border-radius: 0 8px 8px 0; white-space: pre-wrap; word-break: break-word;">${escapeHtml(quote)}</blockquote>`
+          : ""
+      }
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-top: 1px solid ${BORDER};">
+        ${rows.map((row) => metaRow(escapeHtml(row.label), escapeHtml(row.value))).join("")}
+      </table>
+      ${ctaButton(input.cta.url, escapeHtml(input.cta.label))}
+      ${
+        links.length > 0
+          ? `<p style="margin: 12px 0 0; font-size: 13px;">${links
+              .map(
+                (link) =>
+                  `<a href="${escapeHtml(link.url)}" style="color:${BRAND}; text-decoration:none; font-weight:600;">${escapeHtml(link.label)}</a>`,
+              )
+              .join(` <span style="color:${MUTED};">&middot;</span> `)}</p>`
+          : ""
+      }
+    </div>
+  `;
+  const textLines = [
+    `[INTERNAL NOTIFICATION] ${input.eyebrow.toUpperCase()}`,
+    input.heading,
+    "",
+    input.intro,
+    "",
+  ];
+  if (quote)
+    textLines.push(...quote.split("\n").map((line) => `> ${line}`), "");
+  textLines.push(...rows.map((row) => `${row.label}: ${row.value}`), "");
+  textLines.push(`${input.cta.label}: ${input.cta.url}`);
+  textLines.push(...links.map((link) => `${link.label}: ${link.url}`));
+  return {
+    subject: input.subject,
+    ...withOfficialFooter(html, textLines.join("\n")),
+  };
+}
+
+export function buildAdminHostApplicationEmail(params: {
+  applicationId: string;
+  applicantName: string;
+  applicantEmail?: string | null;
+  phone?: string | null;
+  region?: string | null;
+  city?: string | null;
+  idType?: string | null;
+  idNumber?: string | null;
+  experience?: string | null;
+  fleetSize?: number | null;
+  note?: string | null;
+  hasIdDocuments: boolean;
+  submittedAt?: string | null;
+}) {
+  return renderAdminNotice({
+    subject: `[${appName} Admin] New host verification request: ${params.applicantName}`,
+    eyebrow: "Host verification",
+    heading: `${params.applicantName} applied to become a host`,
+    intro:
+      "A new host application is waiting for identity verification and approval. Review the submitted ID documents and approve or reject the request from the admin dashboard.",
+    quote: params.note,
+    rows: [
+      { label: "Application ID", value: params.applicationId },
+      { label: "Applicant", value: params.applicantName },
+      { label: "Email", value: params.applicantEmail ?? "Not available" },
+      { label: "Phone", value: params.phone ?? "Not provided" },
+      {
+        label: "Location",
+        value:
+          [params.city, params.region].filter(Boolean).join(", ") ||
+          "Not provided",
+      },
+      { label: "ID type", value: params.idType ?? "Not provided" },
+      { label: "ID number", value: maskIdentifier(params.idNumber) },
+      {
+        label: "ID documents",
+        value: params.hasIdDocuments ? "Uploaded" : "Missing",
+      },
+      { label: "Experience", value: params.experience ?? "Not provided" },
+      {
+        label: "Fleet size",
+        value:
+          typeof params.fleetSize === "number"
+            ? String(params.fleetSize)
+            : "Not provided",
+      },
+      {
+        label: "Submitted at",
+        value: formatDateTime(params.submittedAt ?? new Date()),
+      },
+    ],
+    cta: {
+      label: "Review application",
+      url: `${siteUrl}/admin?status=pending`,
+    },
+  });
+}
+
+export function buildAdminListingSubmittedEmail(params: {
+  carId: string;
+  carTitle?: string | null;
+  hostName?: string | null;
+  hostEmail?: string | null;
+  city?: string | null;
+  region?: string | null;
+  dailyPrice?: number | null;
+  resubmitted?: boolean;
+  submittedAt?: string | null;
+}) {
+  const carTitle = params.carTitle?.trim() || "New listing";
+  const hostName = params.hostName?.trim() || "A host";
+  return renderAdminNotice({
+    subject: `[${appName} Admin] ${params.resubmitted ? "Listing updated" : "New listing"} pending review: ${carTitle}`,
+    eyebrow: "Vehicle approval",
+    heading: params.resubmitted
+      ? `${hostName} updated ${carTitle}`
+      : `${hostName} submitted ${carTitle}`,
+    intro: params.resubmitted
+      ? "The host edited this listing, so it has returned to the review queue and is hidden from guests until approved."
+      : "A new vehicle is waiting for review. It stays hidden from guests until it is approved.",
+    rows: [
+      { label: "Listing ID", value: params.carId },
+      { label: "Vehicle", value: carTitle },
+      { label: "Host", value: hostName },
+      { label: "Host email", value: params.hostEmail ?? "Not available" },
+      {
+        label: "Location",
+        value:
+          [params.city, params.region].filter(Boolean).join(", ") ||
+          "Not provided",
+      },
+      {
+        label: "Daily price",
+        value:
+          typeof params.dailyPrice === "number"
+            ? formatCurrency(params.dailyPrice)
+            : "Not set",
+      },
+      {
+        label: "Submitted at",
+        value: formatDateTime(params.submittedAt ?? new Date()),
+      },
+    ],
+    cta: { label: "Review listing", url: `${siteUrl}/admin/platform` },
+    links: [
+      {
+        label: "Preview listing",
+        url: `${siteUrl}/admin/cars/${params.carId}/preview`,
+      },
+    ],
+  });
+}
+
+export function buildAdminBookingNoticeEmail(params: {
+  bookingId: string;
+  status: string;
+  instantBook: boolean;
+  carTitle?: string | null;
+  carId?: string | null;
+  renterName?: string | null;
+  renterEmail?: string | null;
+  renterPhone?: string | null;
+  hostName?: string | null;
+  hostEmail?: string | null;
+  startDate: string;
+  endDate: string;
+  nights: number;
+  subtotal: number;
+  platformFee: number;
+  totalPrice: number;
+  paymentReference?: string | null;
+  paidAt?: string | null;
+  tripUseLocation?: string | null;
+}) {
+  const carTitle = params.carTitle?.trim() || "Listing";
+  return renderAdminNotice({
+    subject: `[${appName} Admin] ${params.instantBook ? "Booking confirmed" : "Booking request"}: ${carTitle} (${formatCurrency(params.totalPrice)})`,
+    eyebrow: "Paid booking",
+    heading: params.instantBook
+      ? `New confirmed booking for ${carTitle}`
+      : `New booking request for ${carTitle}`,
+    intro: params.instantBook
+      ? "Payment was captured and the booking auto-confirmed (instant book)."
+      : "Payment was captured and the host has been asked to approve the request.",
+    rows: [
+      { label: "Booking ID", value: params.bookingId },
+      { label: "Status", value: params.status.replace(/_/g, " ") },
+      { label: "Guest", value: params.renterName?.trim() || "Guest" },
+      { label: "Guest email", value: params.renterEmail ?? "Not available" },
+      { label: "Guest phone", value: params.renterPhone ?? "Not provided" },
+      { label: "Host", value: params.hostName?.trim() || "Host" },
+      { label: "Host email", value: params.hostEmail ?? "Not available" },
+      {
+        label: "Trip dates",
+        value: `${params.startDate} to ${params.endDate}`,
+      },
+      { label: "Nights", value: String(params.nights) },
+      ...(params.tripUseLocation
+        ? [{ label: "Trip use location", value: params.tripUseLocation }]
+        : []),
+      { label: "Subtotal", value: formatCurrency(params.subtotal) },
+      {
+        label: "Platform fee earned",
+        value: formatCurrency(params.platformFee),
+      },
+      { label: "Total paid", value: formatCurrency(params.totalPrice) },
+      { label: "Payment reference", value: params.paymentReference ?? "N/A" },
+      { label: "Paid at", value: formatDateTime(params.paidAt) },
+    ],
+    cta: { label: "Open platform controls", url: `${siteUrl}/admin/platform` },
+    links: params.carId
+      ? [{ label: "View listing", url: `${siteUrl}/cars/${params.carId}` }]
+      : undefined,
+  });
+}
+
+export function buildAdminDisputeOpenedEmail(params: {
+  disputeId: string;
+  bookingId: string;
+  carTitle?: string | null;
+  openedByName?: string | null;
+  openedByEmail?: string | null;
+  openedByRole: "renter" | "host";
+  reason: string;
+  openedAt?: string | null;
+}) {
+  const carTitle = params.carTitle?.trim() || "Listing";
+  return renderAdminNotice({
+    subject: `[${appName} Admin] Dispute opened on ${carTitle}`,
+    eyebrow: "Dispute",
+    heading: `A ${params.openedByRole} opened a dispute`,
+    intro: `${params.openedByName?.trim() || "A user"} opened a dispute on booking ${shortId(params.bookingId)} for ${carTitle}. Please review and respond from the platform controls.`,
+    quote: params.reason,
+    rows: [
+      { label: "Dispute ID", value: params.disputeId },
+      { label: "Booking ID", value: params.bookingId },
+      { label: "Listing", value: carTitle },
+      { label: "Opened by", value: params.openedByName?.trim() || "Unknown" },
+      { label: "Contact", value: params.openedByEmail ?? "Not available" },
+      { label: "Role", value: params.openedByRole },
+      {
+        label: "Opened at",
+        value: formatDateTime(params.openedAt ?? new Date()),
+      },
+    ],
+    cta: { label: "Review dispute", url: `${siteUrl}/admin/platform` },
+  });
+}
+
+export function buildAdminPlatformSettingsChangedEmail(params: {
+  changedBy: string;
+  previousFeePercent: number | null;
+  nextFeePercent: number;
+  changedAt?: string | null;
+}) {
+  return renderAdminNotice({
+    subject: `[${appName} Admin] Platform fee changed to ${params.nextFeePercent}%`,
+    eyebrow: "Platform settings",
+    heading: "The platform fee was updated",
+    intro:
+      "The platform fee applied to new bookings has been changed. Existing bookings keep the fee they were charged at the time of payment.",
+    rows: [
+      {
+        label: "Previous fee",
+        value:
+          params.previousFeePercent === null
+            ? "Not set"
+            : `${params.previousFeePercent}%`,
+      },
+      { label: "New fee", value: `${params.nextFeePercent}%` },
+      { label: "Changed by", value: params.changedBy },
+      {
+        label: "Changed at",
+        value: formatDateTime(params.changedAt ?? new Date()),
+      },
+    ],
+    cta: { label: "Open platform controls", url: `${siteUrl}/admin/platform` },
+  });
 }

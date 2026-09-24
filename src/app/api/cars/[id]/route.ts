@@ -7,6 +7,10 @@ import { getRequestUser } from "@/lib/supabase/request-auth";
 import { carFormSchema } from "@/lib/validators";
 import { getHostStatus } from "@/lib/host-status";
 import { buildListingTitle } from "@/lib/listing-title";
+import {
+  buildAdminListingSubmittedEmail,
+  sendAdminNotificationSafe,
+} from "@/lib/email";
 
 type Params = {
   params: Promise<{ id: string }>;
@@ -163,6 +167,41 @@ export async function PUT(req: Request, context: Params) {
       .select()
       .single();
     if (error) throw error;
+
+    // The edit sent the listing back to the review queue; tell the office.
+    try {
+      const { data: profile } = await supa
+        .from("profiles")
+        .select("full_name")
+        .eq("id", user.id)
+        .maybeSingle();
+      const updatedAt = String(data?.updated_at ?? new Date().toISOString());
+      await sendAdminNotificationSafe({
+        template: buildAdminListingSubmittedEmail({
+          carId: id,
+          carTitle: data?.title ?? listingTitle,
+          hostName:
+            profile?.full_name ??
+            (user.user_metadata as any)?.full_name ??
+            user.email ??
+            null,
+          hostEmail: user.email ?? null,
+          city: data?.city ?? null,
+          region: data?.region ?? null,
+          dailyPrice:
+            data?.daily_price === null || data?.daily_price === undefined
+              ? null
+              : Number(data.daily_price),
+          resubmitted: true,
+          submittedAt: updatedAt,
+        }),
+        idempotencyKey: `listing:${id}:resubmitted:${updatedAt}`,
+        replyTo: user.email ?? undefined,
+      });
+    } catch (notifyError) {
+      console.error("[cars] admin listing update notice failed", notifyError);
+    }
+
     return NextResponse.json({ data });
   } catch (error: any) {
     return failJson({

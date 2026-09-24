@@ -7,9 +7,11 @@ import { getRequestUser } from "@/lib/supabase/request-auth";
 import { verifyPaystackTransaction, refundPaystack } from "@/lib/paystack";
 import { isLocationOutsideAccra, isOutsideListingRegion } from "@/lib/utils";
 import {
+  buildAdminBookingNoticeEmail,
   buildBookingInvoiceEmail,
   buildBookingPaidEmail,
   buildHostBookingNoticeEmail,
+  sendAdminNotificationSafe,
   sendEmailSafe,
   sendRefundReceiptEmails,
 } from "@/lib/email";
@@ -146,12 +148,7 @@ export async function POST(req: Request) {
     const { reference, amount, bookingId } = body;
     let { carId, startDate, endDate } = body;
     let { tripUseRegion, tripUseCity, tripUseAddress } = body;
-    let {
-      deliveryAddress,
-      deliveryTime,
-      contactPhone,
-      deliveryNotes,
-    } = body;
+    let { deliveryAddress, deliveryTime, contactPhone, deliveryNotes } = body;
     let heldBooking: any = null;
     if (!reference || !amount) {
       return NextResponse.json(
@@ -797,6 +794,32 @@ export async function POST(req: Request) {
             idempotencyKey: `booking:${booking.id}:invoice:host`,
           });
         }
+
+        // Keep the office in the loop on every paid booking.
+        await sendAdminNotificationSafe({
+          template: buildAdminBookingNoticeEmail({
+            bookingId: String(booking.id),
+            status: finalStatus,
+            instantBook: Boolean(car.instant_book),
+            carTitle: car.title ?? null,
+            carId: car.id ?? null,
+            renterName,
+            renterEmail,
+            renterPhone,
+            hostName,
+            hostEmail,
+            startDate,
+            endDate,
+            nights,
+            subtotal,
+            platformFee,
+            totalPrice: total,
+            paymentReference: reference,
+            paidAt: booking.paid_at ?? new Date().toISOString(),
+            tripUseLocation: tripUseLocationLine,
+          }),
+          idempotencyKey: `booking:${booking.id}:admin-notice`,
+        });
       } catch (emailError) {
         console.error(
           "[bookings/paystack] email notifications failed",
@@ -955,7 +978,10 @@ export async function POST(req: Request) {
           return NextResponse.json({ data: current, alreadyConfirmed: true });
         }
         return NextResponse.json(
-          { message: "This booking was already processed.", data: current ?? null },
+          {
+            message: "This booking was already processed.",
+            data: current ?? null,
+          },
           { status: 409 },
         );
       }

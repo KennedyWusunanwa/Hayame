@@ -7,6 +7,10 @@ import { getRequestUser } from "@/lib/supabase/request-auth";
 import { carFormSchema } from "@/lib/validators";
 import { getHostStatus } from "@/lib/host-status";
 import { buildListingTitle } from "@/lib/listing-title";
+import {
+  buildAdminListingSubmittedEmail,
+  sendAdminNotificationSafe,
+} from "@/lib/email";
 
 function parseNumber(value: string | null) {
   if (!value) return undefined;
@@ -149,9 +153,7 @@ export async function GET(req: Request) {
     // rejects (PGRST303) before the "cars readable by anyone" policy runs,
     // turning a public list into a 500. Use the anon client for public browse;
     // the authenticated client only for "my cars".
-    const supa = (
-      mineOnly ? supabase : createSupabasePublicClient()
-    ) as any;
+    const supa = (mineOnly ? supabase : createSupabasePublicClient()) as any;
 
     let query = supa
       .from("car_search_view")
@@ -424,6 +426,40 @@ export async function POST(req: Request) {
       .select()
       .single();
     if (error) throw error;
+
+    // Tell the office a vehicle is waiting for approval.
+    try {
+      const { data: profile } = await supa
+        .from("profiles")
+        .select("full_name")
+        .eq("id", user.id)
+        .maybeSingle();
+      await sendAdminNotificationSafe({
+        template: buildAdminListingSubmittedEmail({
+          carId: String(data?.id ?? ""),
+          carTitle: data?.title ?? listingTitle,
+          hostName:
+            profile?.full_name ??
+            (user.user_metadata as any)?.full_name ??
+            user.email ??
+            null,
+          hostEmail: user.email ?? null,
+          city: data?.city ?? null,
+          region: data?.region ?? null,
+          dailyPrice:
+            data?.daily_price === null || data?.daily_price === undefined
+              ? null
+              : Number(data.daily_price),
+          resubmitted: false,
+          submittedAt: data?.created_at ?? null,
+        }),
+        idempotencyKey: `listing:${data?.id ?? user.id}:submitted`,
+        replyTo: user.email ?? undefined,
+      });
+    } catch (notifyError) {
+      console.error("[cars] admin listing notice failed", notifyError);
+    }
+
     return NextResponse.json({ data });
   } catch (error: any) {
     return failJson({

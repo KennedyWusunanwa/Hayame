@@ -68,6 +68,14 @@ Can:
 - Update disputes.
 - Manage make/model filter catalog.
 - Send official office messages to users.
+- Change the platform fee percentage (Platform controls, "Platform fees" card). New bookings use the new fee immediately.
+
+Email notifications (all branded, sent from `RESEND_FROM`):
+
+- Applicant: application received, approved, or rejected (with reason).
+- Host: vehicle approved (live) or rejected (with reason and edit link), new booking / booking request, invoice, refund receipt, cancellation.
+- Renter: payment received, host decision, invoice, refund receipt, cancellation.
+- Admin inbox (`ADMIN_NOTIFICATIONS_EMAIL`): new host verification request, new or edited vehicle awaiting review, every paid booking, every dispute opened, contact form requests, platform fee changes.
 
 ## 3. Global Interface (Visible Across The Site)
 

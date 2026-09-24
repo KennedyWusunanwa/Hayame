@@ -4,7 +4,12 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getRequestUser } from "@/lib/supabase/request-auth";
 import { hostApplicationSchema } from "@/lib/validators";
-import { buildHostApplicationSubmittedEmail, sendEmailSafe } from "@/lib/email";
+import {
+  buildAdminHostApplicationEmail,
+  buildHostApplicationSubmittedEmail,
+  sendAdminNotificationSafe,
+  sendEmailSafe,
+} from "@/lib/email";
 import { ZodError } from "zod";
 
 export async function GET(req: Request) {
@@ -111,16 +116,41 @@ export async function POST(req: Request) {
       .single();
     if (error) throw error;
 
-    if (user.email) {
-      const template = buildHostApplicationSubmittedEmail({
-        hostName: parsed.full_name,
-      });
-      await sendEmailSafe({
-        to: user.email,
-        ...template,
-        idempotencyKey: `host-application:${data?.id ?? user.id}:submitted`,
-      });
-    }
+    const applicationId = String(data?.id ?? "").trim() || user.id;
+    const submittedAt = String(data?.submitted_at ?? new Date().toISOString());
+
+    const applicantAck = user.email
+      ? sendEmailSafe({
+          to: user.email,
+          ...buildHostApplicationSubmittedEmail({
+            hostName: parsed.full_name,
+          }),
+          idempotencyKey: `host-application:${applicationId}:submitted`,
+        })
+      : Promise.resolve(null);
+
+    // Tell the office a verification request is waiting.
+    const adminNotice = sendAdminNotificationSafe({
+      template: buildAdminHostApplicationEmail({
+        applicationId,
+        applicantName: parsed.full_name,
+        applicantEmail: user.email ?? null,
+        phone: parsed.phone ?? null,
+        region: parsed.region ?? null,
+        city: parsed.city ?? null,
+        idType: parsed.id_type ?? null,
+        idNumber: parsed.id_number ?? null,
+        experience: parsed.experience,
+        fleetSize: parsed.fleet_size ?? null,
+        note: parsed.note ?? null,
+        hasIdDocuments: Boolean(parsed.id_front_path && parsed.id_back_path),
+        submittedAt,
+      }),
+      idempotencyKey: `host-application:${applicationId}:admin-notice`,
+      replyTo: user.email ?? undefined,
+    });
+
+    await Promise.allSettled([applicantAck, adminNotice]);
 
     return NextResponse.json({ data });
   } catch (error: any) {

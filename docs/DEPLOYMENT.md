@@ -19,7 +19,11 @@
 - `NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY`
 - `NEXT_PUBLIC_SITE_URL`
 - `NEXT_PUBLIC_AUTH_CONFIRMATION_REDIRECT_URL`
-- `RESEND_API_KEY` and sender/support email variables if email notifications are enabled
+- `RESEND_API_KEY` and `RESEND_FROM` (e.g. `Hayame <no-reply@hayamegh.com>`) for all transactional email
+- `ADMIN_NOTIFICATIONS_EMAIL` (comma separated) for internal notices: new host applications, vehicle submissions and edits, paid bookings, disputes and platform fee changes. Falls back to `SUPPORT_INBOX_EMAIL`.
+- `SUPPORT_INBOX_EMAIL` for contact form requests and the reply-to address on every email
+- `EMAIL_LOGO_URL` (optional) absolute URL of the white wordmark for email headers; defaults to `<NEXT_PUBLIC_SITE_URL>/logo-white.png`
+- `NEXT_PUBLIC_IOS_APP_STORE_URL`, `NEXT_PUBLIC_ANDROID_PLAY_STORE_URL` (leave unset until listed) and `NEXT_PUBLIC_ANDROID_APK_URL` for the app links shown on the site and in email footers
 - Push delivery variables for enabled platforms: `APNS_TEAM_ID`, `APNS_KEY_ID`, `APNS_PRIVATE_KEY`, `APNS_TOPIC`, and Firebase HTTP v1 credentials or `FCM_SERVER_KEY`
 
 ## Build & deploy
