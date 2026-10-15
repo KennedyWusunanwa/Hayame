@@ -8,6 +8,7 @@ import { SiteChrome } from "@/components/site-chrome";
 import { NavigationLoader } from "@/components/navigation-loader";
 import { MessagingProvider } from "@/components/messages/messaging-provider";
 import { ConsentBanner } from "@/components/consent-banner";
+import { MaintenanceAdminBanner } from "@/components/maintenance/maintenance-admin-banner";
 import { socialImageAlt } from "@/components/seo/social-preview-image";
 import { resolveSiteUrl } from "@/lib/site-url";
 
@@ -114,6 +115,7 @@ export default function RootLayout({
           </div>
           <SiteChrome>
             <ConsentBanner />
+            <MaintenanceAdminBanner />
           </SiteChrome>
         </MessagingProvider>
       </body>
