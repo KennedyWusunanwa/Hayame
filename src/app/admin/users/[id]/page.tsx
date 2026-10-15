@@ -16,6 +16,7 @@ import { PageHeader } from "@/components/admin/admin-ui";
 import { requireAdmin } from "@/lib/admin-auth";
 import { logAdminAction } from "@/lib/admin-audit";
 import { can } from "@/lib/admin-permissions";
+import { resolveCarImage } from "@/lib/car-images";
 import { friendlyError } from "@/lib/client-errors";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { sendVerificationEmail } from "@/lib/auth-mail";
@@ -410,6 +411,24 @@ async function sendUserEmailAction(formData: FormData) {
   }
 }
 
+function humanLabel(key: string) {
+  return key.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
+}
+
+function formatProfileValue(key: string, value: unknown) {
+  if (value === null || value === undefined || value === "") return "—";
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  if (/_at$/.test(key) || key === "created_at") return formatDateTime(String(value));
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
+}
+
+const CAR_STATUS_STYLES: Record<string, string> = {
+  approved: "bg-emerald-100 text-emerald-800",
+  pending: "bg-amber-100 text-amber-900",
+  rejected: "bg-red-100 text-red-800",
+};
+
 export default async function AdminUserDetailsPage({
   params,
   searchParams,
@@ -445,10 +464,9 @@ export default async function AdminUserDetailsPage({
       .limit(5),
     admin
       .from("cars")
-      .select("id,title,city,region,daily_price,approval_status,created_at")
+      .select("*, car_photos(url)")
       .eq("owner_id", userId)
-      .order("created_at", { ascending: false })
-      .limit(20),
+      .order("created_at", { ascending: false }),
     admin
       .from("bookings")
       .select(
@@ -456,7 +474,7 @@ export default async function AdminUserDetailsPage({
       )
       .eq("renter_id", userId)
       .order("created_at", { ascending: false })
-      .limit(20),
+      .limit(100),
     admin
       .from("conversations")
       .select(
@@ -509,7 +527,7 @@ export default async function AdminUserDetailsPage({
           )
           .in("car_id", carIds)
           .order("created_at", { ascending: false })
-          .limit(20)
+          .limit(200)
       : { data: [] };
 
   const idFrontUrl = latestApplication?.id_front_path
@@ -575,6 +593,181 @@ export default async function AdminUserDetailsPage({
           {resolvedSearch.error}
         </div>
       ) : null}
+
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        {[
+          ["Cars listed", cars.length],
+          ["Approved", cars.filter((c: any) => c.approval_status === "approved").length],
+          ["Waiting for review", cars.filter((c: any) => c.approval_status === "pending").length],
+          ["Bookings on their cars", (ownerBookings ?? []).length],
+          ["Trips they booked", renterBookings.length],
+        ].map(([label, value]) => (
+          <div key={String(label)} className="rounded-2xl border border-border/80 bg-white p-4 shadow-[0_1px_2px_rgba(10,43,84,0.04)]">
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">{label}</p>
+            <p className="mt-1 text-2xl font-black tracking-tight text-[#0A2B54]">{value}</p>
+          </div>
+        ))}
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>All cars ({cars.length})</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {cars.length === 0 ? (
+            <p className="text-sm text-gray-600">This user has not listed any cars.</p>
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              {cars.map((car: any) => {
+                const photoUrl = resolveCarImage(car.car_photos?.[0]?.url, {
+                  id: car.id,
+                  title: car.title,
+                  city: car.city,
+                  region: car.region,
+                  carType: car.car_type,
+                });
+                const carBookings = (ownerBookings ?? []).filter((b: any) => b.car_id === car.id).length;
+                const status = String(car.approval_status ?? "pending");
+                const specs = [car.car_year, car.transmission, car.fuel_type ?? car.fuel, car.seats ? `${car.seats} seats` : null].filter(Boolean).join(" · ");
+                return (
+                  <div key={car.id} className="overflow-hidden rounded-2xl border border-border/80 bg-white shadow-sm">
+                    <div className="relative aspect-[4/3] bg-gray-100">
+                      <Image src={photoUrl} alt={car.title ?? "Car"} fill unoptimized className="object-cover" sizes="(min-width: 1280px) 30vw, (min-width: 640px) 45vw, 100vw" />
+                      <span className={`absolute left-3 top-3 rounded-full px-2.5 py-0.5 text-[11px] font-bold capitalize ${CAR_STATUS_STYLES[status] ?? "bg-gray-100 text-gray-700"}`}>
+                        {status}
+                      </span>
+                    </div>
+                    <div className="space-y-1.5 p-4 text-sm">
+                      <p className="truncate font-semibold text-foreground">{car.title ?? car.id}</p>
+                      <p className="text-xs text-gray-600">
+                        {[[car.make ?? car.brand, car.model].filter(Boolean).join(" "), specs].filter(Boolean).join(" · ")}
+                      </p>
+                      <p className="text-xs text-gray-600">{[car.city, car.region].filter(Boolean).join(", ") || "No location"}</p>
+                      <div className="flex items-center justify-between pt-1">
+                        <span className="font-bold text-[#0A2B54]">{formatCurrency(Number(car.daily_price ?? 0))}<span className="text-xs font-medium text-gray-500"> / day</span></span>
+                        <span className="text-xs text-gray-500">{carBookings} booking{carBookings === 1 ? "" : "s"} · added {formatDate(car.created_at)}</span>
+                      </div>
+                      {car.approval_status === "rejected" && car.rejection_reason ? (
+                        <p className="rounded-lg bg-red-50 px-2.5 py-1.5 text-xs text-red-800">Rejected: {car.rejection_reason}</p>
+                      ) : null}
+                      <div className="flex flex-wrap gap-2 pt-2">
+                        {can(me.role, "vehicles.review") ? (
+                          <>
+                            <Link href={`/admin/cars/${car.id}/preview`} className="rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:brightness-110">Preview</Link>
+                            <Link href={`/admin/cars/${car.id}/edit`} className="rounded-lg border border-border bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 shadow-sm hover:bg-gray-50">Edit</Link>
+                          </>
+                        ) : null}
+                        {status === "approved" ? (
+                          <Link href={`/cars/${car.id}`} target="_blank" className="rounded-lg border border-border bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 shadow-sm hover:bg-gray-50">Public page</Link>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Account summary</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-4 px-3 sm:px-6 md:grid-cols-[auto,1fr]">
+          <div className="relative h-24 w-24 overflow-hidden rounded-full border border-border bg-gray-100">
+            {profile.avatar_url ? (
+              <Image
+                src={profile.avatar_url}
+                alt={profile.full_name ?? "User"}
+                fill
+                className="object-cover"
+                sizes="96px"
+              />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center text-sm font-semibold text-gray-600">
+                No photo
+              </div>
+            )}
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <div>
+              <p className="text-xs uppercase tracking-wide text-gray-500">
+                Name
+              </p>
+              <p className="font-semibold text-foreground">
+                {profile.full_name ?? "N/A"}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs uppercase tracking-wide text-gray-500">
+                Email
+              </p>
+              <p className="font-semibold text-foreground">
+                {authUser?.email ?? "N/A"}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs uppercase tracking-wide text-gray-500">
+                Phone
+              </p>
+              <p className="font-semibold text-foreground">
+                {profile.phone ?? "N/A"}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs uppercase tracking-wide text-gray-500">
+                Role
+              </p>
+              <p className="font-semibold text-foreground">
+                {profile.is_host ? "Host" : "Guest"}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs uppercase tracking-wide text-gray-500">
+                Host level
+              </p>
+              <p className="font-semibold text-foreground">
+                {profile.host_level ?? "N/A"}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs uppercase tracking-wide text-gray-500">
+                Host approved at
+              </p>
+              <p className="font-semibold text-foreground">
+                {formatDateTime(profile.host_approved_at)}
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Full profile and sign-in details</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <dl className="grid gap-x-8 gap-y-3 sm:grid-cols-2 xl:grid-cols-3">
+            {[
+              ["User ID", userId],
+              ["Email", authUser?.email ?? "—"],
+              ["Email confirmed", emailConfirmedAt ? formatDateTime(emailConfirmedAt) : "Not confirmed"],
+              ["Account created", formatDateTime(authUser?.created_at)],
+              ["Last sign-in", formatDateTime(authUser?.last_sign_in_at)],
+              ["Sign-in methods", (authUser?.app_metadata?.providers ?? []).join(", ") || "—"],
+              ...Object.entries(profile)
+                .filter(([key]) => !["id", "avatar_url"].includes(key))
+                .map(([key, value]) => [humanLabel(key), formatProfileValue(key, value)]),
+            ].map(([label, value]) => (
+              <div key={String(label)} className="min-w-0">
+                <dt className="text-xs font-semibold uppercase tracking-wide text-gray-500">{label}</dt>
+                <dd className="mt-0.5 break-words text-sm font-medium text-foreground">{String(value)}</dd>
+              </div>
+            ))}
+          </dl>
+        </CardContent>
+      </Card>
 
       <Card id="account-email">
         <CardHeader>
@@ -763,79 +956,6 @@ export default async function AdminUserDetailsPage({
               Send email
             </PendingSubmitButton>
           </form>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Account summary</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-4 px-3 sm:px-6 md:grid-cols-[auto,1fr]">
-          <div className="relative h-24 w-24 overflow-hidden rounded-full border border-border bg-gray-100">
-            {profile.avatar_url ? (
-              <Image
-                src={profile.avatar_url}
-                alt={profile.full_name ?? "User"}
-                fill
-                className="object-cover"
-                sizes="96px"
-              />
-            ) : (
-              <div className="flex h-full w-full items-center justify-center text-sm font-semibold text-gray-600">
-                No photo
-              </div>
-            )}
-          </div>
-          <div className="grid gap-2 sm:grid-cols-2">
-            <div>
-              <p className="text-xs uppercase tracking-wide text-gray-500">
-                Name
-              </p>
-              <p className="font-semibold text-foreground">
-                {profile.full_name ?? "N/A"}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs uppercase tracking-wide text-gray-500">
-                Email
-              </p>
-              <p className="font-semibold text-foreground">
-                {authUser?.email ?? "N/A"}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs uppercase tracking-wide text-gray-500">
-                Phone
-              </p>
-              <p className="font-semibold text-foreground">
-                {profile.phone ?? "N/A"}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs uppercase tracking-wide text-gray-500">
-                Role
-              </p>
-              <p className="font-semibold text-foreground">
-                {profile.is_host ? "Host" : "Guest"}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs uppercase tracking-wide text-gray-500">
-                Host level
-              </p>
-              <p className="font-semibold text-foreground">
-                {profile.host_level ?? "N/A"}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs uppercase tracking-wide text-gray-500">
-                Host approved at
-              </p>
-              <p className="font-semibold text-foreground">
-                {formatDateTime(profile.host_approved_at)}
-              </p>
-            </div>
-          </div>
         </CardContent>
       </Card>
 
@@ -1251,43 +1371,6 @@ export default async function AdminUserDetailsPage({
       </form>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Recent listings by this user</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Title</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Price</TableHead>
-                  <TableHead>Created</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {cars.map((car: any) => (
-                  <TableRow key={car.id}>
-                    <TableCell>{car.title ?? car.id}</TableCell>
-                    <TableCell>{car.approval_status ?? "N/A"}</TableCell>
-                    <TableCell>
-                      {formatCurrency(Number(car.daily_price ?? 0))}
-                    </TableCell>
-                    <TableCell>{formatDate(car.created_at)}</TableCell>
-                  </TableRow>
-                ))}
-                {cars.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={4} className="text-sm text-gray-600">
-                      No listings.
-                    </TableCell>
-                  </TableRow>
-                ) : null}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-
         <Card>
           <CardHeader>
             <CardTitle>Bookings on their listings</CardTitle>
