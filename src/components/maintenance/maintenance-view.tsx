@@ -187,7 +187,7 @@ export function MaintenanceView({
         ) : null}
 
         <h1
-          className="mt-6 text-4xl font-black leading-[1.02] sm:text-6xl"
+          className="mt-6 text-4xl font-black leading-[1.02] text-inherit sm:text-6xl"
           style={{ letterSpacing: "-0.04em" }}
         >
           {splitHeadline(settings.headline).map((part, i) => (
@@ -198,7 +198,7 @@ export function MaintenanceView({
         </h1>
 
         {settings.message ? (
-          <p className="mt-5 max-w-xl text-base font-medium leading-relaxed opacity-90 sm:text-lg">
+          <p className="mt-5 max-w-xl text-base font-medium leading-relaxed text-inherit opacity-90 sm:text-lg">
             {settings.message}
           </p>
         ) : null}
@@ -213,7 +213,7 @@ export function MaintenanceView({
         ) : null}
 
         {settings.contactEmail ? (
-          <p className="mt-10 text-sm font-medium opacity-80">
+          <p className="mt-10 text-sm font-medium text-inherit opacity-80">
             Need us?{" "}
             <a
               href={`mailto:${settings.contactEmail}`}
@@ -225,7 +225,7 @@ export function MaintenanceView({
         ) : null}
       </div>
 
-      <p className="pb-8 text-center text-sm font-bold opacity-80">www.hayamegh.com</p>
+      <p className="pb-8 text-center text-sm font-bold text-inherit opacity-80">www.hayamegh.com</p>
     </div>
   );
 }

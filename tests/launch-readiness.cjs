@@ -34,6 +34,7 @@ const {
   createAdminSessionToken,
   verifyAdminCredentials,
   verifyAdminPassword,
+  readAdminSessionToken,
   verifyAdminSessionToken,
 } = require("../src/lib/admin-auth/session.ts");
 const {
@@ -43,6 +44,13 @@ const {
   parseMaintenanceForm,
   splitHeadline,
 } = require("../src/lib/maintenance-core.ts");
+const {
+  ADMIN_ROLES,
+  PERMISSIONS,
+  can,
+  permissionsFor,
+} = require("../src/lib/admin-permissions.ts");
+const { describeAction } = require("../src/lib/admin-actions-catalog.ts");
 const {
   contactRequestSchema,
   isContactSpamTrapTriggered,
@@ -190,6 +198,37 @@ function runEmailChecks() {
   assert.ok(feeNotice.text.includes("Previous fee: 10%"));
 }
 
+function runAdminEmailChecks() {
+  const email = require("../src/lib/email.ts");
+  const activity = email.buildAdminActivityEmail({
+    severity: "critical",
+    actionLabel: "Refunded a booking",
+    summary: "Ama <script>x</script> refunded GH₵120 on booking 3F2A9C1B",
+    actorName: "Ama",
+    actorEmail: "ama@hayamegh.com",
+    actorRole: "Finance",
+    ip: "41.66.0.1",
+    targetType: "booking",
+    targetId: "3f2a9c1b-0000-0000-0000-000000000000",
+    details: { reason: "Duplicate charge", amount: 120, nested: { skipped: true } },
+  });
+  assert.ok(activity.subject.includes("CRITICAL"));
+  assert.ok(!activity.html.includes("<script>"), "admin activity html must escape input");
+  assert.ok(activity.html.includes("ama@hayamegh.com") && activity.html.includes("41.66.0.1"));
+  assert.ok(activity.html.includes("Duplicate charge") && !activity.html.includes("skipped"));
+  assert.ok(activity.text.includes("/admin/audit"));
+
+  const welcome = email.buildAdminWelcomeEmail({
+    name: "Kofi",
+    email: "kofi@hayamegh.com",
+    roleLabel: "Super admin",
+    roleDescription: "Everything.",
+    createdBy: "Root",
+  });
+  assert.ok(welcome.html.includes("kofi@hayamegh.com"));
+  assert.ok(!/password:\s*\S+/i.test(welcome.text), "welcome email must never contain a password");
+}
+
 function runMaintenanceChecks() {
   const now = new Date("2026-10-15T12:00:00Z");
   const form = (fields) => ({ get: (name) => fields[name] ?? null });
@@ -246,8 +285,49 @@ function runMaintenanceChecks() {
   ]);
 }
 
+function runAdminRoleChecks() {
+  // Super admin can do everything; nobody else can manage the team or the site switches.
+  assert.equal(permissionsFor("super_admin").length, PERMISSIONS.length);
+  for (const role of ADMIN_ROLES.filter((r) => r !== "super_admin")) {
+    assert.equal(can(role, "team.manage"), false, `${role} must not manage the team`);
+    assert.equal(can(role, "maintenance.manage"), false, `${role} must not toggle maintenance`);
+    assert.equal(can(role, "platform.fee"), false, `${role} must not change the fee`);
+  }
+  assert.equal(can("finance", "bookings.refund"), true);
+  assert.equal(can("admin", "bookings.refund"), false);
+  assert.equal(can("support", "vehicles.delete"), false);
+  assert.equal(can("support", "messages.reply"), true);
+  assert.equal(can(null, "overview.view"), false);
+
+  // Team sessions carry the admin id; tampering or expiry is rejected.
+  const token = createAdminSessionToken({
+    username: "ama@hayamegh.com",
+    adminId: "11111111-1111-1111-1111-111111111111",
+    sessionSecret: "s3cret",
+    now: 1_700_000_000_000,
+    ttlSeconds: 60,
+  });
+  assert.deepEqual(readAdminSessionToken({ token, sessionSecret: "s3cret", now: 1_700_000_010_000 }), {
+    username: "ama@hayamegh.com",
+    adminId: "11111111-1111-1111-1111-111111111111",
+  });
+  assert.equal(readAdminSessionToken({ token, sessionSecret: "wrong", now: 1_700_000_010_000 }), null);
+  assert.equal(readAdminSessionToken({ token, sessionSecret: "s3cret", now: 1_700_000_100_000 }), null);
+  const rootToken = createAdminSessionToken({ username: "admin", sessionSecret: "s3cret", now: 1_700_000_000_000 });
+  assert.equal(readAdminSessionToken({ token: rootToken, sessionSecret: "s3cret", now: 1_700_000_010_000 }).adminId, null);
+
+  // Dangerous actions must always email the team.
+  for (const action of ["booking_refunded", "listing_deleted", "platform_settings_updated", "admin.created", "admin.role_changed", "maintenance.enabled"]) {
+    assert.equal(describeAction(action).severity, "critical", `${action} should be critical`);
+  }
+  assert.equal(describeAction("admin.login").severity, "info");
+  assert.equal(describeAction("something_new").severity, "info");
+}
+
 runAdminAuthChecks();
+runAdminRoleChecks();
 runContactChecks();
 runEmailChecks();
+runAdminEmailChecks();
 runMaintenanceChecks();
 console.log("Launch readiness checks passed.");

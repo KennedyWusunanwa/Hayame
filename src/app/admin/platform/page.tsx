@@ -12,7 +12,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { getAdminReviewerName, requireAdminPage } from "@/lib/admin-auth";
+import { PageHeader } from "@/components/admin/admin-ui";
+import { requireAdmin } from "@/lib/admin-auth";
+import { logAdminAction } from "@/lib/admin-audit";
+import { can } from "@/lib/admin-permissions";
 import {
   isMissingNotificationStorageError,
   sanitizeAnnouncementUrl,
@@ -23,9 +26,7 @@ import {
   sendPushNotificationsToUsers,
 } from "@/lib/push";
 import {
-  buildAdminPlatformSettingsChangedEmail,
   buildListingDecisionEmail,
-  sendAdminNotificationSafe,
   sendEmailSafe,
   sendRefundReceiptEmails,
 } from "@/lib/email";
@@ -305,7 +306,7 @@ function getPlatformNotice(searchParams: {
 
 async function sendDirectPushMessageAction(formData: FormData) {
   "use server";
-  await requireAdminPage();
+  const actor = await requireAdmin("announcements.send");
   const admin = createSupabaseAdminClient() as any;
 
   const title = String(formData.get("title") ?? "").trim();
@@ -332,16 +333,17 @@ async function sendDirectPushMessageAction(formData: FormData) {
     },
   });
 
-  await admin.from("admin_actions").insert({
+  await logAdminAction({
     action: "push_message_sent",
-    target_type: "mobile_push",
-    performed_by: getAdminReviewerName(),
+    summary: `${actor.name} sent a push message "${title}" to ${target === "all" ? "everyone" : target}`,
+    targetType: "mobile_push",
     metadata: {
       title,
-      body,
       target,
-      pushResult,
+      attempted: pushResult.attempted,
+      delivered: pushResult.delivered,
     },
+    actor,
   });
 
   redirectToAdminPlatform({
@@ -354,7 +356,7 @@ async function sendDirectPushMessageAction(formData: FormData) {
 
 async function createAnnouncementAction(formData: FormData) {
   "use server";
-  await requireAdminPage();
+  const actor = await requireAdmin("announcements.send");
   const admin = createSupabaseAdminClient() as any;
 
   const title = String(formData.get("title") ?? "").trim();
@@ -376,7 +378,7 @@ async function createAnnouncementAction(formData: FormData) {
   }
 
   const publishedAt = new Date().toISOString();
-  const reviewer = getAdminReviewerName();
+  const reviewer = actor.email;
   const { data: announcement, error } = await admin
     .from("app_announcements")
     .insert({
@@ -425,19 +427,19 @@ async function createAnnouncementAction(formData: FormData) {
     });
   }
 
-  await admin.from("admin_actions").insert({
+  await logAdminAction({
     action: "announcement_created",
-    target_id: announcement.id,
-    target_type: "announcement",
-    performed_by: reviewer,
+    summary: `${actor.name} published the announcement "${title}" (${delivery}, ${audience})`,
+    targetId: announcement.id,
+    targetType: "announcement",
     metadata: {
       category,
       delivery,
       audience,
-      showOnce,
       pushed: Boolean(pushResult),
-      pushResult,
+      delivered: pushResult?.delivered ?? 0,
     },
+    actor,
   });
 
   redirectToAdminPlatform({
@@ -451,7 +453,7 @@ async function createAnnouncementAction(formData: FormData) {
 
 async function archiveAnnouncementAction(formData: FormData) {
   "use server";
-  await requireAdminPage();
+  const actor = await requireAdmin("announcements.send");
   const admin = createSupabaseAdminClient() as any;
   const announcementId = String(formData.get("announcementId") ?? "").trim();
   if (!announcementId) {
@@ -468,11 +470,12 @@ async function archiveAnnouncementAction(formData: FormData) {
     })
     .eq("id", announcementId);
 
-  await admin.from("admin_actions").insert({
+  await logAdminAction({
     action: "announcement_archived",
-    target_id: announcementId,
-    target_type: "announcement",
-    performed_by: getAdminReviewerName(),
+    summary: `${actor.name} archived an announcement`,
+    targetId: announcementId,
+    targetType: "announcement",
+    actor,
   });
 
   redirectToAdminPlatform({ notice: "announcement-archived" });
@@ -486,7 +489,7 @@ function parseFeePercent(raw: FormDataEntryValue | null) {
 
 async function updatePlatformSettingsAction(formData: FormData) {
   "use server";
-  await requireAdminPage();
+  const actor = await requireAdmin("platform.fee");
   const admin = createSupabaseAdminClient() as any;
   const nextFee = parseFeePercent(formData.get("platformFeePercent"));
   if (nextFee === null) {
@@ -506,7 +509,6 @@ async function updatePlatformSettingsAction(formData: FormData) {
       : Number(current.platform_fee_percent);
 
   const changedAt = new Date().toISOString();
-  const reviewer = getAdminReviewerName();
   const { error } = await admin.from("platform_settings").upsert(
     {
       id: 1,
@@ -521,26 +523,13 @@ async function updatePlatformSettingsAction(formData: FormData) {
     return;
   }
 
-  await admin.from("admin_actions").insert({
-    action: "platform_settings_updated",
-    target_id: null,
-    target_type: "platform_settings",
-    performed_by: reviewer,
-    metadata: {
-      platform_fee_percent: nextFee,
-      previous_platform_fee_percent: previousFee,
-    },
-  });
-
   if (previousFee !== nextFee) {
-    await sendAdminNotificationSafe({
-      template: buildAdminPlatformSettingsChangedEmail({
-        changedBy: reviewer,
-        previousFeePercent: previousFee,
-        nextFeePercent: nextFee,
-        changedAt,
-      }),
-      idempotencyKey: `platform-settings:fee:${changedAt}`,
+    await logAdminAction({
+      action: "platform_settings_updated",
+      summary: `${actor.name} changed the platform fee from ${previousFee === null ? "unset" : `${previousFee}%`} to ${nextFee}%`,
+      targetType: "platform_settings",
+      metadata: { previous_fee_percent: previousFee ?? "unset", new_fee_percent: nextFee },
+      actor,
     });
   }
 
@@ -549,7 +538,7 @@ async function updatePlatformSettingsAction(formData: FormData) {
 
 async function listingReviewAction(formData: FormData) {
   "use server";
-  await requireAdminPage();
+  const actor = await requireAdmin("vehicles.review");
   const admin = createSupabaseAdminClient() as any;
   const carId = String(formData.get("carId") ?? "");
   const action = String(formData.get("action") ?? "");
@@ -569,18 +558,19 @@ async function listingReviewAction(formData: FormData) {
     .update({
       approval_status: action === "approve" ? "approved" : "rejected",
       reviewed_at: new Date().toISOString(),
-      reviewed_by: getAdminReviewerName(),
+      reviewed_by: actor.email,
       rejection_reason:
         action === "reject" ? reason || "Rejected by admin" : null,
     })
     .eq("id", carId);
 
-  await admin.from("admin_actions").insert({
+  await logAdminAction({
     action: action === "approve" ? "listing_approved" : "listing_rejected",
-    target_id: carId,
-    target_type: "car",
-    performed_by: getAdminReviewerName(),
+    summary: `${actor.name} ${action === "approve" ? "approved" : "rejected"} the listing ${(car as { title?: string | null } | null)?.title ?? carId}`,
+    targetId: carId,
+    targetType: "car",
     metadata: action === "reject" ? { reason } : null,
+    actor,
   });
 
   // Notify the host that their listing was approved / rejected (email + push).
@@ -647,19 +637,21 @@ async function listingReviewAction(formData: FormData) {
 
 async function deleteListingAction(formData: FormData) {
   "use server";
-  await requireAdminPage();
+  const actor = await requireAdmin("vehicles.delete");
   const admin = createSupabaseAdminClient() as any;
   const carId = String(formData.get("carId") ?? "");
   if (!carId) {
     redirectToAdminPlatform();
   }
 
+  const { data: doomed } = await admin.from("cars").select("title,city").eq("id", carId).maybeSingle();
   await admin.from("cars").delete().eq("id", carId);
-  await admin.from("admin_actions").insert({
+  await logAdminAction({
     action: "listing_deleted",
-    target_id: carId,
-    target_type: "car",
-    performed_by: getAdminReviewerName(),
+    summary: `${actor.name} deleted the listing ${doomed?.title ?? carId}${doomed?.city ? ` (${doomed.city})` : ""}`,
+    targetId: carId,
+    targetType: "car",
+    actor,
   });
 
   redirectToAdminPlatform({ notice: "listing-deleted" });
@@ -667,7 +659,7 @@ async function deleteListingAction(formData: FormData) {
 
 async function refundAction(formData: FormData) {
   "use server";
-  await requireAdminPage();
+  const actor = await requireAdmin("bookings.refund");
   const admin = createSupabaseAdminClient() as any;
   const bookingId = String(formData.get("bookingId") ?? "");
   const reason =
@@ -754,12 +746,15 @@ async function refundAction(formData: FormData) {
     }
   }
 
-  await admin.from("admin_actions").insert({
+  await logAdminAction({
     action: "booking_refunded",
-    target_id: bookingId,
-    target_type: "booking",
-    performed_by: getAdminReviewerName(),
-    metadata: { reason },
+    summary: refundSucceeded
+      ? `${actor.name} refunded GH₵${Number(booking.total_price ?? 0).toLocaleString("en-GH")} on booking ${bookingId.slice(0, 8).toUpperCase()}`
+      : `REFUND FAILED: ${actor.name} tried to refund booking ${bookingId.slice(0, 8).toUpperCase()}. Refund it manually in Paystack`,
+    targetId: bookingId,
+    targetType: "booking",
+    metadata: { reason, succeeded: refundSucceeded, amount: Number(booking.total_price ?? 0) },
+    actor,
   });
 
   redirectToAdminPlatform({ notice: "booking-refunded" });
@@ -767,7 +762,7 @@ async function refundAction(formData: FormData) {
 
 async function reviewModerationAction(formData: FormData) {
   "use server";
-  await requireAdminPage();
+  const actor = await requireAdmin("reviews.moderate");
   const admin = createSupabaseAdminClient() as any;
   const reviewId = String(formData.get("reviewId") ?? "");
   const action = String(formData.get("action") ?? "");
@@ -781,17 +776,18 @@ async function reviewModerationAction(formData: FormData) {
     .update({
       is_hidden: action === "hide",
       moderated_at: new Date().toISOString(),
-      moderated_by: getAdminReviewerName(),
+      moderated_by: actor.email,
       moderation_reason: action === "hide" ? reason || "Hidden by admin" : null,
     })
     .eq("id", reviewId);
 
-  await admin.from("admin_actions").insert({
+  await logAdminAction({
     action: action === "hide" ? "review_hidden" : "review_restored",
-    target_id: reviewId,
-    target_type: "review",
-    performed_by: getAdminReviewerName(),
+    summary: `${actor.name} ${action === "hide" ? "hid" : "restored"} a review`,
+    targetId: reviewId,
+    targetType: "review",
     metadata: action === "hide" ? { reason } : null,
+    actor,
   });
 
   redirectToAdminPlatform({
@@ -801,7 +797,7 @@ async function reviewModerationAction(formData: FormData) {
 
 async function disputeAction(formData: FormData) {
   "use server";
-  await requireAdminPage();
+  const actor = await requireAdmin("disputes.resolve");
   const admin = createSupabaseAdminClient() as any;
   const disputeId = String(formData.get("disputeId") ?? "");
   const status = String(formData.get("status") ?? "");
@@ -822,12 +818,13 @@ async function disputeAction(formData: FormData) {
     })
     .eq("id", disputeId);
 
-  await admin.from("admin_actions").insert({
+  await logAdminAction({
     action: "dispute_status_updated",
-    target_id: disputeId,
-    target_type: "dispute",
-    performed_by: getAdminReviewerName(),
+    summary: `${actor.name} set a dispute to ${status.replace("_", " ")}`,
+    targetId: disputeId,
+    targetType: "dispute",
     metadata: { status, note },
+    actor,
   });
 
   redirectToAdminPlatform({ notice: "dispute-updated" });
@@ -836,18 +833,19 @@ async function disputeAction(formData: FormData) {
 export default async function AdminPlatformPage({
   searchParams,
 }: {
-  searchParams: {
+  searchParams: Promise<{
     notice?: string;
     error?: string;
     delivery?: string;
     attempted?: string;
     delivered?: string;
     reason?: string;
-  };
+  }>;
 }) {
-  await requireAdminPage();
+  const me = await requireAdmin();
+  const resolvedSearchParams = await searchParams;
   const admin = createSupabaseAdminClient() as any;
-  const notice = getPlatformNotice(searchParams);
+  const notice = getPlatformNotice(resolvedSearchParams);
 
   const [
     pendingListings,
@@ -958,20 +956,12 @@ export default async function AdminPlatformPage({
   ).size;
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 px-4 py-6 sm:px-6 sm:py-8">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <p className="text-sm font-semibold text-primary">
-            Admin platform controls
-          </p>
-          <h1 className="text-2xl font-semibold text-foreground">
-            Moderation & controls
-          </h1>
-        </div>
-        <Link href="/admin" className="text-sm font-semibold text-brand">
-          Back to admin
-        </Link>
-      </div>
+    <div className="space-y-6">
+      <PageHeader
+        eyebrow="Admin"
+        title="Moderation & finance"
+        description="Approve listings, handle refunds and disputes, moderate reviews and talk to the app audience. You only see the tools your role allows."
+      />
 
       {notice ? (
         <AdminNotice
@@ -981,6 +971,7 @@ export default async function AdminPlatformPage({
         />
       ) : null}
 
+      {can(me.role, "platform.fee") ? (
       <Card>
         <CardHeader>
           <CardTitle>Platform fees</CardTitle>
@@ -1031,7 +1022,9 @@ export default async function AdminPlatformPage({
           </div>
         </CardContent>
       </Card>
+      ) : null}
 
+      {can(me.role, "vehicles.review") ? (
       <Card>
         <CardHeader>
           <CardTitle>Listing approvals</CardTitle>
@@ -1194,7 +1187,9 @@ export default async function AdminPlatformPage({
           </div>
         </CardContent>
       </Card>
+      ) : null}
 
+      {can(me.role, "bookings.refund") ? (
       <Card>
         <CardHeader>
           <CardTitle>Refund control</CardTitle>
@@ -1265,7 +1260,9 @@ export default async function AdminPlatformPage({
           </div>
         </CardContent>
       </Card>
+      ) : null}
 
+      {can(me.role, "reviews.moderate") ? (
       <Card>
         <CardHeader>
           <CardTitle>Review moderation</CardTitle>
@@ -1346,7 +1343,9 @@ export default async function AdminPlatformPage({
           </div>
         </CardContent>
       </Card>
+      ) : null}
 
+      {can(me.role, "disputes.resolve") ? (
       <Card>
         <CardHeader>
           <CardTitle>Disputes</CardTitle>
@@ -1423,7 +1422,9 @@ export default async function AdminPlatformPage({
           </div>
         </CardContent>
       </Card>
+      ) : null}
 
+      {can(me.role, "announcements.send") ? (
       <Card>
         <CardHeader>
           <CardTitle>Mobile announcements</CardTitle>
@@ -1744,6 +1745,7 @@ export default async function AdminPlatformPage({
           </div>
         </CardContent>
       </Card>
+      ) : null}
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AdminMessagesConsole } from "@/components/admin/admin-messages-console";
-import { requireAdminPage } from "@/lib/admin-auth";
+import { requireAdmin } from "@/lib/admin-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -10,7 +10,7 @@ export default async function AdminMessagesPage({
 }: {
   searchParams: { user?: string };
 }) {
-  await requireAdminPage();
+  await requireAdmin("messages.reply");
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 px-4 py-6 sm:px-6 sm:py-8">

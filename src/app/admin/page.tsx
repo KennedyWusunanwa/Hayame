@@ -3,28 +3,21 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
 import {
-  AlertTriangle,
-  Bell,
   BarChart3,
   Car,
   CheckCircle2,
   ClipboardCheck,
-  Construction,
   FileClock,
   Gauge,
-  LayoutDashboard,
-  LogOut,
-  MessageSquare,
   Search,
-  Settings2,
   ShieldCheck,
-  SlidersHorizontal,
   Users,
   WalletCards,
   type LucideIcon,
 } from "lucide-react";
 import { AdminLoadingLink } from "@/components/admin/admin-loading-link";
 import { AdminNotice } from "@/components/admin/admin-notice";
+import { PageHeader, SeverityPill } from "@/components/admin/admin-ui";
 import { PendingSubmitButton } from "@/components/admin/pending-submit-button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -37,13 +30,14 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  getAdminReviewerName,
+  getCurrentAdmin,
   isAdminAuthConfigured,
-  isAdminAuthenticated,
-  requireAdminPage,
+  requireAdmin,
   signInAdmin,
-  signOutAdmin,
 } from "@/lib/admin-auth";
+import { logAdminAction } from "@/lib/admin-audit";
+import { queryAudit } from "@/lib/admin-audit-query";
+import { can, type Permission } from "@/lib/admin-permissions";
 import { reviewHostApplication } from "@/lib/admin-host-applications";
 import { resolveCarImage } from "@/lib/car-images";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
@@ -77,6 +71,18 @@ function getAdminNotice(searchParams: { notice?: string; count?: string }): {
   description?: string;
 } | null {
   switch (searchParams.notice) {
+    case "forbidden":
+      return {
+        tone: "error",
+        title: "Your role can't do that",
+        description: "Ask a super admin if you need access to that area.",
+      };
+    case "password-changed":
+      return {
+        tone: "success",
+        title: "Password updated",
+        description: "Use the new password next time you sign in.",
+      };
     case "signed-out":
       return {
         tone: "info",
@@ -120,31 +126,26 @@ function getAdminNotice(searchParams: { notice?: string; count?: string }): {
 
 async function loginAction(formData: FormData) {
   "use server";
-  const username = String(formData.get("username") ?? "");
+  const identifier = String(formData.get("username") ?? "");
   const password = String(formData.get("password") ?? "");
-  if (!username || !password) redirectToAdmin({ error: "invalid" });
+  if (!identifier || !password) redirectToAdmin({ error: "invalid" });
 
-  const result = await signInAdmin(username, password);
+  const result = await signInAdmin(identifier, password);
   if (result === "missing") redirectToAdmin({ error: "missing" });
+  if (result === "locked") redirectToAdmin({ error: "locked" });
   if (result !== "ok") redirectToAdmin({ error: "invalid" });
   redirectToAdmin();
 }
 
-async function logoutAction() {
-  "use server";
-  await signOutAdmin();
-  redirectToAdmin({ notice: "signed-out" });
-}
-
 async function reviewAction(formData: FormData) {
   "use server";
-  await requireAdminPage();
+  const actor = await requireAdmin("applications.review");
   const action = String(formData.get("action") ?? "");
   const applicationId = String(formData.get("applicationId") ?? "");
   const rejectionReason = String(formData.get("rejectionReason") ?? "");
   const currentTab =
     typeof formData.get("tab") === "string" ? String(formData.get("tab")) : "";
-  const reviewer = getAdminReviewerName();
+  const reviewer = actor.email;
 
   if (!applicationId || !["approve", "reject"].includes(action)) {
     redirectToAdmin();
@@ -178,26 +179,28 @@ async function reviewAction(formData: FormData) {
 
 async function deleteListingAction(formData: FormData) {
   "use server";
-  await requireAdminPage();
+  const actor = await requireAdmin("vehicles.delete");
   const carId = String(formData.get("carId") ?? "");
   if (!carId) {
     redirectToAdmin();
   }
 
   const admin = createSupabaseAdminClient() as any;
+  const { data: doomed } = await admin.from("cars").select("title,city").eq("id", carId).maybeSingle();
   await admin.from("cars").delete().eq("id", carId);
-  await admin.from("admin_actions").insert({
+  await logAdminAction({
     action: "listing_deleted",
-    target_id: carId,
-    target_type: "car",
-    performed_by: getAdminReviewerName(),
+    summary: `${actor.name} deleted the listing ${doomed?.title ?? carId}${doomed?.city ? ` (${doomed.city})` : ""}`,
+    targetId: carId,
+    targetType: "car",
+    actor,
   });
   redirectToAdmin({ notice: "listing-deleted" });
 }
 
 async function bulkDeleteListingsAction(formData: FormData) {
   "use server";
-  await requireAdminPage();
+  const actor = await requireAdmin("vehicles.delete");
 
   const carIds = Array.from(
     new Set(
@@ -213,14 +216,12 @@ async function bulkDeleteListingsAction(formData: FormData) {
 
   const admin = createSupabaseAdminClient() as any;
   await admin.from("cars").delete().in("id", carIds);
-  await admin.from("admin_actions").insert({
+  await logAdminAction({
     action: "listing_bulk_deleted",
-    target_type: "car",
-    performed_by: getAdminReviewerName(),
-    metadata: {
-      count: carIds.length,
-      car_ids: carIds,
-    },
+    summary: `${actor.name} bulk-deleted ${carIds.length} listing${carIds.length === 1 ? "" : "s"}`,
+    targetType: "car",
+    metadata: { count: carIds.length, car_ids: carIds.join(",") },
+    actor,
   });
   redirectToAdmin({ notice: "listings-deleted", count: carIds.length });
 }
@@ -234,6 +235,7 @@ type AdminWorkspaceProps = {
   bookingsCount: number;
   statusFilter: string;
   query: string;
+  adminName: string;
 };
 
 type AdminTab =
@@ -243,6 +245,24 @@ type AdminTab =
   | "users"
   | "vehicles"
   | "audit";
+
+const TAB_TITLES: Record<AdminTab, { title: string; description: string }> = {
+  overview: { title: "Dashboard", description: "What needs you today, and how the platform is doing." },
+  applications: { title: "Host applications", description: "Review ID and details before anyone can list a car." },
+  hosts: { title: "Hosts", description: "Everyone who can list vehicles on Hayame." },
+  users: { title: "Users", description: "Customer and host profiles." },
+  vehicles: { title: "Vehicles", description: "Every listing in the catalog." },
+  audit: { title: "Audit log", description: "Moved to its own page." },
+};
+
+const TAB_PERMISSIONS: Record<AdminTab, Permission> = {
+  overview: "overview.view",
+  applications: "applications.review",
+  hosts: "hosts.view",
+  users: "users.view",
+  vehicles: "vehicles.review",
+  audit: "audit.view",
+};
 
 function resolveAdminTab(raw?: string): AdminTab {
   if (
@@ -266,305 +286,50 @@ function AdminWorkspace({
   bookingsCount,
   statusFilter,
   query,
+  adminName,
 }: AdminWorkspaceProps) {
-  const navItems = [
-    {
-      label: "Overview",
-      href: buildAdminHref({ tab: "overview" }),
-      icon: LayoutDashboard,
-      active: initialTab === "overview",
-    },
-    {
-      label: "Applications",
-      href: buildAdminHref({ tab: "applications", status: statusFilter }),
-      icon: ClipboardCheck,
-      active: initialTab === "applications",
-      badge: pendingCount,
-    },
-    {
-      label: "Hosts",
-      href: buildAdminHref({ tab: "hosts" }),
-      icon: ShieldCheck,
-      active: initialTab === "hosts",
-    },
-    {
-      label: "Users",
-      href: buildAdminHref({ tab: "users" }),
-      icon: Users,
-      active: initialTab === "users",
-    },
-    {
-      label: "Vehicles",
-      href: buildAdminHref({ tab: "vehicles" }),
-      icon: Car,
-      active: initialTab === "vehicles",
-    },
-    {
-      label: "Audit log",
-      href: buildAdminHref({ tab: "audit" }),
-      icon: FileClock,
-      active: initialTab === "audit",
-    },
-    {
-      label: "Messages",
-      href: "/admin/messages",
-      icon: MessageSquare,
-    },
-    {
-      label: "Analytics",
-      href: "/admin/analytics",
-      icon: BarChart3,
-    },
-    {
-      label: "Manage filters",
-      href: "/admin/filters",
-      icon: SlidersHorizontal,
-    },
-    {
-      label: "Platform controls",
-      href: "/admin/platform",
-      icon: Settings2,
-    },
-    {
-      label: "Error reports",
-      href: "/admin/errors",
-      icon: AlertTriangle,
-    },
-  ];
-  const activeSectionLabel =
-    navItems.find((item) => item.active)?.label ?? "Overview";
-
+  const heading = TAB_TITLES[initialTab];
   return (
-    <div className="min-h-screen bg-[#f5f8fc]">
-      <div className="mx-auto grid max-w-[1500px] gap-4 px-3 py-4 sm:gap-6 sm:px-6 lg:grid-cols-[260px_minmax(0,1fr)] lg:py-6">
-        <aside className="hidden rounded-2xl border border-border/80 bg-white p-4 shadow-sm lg:block">
-          <div className="rounded-2xl bg-primary px-4 py-5 text-white">
-            <Image
-              src="/logo.png"
-              alt="Hayame"
-              width={128}
-              height={48}
-              className="h-9 w-auto brightness-0 invert"
-              priority
-            />
-            <div className="mt-4 text-xl font-semibold text-white">
-              Admin console
-            </div>
-            <p className="mt-3 text-xs leading-5 text-white/70">
-              Review hosts, manage listings, and keep platform operations in one
-              workspace.
-            </p>
-          </div>
-
-          <nav className="mt-5 space-y-1">
-            {navItems.map((item) => (
-              <AdminNavLink key={item.label} {...item} />
-            ))}
-          </nav>
-
-          <div className="mt-6 rounded-2xl border border-brand/20 bg-brand/5 p-4">
-            <div className="flex items-center gap-3">
-              <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-brand text-white">
-                <Bell className="h-5 w-5" aria-hidden="true" />
-              </span>
-              <div>
-                <p className="text-sm font-semibold text-foreground">
-                  {pendingCount} pending
-                </p>
-                <p className="text-xs text-gray-600">Host reviews waiting</p>
-              </div>
-            </div>
-          </div>
-        </aside>
-
-        <main className="min-w-0 space-y-4 sm:space-y-6">
-          <details className="group rounded-2xl border border-border/80 bg-white p-3 shadow-sm lg:hidden">
-            <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 rounded-xl bg-primary px-4 text-white">
-              <span className="inline-flex min-w-0 items-center gap-3">
-                <Image
-                  src="/logo.png"
-                  alt="Hayame"
-                  width={104}
-                  height={38}
-                  className="h-7 w-auto shrink-0 brightness-0 invert"
-                  priority
-                />
-                <span className="truncate text-sm font-semibold text-white">
-                  Admin menu
-                </span>
-              </span>
-              <span className="text-xs font-semibold text-white/80 group-open:hidden">
-                Expand
-              </span>
-              <span className="hidden text-xs font-semibold text-white/80 group-open:inline">
-                Collapse
-              </span>
-            </summary>
-            <nav className="mt-3 grid gap-1">
-              {navItems.map((item) => (
-                <AdminNavLink key={item.label} {...item} />
-              ))}
-            </nav>
-          </details>
-
-          <div className="rounded-2xl border border-border/80 bg-white p-3 shadow-sm sm:p-5">
-            <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-              <div>
-                <p className="text-sm font-semibold text-primary">
-                  Website admin
-                </p>
-                <h1 className="mt-1 text-xl font-semibold tracking-tight text-foreground sm:text-3xl">
-                  {activeSectionLabel}
-                </h1>
-              </div>
-              <div className="grid gap-3 xl:flex xl:items-center">
-                <form
-                  action="/admin"
-                  method="get"
-                  className="flex min-w-0 items-center rounded-xl border border-border bg-gray-50 px-3 py-2 sm:rounded-full xl:w-72"
-                >
-                  <Search className="h-4 w-4 shrink-0 text-gray-500" />
-                  <input type="hidden" name="tab" value="applications" />
-                  <input type="hidden" name="status" value={statusFilter} />
-                  <input
-                    name="q"
-                    defaultValue={query}
-                    placeholder="Search applications"
-                    className="min-w-0 bg-transparent px-2 text-sm text-gray-800 outline-none placeholder:text-gray-500"
-                  />
-                </form>
-                <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
-                  <TopAction href="/admin/messages" icon={MessageSquare}>
-                    Messages
-                  </TopAction>
-                  <TopAction href="/admin/filters" icon={SlidersHorizontal}>
-                    Filters
-                  </TopAction>
-                  <TopAction href="/admin/platform" icon={Settings2}>
-                    Controls
-                  </TopAction>
-                  <TopAction href="/admin/maintenance" icon={Construction}>
-                    Maintenance
-                  </TopAction>
-                  <form
-                    action={logoutAction}
-                    className="col-span-2 sm:col-span-1"
-                  >
-                    <PendingSubmitButton
-                      pendingLabel="Signing out..."
-                      className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl border border-border bg-white px-3 py-2 text-sm font-semibold text-gray-700 shadow-sm transition-colors hover:bg-gray-50 sm:w-auto sm:rounded-full"
-                    >
-                      <LogOut className="h-4 w-4" aria-hidden="true" />
-                      Sign out
-                    </PendingSubmitButton>
-                  </form>
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-4 grid gap-3 sm:mt-5 sm:grid-cols-2 xl:grid-cols-4">
-              <AdminStatCard
-                label="Users"
-                value={usersCount}
-                helper="Active customer profiles"
-                icon={Users}
-                tone="brand"
+    <div className="space-y-6">
+      <PageHeader
+        eyebrow={initialTab === "overview" ? `Welcome back, ${adminName.split(" ")[0]}` : "Admin"}
+        title={heading.title}
+        description={heading.description}
+        actions={
+          initialTab === "applications" ? (
+            <form action="/admin" method="get" className="flex min-w-0 items-center rounded-xl border border-border bg-white px-3 py-2 shadow-sm sm:w-72">
+              <Search className="h-4 w-4 shrink-0 text-gray-500" />
+              <input type="hidden" name="tab" value="applications" />
+              <input type="hidden" name="status" value={statusFilter} />
+              <input
+                name="q"
+                defaultValue={query}
+                placeholder="Search applications"
+                className="min-w-0 flex-1 bg-transparent px-2 text-sm text-gray-800 outline-none placeholder:text-gray-500"
               />
-              <AdminStatCard
-                label="Vehicles"
-                value={carsCount}
-                helper="Listings in the catalog"
-                icon={Car}
-                tone="blue"
-              />
-              <AdminStatCard
-                label="Bookings"
-                value={bookingsCount}
-                helper="Trip records captured"
-                icon={WalletCards}
-                tone="slate"
-              />
-              <AdminStatCard
-                label="Approvals"
-                value={pendingCount}
-                helper="Host applications pending"
-                icon={ShieldCheck}
-                tone="brand"
-                href={buildAdminHref({
-                  tab: "applications",
-                  status: "pending",
-                })}
-              />
-            </div>
-          </div>
+            </form>
+          ) : null
+        }
+      />
 
-          {children}
-        </main>
-      </div>
-    </div>
-  );
-}
-
-function AdminNavLink({
-  label,
-  href,
-  icon: Icon,
-  active,
-  badge,
-}: {
-  label: string;
-  href: string;
-  icon: LucideIcon;
-  active?: boolean;
-  badge?: number;
-}) {
-  return (
-    <AdminLoadingLink
-      href={href}
-      indicator="inline"
-      pendingLabel="Loading..."
-      className={`flex items-center justify-between rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors ${
-        active
-          ? "bg-brand text-white shadow-sm"
-          : "text-gray-700 hover:bg-gray-50"
-      }`}
-    >
-      <span className="inline-flex min-w-0 items-center gap-3">
-        <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
-        <span className="truncate">{label}</span>
-      </span>
-      {badge ? (
-        <span
-          className={`rounded-full px-2 py-0.5 text-[11px] ${
-            active ? "bg-white/20 text-white" : "bg-brand/10 text-brand"
-          }`}
-        >
-          {badge}
-        </span>
+      {initialTab === "overview" ? (
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <AdminStatCard label="Users" value={usersCount} helper="Customer profiles" icon={Users} tone="brand" />
+          <AdminStatCard label="Vehicles" value={carsCount} helper="Listings in the catalog" icon={Car} tone="blue" />
+          <AdminStatCard label="Bookings" value={bookingsCount} helper="Trip records captured" icon={WalletCards} tone="slate" />
+          <AdminStatCard
+            label="Approvals"
+            value={pendingCount}
+            helper="Host applications pending"
+            icon={ShieldCheck}
+            tone="brand"
+            href={buildAdminHref({ tab: "applications", status: "pending" })}
+          />
+        </div>
       ) : null}
-    </AdminLoadingLink>
-  );
-}
 
-function TopAction({
-  href,
-  icon: Icon,
-  children,
-}: {
-  href: string;
-  icon: LucideIcon;
-  children: ReactNode;
-}) {
-  return (
-    <AdminLoadingLink
-      href={href}
-      indicator="inline"
-      pendingLabel="Loading..."
-      className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-border bg-white px-3 py-2 text-sm font-semibold text-gray-700 shadow-sm transition-colors hover:bg-gray-50 sm:rounded-full"
-    >
-      <Icon className="h-4 w-4" aria-hidden="true" />
       {children}
-    </AdminLoadingLink>
+    </div>
   );
 }
 
@@ -638,7 +403,8 @@ export default async function AdminPage({
     process.env.NEXT_PUBLIC_SUPABASE_URL &&
     process.env.SUPABASE_SERVICE_ROLE_KEY,
   );
-  const authed = await isAdminAuthenticated();
+  const me = await getCurrentAdmin();
+  const authed = me !== null;
   const notice = getAdminNotice(resolvedSearchParams);
 
   if (!envReady) {
@@ -659,67 +425,99 @@ export default async function AdminPage({
   }
 
   if (!authed) {
+    const err = resolvedSearchParams?.error;
     return (
-      <div className="mx-auto max-w-md px-6 py-10">
-        <Card>
-          <CardHeader>
-            <CardTitle>Admin sign in</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {resolvedSearchParams?.error === "invalid" ? (
-              <AdminNotice
-                tone="error"
-                title="Admin sign-in failed"
-                description="Check the username and password, then try again."
-              />
-            ) : null}
-            {resolvedSearchParams?.error === "missing" ? (
-              <AdminNotice
-                tone="error"
-                title="Admin credentials are not configured"
-                description="Set the admin username and password environment variables before signing in."
-              />
-            ) : null}
-            {notice ? (
-              <AdminNotice
-                tone={notice.tone}
-                title={notice.title}
-                description={notice.description}
-              />
-            ) : null}
-            <form className="space-y-4" action={loginAction}>
+      <div className="grid min-h-screen bg-[#F4F8FD] lg:grid-cols-[1.05fr_1fr]">
+        <div className="relative hidden flex-col justify-between overflow-hidden bg-[linear-gradient(160deg,#06182E_0%,#0A2B54_55%,#0E4C8C_100%)] p-12 text-white lg:flex">
+          <div className="absolute -bottom-40 -right-32 h-[520px] w-[520px] rounded-full bg-white/[0.06]" aria-hidden />
+          <Image src="/logo-white.png" alt="Hayame" width={160} height={58} className="h-12 w-auto self-start" priority unoptimized />
+          <div className="relative">
+            <h1 className="text-5xl font-black leading-[1.02] tracking-tight text-white">
+              Run Hayame,<br />
+              <span className="text-[#7CCBFF]">carefully.</span>
+            </h1>
+            <p className="mt-5 max-w-md text-base leading-relaxed text-white/75">
+              Hosts, listings, refunds and the site itself. Every action here is signed with your name and recorded.
+            </p>
+          </div>
+          <p className="relative text-sm font-semibold text-white/60">www.hayamegh.com</p>
+        </div>
+
+        <div className="flex items-center justify-center px-6 py-12">
+          <div className="w-full max-w-sm">
+            <Image src="/logo.png" alt="Hayame" width={130} height={48} className="mb-8 h-10 w-auto lg:hidden" unoptimized />
+            <h2 className="text-2xl font-black tracking-tight text-[#0A2B54]">Admin sign in</h2>
+            <p className="mt-1.5 text-sm text-gray-600">Use the email and password your super admin gave you.</p>
+
+            <div className="mt-6 space-y-3">
+              {err === "invalid" ? (
+                <AdminNotice tone="error" title="Sign-in failed" description="Check your email and password, then try again." />
+              ) : null}
+              {err === "locked" ? (
+                <AdminNotice
+                  tone="error"
+                  title="Too many tries"
+                  description="Sign-in is paused for 15 minutes. If this wasn't you, tell a super admin."
+                />
+              ) : null}
+              {err === "missing" ? (
+                <AdminNotice
+                  tone="error"
+                  title="Admin credentials are not configured"
+                  description="Set the admin username and password environment variables before signing in."
+                />
+              ) : null}
+              {notice ? <AdminNotice tone={notice.tone} title={notice.title} description={notice.description} /> : null}
+            </div>
+
+            <form className="mt-6 space-y-4" action={loginAction}>
               <div>
-                <label className="text-sm font-semibold text-foreground">
-                  Username
+                <label className="text-sm font-semibold text-[#0A2B54]" htmlFor="admin-id">
+                  Email or username
                 </label>
                 <input
+                  id="admin-id"
                   name="username"
-                  className="mt-2 w-full rounded-md border border-border bg-white px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
+                  autoComplete="username"
+                  className="mt-1.5 w-full rounded-xl border border-border bg-white px-3.5 py-2.5 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
                   required
                 />
               </div>
               <div>
-                <label className="text-sm font-semibold text-foreground">
+                <label className="text-sm font-semibold text-[#0A2B54]" htmlFor="admin-pw">
                   Password
                 </label>
                 <input
+                  id="admin-pw"
                   name="password"
                   type="password"
-                  className="mt-2 w-full rounded-md border border-border bg-white px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
+                  autoComplete="current-password"
+                  className="mt-1.5 w-full rounded-xl border border-border bg-white px-3.5 py-2.5 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
                   required
                 />
               </div>
               <PendingSubmitButton
-                pendingLabel="Signing in..."
-                className="w-full rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white"
+                pendingLabel="Signing in…"
+                className="w-full rounded-xl bg-brand px-4 py-3 text-sm font-semibold text-white shadow-sm hover:brightness-110"
               >
                 Sign in
               </PendingSubmitButton>
             </form>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </div>
     );
+  }
+
+  if (me.mustChangePassword) redirect("/admin/account?force=1");
+  const requestedTab = resolveAdminTab(resolvedSearchParams?.tab);
+  if (requestedTab === "audit") redirect("/admin/audit");
+  if (!can(me.role, TAB_PERMISSIONS[requestedTab])) {
+    const fallback = (["overview", "applications", "hosts", "users", "vehicles"] as AdminTab[]).find((tab) =>
+      can(me.role, TAB_PERMISSIONS[tab]),
+    );
+    if (!fallback) redirect("/admin/account");
+    redirect(`/admin?tab=${fallback}&notice=forbidden`);
   }
 
   const admin = createSupabaseAdminClient() as any;
@@ -888,11 +686,9 @@ export default async function AdminPage({
     blocksByCar.get(row.car_id)!.push(row);
   });
 
-  const { data: auditRows } = await admin
-    .from("admin_actions")
-    .select("*")
-    .order("created_at", { ascending: false })
-    .limit(12);
+  const recentActivity = can(me.role, "audit.view")
+    ? (await queryAudit({ severity: "important" }, 1, 6)).rows
+    : [];
 
   return (
     <AdminWorkspace
@@ -903,6 +699,7 @@ export default async function AdminPage({
       bookingsCount={bookingsCount ?? 0}
       statusFilter={statusFilter}
       query={query}
+      adminName={me.name}
     >
       {notice ? (
         <AdminNotice
@@ -954,9 +751,9 @@ export default async function AdminPage({
                     Audit
                   </p>
                   <p className="mt-2 text-2xl font-semibold text-foreground">
-                    {auditRows?.length ?? 0}
+                    {recentActivity.length}
                   </p>
-                  <p className="text-xs text-gray-600">recent admin actions</p>
+                  <p className="text-xs text-gray-600">recent important actions</p>
                 </div>
               </CardContent>
             </Card>
@@ -993,6 +790,42 @@ export default async function AdminPage({
               </CardContent>
             </Card>
           </div>
+
+          {can(me.role, "audit.view") ? (
+            <Card className="border-border/80 shadow-sm">
+              <CardHeader className="flex-row items-center justify-between space-y-0">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <FileClock className="h-5 w-5 text-brand" aria-hidden="true" />
+                  Recent admin activity
+                </CardTitle>
+                <Link href="/admin/audit" className="text-sm font-semibold text-brand">
+                  Open audit log
+                </Link>
+              </CardHeader>
+              <CardContent>
+                {recentActivity.length === 0 ? (
+                  <p className="text-sm text-gray-600">No important admin actions yet.</p>
+                ) : (
+                  <ul className="divide-y divide-border/60">
+                    {recentActivity.map((row) => (
+                      <li key={row.id} className="flex items-start justify-between gap-3 py-2.5">
+                        <div className="min-w-0">
+                          <p className="text-sm text-foreground">{row.summary}</p>
+                          <p className="text-xs text-gray-500">{row.adminEmail || "System"}</p>
+                        </div>
+                        <div className="flex shrink-0 flex-col items-end gap-1">
+                          <SeverityPill severity={row.severity} />
+                          <span className="text-[11px] text-gray-500">
+                            {new Date(row.createdAt).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" })}
+                          </span>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </CardContent>
+            </Card>
+          ) : null}
 
           <div className="grid gap-4 xl:grid-cols-2">
             <Card className="border-border/80 shadow-sm">
@@ -1392,38 +1225,6 @@ export default async function AdminPage({
                 ) : null}
               </div>
             </form>
-          </CardContent>
-        </Card>
-      ) : null}
-
-      {initialTab === "audit" ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>Admin audit log</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2 text-sm">
-              {(auditRows ?? []).map((row: any) => (
-                <div key={row.id} className="flex items-center justify-between">
-                  <div>
-                    <p className="font-semibold text-foreground">
-                      {row.action}
-                    </p>
-                    <p className="text-xs text-gray-600">
-                      {row.performed_by ?? "admin"}
-                    </p>
-                  </div>
-                  <span className="text-xs text-gray-500">
-                    {row.created_at
-                      ? new Date(row.created_at).toLocaleString()
-                      : "—"}
-                  </span>
-                </div>
-              ))}
-              {(auditRows ?? []).length === 0 ? (
-                <p className="text-sm text-gray-600">No admin actions yet.</p>
-              ) : null}
-            </div>
           </CardContent>
         </Card>
       ) : null}

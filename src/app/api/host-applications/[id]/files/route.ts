@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { failJson } from "@/lib/api-errors";
 import { requireAdminApi } from "@/lib/admin-auth";
+import { logAdminAction } from "@/lib/admin-audit";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getRequestUser } from "@/lib/supabase/request-auth";
@@ -17,7 +18,7 @@ export async function GET(
       return NextResponse.json({ message: "Missing type" }, { status: 400 });
     }
 
-    const admin = await requireAdminApi();
+    const admin = await requireAdminApi("applications.review");
     const supabase = await createSupabaseServerClient();
     const user = await getRequestUser(supabase as any, req);
 
@@ -52,6 +53,15 @@ export async function GET(
       .from(bucket)
       .createSignedUrl(path, 60 * 10);
     if (error) throw error;
+    if (admin && application.user_id !== user?.id) {
+      await logAdminAction({
+        action: "host_id_viewed",
+        summary: `${admin.name} opened the ${type} of the ID document on host application ${appId.slice(0, 8).toUpperCase()}`,
+        targetType: "host_application",
+        targetId: appId,
+        actor: admin,
+      });
+    }
     return NextResponse.redirect(data.signedUrl);
   } catch (error: any) {
     return failJson({

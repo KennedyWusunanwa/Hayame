@@ -112,7 +112,9 @@ export default function RootLayout({
               <Footer />
             </SiteChrome>
           </div>
-          <ConsentBanner />
+          <SiteChrome>
+            <ConsentBanner />
+          </SiteChrome>
         </MessagingProvider>
       </body>
     </html>

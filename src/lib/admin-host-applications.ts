@@ -1,3 +1,4 @@
+import { logAdminAction } from "@/lib/admin-audit";
 import { buildHostApplicationDecisionEmail, sendEmailSafe } from "@/lib/email";
 import { sendPushNotificationsToUsers } from "@/lib/push";
 
@@ -60,12 +61,12 @@ export async function reviewHostApplication({
       })
       .eq("id", applicationId);
 
-    await admin.from("admin_actions").insert({
+    await logAdminAction({
       action: "host_application_approved",
-      target_id: applicationId,
-      target_type: "host_application",
-      performed_by: reviewer,
-      metadata: { user_id: userId },
+      summary: `${reviewer} approved the host application of ${(application as { full_name?: string | null } | null)?.full_name ?? applicationId.slice(0, 8).toUpperCase()}`,
+      targetId: applicationId,
+      targetType: "host_application",
+      metadata: { user_id: userId ?? "" },
     });
 
     if (userId) {
@@ -126,11 +127,11 @@ export async function reviewHostApplication({
     })
     .eq("id", applicationId);
 
-  await admin.from("admin_actions").insert({
+  await logAdminAction({
     action: "host_application_rejected",
-    target_id: applicationId,
-    target_type: "host_application",
-    performed_by: reviewer,
+    summary: `${reviewer} rejected host application ${applicationId.slice(0, 8).toUpperCase()}`,
+    targetId: applicationId,
+    targetType: "host_application",
     metadata: { reason: normalizedReason },
   });
 

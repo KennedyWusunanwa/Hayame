@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CarForm } from "@/components/car-form";
 import { AvailabilityForm } from "@/components/availability-form";
-import { requireAdminPage } from "@/lib/admin-auth";
+import { requireAdmin } from "@/lib/admin-auth";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 type PageProps = {
@@ -13,7 +13,7 @@ type PageProps = {
 export const dynamic = "force-dynamic";
 
 export default async function AdminEditCarPage({ params }: PageProps) {
-  await requireAdminPage();
+  await requireAdmin("vehicles.review");
   const resolvedParams = await params;
   const admin = createSupabaseAdminClient() as any;
   const { data: car } = await admin

@@ -12,7 +12,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { reviewHostApplication } from "@/lib/admin-host-applications";
-import { getAdminReviewerName, requireAdminPage } from "@/lib/admin-auth";
+import { PageHeader } from "@/components/admin/admin-ui";
+import { requireAdmin } from "@/lib/admin-auth";
+import { logAdminAction } from "@/lib/admin-audit";
+import { can } from "@/lib/admin-permissions";
 import { friendlyError } from "@/lib/client-errors";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { sendVerificationEmail } from "@/lib/auth-mail";
@@ -57,10 +60,10 @@ function formatDate(value?: string | null) {
 
 async function updateUserAction(formData: FormData) {
   "use server";
-  await requireAdminPage();
+  const actor = await requireAdmin("users.manage");
 
   const admin = createSupabaseAdminClient() as any;
-  const reviewer = getAdminReviewerName();
+  const reviewer = actor.email;
   const userId = String(formData.get("user_id") ?? "").trim();
   if (!userId) redirect("/admin");
 
@@ -186,14 +189,13 @@ async function updateUserAction(formData: FormData) {
       if (applicationError) throw applicationError;
     }
 
-    await admin.from("admin_actions").insert({
+    await logAdminAction({
       action: "user_profile_updated",
-      target_id: userId,
-      target_type: "profile",
-      performed_by: reviewer,
-      metadata: {
-        application_id: applicationId || null,
-      },
+      summary: `${actor.name} edited the profile of user ${userId.slice(0, 8).toUpperCase()}`,
+      targetId: userId,
+      targetType: "profile",
+      metadata: { application_id: applicationId || "none" },
+      actor,
     });
 
     redirect(`/admin/users/${userId}?saved=1`);
@@ -205,9 +207,9 @@ async function updateUserAction(formData: FormData) {
 
 async function reviewUserHostApplicationAction(formData: FormData) {
   "use server";
-  await requireAdminPage();
+  const actor = await requireAdmin("applications.review");
 
-  const reviewer = getAdminReviewerName();
+  const reviewer = actor.email;
   const userId = String(formData.get("user_id") ?? "").trim();
   const applicationId = String(formData.get("applicationId") ?? "").trim();
   const action = String(formData.get("action") ?? "").trim();
@@ -249,10 +251,9 @@ async function reviewUserHostApplicationAction(formData: FormData) {
  */
 async function confirmUserEmailAction(formData: FormData) {
   "use server";
-  await requireAdminPage();
+  const actor = await requireAdmin("users.manage");
 
   const admin = createSupabaseAdminClient() as any;
-  const reviewer = getAdminReviewerName();
   const userId = String(formData.get("user_id") ?? "").trim();
   if (!userId) redirect("/admin");
 
@@ -268,12 +269,13 @@ async function confirmUserEmailAction(formData: FormData) {
       .update({ email_verified: true, updated_at: new Date().toISOString() })
       .eq("id", userId);
 
-    await admin.from("admin_actions").insert({
+    await logAdminAction({
       action: "user_email_confirmed_manually",
-      target_id: userId,
-      target_type: "profile",
-      performed_by: reviewer,
+      summary: `${actor.name} confirmed the email of user ${userId.slice(0, 8).toUpperCase()} by hand, without the user clicking the link`,
+      targetId: userId,
+      targetType: "profile",
       metadata: { reason: "manual admin confirmation" },
+      actor,
     });
 
     redirect(`/admin/users/${userId}?notice=email-confirmed#account-email`);
@@ -288,7 +290,7 @@ async function confirmUserEmailAction(formData: FormData) {
 /** Re-sends the branded verification email — the preferred fix over confirming manually. */
 async function resendUserVerificationAction(formData: FormData) {
   "use server";
-  await requireAdminPage();
+  await requireAdmin("users.manage");
 
   const userId = String(formData.get("user_id") ?? "").trim();
   const email = String(formData.get("email") ?? "").trim();
@@ -321,10 +323,8 @@ async function resendUserVerificationAction(formData: FormData) {
 /** Sends a one-off no-reply email to this user, on the Hayame template. */
 async function sendUserEmailAction(formData: FormData) {
   "use server";
-  await requireAdminPage();
+  const actor = await requireAdmin("users.manage");
 
-  const admin = createSupabaseAdminClient() as any;
-  const reviewer = getAdminReviewerName();
   const userId = String(formData.get("user_id") ?? "").trim();
   const to = String(formData.get("to") ?? "").trim();
   const subject = String(formData.get("subject") ?? "").trim();
@@ -391,12 +391,13 @@ async function sendUserEmailAction(formData: FormData) {
       throw result.error;
     }
 
-    await admin.from("admin_actions").insert({
+    await logAdminAction({
       action: "user_email_sent",
-      target_id: userId,
-      target_type: "profile",
-      performed_by: reviewer,
+      summary: `${actor.name} emailed user ${userId.slice(0, 8).toUpperCase()}: "${subject}"`,
+      targetId: userId,
+      targetType: "profile",
       metadata: { subject, attachments: attachments.length },
+      actor,
     });
 
     redirect(`/admin/users/${userId}?notice=email-sent#send-email`);
@@ -418,7 +419,8 @@ export default async function AdminUserDetailsPage({
     | { saved?: string; error?: string; notice?: string }
     | Promise<{ saved?: string; error?: string; notice?: string }>;
 }) {
-  await requireAdminPage();
+  const me = await requireAdmin("users.view");
+  const canManageUsers = can(me.role, "users.manage");
   const resolvedParams = await params;
   const resolvedSearch = searchParams ? await searchParams : {};
   const userId = resolvedParams.id;
@@ -519,21 +521,24 @@ export default async function AdminUserDetailsPage({
   const faceUrl = profile.avatar_url ?? null;
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 px-3 py-4 sm:space-y-6 sm:px-6 sm:py-10">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p className="text-sm font-semibold text-primary">Admin</p>
-          <h1 className="text-xl font-semibold sm:text-2xl text-foreground">
-            User details
-          </h1>
+    <div className="space-y-4 sm:space-y-6">
+      <PageHeader
+        eyebrow="Admin · Users"
+        title="User details"
+        actions={
+          <Link
+            href="/admin?tab=users"
+            className="rounded-xl border border-border bg-white px-3 py-2 text-sm font-semibold text-gray-700 shadow-sm hover:bg-gray-50"
+          >
+            Back to users
+          </Link>
+        }
+      />
+      {!canManageUsers ? (
+        <div className="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-medium text-sky-900">
+          View only. Your role can read this profile but not change it, email the user or confirm their email.
         </div>
-        <Link
-          href="/admin"
-          className="rounded-md border border-border px-3 py-2 text-sm font-semibold text-gray-700"
-        >
-          Back to admin
-        </Link>
-      </div>
+      ) : null}
 
       {resolvedSearch?.saved ? (
         <div className="rounded-md border border-brand/25 bg-brand/10 px-3 py-2 text-sm font-medium text-foreground">

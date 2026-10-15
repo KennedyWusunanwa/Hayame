@@ -3,7 +3,8 @@ import { revalidatePath } from "next/cache";
 import { AdminNotice } from "@/components/admin/admin-notice";
 import { PendingSubmitButton } from "@/components/admin/pending-submit-button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { requireAdminPage } from "@/lib/admin-auth";
+import { requireAdmin } from "@/lib/admin-auth";
+import { logAdminAction } from "@/lib/admin-audit";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
@@ -57,7 +58,7 @@ function formatTime(value: string | null) {
 
 async function resolveErrorAction(formData: FormData) {
   "use server";
-  await requireAdminPage();
+  await requireAdmin("errors.view");
   const id = String(formData.get("id") ?? "").trim();
   const next = String(formData.get("next") ?? "true") === "true";
   if (!id) return;
@@ -74,9 +75,16 @@ async function resolveErrorAction(formData: FormData) {
 
 async function clearResolvedAction() {
   "use server";
-  await requireAdminPage();
+  const actor = await requireAdmin("errors.view");
   const admin = createSupabaseAdminClient() as any;
   await admin.from("error_reports").delete().eq("resolved", true);
+  await logAdminAction({
+    action: "errors.cleared",
+    summary: `${actor.name} deleted all resolved error reports`,
+    targetType: "error_report",
+    severity: "important",
+    actor,
+  });
   revalidatePath("/admin/errors");
 }
 
@@ -85,7 +93,7 @@ export default async function AdminErrorsPage({
 }: {
   searchParams: Promise<{ filter?: string }>;
 }) {
-  await requireAdminPage();
+  await requireAdmin("errors.view");
   const params = await searchParams;
   const filter = resolveFilter(params.filter);
 

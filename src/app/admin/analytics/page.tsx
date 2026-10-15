@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { AdminNotice } from "@/components/admin/admin-notice";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { requireAdminPage } from "@/lib/admin-auth";
+import { requireAdmin } from "@/lib/admin-auth";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { FUNNEL_STEPS } from "@/lib/analytics/events";
 import { cn } from "@/lib/utils";
@@ -93,7 +93,7 @@ export default async function AdminAnalyticsPage({
 }: {
   searchParams: Promise<{ range?: string }>;
 }) {
-  await requireAdminPage();
+  await requireAdmin("analytics.view");
   const params = await searchParams;
   const days = resolveRange(params.range);
 

@@ -1,7 +1,7 @@
 // Admin session config shared by the server helpers and the proxy.
 // Deliberately free of `server-only` and `next/headers` so the proxy can import it.
 import { createHash } from "node:crypto";
-import { verifyAdminSessionToken } from "@/lib/admin-auth/session";
+import { readAdminSessionToken } from "@/lib/admin-auth/session";
 
 export const ADMIN_COOKIE_NAME = "hayame_admin_session";
 
@@ -46,11 +46,16 @@ export function isAdminAuthConfigured() {
   );
 }
 
+/** The signed claims inside a valid, unexpired admin cookie, or null. */
+export function readAdminSession(token: string | undefined | null) {
+  if (!token || !isAdminAuthConfigured()) return null;
+  const claims = readAdminSessionToken({ token, sessionSecret: getAdminSessionSecret() });
+  if (!claims) return null;
+  // Root session: must still match the configured username.
+  if (!claims.adminId && claims.username !== getConfiguredUsername()) return null;
+  return claims;
+}
+
 export function isValidAdminSessionToken(token: string | undefined | null) {
-  if (!token || !isAdminAuthConfigured()) return false;
-  return verifyAdminSessionToken({
-    token,
-    sessionSecret: getAdminSessionSecret(),
-    expectedUsername: getConfiguredUsername(),
-  });
+  return readAdminSession(token) !== null;
 }

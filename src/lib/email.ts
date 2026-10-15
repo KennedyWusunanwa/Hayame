@@ -1531,3 +1531,71 @@ export function buildAdminPlatformSettingsChangedEmail(params: {
     cta: { label: "Open platform controls", url: `${siteUrl}/admin/platform` },
   });
 }
+
+export function buildAdminActivityEmail(params: {
+  severity: "important" | "critical";
+  actionLabel: string;
+  summary: string;
+  actorName: string;
+  actorEmail: string;
+  actorRole: string;
+  ip?: string | null;
+  targetType?: string | null;
+  targetId?: string | null;
+  details?: Record<string, unknown> | null;
+}) {
+  const detailRows = Object.entries(params.details ?? {})
+    .filter(([, value]) => ["string", "number", "boolean"].includes(typeof value))
+    .slice(0, 6)
+    .map(([key, value]) => ({
+      label: key.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase()),
+      value: String(value).slice(0, 200),
+    }));
+  return renderAdminNotice({
+    subject: `[${appName} Admin${params.severity === "critical" ? " · CRITICAL" : ""}] ${params.actionLabel}`,
+    eyebrow: params.severity === "critical" ? "Critical admin action" : "Admin activity",
+    heading: params.summary,
+    intro:
+      "This was done in the admin portal. If it wasn't expected, open the audit log and contact a super admin right away.",
+    rows: [
+      { label: "Action", value: params.actionLabel },
+      {
+        label: "Done by",
+        value: params.actorEmail
+          ? `${params.actorName} (${params.actorEmail})${params.actorRole ? `, ${params.actorRole}` : ""}`
+          : params.actorName,
+      },
+      {
+        label: "Target",
+        value: params.targetType
+          ? `${params.targetType}${params.targetId ? ` ${shortId(params.targetId)}` : ""}`
+          : "",
+      },
+      ...detailRows,
+      { label: "IP address", value: params.ip ?? "" },
+      { label: "When", value: formatDateTime(new Date()) },
+    ],
+    cta: { label: "Open the audit log", url: `${siteUrl}/admin/audit` },
+  });
+}
+
+export function buildAdminWelcomeEmail(params: {
+  name: string;
+  email: string;
+  roleLabel: string;
+  roleDescription: string;
+  createdBy: string;
+}) {
+  return renderAdminNotice({
+    subject: `[${appName} Admin] Your admin account is ready`,
+    eyebrow: "Admin access",
+    heading: `Welcome, ${params.name}`,
+    intro: `${params.createdBy} gave you access to the ${appName} admin portal. Your temporary password was shared with you separately. You will be asked to choose your own password the first time you sign in. Every action you take is logged.`,
+    rows: [
+      { label: "Sign in with", value: params.email },
+      { label: "Your role", value: params.roleLabel },
+      { label: "What it allows", value: params.roleDescription },
+    ],
+    cta: { label: "Open the admin portal", url: `${siteUrl}/admin` },
+  });
+}

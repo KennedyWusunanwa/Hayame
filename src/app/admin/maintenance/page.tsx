@@ -3,7 +3,9 @@ import { redirect } from "next/navigation";
 import { AdminNotice } from "@/components/admin/admin-notice";
 import { MaintenanceDesigner } from "@/components/admin/maintenance-designer";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getAdminReviewerName, requireAdminPage } from "@/lib/admin-auth";
+import { PageHeader } from "@/components/admin/admin-ui";
+import { requireAdmin } from "@/lib/admin-auth";
+import { logAdminAction } from "@/lib/admin-audit";
 import { invalidateMaintenanceCache } from "@/lib/maintenance";
 import {
   isMaintenanceActive,
@@ -27,7 +29,7 @@ async function loadSettings() {
 
 async function saveMaintenanceAction(formData: FormData) {
   "use server";
-  await requireAdminPage();
+  const actor = await requireAdmin("maintenance.manage");
 
   const { settings: current, error: loadError } = await loadSettings();
   if (loadError) redirect(`/admin/maintenance?error=${encodeURIComponent(loadError)}`);
@@ -40,11 +42,34 @@ async function saveMaintenanceAction(formData: FormData) {
     id: 1,
     ...settingsToRow(parsed.settings),
     updated_at: new Date().toISOString(),
-    updated_by: getAdminReviewerName(),
+    updated_by: actor.email,
   });
   if (error) redirect(`/admin/maintenance?error=${encodeURIComponent(error.message)}`);
 
   invalidateMaintenanceCache();
+  const endsNote =
+    parsed.settings.mode === "timed" && parsed.settings.endsAt
+      ? ` until ${new Date(parsed.settings.endsAt).toISOString().replace("T", " ").slice(0, 16)} GMT`
+      : parsed.settings.mode === "indefinite"
+        ? " with no end time"
+        : "";
+  await logAdminAction({
+    action:
+      parsed.intent === "publish"
+        ? "maintenance.enabled"
+        : parsed.intent === "disable"
+          ? "maintenance.disabled"
+          : "maintenance.updated",
+    summary:
+      parsed.intent === "publish"
+        ? `${actor.name} turned maintenance mode ON${endsNote}: visitors can no longer see the site`
+        : parsed.intent === "disable"
+          ? `${actor.name} turned maintenance mode OFF: the site is open to visitors`
+          : `${actor.name} saved the maintenance page design`,
+    targetType: "site",
+    metadata: { mode: parsed.settings.mode, ends_at: parsed.settings.endsAt ?? "none" },
+    actor,
+  });
   const notice =
     parsed.intent === "publish" ? "live" : parsed.intent === "disable" ? "off" : "saved";
   redirect(`/admin/maintenance?notice=${notice}`);
@@ -73,7 +98,7 @@ export default async function AdminMaintenancePage({
 }: {
   searchParams: Promise<{ notice?: string; error?: string }>;
 }) {
-  await requireAdminPage();
+  await requireAdmin("maintenance.manage");
   const params = await searchParams;
   const { settings, error: loadError } = await loadSettings();
   const active = isMaintenanceActive(settings);
@@ -81,18 +106,14 @@ export default async function AdminMaintenancePage({
   const error = params.error ?? loadError;
 
   return (
-    <div className="mx-auto max-w-6xl px-6 py-10">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm font-semibold text-primary">Admin</p>
-          <h1 className="text-2xl font-semibold text-foreground">Maintenance mode</h1>
-        </div>
-        <Link href="/admin" className="text-sm font-semibold text-brand">
-          Back to admin
-        </Link>
-      </div>
+    <div className="space-y-6">
+      <PageHeader
+        eyebrow="Admin · Site"
+        title="Maintenance mode"
+        description="Hide the whole website behind a page you design. Admins who are signed in still see the real site."
+      />
 
-      <div className="mt-6 space-y-3">
+      <div className="space-y-3">
         {notice ? <AdminNotice tone="success" title={notice.title} description={notice.description} /> : null}
         {error ? (
           <AdminNotice

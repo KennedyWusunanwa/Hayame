@@ -43,7 +43,7 @@ function getStoragePathFromPublicUrl(
 }
 
 async function canManageCar(carId: string, req?: Request) {
-  const adminAllowed = await requireAdminApi();
+  const adminAllowed = await requireAdminApi("vehicles.review");
   if (adminAllowed) {
     try {
       const adminClient = createSupabaseAdminClient() as any;
