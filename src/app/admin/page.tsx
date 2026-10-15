@@ -18,6 +18,7 @@ import {
 import { AdminLoadingLink } from "@/components/admin/admin-loading-link";
 import { AdminNotice } from "@/components/admin/admin-notice";
 import { PageHeader, SeverityPill } from "@/components/admin/admin-ui";
+import { ShellSync } from "@/components/admin/shell-sync";
 import { PendingSubmitButton } from "@/components/admin/pending-submit-button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -291,6 +292,7 @@ function AdminWorkspace({
   const heading = TAB_TITLES[initialTab];
   return (
     <div className="space-y-6">
+      <ShellSync expect="shell" />
       <PageHeader
         eyebrow={initialTab === "overview" ? `Welcome back, ${adminName.split(" ")[0]}` : "Admin"}
         title={heading.title}
@@ -427,6 +429,7 @@ export default async function AdminPage({
     const err = resolvedSearchParams?.error;
     return (
       <div className="grid min-h-screen bg-[#F4F8FD] lg:grid-cols-[1.05fr_1fr]">
+        <ShellSync expect="bare" />
         <div className="relative hidden flex-col justify-between overflow-hidden bg-[linear-gradient(160deg,#06182E_0%,#0A2B54_55%,#0E4C8C_100%)] p-12 text-white lg:flex">
           <div className="absolute -bottom-40 -right-32 h-[520px] w-[520px] rounded-full bg-white/[0.06]" aria-hidden />
           <Image src="/logo-white.png" alt="Hayame" width={160} height={58} className="h-12 w-auto self-start" priority unoptimized />

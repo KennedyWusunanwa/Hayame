@@ -17,6 +17,9 @@ function isModifiedEvent(event: MouseEvent) {
   );
 }
 
+// The admin portal and maintenance page have their own loading states.
+const SELF_MANAGED = /^\/(admin|maintenance)(\/|$)/;
+
 function shouldTrackAnchor(anchor: HTMLAnchorElement) {
   if (anchor.hasAttribute("data-no-loading")) return false;
   if (anchor.hasAttribute("download")) return false;
@@ -37,6 +40,7 @@ function shouldTrackAnchor(anchor: HTMLAnchorElement) {
     const currentUrl = new URL(window.location.href);
     const targetUrl = new URL(anchor.href, currentUrl);
     if (targetUrl.origin !== currentUrl.origin) return false;
+    if (SELF_MANAGED.test(targetUrl.pathname) || SELF_MANAGED.test(currentUrl.pathname)) return false;
 
     return !(
       targetUrl.pathname === currentUrl.pathname &&
@@ -120,6 +124,7 @@ export function NavigationLoader() {
       const form = event.target as HTMLFormElement | null;
       if (!form) return;
       if (form.hasAttribute("data-no-loading")) return;
+      if (SELF_MANAGED.test(window.location.pathname)) return;
 
       if (dismissTimerRef.current) window.clearTimeout(dismissTimerRef.current);
       setDismissing(false);

@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { Suspense, useState, type ReactNode } from "react";
+import { Suspense, useEffect, useState, type ReactNode } from "react";
 import {
   AlertTriangle,
   BarChart3,
@@ -24,7 +24,7 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
-import { PendingSubmitButton } from "@/components/admin/pending-submit-button";
+import { Spinner } from "@/components/ui/spinner";
 import { RoleBadge } from "@/components/admin/admin-ui";
 import type { AdminRole } from "@/lib/admin-permissions";
 import { cn } from "@/lib/utils";
@@ -102,6 +102,90 @@ function NavList({ groups, onNavigate }: { groups: ShellNavGroup[]; onNavigate?:
   );
 }
 
+/**
+ * The page area. It fades each new page in, and while a link is loading it dims
+ * the old page and shows a thin progress bar, so a click never looks like a flash.
+ * (The public site's full-screen loader is disabled inside /admin.)
+ */
+function AdminContent({ children }: { children: ReactNode }) {
+  const pathname = usePathname();
+  const search = useSearchParams().toString();
+  const [pending, setPending] = useState(false);
+
+  useEffect(() => {
+    setPending(false);
+  }, [pathname, search]);
+
+  useEffect(() => {
+    let timeout: number | undefined;
+    const onClick = (event: MouseEvent) => {
+      if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      const anchor = (event.target as HTMLElement | null)?.closest("a");
+      if (!anchor || anchor.target === "_blank" || anchor.hasAttribute("download")) return;
+      try {
+        const next = new URL(anchor.href, window.location.href);
+        const here = new URL(window.location.href);
+        if (next.origin !== here.origin || !next.pathname.startsWith("/admin")) return;
+        if (next.pathname === here.pathname && next.search === here.search) return;
+      } catch {
+        return;
+      }
+      setPending(true);
+      window.clearTimeout(timeout);
+      timeout = window.setTimeout(() => setPending(false), 10_000);
+    };
+    document.addEventListener("click", onClick);
+    return () => {
+      document.removeEventListener("click", onClick);
+      window.clearTimeout(timeout);
+    };
+  }, []);
+
+  return (
+    <>
+      <div
+        aria-hidden
+        className={cn(
+          "pointer-events-none fixed inset-x-0 top-0 z-[60] h-[3px] overflow-hidden transition-opacity duration-200",
+          pending ? "opacity-100" : "opacity-0",
+        )}
+      >
+        <div className="admin-progress-bar h-full w-full bg-brand" />
+      </div>
+      <div
+        key={`${pathname}?${search}`}
+        className={cn("admin-fade-in transition-opacity duration-200", pending && "opacity-50")}
+        aria-busy={pending}
+      >
+        {children}
+      </div>
+    </>
+  );
+}
+
+function SignOutButton({ signOutAction }: { signOutAction: () => void | Promise<void> }) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <button
+      type="button"
+      disabled={busy}
+      onClick={async () => {
+        setBusy(true);
+        try {
+          await signOutAction();
+        } finally {
+          // Full page load, so the signed-out screen replaces the shell cleanly.
+          window.location.assign("/admin?notice=signed-out");
+        }
+      }}
+      className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-white/80 hover:bg-white/10 hover:text-white disabled:opacity-60"
+    >
+      {busy ? <Spinner size={12} /> : <LogOut className="h-3.5 w-3.5" aria-hidden="true" />}
+      {busy ? "Signing out…" : "Sign out"}
+    </button>
+  );
+}
+
 function Sidebar({
   groups,
   user,
@@ -136,17 +220,7 @@ function Sidebar({
         </div>
         <div className="mt-3 flex items-center justify-between gap-2">
           <RoleBadge role={user.role} className="!bg-white/15 !text-white" />
-          <form action={signOutAction}>
-            <PendingSubmitButton
-              pendingLabel="Signing out…"
-              className="rounded-lg px-2.5 py-1.5 text-xs font-semibold text-white/80 hover:bg-white/10 hover:text-white"
-            >
-              <span className="inline-flex items-center gap-1.5">
-                <LogOut className="h-3.5 w-3.5" aria-hidden="true" />
-                Sign out
-              </span>
-            </PendingSubmitButton>
-          </form>
+          <SignOutButton signOutAction={signOutAction} />
         </div>
       </div>
     </div>
@@ -166,7 +240,7 @@ export function AdminShell({
 }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className="min-h-screen bg-[#F4F8FD] lg:pl-[272px]">
+    <div data-admin-shell className="min-h-screen bg-[#F4F8FD] lg:pl-[272px] [&>*]:![animation:none]">
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-[272px] lg:block">
         <Sidebar groups={groups} user={user} signOutAction={signOutAction} />
       </aside>
@@ -200,7 +274,11 @@ export function AdminShell({
         </div>
       ) : null}
 
-      <main className="mx-auto w-full max-w-[1400px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">{children}</main>
+      <main className="mx-auto w-full max-w-[1400px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+        <Suspense fallback={null}>
+          <AdminContent>{children}</AdminContent>
+        </Suspense>
+      </main>
     </div>
   );
 }

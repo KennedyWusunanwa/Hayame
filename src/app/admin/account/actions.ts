@@ -6,7 +6,7 @@ import { logAdminAction } from "@/lib/admin-audit";
 import { createAdminPasswordHash, verifyAdminPassword } from "@/lib/admin-auth/session";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
-export type PasswordState = { error?: string } | null;
+export type PasswordState = { error?: string; done?: boolean } | null;
 
 export async function changeOwnPasswordAction(
   _prev: PasswordState,
@@ -48,5 +48,6 @@ export async function changeOwnPasswordAction(
     targetId: admin.id,
     actor: admin,
   });
-  redirect("/admin?notice=password-changed");
+  // The client does a full page load next so the admin shell appears.
+  return { done: true };
 }
