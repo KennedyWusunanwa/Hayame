@@ -201,6 +201,8 @@ async function updateUserAction(formData: FormData) {
 
     redirect(`/admin/users/${userId}?saved=1`);
   } catch (error: any) {
+    // `redirect` throws by design: let it through instead of reporting it as an error.
+    if (error?.digest?.startsWith?.("NEXT_REDIRECT")) throw error;
     const message = encodeURIComponent(friendlyError(error, "Unable to save user"));
     redirect(`/admin/users/${userId}?error=${message}`);
   }
@@ -234,6 +236,8 @@ async function reviewUserHostApplicationAction(formData: FormData) {
       `/admin/users/${userId}?notice=${action === "approve" ? "host-approved" : "host-rejected"}#host-application`,
     );
   } catch (error: any) {
+    // `redirect` throws by design: let it through instead of reporting it as an error.
+    if (error?.digest?.startsWith?.("NEXT_REDIRECT")) throw error;
     const message = encodeURIComponent(
       friendlyError(error, "Unable to review host application"),
     );
@@ -281,6 +285,8 @@ async function confirmUserEmailAction(formData: FormData) {
 
     redirect(`/admin/users/${userId}?notice=email-confirmed#account-email`);
   } catch (error: any) {
+    // `redirect` throws by design: let it through instead of reporting it as an error.
+    if (error?.digest?.startsWith?.("NEXT_REDIRECT")) throw error;
     const message = encodeURIComponent(
       friendlyError(error, "Unable to confirm this email"),
     );
