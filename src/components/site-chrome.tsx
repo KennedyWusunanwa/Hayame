@@ -13,5 +13,5 @@ export function SiteChrome({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isAuthRoute = pathname?.startsWith("/auth");
   if (isAuthRoute) return null;
-  return <>{children}</>;
+  return <div data-site-chrome className="contents">{children}</div>;
 }

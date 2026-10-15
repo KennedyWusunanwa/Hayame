@@ -9,6 +9,7 @@ import {
   Car,
   CheckCircle2,
   ClipboardCheck,
+  Construction,
   FileClock,
   Gauge,
   LayoutDashboard,
@@ -441,6 +442,9 @@ function AdminWorkspace({
                   </TopAction>
                   <TopAction href="/admin/platform" icon={Settings2}>
                     Controls
+                  </TopAction>
+                  <TopAction href="/admin/maintenance" icon={Construction}>
+                    Maintenance
                   </TopAction>
                   <form
                     action={logoutAction}
