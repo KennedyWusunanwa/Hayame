@@ -23,6 +23,21 @@ create table if not exists public.admin_users (
 alter table public.admin_users enable row level security;
 revoke all on public.admin_users from anon, authenticated;
 
+-- The audit log. Created here if your database never had it, so this script works
+-- on a fresh project as well as an older one.
+create table if not exists public.admin_actions (
+  id uuid primary key default gen_random_uuid(),
+  action text not null,
+  target_id uuid,
+  target_type text,
+  metadata jsonb,
+  performed_by text,
+  created_at timestamptz default now()
+);
+
+alter table public.admin_actions enable row level security;
+revoke all on public.admin_actions from anon, authenticated;
+
 -- Who did it, from where, and how serious it is.
 alter table public.admin_actions add column if not exists admin_id text;
 alter table public.admin_actions add column if not exists admin_email text;
