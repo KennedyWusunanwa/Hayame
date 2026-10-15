@@ -37,6 +37,7 @@ const {
   readAdminSessionToken,
   verifyAdminSessionToken,
 } = require("../src/lib/admin-auth/session.ts");
+const { renderMaintenanceHtml } = require("../src/lib/maintenance-html.ts");
 const {
   DEFAULT_MAINTENANCE,
   addDuration,
@@ -229,6 +230,35 @@ function runAdminEmailChecks() {
   assert.ok(!/password:\s*\S+/i.test(welcome.text), "welcome email must never contain a password");
 }
 
+function runMaintenanceHtmlChecks() {
+  const base = { ...DEFAULT_MAINTENANCE, enabled: true };
+  const plain = renderMaintenanceHtml(base);
+  assert.ok(plain.startsWith("<!doctype html>"));
+  assert.ok(plain.includes("Under construction") && plain.includes("better."));
+  assert.ok(!plain.includes('id="timer"'), "no countdown for an open-ended maintenance");
+  assert.ok(!plain.includes("Join Hayame hosts") && !plain.includes("data-site-chrome"), "page is standalone");
+
+  // Admin-typed text is escaped everywhere.
+  const evil = renderMaintenanceHtml({
+    ...base,
+    badge: '<img src=x onerror=alert(1)>',
+    headline: 'Hi <script>alert(1)</script> *there*',
+    message: '"><svg onload=alert(1)>',
+    contactEmail: 'a@b.co"><script>x</script>',
+    background: 'https://x.com/a.jpg"onerror="alert(1)',
+  });
+  assert.ok(!/<script>alert|<img src=x|<svg onload|onerror="alert/i.test(evil.replace(/<script>[\s\S]*?<\/script>$/m, "")), "html must escape input");
+  assert.ok(!evil.includes("a@b.co"), "an invalid contact email is dropped");
+
+  // Timer only when timed + shown, with a machine-readable end.
+  const timed = renderMaintenanceHtml({ ...base, mode: "timed", endsAt: "2026-12-01T09:30:00.000Z", showCountdown: true });
+  assert.ok(timed.includes('id="timer"') && timed.includes("2026-12-01T09:30:00.000Z"));
+  const hidden = renderMaintenanceHtml({ ...base, mode: "timed", endsAt: "2026-12-01T09:30:00.000Z", showCountdown: false });
+  assert.ok(!hidden.includes('id="timer"'));
+  assert.ok(renderMaintenanceHtml({ ...base, background: "none" }).indexOf('class="photo"') === -1);
+  assert.ok(renderMaintenanceHtml(base).includes("/maintenance/accra-skyline.jpg"));
+}
+
 function runMaintenanceChecks() {
   const now = new Date("2026-10-15T12:00:00Z");
   const form = (fields) => ({ get: (name) => fields[name] ?? null });
@@ -329,5 +359,6 @@ runAdminRoleChecks();
 runContactChecks();
 runEmailChecks();
 runAdminEmailChecks();
+runMaintenanceHtmlChecks();
 runMaintenanceChecks();
 console.log("Launch readiness checks passed.");

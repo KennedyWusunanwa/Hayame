@@ -2,6 +2,10 @@ import { NextResponse, type NextRequest } from "next/server";
 import { ADMIN_COOKIE_NAME, isValidAdminSessionToken } from "@/lib/admin-auth/config";
 import { getMaintenanceSettings } from "@/lib/maintenance";
 import { isMaintenanceActive } from "@/lib/maintenance-core";
+import { renderMaintenanceHtml } from "@/lib/maintenance-html";
+
+// Lets the public site show admins an "everyone else sees maintenance" indicator.
+const ADMIN_FLAG_COOKIE = "hayame_maint_admin";
 
 // Always reachable, even in maintenance: the admin portal (to switch it off),
 // the maintenance page itself, and API routes (payment webhooks, mobile apps).
@@ -26,24 +30,39 @@ export async function proxy(request: NextRequest) {
   if (isExempt(request.nextUrl.pathname)) return NextResponse.next();
 
   const settings = await getMaintenanceSettings();
-  if (!isMaintenanceActive(settings)) return NextResponse.next();
+  const active = isMaintenanceActive(settings);
+  if (!active) {
+    const response = NextResponse.next();
+    if (request.cookies.has(ADMIN_FLAG_COOKIE)) response.cookies.delete(ADMIN_FLAG_COOKIE);
+    return response;
+  }
 
-  // A signed-in admin sees the real site.
+  // A signed-in admin sees the real site, plus a small "maintenance is ON" indicator.
   if (isValidAdminSessionToken(request.cookies.get(ADMIN_COOKIE_NAME)?.value)) {
-    return NextResponse.next();
+    const response = NextResponse.next();
+    response.cookies.set(ADMIN_FLAG_COOKIE, settings?.mode === "timed" && settings.endsAt ? settings.endsAt : "indefinite", {
+      path: "/",
+      sameSite: "lax",
+      httpOnly: false,
+      maxAge: 60 * 60 * 12,
+    });
+    return response;
   }
 
   const retryAfter =
     settings?.mode === "timed" && settings.endsAt
       ? Math.max(60, Math.ceil((Date.parse(settings.endsAt) - Date.now()) / 1000))
       : 3600;
-  const target = request.nextUrl.clone();
-  target.pathname = "/maintenance";
-  target.search = "";
-  const response = NextResponse.rewrite(target, { status: 503 });
-  response.headers.set("Retry-After", String(retryAfter));
-  response.headers.set("Cache-Control", "no-store");
-  return response;
+  // Plain HTML, not an app route: nothing from the site layout can flash first.
+  return new NextResponse(renderMaintenanceHtml(settings!), {
+    status: 503,
+    headers: {
+      "Content-Type": "text/html; charset=utf-8",
+      "Retry-After": String(retryAfter),
+      "Cache-Control": "no-store",
+      "X-Robots-Tag": "noindex, nofollow",
+    },
+  });
 }
 
 export const config = {

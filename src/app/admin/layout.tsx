@@ -2,6 +2,8 @@ import type { ReactNode } from "react";
 import { AdminShell, type ShellNavGroup } from "@/components/admin/admin-shell";
 import { getCurrentAdmin } from "@/lib/admin-identity";
 import { can, type Permission } from "@/lib/admin-permissions";
+import { getMaintenanceSettings } from "@/lib/maintenance";
+import { isMaintenanceActive } from "@/lib/maintenance-core";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { signOutAction } from "@/app/admin/shell-actions";
 
@@ -26,6 +28,12 @@ export default async function AdminLayout({ children }: { children: ReactNode })
   if (!admin || admin.mustChangePassword) return <>{children}</>;
 
   const pending = can(admin.role, "applications.review") ? await pendingApplications() : 0;
+  const maintenanceSettings = await getMaintenanceSettings();
+  const maintenanceOn = isMaintenanceActive(maintenanceSettings);
+  const maintenanceUntil =
+    maintenanceOn && maintenanceSettings?.mode === "timed" && maintenanceSettings.endsAt
+      ? new Date(maintenanceSettings.endsAt).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" }) + " GMT"
+      : null;
   const allow = (permission: Permission) => can(admin.role, permission);
   const anyOf = (...permissions: Permission[]) => permissions.some(allow);
 
@@ -59,7 +67,7 @@ export default async function AdminLayout({ children }: { children: ReactNode })
     {
       title: "Site",
       items: [
-        { label: "Maintenance mode", href: "/admin/maintenance", icon: "maintenance", show: allow("maintenance.manage") },
+        { label: "Maintenance mode", href: "/admin/maintenance", icon: "maintenance", flag: maintenanceOn ? "ON" : undefined, show: allow("maintenance.manage") },
         { label: "Car makes & models", href: "/admin/filters", icon: "filters", show: allow("filters.manage") },
         { label: "Error reports", href: "/admin/errors", icon: "errors", show: allow("errors.view") },
       ],
@@ -78,7 +86,7 @@ export default async function AdminLayout({ children }: { children: ReactNode })
       title: group.title,
       items: group.items
         .filter((item) => item.show)
-        .map((item) => ({ label: item.label, href: item.href, icon: item.icon, badge: item.badge })),
+        .map((item) => ({ label: item.label, href: item.href, icon: item.icon, badge: item.badge, flag: item.flag })),
     }))
     .filter((group) => group.items.length > 0);
 
@@ -87,6 +95,7 @@ export default async function AdminLayout({ children }: { children: ReactNode })
       groups={groups}
       user={{ name: admin.name, email: admin.email, role: admin.role }}
       signOutAction={signOutAction}
+      maintenance={maintenanceOn ? { until: maintenanceUntil } : null}
     >
       {children}
     </AdminShell>

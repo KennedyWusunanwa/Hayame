@@ -46,7 +46,7 @@ const ICONS: Record<string, LucideIcon> = {
   account: UserRound,
 };
 
-export type ShellNavItem = { label: string; href: string; icon: keyof typeof ICONS; badge?: number };
+export type ShellNavItem = { label: string; href: string; icon: keyof typeof ICONS; badge?: number; flag?: string };
 export type ShellNavGroup = { title: string; items: ShellNavItem[] };
 
 function isActive(item: ShellNavItem, pathname: string, tab: string | null) {
@@ -86,6 +86,9 @@ function NavList({ groups, onNavigate }: { groups: ShellNavGroup[]; onNavigate?:
                       <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
                       <span className="truncate">{item.label}</span>
                     </span>
+                    {item.flag ? (
+                      <span className="rounded-full bg-amber-400 px-2 py-0.5 text-[10px] font-extrabold tracking-wide text-[#0A2B54]">{item.flag}</span>
+                    ) : null}
                     {item.badge ? (
                       <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-bold", active ? "bg-brand text-white" : "bg-white/15 text-white")}>
                         {item.badge}
@@ -231,11 +234,14 @@ export function AdminShell({
   groups,
   user,
   signOutAction,
+  maintenance,
   children,
 }: {
   groups: ShellNavGroup[];
   user: { name: string; email: string; role: AdminRole };
   signOutAction: () => void | Promise<void>;
+  /** Set while maintenance mode is live, so admins never forget visitors are locked out. */
+  maintenance?: { until: string | null } | null;
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
@@ -275,6 +281,22 @@ export function AdminShell({
       ) : null}
 
       <main className="mx-auto w-full max-w-[1400px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+        {maintenance ? (
+          <div role="status" className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+            <span className="flex min-w-0 items-start gap-2.5">
+              <span className="relative mt-1.5 flex h-2.5 w-2.5 shrink-0">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-500 opacity-75" />
+                <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-amber-500" />
+              </span>
+              <span>
+                <strong className="font-bold">Maintenance mode is ON.</strong> Visitors see the maintenance page{maintenance.until ? `, until ${maintenance.until}` : ", until you switch it off"}. You can still see the real site because you&apos;re signed in.
+              </span>
+            </span>
+            <Link href="/admin/maintenance" className="shrink-0 rounded-lg bg-amber-900/10 px-3 py-1.5 text-xs font-bold text-amber-950 hover:bg-amber-900/20">
+              Manage
+            </Link>
+          </div>
+        ) : null}
         <Suspense fallback={null}>
           <AdminContent>{children}</AdminContent>
         </Suspense>
