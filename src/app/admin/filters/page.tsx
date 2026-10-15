@@ -1,12 +1,12 @@
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FilterManager } from "@/components/admin/filter-manager";
-import { requireAdminPage } from "@/lib/admin-auth";
+import { requireAdmin } from "@/lib/admin-auth";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminFiltersPage() {
-  await requireAdminPage();
+  await requireAdmin("filters.manage");
   return (
     <div className="mx-auto max-w-6xl px-6 py-10">
       <div className="flex items-center justify-between">

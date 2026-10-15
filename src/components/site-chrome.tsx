@@ -3,7 +3,7 @@
 import { usePathname } from "next/navigation";
 
 /**
- * Hides the site navbar/footer on the auth routes.
+ * Hides the site navbar/footer (and consent banner) on the auth and admin routes.
  *
  * The sign in and sign up screens are a full-bleed split layout with their own
  * "Back to Hayame" affordance; the global chrome would compete with the brand
@@ -11,7 +11,7 @@ import { usePathname } from "next/navigation";
  */
 export function SiteChrome({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const isAuthRoute = pathname?.startsWith("/auth");
-  if (isAuthRoute) return null;
-  return <>{children}</>;
+  const hidden = ["/auth", "/admin", "/maintenance"].some((prefix) => pathname?.startsWith(prefix));
+  if (hidden) return null;
+  return <div data-site-chrome className="contents">{children}</div>;
 }

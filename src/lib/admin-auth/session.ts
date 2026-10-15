@@ -14,6 +14,8 @@ type SessionPayload = {
   u: string;
   iat: number;
   exp: number;
+  /** admin_users.id for team accounts. Absent for the env-configured root admin. */
+  id?: string;
 };
 
 function toBase64Url(input: string | Buffer) {
@@ -93,6 +95,7 @@ export function verifyAdminCredentials(params: {
 export function createAdminSessionToken(params: {
   username: string;
   sessionSecret: string;
+  adminId?: string;
   now?: number;
   ttlSeconds?: number;
 }) {
@@ -103,6 +106,7 @@ export function createAdminSessionToken(params: {
     u: params.username,
     iat: issuedAt,
     exp: expiresAt,
+    ...(params.adminId ? { id: params.adminId } : {}),
   };
   const encodedPayload = toBase64Url(JSON.stringify(payload));
   const signature = signValue(encodedPayload, params.sessionSecret);
@@ -130,5 +134,32 @@ export function verifyAdminSessionToken(params: {
     return payload.exp > now;
   } catch {
     return false;
+  }
+}
+
+/** Verifies signature and expiry and returns the claims, without tying them to one username. */
+export function readAdminSessionToken(params: {
+  token: string;
+  sessionSecret: string;
+  now?: number;
+}): { username: string; adminId: string | null } | null {
+  const [encodedPayload, signature] = params.token.split(".");
+  if (!encodedPayload || !signature) return null;
+  if (!safeCompare(signValue(encodedPayload, params.sessionSecret), signature))
+    return null;
+
+  try {
+    const payload = JSON.parse(
+      fromBase64Url(encodedPayload).toString("utf8"),
+    ) as SessionPayload;
+    if (payload.v !== SESSION_VERSION || typeof payload.u !== "string") return null;
+    const now = Math.floor((params.now ?? Date.now()) / 1000);
+    if (!(payload.exp > now)) return null;
+    return {
+      username: payload.u,
+      adminId: typeof payload.id === "string" ? payload.id : null,
+    };
+  } catch {
+    return null;
   }
 }

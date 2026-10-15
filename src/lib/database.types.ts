@@ -557,6 +557,53 @@ export type Database = {
           updated_at?: string | null;
         };
       };
+      site_maintenance: {
+        Row: {
+          id: number;
+          enabled: boolean;
+          mode: string;
+          ends_at: string | null;
+          show_countdown: boolean;
+          badge: string;
+          headline: string;
+          message: string;
+          theme: string;
+          background: string;
+          contact_email: string;
+          updated_at: string;
+          updated_by: string | null;
+        };
+        Insert: {
+          id?: number;
+          enabled?: boolean;
+          mode?: string;
+          ends_at?: string | null;
+          show_countdown?: boolean;
+          badge?: string;
+          headline?: string;
+          message?: string;
+          theme?: string;
+          background?: string;
+          contact_email?: string;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Update: {
+          id?: number;
+          enabled?: boolean;
+          mode?: string;
+          ends_at?: string | null;
+          show_countdown?: boolean;
+          badge?: string;
+          headline?: string;
+          message?: string;
+          theme?: string;
+          background?: string;
+          contact_email?: string;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+      };
       listing_views: {
         Row: {
           id: string;

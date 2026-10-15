@@ -149,7 +149,7 @@ export async function POST(req: Request) {
         { status: 400 },
       );
     }
-    const admin = await requireAdminApi();
+    const admin = await requireAdminApi("vehicles.review");
     const supabase = await createSupabaseServerClient();
     const supa = admin
       ? (createSupabaseAdminClient() as any)

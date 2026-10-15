@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { failJson } from "@/lib/api-errors";
-import { getAdminReviewerName, requireAdminApi } from "@/lib/admin-auth";
+import { requireAdminApi } from "@/lib/admin-auth";
+import { logAdminAction } from "@/lib/admin-audit";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getRequestUser } from "@/lib/supabase/request-auth";
@@ -22,7 +23,7 @@ export async function GET(req: Request, context: Params) {
     const supabase = await createSupabaseServerClient();
     const supa = supabase as any;
     const user = await getRequestUser(supabase as any, req);
-    const admin = await requireAdminApi();
+    const admin = await requireAdminApi("vehicles.review");
 
     // maybeSingle(), not single(): single() raises PGRST116 ("Cannot coerce the
     // result to a single JSON object") when the row is absent, which the catch
@@ -80,7 +81,7 @@ export async function PUT(req: Request, context: Params) {
         { status: 400 },
       );
     }
-    const admin = await requireAdminApi();
+    const admin = await requireAdminApi("vehicles.review");
     const hasAirConditioning =
       Boolean(parsed.air_conditioning) ||
       Boolean(
@@ -102,7 +103,7 @@ export async function PUT(req: Request, context: Params) {
             : null,
           approval_status: "approved",
           reviewed_at: new Date().toISOString(),
-          reviewed_by: getAdminReviewerName(),
+          reviewed_by: admin.email,
           rejection_reason: null,
           updated_at: new Date().toISOString(),
         })
@@ -110,6 +111,13 @@ export async function PUT(req: Request, context: Params) {
         .select()
         .single();
       if (error) throw error;
+      await logAdminAction({
+        action: "listing_edited_by_admin",
+        summary: `${admin.name} edited the listing ${listingTitle ?? id} and approved it`,
+        targetType: "car",
+        targetId: id,
+        actor: admin,
+      });
       return NextResponse.json({ data });
     }
 
@@ -217,11 +225,19 @@ export async function PUT(req: Request, context: Params) {
 export async function DELETE(req: Request, context: Params) {
   const { id } = await context.params;
   try {
-    const admin = await requireAdminApi();
+    const admin = await requireAdminApi("vehicles.delete");
     if (admin) {
       const adminClient = createSupabaseAdminClient() as any;
+      const { data: doomed } = await adminClient.from("cars").select("title,city").eq("id", id).maybeSingle();
       const { error } = await adminClient.from("cars").delete().eq("id", id);
       if (error) throw error;
+      await logAdminAction({
+        action: "listing_deleted",
+        summary: `${admin.name} deleted the listing ${doomed?.title ?? id}${doomed?.city ? ` (${doomed.city})` : ""}`,
+        targetType: "car",
+        targetId: id,
+        actor: admin,
+      });
       return NextResponse.json({ ok: true });
     }
 

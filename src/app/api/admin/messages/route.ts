@@ -10,7 +10,7 @@ import {
 } from "@/lib/admin-office";
 
 async function requireAdminClient() {
-  const authed = await requireAdminApi();
+  const authed = await requireAdminApi("messages.reply");
   if (!authed) return null;
   return createSupabaseAdminClient() as any;
 }

@@ -6,7 +6,7 @@ import { ImageGallery } from "@/components/image-gallery";
 import { VerificationBadges } from "@/components/verification-badges";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { requireAdminPage } from "@/lib/admin-auth";
+import { requireAdmin } from "@/lib/admin-auth";
 import { resolveCarImages } from "@/lib/car-images";
 import { deriveHostBadgeType, hostBadgeLabel } from "@/lib/host-badges";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
@@ -55,7 +55,7 @@ type AdminPreviewCar = {
 export const dynamic = "force-dynamic";
 
 export default async function AdminListingPreviewPage({ params }: PageProps) {
-  await requireAdminPage();
+  await requireAdmin("vehicles.review");
   const resolvedParams = await params;
   const admin = createSupabaseAdminClient();
 

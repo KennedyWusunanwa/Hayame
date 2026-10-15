@@ -1,5 +1,5 @@
-import { AdminWorkspaceSkeleton } from "@/components/skeletons/page-loading-skeletons";
+import { AdminDashboardSkeleton } from "@/components/admin/admin-skeletons";
 
 export default function AdminLoading() {
-  return <AdminWorkspaceSkeleton />;
+  return <AdminDashboardSkeleton />;
 }

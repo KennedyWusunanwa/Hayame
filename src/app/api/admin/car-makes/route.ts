@@ -4,7 +4,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { failJson } from "@/lib/api-errors";
 
 export async function GET() {
-  const admin = await requireAdminApi();
+  const admin = await requireAdminApi("filters.manage");
   if (!admin)
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   const supa = createSupabaseAdminClient() as any;
@@ -23,7 +23,7 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const admin = await requireAdminApi();
+  const admin = await requireAdminApi("filters.manage");
   if (!admin)
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   const body = (await req.json()) as { name?: string };
@@ -48,7 +48,7 @@ export async function POST(req: Request) {
 }
 
 export async function PATCH(req: Request) {
-  const admin = await requireAdminApi();
+  const admin = await requireAdminApi("filters.manage");
   if (!admin)
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   const body = (await req.json()) as { id?: string; name?: string };
@@ -76,7 +76,7 @@ export async function PATCH(req: Request) {
 }
 
 export async function DELETE(req: Request) {
-  const admin = await requireAdminApi();
+  const admin = await requireAdminApi("filters.manage");
   if (!admin)
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   const body = (await req.json()) as { id?: string };
