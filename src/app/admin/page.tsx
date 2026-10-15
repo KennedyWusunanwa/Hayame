@@ -931,38 +931,55 @@ export default async function AdminPage({
             <CardTitle>Approved hosts</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-2">
-              {(hosts ?? []).map((host: any) => (
-                <div
-                  key={host.user_id ?? host.id}
-                  className="flex items-center justify-between gap-3 text-sm"
-                >
-                  <div className="flex items-center gap-3">
-                    <ProfileAvatar
-                      src={host.profiles?.avatar_url}
-                      name={
-                        host.profiles?.full_name ?? host.full_name ?? "Host"
-                      }
-                      className="h-10 w-10"
-                    />
-                    <div>
-                      <p className="font-semibold text-foreground">
-                        {host.profiles?.full_name ?? host.full_name ?? "Host"}
-                      </p>
-                      <p className="text-xs text-gray-600">
-                        {host.profiles?.phone ?? host.phone ?? "No phone"}
-                      </p>
-                      <p className="text-[11px] text-gray-500">
-                        Vehicles:{" "}
-                        {carsByOwner.get(host.user_id ?? host.id) ?? 0}
-                      </p>
+            <div className="divide-y divide-border/60">
+              {(hosts ?? []).map((host: any) => {
+                const hostId = host.user_id ?? host.id;
+                const hostName = host.profiles?.full_name ?? host.full_name ?? "Host";
+                return (
+                  <div
+                    key={hostId}
+                    className="group flex flex-wrap items-center justify-between gap-3 py-3 text-sm"
+                  >
+                    <Link
+                      href={`/admin/users/${hostId}`}
+                      className="flex min-w-0 flex-1 items-center gap-3 rounded-xl px-2 py-1 -mx-2 transition-colors hover:bg-gray-50"
+                    >
+                      <ProfileAvatar
+                        src={host.profiles?.avatar_url}
+                        name={hostName}
+                        className="h-10 w-10"
+                      />
+                      <div className="min-w-0">
+                        <p className="truncate font-semibold text-foreground group-hover:text-brand">
+                          {hostName}
+                        </p>
+                        <p className="text-xs text-gray-600">
+                          {host.profiles?.phone ?? host.phone ?? "No phone"}
+                          {" · "}
+                          {host.profiles?.city ?? host.city ?? "-"}
+                        </p>
+                        <p className="text-[11px] text-gray-500">
+                          Vehicles: {carsByOwner.get(hostId) ?? 0}
+                        </p>
+                      </div>
+                    </Link>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <Link
+                        href={`/admin/users/${hostId}#host-application`}
+                        className="rounded-lg border border-border bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 shadow-sm hover:bg-gray-50"
+                      >
+                        Application &amp; ID
+                      </Link>
+                      <Link
+                        href={`/admin/users/${hostId}`}
+                        className="rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:brightness-110"
+                      >
+                        View details
+                      </Link>
                     </div>
                   </div>
-                  <span className="text-xs text-gray-500">
-                    {host.profiles?.city ?? host.city ?? "-"}
-                  </span>
-                </div>
-              ))}
+                );
+              })}
               {(hosts ?? []).length === 0 ? (
                 <p className="text-sm text-gray-600">No approved hosts yet.</p>
               ) : null}
