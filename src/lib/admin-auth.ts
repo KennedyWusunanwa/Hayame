@@ -13,6 +13,7 @@ import {
   getConfiguredPassword,
   getConfiguredPasswordHash,
   getConfiguredUsername,
+  hasRootCredentials,
   isAdminAuthConfigured,
 } from "@/lib/admin-auth/config";
 import { logAdminAction, getRequestMeta } from "@/lib/admin-audit";
@@ -25,7 +26,7 @@ const MAX_FAILED_ATTEMPTS = 5;
 const LOCK_MINUTES = 15;
 const IP_FAILURE_LIMIT = 10;
 
-export { isAdminAuthConfigured, getCurrentAdmin };
+export { isAdminAuthConfigured, hasRootCredentials, getCurrentAdmin };
 export type { AdminIdentity };
 
 function getCookieSecure() {
@@ -201,6 +202,10 @@ export async function signInAdmin(identifier: string, password: string): Promise
     return "ok";
   }
 
+  if (!hasRootCredentials()) {
+    burnTime(password);
+    return fail("unknown account or wrong password");
+  }
   const rootOk = verifyAdminCredentials({
     inputUsername: typed,
     inputPassword: password,

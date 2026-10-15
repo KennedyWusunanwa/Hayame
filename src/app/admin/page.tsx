@@ -415,9 +415,8 @@ export default async function AdminPage({
             <CardTitle>Admin</CardTitle>
           </CardHeader>
           <CardContent className="text-sm text-gray-700">
-            Set ADMIN_USERNAME, ADMIN_PASSWORD or ADMIN_PASSWORD_HASH,
-            ADMIN_SESSION_SECRET, and SUPABASE_SERVICE_ROLE_KEY in your
-            environment to enable admin access.
+            Set SUPABASE_SERVICE_ROLE_KEY (and ideally a long random
+            ADMIN_SESSION_SECRET) in your environment to enable admin access.
           </CardContent>
         </Card>
       </div>

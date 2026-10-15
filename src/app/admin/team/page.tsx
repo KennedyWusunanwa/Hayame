@@ -10,7 +10,7 @@ import {
 } from "@/components/admin/admin-ui";
 import { CreateAdminForm, ResetPasswordForm } from "@/components/admin/team-forms";
 import { PendingSubmitButton } from "@/components/admin/pending-submit-button";
-import { isAdminAuthConfigured, requireAdmin } from "@/lib/admin-auth";
+import { hasRootCredentials, requireAdmin } from "@/lib/admin-auth";
 import {
   ADMIN_ROLES,
   PERMISSIONS,
@@ -65,6 +65,13 @@ export default async function TeamPage({
 
       {params.notice && NOTICES[params.notice] ? <AdminNotice tone="success" title={NOTICES[params.notice]} /> : null}
       {params.error ? <AdminNotice tone="error" title="That didn't work" description={params.error} /> : null}
+      {hasRootCredentials() && team.some((p) => p.role === "super_admin" && p.active) ? (
+        <AdminNotice
+          tone="info"
+          title="A shared root login is still switched on"
+          description="Everyone now has a personal account, so you can remove ADMIN_USERNAME, ADMIN_PASSWORD and ADMIN_PASSWORD_HASH from your Vercel environment variables (and set ADMIN_SESSION_SECRET to a long random value). That deletes the shared login for good."
+        />
+      ) : null}
       {missingTable ? (
         <AdminNotice
           tone="error"
@@ -77,9 +84,9 @@ export default async function TeamPage({
         <CreateAdminForm />
       </Panel>
 
-      <Panel title={`People with access (${team.length + (isAdminAuthConfigured() ? 1 : 0)})`}>
+      <Panel title={`People with access (${team.length + (hasRootCredentials() ? 1 : 0)})`}>
         <div className="divide-y divide-border/70">
-          {isAdminAuthConfigured() ? (
+          {hasRootCredentials() ? (
             <div className="flex flex-wrap items-center justify-between gap-3 py-4">
               <div>
                 <p className="text-sm font-semibold text-[#0A2B54]">Root admin <span className="font-normal text-gray-500">(set in hosting env)</span></p>

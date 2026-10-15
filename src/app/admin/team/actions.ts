@@ -2,7 +2,7 @@
 
 import { randomBytes } from "node:crypto";
 import { redirect } from "next/navigation";
-import { requireAdmin, isAdminAuthConfigured } from "@/lib/admin-auth";
+import { requireAdmin, hasRootCredentials } from "@/lib/admin-auth";
 import { logAdminAction } from "@/lib/admin-audit";
 import { createAdminPasswordHash } from "@/lib/admin-auth/session";
 import { ROLE_META, isAdminRole } from "@/lib/admin-permissions";
@@ -34,7 +34,7 @@ function db() {
 async function activeSuperAdminCount(excludingId?: string) {
   const { data } = await db().from("admin_users").select("id").eq("role", "super_admin").eq("active", true);
   const team = (data ?? []).filter((row: { id: string }) => row.id !== excludingId).length;
-  return team + (isAdminAuthConfigured() ? 1 : 0);
+  return team + (hasRootCredentials() ? 1 : 0);
 }
 
 export async function createAdminAccountAction(

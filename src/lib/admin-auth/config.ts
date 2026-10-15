@@ -38,12 +38,14 @@ export function getAdminSessionSecret() {
   return createHash("sha256").update(seed).digest("hex");
 }
 
+/** True when the env-configured root login (ADMIN_USERNAME + password) exists. Optional. */
+export function hasRootCredentials() {
+  return Boolean(getConfiguredUsername() && (getConfiguredPassword() || getConfiguredPasswordHash()));
+}
+
+/** Sessions can be issued as long as there is a signing secret. Team accounts need nothing else. */
 export function isAdminAuthConfigured() {
-  return Boolean(
-    getConfiguredUsername() &&
-    (getConfiguredPassword() || getConfiguredPasswordHash()) &&
-    getAdminSessionSecret(),
-  );
+  return Boolean(getAdminSessionSecret());
 }
 
 /** The signed claims inside a valid, unexpired admin cookie, or null. */
@@ -51,8 +53,8 @@ export function readAdminSession(token: string | undefined | null) {
   if (!token || !isAdminAuthConfigured()) return null;
   const claims = readAdminSessionToken({ token, sessionSecret: getAdminSessionSecret() });
   if (!claims) return null;
-  // Root session: must still match the configured username.
-  if (!claims.adminId && claims.username !== getConfiguredUsername()) return null;
+  // Root session: only valid while the root login still exists and matches.
+  if (!claims.adminId && (!hasRootCredentials() || claims.username !== getConfiguredUsername())) return null;
   return claims;
 }
 
