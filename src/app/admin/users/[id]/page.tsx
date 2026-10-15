@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/table";
 import { reviewHostApplication } from "@/lib/admin-host-applications";
 import { PageHeader } from "@/components/admin/admin-ui";
+import { EvidenceGallery } from "@/components/admin/image-lightbox";
 import { requireAdmin } from "@/lib/admin-auth";
 import { logAdminAction } from "@/lib/admin-audit";
 import { can } from "@/lib/admin-permissions";
@@ -992,70 +993,13 @@ export default async function AdminUserDetailsPage({
               Host active: {profile.is_host ? "Yes" : "No"}
             </span>
           </div>
-          <div className="grid gap-4 sm:grid-cols-3">
-            <div className="rounded-lg border border-border p-3">
-              <p className="text-xs font-semibold text-gray-500">Face photo</p>
-              {faceUrl ? (
-                <img
-                  src={faceUrl}
-                  alt="Face evidence"
-                  className="mt-2 h-40 w-full rounded-md object-cover"
-                />
-              ) : (
-                <p className="mt-2 text-sm text-gray-600">
-                  No face photo uploaded.
-                </p>
-              )}
-            </div>
-            <div className="rounded-lg border border-border p-3">
-              <p className="text-xs font-semibold text-gray-500">ID front</p>
-              {idFrontUrl ? (
-                <>
-                  <img
-                    src={idFrontUrl}
-                    alt="ID front"
-                    className="mt-2 h-40 w-full rounded-md object-cover"
-                  />
-                  <a
-                    href={idFrontUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="mt-2 inline-flex text-xs font-semibold text-brand"
-                  >
-                    Open original
-                  </a>
-                </>
-              ) : (
-                <p className="mt-2 text-sm text-gray-600">
-                  No ID front uploaded.
-                </p>
-              )}
-            </div>
-            <div className="rounded-lg border border-border p-3">
-              <p className="text-xs font-semibold text-gray-500">ID back</p>
-              {idBackUrl ? (
-                <>
-                  <img
-                    src={idBackUrl}
-                    alt="ID back"
-                    className="mt-2 h-40 w-full rounded-md object-cover"
-                  />
-                  <a
-                    href={idBackUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="mt-2 inline-flex text-xs font-semibold text-brand"
-                  >
-                    Open original
-                  </a>
-                </>
-              ) : (
-                <p className="mt-2 text-sm text-gray-600">
-                  No ID back uploaded.
-                </p>
-              )}
-            </div>
-          </div>
+          <EvidenceGallery
+            items={[
+              { label: "Face photo", src: faceUrl, empty: "No face photo uploaded." },
+              { label: "ID front", src: idFrontUrl, empty: "No ID front uploaded." },
+              { label: "ID back", src: idBackUrl, empty: "No ID back uploaded." },
+            ]}
+          />
           {latestApplication ? (
             <p className="text-xs text-gray-600">
               Latest host application:{" "}

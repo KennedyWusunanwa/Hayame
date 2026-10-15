@@ -18,6 +18,7 @@ import {
 import { AdminLoadingLink } from "@/components/admin/admin-loading-link";
 import { AdminNotice } from "@/components/admin/admin-notice";
 import { PageHeader, SeverityPill } from "@/components/admin/admin-ui";
+import { PreviewLink } from "@/components/admin/image-lightbox";
 import { ShellSync } from "@/components/admin/shell-sync";
 import { PendingSubmitButton } from "@/components/admin/pending-submit-button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -1474,14 +1475,16 @@ export default async function AdminPage({
                             ID front
                           </p>
                           <div className="mt-2">
-                            <a
+                            <PreviewLink
                               className="inline-flex min-h-10 w-full items-center justify-center rounded-md border border-border px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 sm:w-auto"
-                              href={`/api/host-applications/${app.id}/files?type=front`}
-                              target="_blank"
-                              rel="noreferrer"
+                              items={[
+                                { label: `${app.full_name ?? "Applicant"} · ID front`, src: `/api/host-applications/${app.id}/files?type=front` },
+                                { label: `${app.full_name ?? "Applicant"} · ID back`, src: `/api/host-applications/${app.id}/files?type=back` },
+                              ]}
+                              index={0}
                             >
-                              Open ID front
-                            </a>
+                              Preview ID front
+                            </PreviewLink>
                           </div>
                         </div>
                         <div className="rounded-xl border border-border p-3">
@@ -1489,14 +1492,16 @@ export default async function AdminPage({
                             ID back
                           </p>
                           <div className="mt-2">
-                            <a
+                            <PreviewLink
                               className="inline-flex min-h-10 w-full items-center justify-center rounded-md border border-border px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 sm:w-auto"
-                              href={`/api/host-applications/${app.id}/files?type=back`}
-                              target="_blank"
-                              rel="noreferrer"
+                              items={[
+                                { label: `${app.full_name ?? "Applicant"} · ID front`, src: `/api/host-applications/${app.id}/files?type=front` },
+                                { label: `${app.full_name ?? "Applicant"} · ID back`, src: `/api/host-applications/${app.id}/files?type=back` },
+                              ]}
+                              index={1}
                             >
-                              Open ID back
-                            </a>
+                              Preview ID back
+                            </PreviewLink>
                           </div>
                         </div>
                       </div>
@@ -1658,19 +1663,27 @@ export default async function AdminPage({
                       </div>
                       <div>
                         ID Images:{" "}
-                        <a
-                          className="text-brand"
-                          href={`/api/host-applications/${app.id}/files?type=front`}
+                        <PreviewLink
+                          className="text-brand underline-offset-2 hover:underline"
+                          items={[
+                            { label: `${app.full_name ?? "Applicant"} · ID front`, src: `/api/host-applications/${app.id}/files?type=front` },
+                            { label: `${app.full_name ?? "Applicant"} · ID back`, src: `/api/host-applications/${app.id}/files?type=back` },
+                          ]}
+                          index={0}
                         >
                           Front
-                        </a>{" "}
+                        </PreviewLink>{" "}
                         /{" "}
-                        <a
-                          className="text-brand"
-                          href={`/api/host-applications/${app.id}/files?type=back`}
+                        <PreviewLink
+                          className="text-brand underline-offset-2 hover:underline"
+                          items={[
+                            { label: `${app.full_name ?? "Applicant"} · ID front`, src: `/api/host-applications/${app.id}/files?type=front` },
+                            { label: `${app.full_name ?? "Applicant"} · ID back`, src: `/api/host-applications/${app.id}/files?type=back` },
+                          ]}
+                          index={1}
                         >
                           Back
-                        </a>
+                        </PreviewLink>
                       </div>
                       <div>
                         Fleet size:{" "}
@@ -1829,18 +1842,26 @@ export default async function AdminPage({
                           <TableCell className="whitespace-nowrap text-xs text-gray-600">
                             {app.id_type ?? "—"} {app.id_number ?? ""}
                             <div className="mt-1 flex gap-2">
-                              <a
-                                className="text-brand"
-                                href={`/api/host-applications/${app.id}/files?type=front`}
+                              <PreviewLink
+                                className="text-brand underline-offset-2 hover:underline"
+                                items={[
+                                  { label: `${app.full_name ?? "Applicant"} · ID front`, src: `/api/host-applications/${app.id}/files?type=front` },
+                                  { label: `${app.full_name ?? "Applicant"} · ID back`, src: `/api/host-applications/${app.id}/files?type=back` },
+                                ]}
+                                index={0}
                               >
                                 Front
-                              </a>
-                              <a
-                                className="text-brand"
-                                href={`/api/host-applications/${app.id}/files?type=back`}
+                              </PreviewLink>
+                              <PreviewLink
+                                className="text-brand underline-offset-2 hover:underline"
+                                items={[
+                                  { label: `${app.full_name ?? "Applicant"} · ID front`, src: `/api/host-applications/${app.id}/files?type=front` },
+                                  { label: `${app.full_name ?? "Applicant"} · ID back`, src: `/api/host-applications/${app.id}/files?type=back` },
+                                ]}
+                                index={1}
                               >
                                 Back
-                              </a>
+                              </PreviewLink>
                             </div>
                           </TableCell>
                           <TableCell className="text-sm font-semibold">
