@@ -2,10 +2,22 @@
 
 import { useEffect, useRef, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
-import { NavigationSkeletonOverlay } from "@/components/skeletons/page-loading-skeletons";
 
+/**
+ * Slim progress bar along the top edge while a navigation is in flight.
+ *
+ * Deliberately quiet: it only appears if the next page hasn't arrived within
+ * SHOW_DELAY_MS, so prefetched (near-instant) navigations show nothing at all
+ * and the old page simply becomes the new one. Slow navigations get a bar that
+ * eases towards 85%, then runs to 100% and fades the moment the route changes.
+ * This replaces the old full-screen skeleton overlay, which flashed a fake page
+ * over every click.
+ */
+const SHOW_DELAY_MS = 150;
 const HIDE_TIMEOUT_MS = 8000;
-const DISMISS_TRANSITION_MS = 200;
+const FINISH_MS = 260;
+
+type Phase = "idle" | "pending" | "visible" | "finishing";
 
 function isModifiedEvent(event: MouseEvent) {
   return (
@@ -16,9 +28,6 @@ function isModifiedEvent(event: MouseEvent) {
     event.altKey
   );
 }
-
-// The admin portal and maintenance page have their own loading states.
-const SELF_MANAGED = /^\/(admin|maintenance)(\/|$)/;
 
 function shouldTrackAnchor(anchor: HTMLAnchorElement) {
   if (anchor.hasAttribute("data-no-loading")) return false;
@@ -40,8 +49,6 @@ function shouldTrackAnchor(anchor: HTMLAnchorElement) {
     const currentUrl = new URL(window.location.href);
     const targetUrl = new URL(anchor.href, currentUrl);
     if (targetUrl.origin !== currentUrl.origin) return false;
-    if (SELF_MANAGED.test(targetUrl.pathname) || SELF_MANAGED.test(currentUrl.pathname)) return false;
-
     return !(
       targetUrl.pathname === currentUrl.pathname &&
       targetUrl.search === currentUrl.search
@@ -51,96 +58,92 @@ function shouldTrackAnchor(anchor: HTMLAnchorElement) {
   }
 }
 
-function targetPathFromAnchor(anchor: HTMLAnchorElement) {
-  try {
-    return new URL(anchor.href, window.location.href).pathname;
-  } catch {
-    return null;
-  }
-}
-
 export function NavigationLoader() {
-  const [loading, setLoading] = useState(false);
-  const [dismissing, setDismissing] = useState(false);
-  const [targetPath, setTargetPath] = useState<string | null>(null);
-  const timerRef = useRef<number | null>(null);
-  const dismissTimerRef = useRef<number | null>(null);
+  const [phase, setPhase] = useState<Phase>("idle");
+  const phaseRef = useRef<Phase>("idle");
+  const showTimer = useRef<number | null>(null);
+  const safetyTimer = useRef<number | null>(null);
+  const finishTimer = useRef<number | null>(null);
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  useEffect(() => {
-    return () => {
-      if (dismissTimerRef.current) window.clearTimeout(dismissTimerRef.current);
-    };
-  }, []);
-
-  const dismiss = () => {
-    setDismissing(true);
-    if (dismissTimerRef.current) window.clearTimeout(dismissTimerRef.current);
-    // Let the overlay's own opacity transition play instead of unmounting it
-    // outright — otherwise the destination page (already rendered behind the
-    // mask) just appears with a hard cut instead of a smooth cross-fade.
-    dismissTimerRef.current = window.setTimeout(() => {
-      setLoading(false);
-      setDismissing(false);
-      setTargetPath(null);
-    }, DISMISS_TRANSITION_MS);
+  const setPhaseSafe = (next: Phase) => {
+    phaseRef.current = next;
+    setPhase(next);
   };
 
-  useEffect(() => {
-    if (!loading) return;
-    if (timerRef.current) window.clearTimeout(timerRef.current);
-    timerRef.current = window.setTimeout(dismiss, HIDE_TIMEOUT_MS);
-    return () => {
-      if (timerRef.current) window.clearTimeout(timerRef.current);
-    };
-  }, [loading]);
+  const clearTimers = () => {
+    for (const ref of [showTimer, safetyTimer, finishTimer]) {
+      if (ref.current) {
+        window.clearTimeout(ref.current);
+        ref.current = null;
+      }
+    }
+  };
 
-  useEffect(() => {
-    if (!loading) return;
+  const finish = () => {
+    clearTimers();
+    if (phaseRef.current === "visible") {
+      // Run the bar to the end, then let it fade before unmounting.
+      setPhaseSafe("finishing");
+      finishTimer.current = window.setTimeout(
+        () => setPhaseSafe("idle"),
+        FINISH_MS + 200,
+      );
+    } else {
+      setPhaseSafe("idle");
+    }
+  };
 
-    const frame = window.requestAnimationFrame(dismiss);
-    return () => window.cancelAnimationFrame(frame);
-  }, [pathname, searchParams, loading]);
+  const start = () => {
+    clearTimers();
+    setPhaseSafe("pending");
+    showTimer.current = window.setTimeout(() => {
+      if (phaseRef.current === "pending") setPhaseSafe("visible");
+    }, SHOW_DELAY_MS);
+    safetyTimer.current = window.setTimeout(finish, HIDE_TIMEOUT_MS);
+  };
+
+  // The route changed: whatever we were showing is done.
+  useEffect(() => {
+    if (phaseRef.current === "idle") return;
+    finish();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname, searchParams]);
 
   useEffect(() => {
     const handleClick = (event: MouseEvent) => {
-      if (event.defaultPrevented) return;
-      if (isModifiedEvent(event)) return;
-
+      if (event.defaultPrevented || isModifiedEvent(event)) return;
       const target = event.target as HTMLElement | null;
-      if (!target) return;
-
-      const anchor = target.closest("a") as HTMLAnchorElement | null;
+      const anchor = target?.closest("a") as HTMLAnchorElement | null;
       if (!anchor || !shouldTrackAnchor(anchor)) return;
-
-      if (dismissTimerRef.current) window.clearTimeout(dismissTimerRef.current);
-      setTargetPath(targetPathFromAnchor(anchor));
-      setDismissing(false);
-      setLoading(true);
+      start();
     };
-
     const handleSubmit = (event: Event) => {
       const form = event.target as HTMLFormElement | null;
-      if (!form) return;
-      if (form.hasAttribute("data-no-loading")) return;
-      if (SELF_MANAGED.test(window.location.pathname)) return;
-
-      if (dismissTimerRef.current) window.clearTimeout(dismissTimerRef.current);
-      setDismissing(false);
-      setLoading(true);
-      setTargetPath(null);
+      if (!form || form.hasAttribute("data-no-loading")) return;
+      start();
     };
-
     document.addEventListener("click", handleClick, true);
     document.addEventListener("submit", handleSubmit, true);
     return () => {
       document.removeEventListener("click", handleClick, true);
       document.removeEventListener("submit", handleSubmit, true);
+      clearTimers();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  if (!loading) return null;
+  if (phase === "idle" || phase === "pending") return null;
 
-  return <NavigationSkeletonOverlay path={targetPath} dismissing={dismissing} />;
+  return (
+    <div
+      className={`nav-progress ${phase === "finishing" ? "is-finishing" : "is-active"}`}
+      role="progressbar"
+      aria-label="Loading page"
+      aria-busy={phase !== "finishing"}
+    >
+      <div className="nav-progress__bar" />
+    </div>
+  );
 }
