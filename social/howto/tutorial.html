@@ -1,0 +1,490 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<style>html,body{margin:0;padding:0;background:#F7FAFF;overflow:hidden}canvas{display:block}</style>
+</head><body><canvas id="c"></canvas>
+<script>
+/* Hayame how-to video engine. Deterministic: render(t) draws the frame for time t.
+   The build script fills SPEC (steps + timing), FONTS, ASSETS (name -> file URL), LOGO, ICONS. */
+const SPEC = {{SPEC}};
+const FONTS = {{FONTS}};
+const ASSETS = {{ASSETS}};
+const LOGO = "{{LOGO}}";
+const ICONS = {{ICONS}};
+
+const W = SPEC.w, H = SPEC.h, PORTRAIT = H > W;
+const NAVY = "#0A2B54", BLUE = "#1484D9", SKY = "#7CCBFF", MIST = "#EDF7FF", INK = "#0A2B54", MUTED = "#5B6B82";
+const cv = document.getElementById("c"); cv.width = W; cv.height = H; const ctx = cv.getContext("2d");
+
+/* ---------- helpers ---------- */
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const seg = (t, a, b) => clamp((t - a) / (b - a));
+const lerp = (a, b, k) => a + (b - a) * k;
+const E = {
+  outExpo: x => (x >= 1 ? 1 : 1 - Math.pow(2, -10 * x)),
+  outCubic: x => 1 - Math.pow(1 - x, 3),
+  inCubic: x => x * x * x,
+  inOutCubic: x => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2),
+  inOutQuint: x => (x < 0.5 ? 16 * x ** 5 : 1 - Math.pow(-2 * x + 2, 5) / 2),
+  outBack: (x, s = 1.7) => 1 + (s + 1) * Math.pow(x - 1, 3) + s * Math.pow(x - 1, 2),
+};
+function rng(seed) { return function () { seed |= 0; seed = (seed + 0x6D2B79F5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+function rr(x, y, w, h, r) { r = Math.min(r, w / 2, h / 2); ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+/** keyframes [{t, ...values}] -> interpolated values at time t (eased per segment) */
+function kf(frames, t, ease = E.inOutCubic) {
+  if (!frames || !frames.length) return null;
+  if (t <= frames[0].t) return { ...frames[0] };
+  for (let i = 1; i < frames.length; i++) {
+    if (t <= frames[i].t) {
+      const a = frames[i - 1], b = frames[i], k = ease(seg(t, a.t, b.t)), out = {};
+      for (const key of Object.keys(b)) out[key] = typeof b[key] === "number" && typeof a[key] === "number" ? lerp(a[key], b[key], k) : b[key];
+      return out;
+    }
+  }
+  return { ...frames[frames.length - 1] };
+}
+function setFont(size, weight = 900, tracking = -0.04) { ctx.font = `${weight} ${size}px Geist, sans-serif`; ctx.letterSpacing = `${(tracking * size).toFixed(2)}px`; }
+function fitFont(text, size, weight, maxW, tracking) { setFont(size, weight, tracking); while (ctx.measureText(text).width > maxW && size > 18) { size -= 2; setFont(size, weight, tracking); } return size; }
+
+/* ---------- assets ---------- */
+const img = {};
+function loadImg(src) { return new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error("img " + src)); i.src = src; }); }
+async function boot() {
+  for (const [w, uri] of Object.entries(FONTS)) { const f = new FontFace("Geist", `url(${uri})`, { weight: String(w) }); document.fonts.add(await f.load()); }
+  img.logo = await loadImg(LOGO);
+  img.icons = await Promise.all(ICONS.map(loadImg));
+  for (const [name, url] of Object.entries(ASSETS)) img[name] = await loadImg(url);
+  const m = location.hash.match(/t=([\d.]+)/);
+  if (m) { render(parseFloat(m[1])); document.title = "ready"; }
+  else { const t0 = performance.now(); (function loop() { render(((performance.now() - t0) / 1000) % SPEC.duration); requestAnimationFrame(loop); })(); }
+}
+
+/* ---------- timeline ---------- */
+// Each step has absolute start/end (set by the build script). Transition overlap: TR seconds.
+const TR = 0.55;
+function currentSteps(t) {
+  const out = [];
+  for (const s of SPEC.steps) {
+    const a = s.start - TR, b = s.end + TR;
+    if (t >= a && t <= b) out.push(s);
+  }
+  return out;
+}
+
+/* ---------- background ---------- */
+const BLOBS = (() => { const r = rng(3); return Array.from({ length: 4 }, (_, i) => ({ x: r(), y: r(), rad: 0.25 + r() * 0.25, sp: 0.03 + r() * 0.03, ph: r() * 6.28, a: 0.10 + r() * 0.08 })); })();
+function background(t) {
+  const g = ctx.createLinearGradient(0, 0, W, H);
+  g.addColorStop(0, "#FFFFFF"); g.addColorStop(0.55, "#F3F8FE"); g.addColorStop(1, "#E6F2FD");
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  for (const b of BLOBS) {
+    const x = (b.x + Math.sin(t * b.sp * 6 + b.ph) * 0.08) * W, y = (b.y + Math.cos(t * b.sp * 5 + b.ph) * 0.08) * H, rad = b.rad * Math.max(W, H);
+    const rg = ctx.createRadialGradient(x, y, 0, x, y, rad);
+    rg.addColorStop(0, `rgba(20,132,217,${b.a})`); rg.addColorStop(1, "rgba(20,132,217,0)");
+    ctx.fillStyle = rg; ctx.fillRect(0, 0, W, H);
+  }
+  // fine dot grid
+  ctx.fillStyle = "rgba(10,43,84,0.045)";
+  const step = PORTRAIT ? 54 : 60, off = (t * 6) % step;
+  for (let x = -step; x < W + step; x += step) for (let y = -step; y < H + step; y += step) { ctx.beginPath(); ctx.arc(x + off * 0.3, y + off * 0.3, 1.3, 0, 7); ctx.fill(); }
+}
+
+/* ---------- layout ---------- */
+// Portrait: text block at top, device below. Landscape: text left, device right.
+const L = PORTRAIT
+  ? { textX: 84, textY: 230, textW: W - 168, devX: 90, devY: 740, devW: W - 180, devH: H - 740 + 200, progY: 150 }
+  : { textX: 96, textY: 300, textW: 640, devX: 800, devY: 96, devW: W - 800 - 72, devH: H - 192, progY: H - 72 };
+
+/* ---------- device frames ---------- */
+function drawPhone(x, y, w, screen) {
+  // Bezel proportions of an iPhone-style device; screen is a callback drawing inside the clipped screen rect.
+  const bez = w * 0.028, rad = w * 0.145, h = w * (2622 / 1206) + bez * 2;
+  ctx.save();
+  ctx.shadowColor = "rgba(10,43,84,0.28)"; ctx.shadowBlur = 70; ctx.shadowOffsetY = 30;
+  ctx.fillStyle = "#0b0f16"; rr(x, y, w, h, rad); ctx.fill();
+  ctx.shadowColor = "transparent";
+  ctx.strokeStyle = "rgba(255,255,255,0.12)"; ctx.lineWidth = 2; rr(x + 1, y + 1, w - 2, h - 2, rad); ctx.stroke();
+  const sx = x + bez, sy = y + bez, sw = w - bez * 2, sh = h - bez * 2;
+  ctx.save(); rr(sx, sy, sw, sh, rad - bez); ctx.clip(); ctx.fillStyle = "#F7FAFF"; ctx.fillRect(sx, sy, sw, sh);
+  screen(sx, sy, sw, sh); ctx.restore();
+  // dynamic island
+  ctx.fillStyle = "#000"; rr(x + w / 2 - w * 0.165, sy + sh * 0.012, w * 0.33, sh * 0.03, sh * 0.015); ctx.fill();
+  ctx.restore();
+  return { x, y, w, h, sx, sy, sw, sh };
+}
+function drawBrowser(x, y, w, h, url, screen) {
+  const bar = 58, rad = 20;
+  ctx.save();
+  ctx.shadowColor = "rgba(10,43,84,0.22)"; ctx.shadowBlur = 60; ctx.shadowOffsetY = 24;
+  ctx.fillStyle = "#fff"; rr(x, y, w, h, rad); ctx.fill(); ctx.shadowColor = "transparent";
+  ctx.save(); rr(x, y, w, h, rad); ctx.clip();
+  ctx.fillStyle = "#EEF3F9"; ctx.fillRect(x, y, w, bar);
+  for (let i = 0; i < 3; i++) { ctx.fillStyle = ["#FF5F57", "#FEBC2E", "#28C840"][i]; ctx.beginPath(); ctx.arc(x + 26 + i * 22, y + bar / 2, 6.5, 0, 7); ctx.fill(); }
+  const pw = Math.min(w * 0.5, 560); ctx.fillStyle = "#fff"; rr(x + w / 2 - pw / 2, y + 12, pw, bar - 24, 10); ctx.fill();
+  ctx.strokeStyle = "rgba(10,43,84,0.08)"; ctx.lineWidth = 1; rr(x + w / 2 - pw / 2, y + 12, pw, bar - 24, 10); ctx.stroke();
+  setFont(17, 500, -0.01); ctx.fillStyle = "#3C4A5E"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  // tiny lock
+  ctx.fillStyle = "#1CA160"; ctx.fillText("🔒", x + w / 2 - ctx.measureText(url).width / 2 - 16, y + bar / 2 + 1);
+  ctx.fillStyle = "#3C4A5E"; ctx.fillText(url, x + w / 2 + 8, y + bar / 2 + 1);
+  const sx = x, sy = y + bar, sw = w, sh = h - bar;
+  ctx.save(); ctx.beginPath(); ctx.rect(sx, sy, sw, sh); ctx.clip(); ctx.fillStyle = "#fff"; ctx.fillRect(sx, sy, sw, sh); screen(sx, sy, sw, sh); ctx.restore();
+  ctx.restore(); ctx.restore();
+  return { x, y, w, h, sx, sy, sw, sh };
+}
+
+/* ---------- screenshot with scroll + price blur ---------- */
+const pixCanvas = document.createElement("canvas");
+function drawShot(im, sx, sy, sw, sh, scrollFrac, blurRects) {
+  // Fit image to screen width; scroll by a fraction of the image height.
+  const scale = sw / im.naturalWidth, ih = im.naturalHeight * scale;
+  const maxScroll = Math.max(0, ih - sh), off = clamp(scrollFrac) * maxScroll;
+  ctx.drawImage(im, sx, sy - off, sw, ih);
+  for (const r of blurRects || []) {
+    const bx = r.x * im.naturalWidth, by = r.y * im.naturalHeight, bw = r.w * im.naturalWidth, bh = r.h * im.naturalHeight;
+    const dx = sx + r.x * sw, dy = sy - off + r.y * ih, dw = r.w * sw, dh = r.h * ih;
+    if (dy + dh < sy || dy > sy + sh) continue;
+    const pw = Math.max(2, Math.round(dw / 14)), ph = Math.max(2, Math.round(dh / 14));
+    pixCanvas.width = pw; pixCanvas.height = ph; const px = pixCanvas.getContext("2d");
+    px.imageSmoothingEnabled = true; px.drawImage(im, bx, by, bw, bh, 0, 0, pw, ph);
+    ctx.save(); rr(dx - 4, dy - 4, dw + 8, dh + 8, 10); ctx.clip(); ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(pixCanvas, 0, 0, pw, ph, dx - 8, dy - 8, dw + 16, dh + 16);
+    ctx.fillStyle = "rgba(247,250,255,0.35)"; ctx.fillRect(dx - 8, dy - 8, dw + 16, dh + 16); ctx.restore();
+  }
+  return { scale, ih, off };
+}
+// screenshot fraction -> canvas coordinates (after scroll)
+function shotToCanvas(dev, geom, fx, fy) { return { x: dev.sx + fx * dev.sw, y: dev.sy - geom.off + fy * geom.ih }; }
+
+/* ---------- pointer, highlight, overlays ---------- */
+function fingerTap(p, t, tapT, alpha = 1) {
+  const pre = seg(t, tapT - 0.5, tapT - 0.1), press = seg(t, tapT, tapT + 0.12), rel = seg(t, tapT + 0.12, tapT + 0.9);
+  if (pre <= 0 || rel >= 1) return;
+  ctx.save(); ctx.globalAlpha = alpha;
+  // soft fingertip
+  const r = lerp(34, 26, press) * (1 + rel * 0.2), a = pre * (1 - rel);
+  ctx.fillStyle = `rgba(20,132,217,${0.28 * a})`; ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, 7); ctx.fill();
+  ctx.strokeStyle = `rgba(255,255,255,${0.9 * a})`; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, 7); ctx.stroke();
+  // ripple
+  if (t >= tapT) { const k = seg(t, tapT, tapT + 0.8); ctx.strokeStyle = `rgba(20,132,217,${0.7 * (1 - k)})`; ctx.lineWidth = lerp(8, 1, k); ctx.beginPath(); ctx.arc(p.x, p.y, 30 + 90 * E.outCubic(k), 0, 7); ctx.stroke(); }
+  ctx.restore();
+}
+function cursorArrow(p, t, clickT, alpha = 1, pressed = false) {
+  ctx.save(); ctx.globalAlpha = alpha;
+  const k = clickT != null && t >= clickT && t < clickT + 0.9 ? seg(t, clickT, clickT + 0.9) : null;
+  if (k !== null) { ctx.strokeStyle = `rgba(20,132,217,${0.75 * (1 - k)})`; ctx.lineWidth = lerp(7, 1, k); ctx.beginPath(); ctx.arc(p.x, p.y, 14 + 70 * E.outCubic(k), 0, 7); ctx.stroke(); }
+  const s = pressed ? 0.9 : 1;
+  ctx.translate(p.x, p.y); ctx.scale(s, s);
+  ctx.shadowColor = "rgba(0,0,0,0.35)"; ctx.shadowBlur = 10; ctx.shadowOffsetY = 3;
+  ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, 30); ctx.lineTo(8, 23); ctx.lineTo(14, 36); ctx.lineTo(19, 33.5); ctx.lineTo(13.5, 21); ctx.lineTo(23, 21); ctx.closePath();
+  ctx.fillStyle = "#fff"; ctx.fill(); ctx.shadowColor = "transparent"; ctx.strokeStyle = NAVY; ctx.lineWidth = 2; ctx.stroke();
+  ctx.restore();
+}
+function highlight(rect, k, alpha = 1) {
+  // rect in canvas px. k 0..1 draws in. Dims outside slightly, strokes inside.
+  if (k <= 0) return;
+  ctx.save(); ctx.globalAlpha = alpha;
+  const pad = 10, x = rect.x - pad, y = rect.y - pad, w = rect.w + pad * 2, h = rect.h + pad * 2;
+  ctx.fillStyle = `rgba(10,43,84,${0.28 * k})`;
+  ctx.beginPath(); ctx.rect(0, 0, W, H); rr(x, y, w, h, 18); ctx.fill("evenodd");
+  ctx.strokeStyle = `rgba(20,132,217,${0.95 * k})`; ctx.lineWidth = 4; ctx.shadowColor = "rgba(20,132,217,0.6)"; ctx.shadowBlur = 24 * k;
+  ctx.setLineDash([Math.max(1, (w + h) * 2 * k), 99999]); rr(x, y, w, h, 18); ctx.stroke();
+  ctx.restore();
+}
+function callout(text, x, y, k, align = "left") {
+  if (k <= 0) return;
+  ctx.save(); ctx.globalAlpha = clamp(k);
+  const size = PORTRAIT ? 30 : 22; setFont(size, 700, -0.02);
+  const w = ctx.measureText(text).width + size * 1.4, h = size * 1.9, bx = align === "left" ? x : align === "right" ? x - w : x - w / 2, by = y - h / 2 + (1 - E.outBack(clamp(k))) * 14;
+  ctx.shadowColor = "rgba(10,43,84,0.25)"; ctx.shadowBlur = 24; ctx.shadowOffsetY = 8;
+  ctx.fillStyle = NAVY; rr(bx, by, w, h, h / 2); ctx.fill(); ctx.shadowColor = "transparent";
+  ctx.fillStyle = "#fff"; ctx.textAlign = "left"; ctx.textBaseline = "middle"; ctx.fillText(text, bx + size * 0.7, by + h / 2 + 1);
+  ctx.restore();
+}
+
+/* ---------- text block ---------- */
+function wrapWords(words, maxW) {
+  // words: [{t, c}] -> lines of words that fit maxW at current font
+  const lines = [[]]; let lw = 0; const sp = ctx.measureText(" ").width;
+  for (const w of words) { const ww = ctx.measureText(w.t).width; if (lw + ww > maxW && lines[lines.length - 1].length) { lines.push([]); lw = 0; } lines[lines.length - 1].push(w); lw += ww + sp; }
+  return lines;
+}
+function textBlock(step, local, dur, alphaMul = 1) {
+  // chip, headline (kinetic words), subline; fades out near the end of the step
+  const inK = E.outExpo(seg(local, 0.15, 0.9)), outK = E.inCubic(seg(local, dur - 0.45, dur - 0.05)), a = alphaMul * (1 - outK);
+  if (a <= 0 || local < 0.1) return;
+  let y = L.textY;
+  ctx.save(); ctx.globalAlpha = a; ctx.textBaseline = "alphabetic"; ctx.textAlign = "left";
+  if (step.chip) {
+    const cs = PORTRAIT ? 26 : 18; setFont(cs, 700, 0.08); const cw = ctx.measureText(step.chip.toUpperCase()).width + cs * 1.6, ch = cs * 1.75;
+    const ck = E.outBack(seg(local, 0.1, 0.6));
+    ctx.save(); ctx.globalAlpha = a * clamp(ck); ctx.translate(L.textX + (1 - ck) * -20, y);
+    ctx.fillStyle = "rgba(20,132,217,0.12)"; rr(0, -ch * 0.72, cw, ch, ch / 2); ctx.fill();
+    ctx.fillStyle = BLUE; ctx.fillText(step.chip.toUpperCase(), cs * 0.8, 0); ctx.restore();
+    y += PORTRAIT ? 86 : 62;
+  }
+  const hs = PORTRAIT ? 92 : 64; setFont(hs, 900, -0.04);
+  const lines = wrapWords(step.title, L.textW); let wi = 0;
+  for (const line of lines) {
+    let x = L.textX; const sp = ctx.measureText(" ").width;
+    for (const w of line) {
+      const k = E.outExpo(seg(local, 0.25 + wi * 0.07, 0.85 + wi * 0.07)); wi++;
+      ctx.save(); ctx.beginPath(); ctx.rect(x - 10, y - hs * 1.05, ctx.measureText(w.t).width + 20, hs * 1.3); ctx.clip();
+      ctx.fillStyle = w.c === "accent" ? BLUE : INK; ctx.fillText(w.t, x, y + (1 - k) * hs * 0.9); ctx.restore();
+      x += ctx.measureText(w.t).width + sp;
+    }
+    y += hs * 1.08;
+  }
+  if (step.sub) {
+    const ss = PORTRAIT ? 36 : 24; setFont(ss, 500, -0.01); ctx.fillStyle = MUTED;
+    const sk = E.outCubic(seg(local, 0.7, 1.3)); ctx.globalAlpha = a * sk;
+    const sl = wrapWords(step.sub.split(" ").map(t => ({ t })), L.textW); y += PORTRAIT ? 18 : 10;
+    for (const line of sl) { ctx.fillText(line.map(w => w.t).join(" "), L.textX, y + (1 - sk) * 16); y += ss * 1.4; }
+  }
+  if (step.tip) {
+    const ts = PORTRAIT ? 28 : 20; const tk = E.outCubic(seg(local, Math.min(dur - 1.5, 2.2), Math.min(dur - 1.0, 2.9)));
+    if (tk > 0) {
+      ctx.globalAlpha = a * tk; setFont(ts, 600, -0.01); const tw = ctx.measureText(step.tip).width + ts * 2.2, th = ts * 2;
+      y += PORTRAIT ? 20 : 12; ctx.fillStyle = "#fff"; ctx.shadowColor = "rgba(10,43,84,0.12)"; ctx.shadowBlur = 20; ctx.shadowOffsetY = 6; rr(L.textX, y, tw, th, th / 2); ctx.fill(); ctx.shadowColor = "transparent";
+      ctx.fillStyle = BLUE; ctx.fillText("💡", L.textX + ts * 0.6, y + th * 0.68); ctx.fillStyle = INK; ctx.fillText(step.tip, L.textX + ts * 1.7, y + th * 0.68);
+    }
+  }
+  ctx.restore();
+}
+
+/* ---------- progress ---------- */
+function progress(t) {
+  const steps = SPEC.steps.filter(s => s.kind === "step"); if (!steps.length) return;
+  const first = steps[0].start, last = steps[steps.length - 1].end; const a = seg(t, first - 0.6, first) * (1 - seg(t, last, last + 0.6));
+  if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha = a;
+  const n = steps.length, gap = 8, totalW = PORTRAIT ? W - 168 : 560, segW = (totalW - gap * (n - 1)) / n, x0 = L.textX, y = L.progY;
+  steps.forEach((s, i) => {
+    const k = seg(t, s.start, s.end); ctx.fillStyle = "rgba(10,43,84,0.10)"; rr(x0 + i * (segW + gap), y, segW, 6, 3); ctx.fill();
+    if (k > 0) { ctx.fillStyle = BLUE; rr(x0 + i * (segW + gap), y, segW * (t > s.end ? 1 : E.inOutCubic(k)), 6, 3); ctx.fill(); }
+  });
+  setFont(PORTRAIT ? 22 : 16, 600, 0.02); ctx.fillStyle = MUTED; ctx.textAlign = "right"; ctx.textBaseline = "middle";
+  const cur = steps.findIndex(s => t < s.end); ctx.fillText(`${Math.min(n, (cur < 0 ? n : cur) + 1)} / ${n}`, x0 + totalW, y - (PORTRAIT ? 22 : 18));
+  ctx.restore();
+}
+
+/* ---------- vector overlays (checkout, confirmation) ---------- */
+function checkoutCard(x, y, w, k, t) {
+  if (k <= 0) return; const h = w * 1.05, s = lerp(0.9, 1, E.outBack(k));
+  ctx.save(); ctx.globalAlpha = clamp(k); ctx.translate(x + w / 2, y + h / 2); ctx.scale(s, s); ctx.translate(-w / 2, -h / 2);
+  ctx.shadowColor = "rgba(10,43,84,0.35)"; ctx.shadowBlur = 60; ctx.shadowOffsetY = 24; ctx.fillStyle = "#fff"; rr(0, 0, w, h, 24); ctx.fill(); ctx.shadowColor = "transparent";
+  const u = w / 420;
+  ctx.fillStyle = NAVY; rr(0, 0, w, 86 * u, 24); ctx.fill(); ctx.fillRect(0, 50 * u, w, 36 * u);
+  setFont(20 * u, 700, 0.06); ctx.fillStyle = "rgba(255,255,255,0.7)"; ctx.textAlign = "left"; ctx.textBaseline = "alphabetic"; ctx.fillText("SECURE CHECKOUT", 28 * u, 36 * u);
+  setFont(24 * u, 700, -0.02); ctx.fillStyle = "#fff"; ctx.fillText("Powered by Paystack", 28 * u, 68 * u);
+  ctx.fillStyle = "#1CA160"; ctx.beginPath(); ctx.arc(w - 40 * u, 43 * u, 12 * u, 0, 7); ctx.fill(); setFont(14 * u, 900); ctx.fillStyle = "#fff"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText("✓", w - 40 * u, 44 * u);
+  const opts = [["Mobile Money", "MTN · Telecel · AirtelTigo"], ["Card", "Visa and Mastercard"], ["Bank transfer", "Instant confirmation"]];
+  opts.forEach(([a, b], i) => {
+    const oy = 112 * u + i * 86 * u, sel = i === 0 && t % 10 > -1;
+    ctx.fillStyle = sel ? "rgba(20,132,217,0.08)" : "#F4F8FD"; rr(24 * u, oy, w - 48 * u, 72 * u, 16 * u); ctx.fill();
+    if (sel) { ctx.strokeStyle = BLUE; ctx.lineWidth = 2.5 * u; rr(24 * u, oy, w - 48 * u, 72 * u, 16 * u); ctx.stroke(); }
+    ctx.fillStyle = sel ? BLUE : "rgba(10,43,84,0.25)"; ctx.beginPath(); ctx.arc(52 * u, oy + 36 * u, 10 * u, 0, 7); ctx.fill();
+    setFont(20 * u, 700, -0.02); ctx.fillStyle = INK; ctx.textAlign = "left"; ctx.textBaseline = "alphabetic"; ctx.fillText(a, 78 * u, oy + 31 * u);
+    setFont(15 * u, 500, 0); ctx.fillStyle = MUTED; ctx.fillText(b, 78 * u, oy + 55 * u);
+  });
+  const by = h - 76 * u; const bg = ctx.createLinearGradient(0, 0, w, 0); bg.addColorStop(0, BLUE); bg.addColorStop(1, NAVY);
+  ctx.fillStyle = bg; rr(24 * u, by, w - 48 * u, 56 * u, 14 * u); ctx.fill();
+  setFont(20 * u, 700, -0.01); ctx.fillStyle = "#fff"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText("Pay securely", w / 2, by + 29 * u);
+  ctx.restore();
+  return { btn: { x: x + 24 * u, y: y + h - 76 * u, w: w - 48 * u, h: 56 * u }, u };
+}
+function confirmCard(x, y, w, k, t, lines) {
+  if (k <= 0) return; const u = w / 480, h = 300 * u, s = lerp(0.85, 1, E.outBack(k));
+  ctx.save(); ctx.globalAlpha = clamp(k); ctx.translate(x + w / 2, y + h / 2); ctx.scale(s, s); ctx.translate(-w / 2, -h / 2);
+  ctx.shadowColor = "rgba(10,43,84,0.3)"; ctx.shadowBlur = 60; ctx.shadowOffsetY = 24; ctx.fillStyle = "#fff"; rr(0, 0, w, h, 28 * u); ctx.fill(); ctx.shadowColor = "transparent";
+  // check burst
+  const ck = E.outBack(seg(k, 0.4, 1), 2.2); ctx.save(); ctx.translate(w / 2, 78 * u); ctx.scale(ck, ck);
+  ctx.fillStyle = "rgba(28,161,96,0.15)"; ctx.beginPath(); ctx.arc(0, 0, 54 * u, 0, 7); ctx.fill();
+  ctx.fillStyle = "#1CA160"; ctx.beginPath(); ctx.arc(0, 0, 38 * u, 0, 7); ctx.fill();
+  ctx.strokeStyle = "#fff"; ctx.lineWidth = 7 * u; ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.beginPath(); ctx.moveTo(-16 * u, 0); ctx.lineTo(-5 * u, 12 * u); ctx.lineTo(18 * u, -13 * u); ctx.stroke(); ctx.restore();
+  setFont(34 * u, 900, -0.03); ctx.fillStyle = INK; ctx.textAlign = "center"; ctx.textBaseline = "alphabetic"; ctx.fillText(lines[0], w / 2, 170 * u);
+  setFont(18 * u, 500, -0.01); ctx.fillStyle = MUTED; ctx.fillText(lines[1], w / 2, 206 * u); if (lines[2]) ctx.fillText(lines[2], w / 2, 234 * u);
+  ctx.fillStyle = "rgba(20,132,217,0.1)"; rr(w / 2 - 120 * u, 254 * u, 240 * u, 32 * u, 16 * u); ctx.fill();
+  setFont(14 * u, 700, 0.06); ctx.fillStyle = BLUE; ctx.textBaseline = "middle"; ctx.fillText(lines[3] || "CONFIRMED", w / 2, 270 * u);
+  ctx.restore();
+}
+// confetti burst for the final step
+const CONF = (() => { const r = rng(9); return Array.from({ length: 90 }, () => ({ a: r() * 6.28, v: 300 + r() * 500, s: 6 + r() * 8, c: [BLUE, SKY, NAVY, "#1CA160", "#FFC857"][Math.floor(r() * 5)], w: r() * 6.28, rot: r() * 6.28 })); })();
+function confetti(cx, cy, k) {
+  if (k <= 0 || k >= 1) return; ctx.save();
+  for (const p of CONF) { const d = p.v * E.outCubic(k), x = cx + Math.cos(p.a) * d, y = cy + Math.sin(p.a) * d * 0.7 + 420 * k * k; ctx.save(); ctx.translate(x, y); ctx.rotate(p.rot + k * 7); ctx.globalAlpha = 1 - E.inCubic(k); ctx.fillStyle = p.c; ctx.fillRect(-p.s / 2, -p.s / 4, p.s, p.s / 2); ctx.restore(); }
+  ctx.restore();
+}
+
+/* ---------- step renderers ---------- */
+function deviceAlpha(step, t) {
+  // slide/fade in over TR at start, out over TR at end
+  const inK = E.outCubic(seg(t, step.start - TR, step.start + 0.1)), outK = E.inCubic(seg(t, step.end - 0.1, step.end + TR));
+  return { a: inK * (1 - outK), dx: (1 - inK) * (PORTRAIT ? 0 : 120) - outK * (PORTRAIT ? 0 : 120), dy: (1 - inK) * (PORTRAIT ? 160 : 0) - outK * (PORTRAIT ? -160 : 0) };
+}
+function renderStep(step, t) {
+  const local = t - step.start, dur = step.end - step.start;
+  const dv = deviceAlpha(step, t); if (dv.a <= 0) return;
+  const cam = kf(step.cam || [{ t: 0, z: 1, fx: 0.5, fy: 0.5 }], local) || { z: 1, fx: 0.5, fy: 0.5 };
+  const scroll = (kf(step.scroll || [{ t: 0, y: 0 }], local) || { y: 0 }).y;
+  const im = img[step.shot];
+  let geom, dev, mark = [];
+  ctx.save(); ctx.globalAlpha = dv.a;
+  // camera: scale around the point of interest within the device area
+  const devCX = L.devX + L.devW / 2, devCY = L.devY + (PORTRAIT ? L.devW * 0.9 : L.devH / 2);
+  // compute device placement first (unzoomed) to find where fx/fy land
+  const place = (fn) => {
+    if (PORTRAIT) return drawPhone(L.devX + dv.dx, L.devY + dv.dy, L.devW, fn);
+    return drawBrowser(L.devX + dv.dx, L.devY + dv.dy, L.devW, L.devH, step.url || "hayamegh.com", fn);
+  };
+  // dry-run geometry: emulate to get screen rect
+  const bez = PORTRAIT ? L.devW * 0.028 : 0;
+  const sx0 = L.devX + bez, sy0 = PORTRAIT ? L.devY + bez : L.devY + 58, sw0 = PORTRAIT ? L.devW - bez * 2 : L.devW, sh0 = PORTRAIT ? (L.devW * (2622 / 1206)) : L.devH - 58;
+  const scale0 = sw0 / im.naturalWidth, ih0 = im.naturalHeight * scale0, off0 = clamp(scroll) * Math.max(0, ih0 - sh0);
+  const focus = { x: sx0 + cam.fx * sw0, y: sy0 - off0 + cam.fy * ih0 };
+  const anchor = PORTRAIT ? { x: W / 2, y: L.devY + (H - L.devY) * 0.5 } : { x: L.devX + L.devW / 2, y: L.devY + L.devH / 2 };
+  const z = cam.z;
+  // The zoom happens *inside* the device's footprint: draw the resting shadow first, then clip to the
+  // unzoomed frame so a push-in never grows over the text block.
+  const frameH = PORTRAIT ? L.devW * (2622 / 1206) + bez * 2 : L.devH, frameR = PORTRAIT ? L.devW * 0.145 : 20;
+  ctx.save(); ctx.shadowColor = "rgba(10,43,84,0.26)"; ctx.shadowBlur = 70; ctx.shadowOffsetY = 28; ctx.fillStyle = PORTRAIT ? "#0b0f16" : "#ffffff";
+  rr(L.devX + dv.dx, L.devY + dv.dy, L.devW, frameH, frameR); ctx.fill(); ctx.restore();
+  rr(L.devX + dv.dx - 1, L.devY + dv.dy - 1, L.devW + 2, frameH + 2, frameR); ctx.clip();
+  // translation that puts the focus point on the anchor, clamped so the scaled device still covers its footprint
+  const zoomMix = clamp((z - 1) / 0.02), fX = lerp(anchor.x, focus.x, zoomMix), fY = lerp(anchor.y, focus.y, zoomMix);
+  let tx = anchor.x - fX * z, ty = anchor.y - fY * z;
+  const fx0 = L.devX + dv.dx, fy0 = L.devY + dv.dy, fw0 = L.devW, fh0 = Math.min(frameH, H - fy0 + 4);
+  tx = clamp(tx, (fx0 + fw0) * (1 - z), fx0 * (1 - z)); ty = clamp(ty, fy0 + fh0 - (fy0 + frameH) * z, fy0 * (1 - z));
+  ctx.translate(tx, ty); ctx.scale(z, z);
+  dev = place((sx, sy, sw, sh) => {
+    geom = drawShot(im, sx, sy, sw, sh, scroll, step.blur);
+    if (step.overlay) { const dk = seg(local, step.overlayT - 0.2, step.overlayT + 0.5); ctx.fillStyle = `rgba(10,43,84,${0.42 * dk})`; ctx.fillRect(sx, sy, sw, sh); }
+  });
+  // overlays drawn in device space
+  for (const h of step.highlights || []) {
+    const k = E.outCubic(seg(local, h.t0, h.t0 + 0.5)) * (1 - E.inCubic(seg(local, h.t1 - 0.3, h.t1)));
+    if (k > 0) { const p = shotToCanvas(dev, geom, h.x, h.y); const q = shotToCanvas(dev, geom, h.x + h.w, h.y + h.h); ctx.save(); ctx.beginPath(); ctx.rect(dev.sx, dev.sy, dev.sw, dev.sh); ctx.clip(); highlight({ x: p.x, y: p.y, w: q.x - p.x, h: q.y - p.y }, k); ctx.restore(); }
+  }
+  for (const c of step.callouts || []) {
+    const k = seg(local, c.t0, c.t0 + 0.45) * (1 - seg(local, c.t1 - 0.3, c.t1)); if (k <= 0) continue;
+    const p = shotToCanvas(dev, geom, c.x, c.y); callout(c.text, p.x, p.y, k, c.align || "left");
+  }
+  if (step.overlay === "checkout") {
+    const k = E.outCubic(seg(local, step.overlayT, step.overlayT + 0.6)); const w = PORTRAIT ? dev.sw * 0.86 : Math.min(420, dev.sw * 0.4);
+    const card = checkoutCard(dev.sx + (dev.sw - w) / 2, dev.sy + (PORTRAIT ? dev.sh * 0.18 : (dev.sh - w * 1.05) / 2), w, k, t);
+    if (card && step.tap && step.tap.at === "overlay-btn") { step._tapPoint = { x: card.btn.x + card.btn.w / 2, y: card.btn.y + card.btn.h / 2 }; }
+  }
+  if (step.overlay === "confirm") {
+    const k = E.outCubic(seg(local, step.overlayT, step.overlayT + 0.7)); const w = PORTRAIT ? dev.sw * 0.88 : Math.min(480, dev.sw * 0.42);
+    confirmCard(dev.sx + (dev.sw - w) / 2, dev.sy + (PORTRAIT ? dev.sh * 0.2 : dev.sh * 0.22), w, k, t, step.lines);
+    confetti(dev.sx + dev.sw / 2, dev.sy + dev.sh * 0.3, seg(local, step.overlayT + 0.3, step.overlayT + 2.2));
+  }
+  // pointer: portrait = finger taps (any number), landscape = one cursor path with a click
+  const tapList = step.taps || (step.tap ? [step.tap] : []);
+  if (PORTRAIT) {
+    for (const tap of tapList) { const tp = tap.at === "overlay-btn" ? step._tapPoint : shotToCanvas(dev, geom, tap.x, tap.y); if (tp) fingerTap(tp, local, tap.t); }
+  } else if (tapList.length) {
+    step.tap = tapList[0];
+    const tp = step.tap.at === "overlay-btn" ? step._tapPoint : shotToCanvas(dev, geom, step.tap.x, step.tap.y);
+    if (tp) {
+      {
+        const from = step.cursorFrom ? shotToCanvas(dev, geom, step.cursorFrom.x, step.cursorFrom.y) : { x: dev.sx + dev.sw * 0.5, y: dev.sy + dev.sh * 0.95 };
+        const path = step.cursorPath ? step.cursorPath.map(p => ({ t: p.t, ...shotToCanvas(dev, geom, p.x, p.y) })) : null;
+        let pos;
+        if (path) pos = kf([{ t: path[0].t - 0.01, x: from.x, y: from.y }, ...path, { t: step.tap.t, x: tp.x, y: tp.y }], local, E.inOutQuint);
+        else pos = kf([{ t: step.tap.t - 1.4, x: from.x, y: from.y }, { t: step.tap.t - 0.25, x: tp.x, y: tp.y }], local, E.inOutQuint);
+        const show = seg(local, step.tap.t - 1.6, step.tap.t - 1.3) * (1 - seg(local, step.tap.t + 1.2, step.tap.t + 1.6));
+        if (show > 0) cursorArrow(pos, local, step.tap.t, show, local >= step.tap.t && local < step.tap.t + 0.15);
+      }
+    }
+  }
+  ctx.restore();
+  textBlock(step, local, dur, 1);
+}
+
+function renderIntro(step, t) {
+  const local = t - step.start, dur = step.end - step.start, out = E.inCubic(seg(local, dur - 0.5, dur));
+  ctx.save(); ctx.globalAlpha = 1 - out;
+  const lk = E.outBack(seg(local, 0.1, 0.9), 1.3); const lw = PORTRAIT ? 300 : 240, lh = lw * (img.logo.naturalHeight / img.logo.naturalWidth);
+  ctx.save(); ctx.translate(W / 2, PORTRAIT ? H * 0.3 : H * 0.3); ctx.scale(lk, lk); ctx.globalAlpha *= clamp(lk);
+  // tint logo to blue via composite
+  ctx.drawImage(tintedLogo(), -lw / 2, -lh / 2, lw, lh); ctx.restore();
+  const hs = PORTRAIT ? 100 : 84; setFont(hs, 900, -0.045); ctx.textAlign = "center"; ctx.textBaseline = "alphabetic";
+  const lines = step.title; let y = PORTRAIT ? H * 0.46 : H * 0.52;
+  lines.forEach((line, li) => {
+    const k = E.outExpo(seg(local, 0.6 + li * 0.18, 1.3 + li * 0.18));
+    ctx.save(); ctx.beginPath(); ctx.rect(0, y - hs * 1.1, W, hs * 1.35); ctx.clip();
+    let total = 0; for (const w of line) total += ctx.measureText(w.t).width; total += ctx.measureText(" ").width * (line.length - 1);
+    let x = W / 2 - total / 2; ctx.textAlign = "left";
+    for (const w of line) { ctx.fillStyle = w.c === "accent" ? BLUE : INK; ctx.fillText(w.t, x, y + (1 - k) * hs); x += ctx.measureText(w.t).width + ctx.measureText(" ").width; }
+    ctx.restore(); y += hs * 1.1;
+  });
+  const sk = E.outCubic(seg(local, 1.4, 2.0)); setFont(PORTRAIT ? 38 : 28, 500, -0.01); ctx.fillStyle = MUTED; ctx.textAlign = "center"; ctx.globalAlpha = (1 - out) * sk;
+  ctx.fillText(step.sub, W / 2, y + (PORTRAIT ? 30 : 16) + (1 - sk) * 20);
+  // step count pills
+  const n = SPEC.steps.filter(s => s.kind === "step").length; const pk = E.outBack(seg(local, 1.9, 2.5));
+  ctx.globalAlpha = (1 - out) * clamp(pk); setFont(PORTRAIT ? 26 : 20, 700, 0.06); const label = `${n} EASY STEPS · ${step.time}`; const pw = ctx.measureText(label).width + 60, ph = PORTRAIT ? 64 : 48;
+  ctx.fillStyle = NAVY; rr(W / 2 - pw / 2, y + (PORTRAIT ? 100 : 60), pw, ph, ph / 2); ctx.fill(); ctx.fillStyle = "#fff"; ctx.textBaseline = "middle"; ctx.fillText(label, W / 2, y + (PORTRAIT ? 100 : 60) + ph / 2 + 1);
+  ctx.restore();
+}
+let _tinted = null;
+function tintedLogo() { if (_tinted) return _tinted; const c = document.createElement("canvas"); c.width = img.logo.naturalWidth; c.height = img.logo.naturalHeight; const x = c.getContext("2d"); x.drawImage(img.logo, 0, 0); x.globalCompositeOperation = "source-in"; x.fillStyle = BLUE; x.fillRect(0, 0, c.width, c.height); _tinted = c; return c; }
+
+function renderOutro(step, t) {
+  const local = t - step.start;
+  const k = E.outExpo(seg(local, 0.1, 0.9));
+  ctx.save();
+  // navy card rising
+  const ch = PORTRAIT ? H * 0.62 : H * 0.7, cw = PORTRAIT ? W - 120 : Math.min(1100, W - 160), cx = W / 2 - cw / 2, cy = (PORTRAIT ? H * 0.19 : H * 0.15) + (1 - k) * 80;
+  ctx.globalAlpha = k; ctx.shadowColor = "rgba(10,43,84,0.35)"; ctx.shadowBlur = 80; ctx.shadowOffsetY = 30;
+  const g = ctx.createLinearGradient(cx, cy, cx + cw, cy + ch); g.addColorStop(0, "#06182E"); g.addColorStop(0.55, "#0A2B54"); g.addColorStop(1, "#0E4C8C");
+  ctx.fillStyle = g; rr(cx, cy, cw, ch, 44); ctx.fill(); ctx.shadowColor = "transparent";
+  ctx.save(); rr(cx, cy, cw, ch, 44); ctx.clip(); ctx.fillStyle = "rgba(255,255,255,0.05)"; ctx.beginPath(); ctx.arc(cx + cw * 0.9, cy + ch * 0.95, cw * 0.5, 0, 7); ctx.fill(); ctx.restore();
+  const lw = PORTRAIT ? 260 : 200, lh = lw * (img.logo.naturalHeight / img.logo.naturalWidth); ctx.drawImage(img.logo, W / 2 - lw / 2, cy + (PORTRAIT ? 90 : 60), lw, lh);
+  const hs = PORTRAIT ? 92 : 72; setFont(hs, 900, -0.04); ctx.textAlign = "center"; ctx.textBaseline = "alphabetic";
+  let y = cy + (PORTRAIT ? 90 : 60) + lh + (PORTRAIT ? 150 : 110);
+  step.title.forEach((line, li) => {
+    const kk = E.outExpo(seg(local, 0.5 + li * 0.15, 1.2 + li * 0.15)); ctx.save(); ctx.beginPath(); ctx.rect(0, y - hs * 1.1, W, hs * 1.35); ctx.clip();
+    let total = 0; for (const w of line) total += ctx.measureText(w.t).width; total += ctx.measureText(" ").width * (line.length - 1); let x = W / 2 - total / 2; ctx.textAlign = "left";
+    for (const w of line) { ctx.fillStyle = w.c === "accent" ? SKY : "#fff"; ctx.fillText(w.t, x, y + (1 - kk) * hs); x += ctx.measureText(w.t).width + ctx.measureText(" ").width; }
+    ctx.restore(); y += hs * 1.1;
+  });
+  const sk = E.outCubic(seg(local, 1.3, 1.9)); setFont(PORTRAIT ? 36 : 26, 500, -0.01); ctx.fillStyle = "rgba(255,255,255,0.85)"; ctx.textAlign = "center"; ctx.globalAlpha = k * sk;
+  ctx.fillText(step.sub, W / 2, y + (PORTRAIT ? 20 : 10) + (1 - sk) * 16);
+  // badges / url
+  const bk = E.outBack(seg(local, 1.8, 2.5)); ctx.globalAlpha = k * clamp(bk);
+  const by = cy + ch - (PORTRAIT ? 250 : 180);
+  if (step.badges) {
+    const bw = PORTRAIT ? 300 : 220, bh = bw / 3, gap = 24; let bx = W / 2 - (bw * 2 + gap) / 2;
+    if (img.apple) ctx.drawImage(img.apple, bx, by, bw, bh);
+    bx += bw + gap; ctx.fillStyle = "#000"; rr(bx, by, bw, bh, bh * 0.17); ctx.fill(); ctx.strokeStyle = "#A6A6A6"; ctx.lineWidth = 1.5; rr(bx, by, bw, bh, bh * 0.17); ctx.stroke();
+    setFont(bh * 0.17, 500, 0.07); ctx.fillStyle = "#fff"; ctx.textAlign = "left"; ctx.textBaseline = "alphabetic"; ctx.fillText("GET IT ON", bx + bw * 0.3, by + bh * 0.4);
+    setFont(bh * 0.33, 600, -0.02); ctx.fillText("Google Play", bx + bw * 0.3, by + bh * 0.78);
+    ctx.fillStyle = "#00C3FF"; ctx.beginPath(); ctx.moveTo(bx + bw * 0.1, by + bh * 0.22); ctx.lineTo(bx + bw * 0.1, by + bh * 0.78); ctx.lineTo(bx + bw * 0.24, by + bh * 0.5); ctx.closePath(); ctx.fill();
+  }
+  setFont(PORTRAIT ? 40 : 30, 700, -0.01); ctx.fillStyle = "#fff"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText("www.hayamegh.com", W / 2, cy + ch - (PORTRAIT ? 130 : 95));
+  const isz = PORTRAIT ? 48 : 36, igap = PORTRAIT ? 34 : 26, tot = img.icons.length * isz + (img.icons.length - 1) * igap; let ix = W / 2 - tot / 2;
+  img.icons.forEach((ic, i) => { const kk = clamp(E.outBack(seg(local, 2.2 + i * 0.07, 2.7 + i * 0.07))); ctx.save(); ctx.globalAlpha = k * kk; ctx.translate(ix + isz / 2, cy + ch - (PORTRAIT ? 62 : 46)); ctx.scale(kk, kk); ctx.drawImage(ic, -isz / 2, -isz / 2, isz, isz); ctx.restore(); ix += isz + igap; });
+  ctx.restore();
+}
+
+/* ---------- main ---------- */
+function render(tRaw) {
+  const t = Math.min(tRaw, SPEC.duration);
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, W, H);
+  background(t);
+  for (const s of currentSteps(t)) {
+    if (s.kind === "intro") renderIntro(s, t);
+    else if (s.kind === "outro") renderOutro(s, t);
+    else renderStep(s, t);
+  }
+  progress(t);
+  // small logo watermark during steps
+  const steps = SPEC.steps.filter(s => s.kind === "step"); if (steps.length) {
+    const a = seg(t, steps[0].start - 0.4, steps[0].start) * (1 - seg(t, steps[steps.length - 1].end, steps[steps.length - 1].end + 0.4));
+    if (a > 0) { ctx.save(); ctx.globalAlpha = a; const lw = PORTRAIT ? 150 : 120, lh = lw * (img.logo.naturalHeight / img.logo.naturalWidth); ctx.drawImage(tintedLogo(), PORTRAIT ? L.textX : L.textX, PORTRAIT ? 60 : 56, lw, lh); ctx.restore(); }
+  }
+  // fade in/out of the whole video
+  const fade = Math.max(1 - seg(t, 0, 0.6), seg(t, SPEC.duration - 0.6, SPEC.duration));
+  if (fade > 0) { ctx.fillStyle = `rgba(247,250,255,${fade})`; ctx.fillRect(0, 0, W, H); }
+}
+boot();
+</script></body></html>
