@@ -10,7 +10,6 @@ import {
   MessageCircle,
   ShieldCheck,
   Smartphone,
-  Sparkles,
 } from "lucide-react";
 import { AppDownloadButtons } from "@/components/app-download-buttons";
 import { FadeImage } from "@/components/ui/fade-image";
@@ -173,8 +172,7 @@ export default function DownloadPage() {
 
         <div className="mx-auto grid max-w-6xl items-center gap-12 px-6 py-14 sm:py-20 lg:grid-cols-[1.04fr_0.96fr] lg:gap-16 lg:py-24">
           <div className="relative z-10">
-            <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-semibold !text-white backdrop-blur">
-              <Sparkles className="h-3.5 w-3.5 text-sky-300" />
+            <div className="inline-flex items-center rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-semibold !text-white backdrop-blur">
               Hayame for iPhone and Android
             </div>
             <h1 className="mt-6 max-w-2xl text-4xl font-bold leading-[1.04] tracking-[-0.04em] !text-white sm:text-5xl lg:text-6xl">

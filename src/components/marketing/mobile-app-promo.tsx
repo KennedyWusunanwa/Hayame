@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, Sparkles } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { AppDownloadButtons } from "@/components/app-download-buttons";
 import { FadeImage } from "@/components/ui/fade-image";
 import { Reveal } from "@/components/ui/reveal";
@@ -58,8 +58,7 @@ export function MobileAppPromo() {
         </Reveal>
 
         <Reveal className="lg:order-1">
-          <span className="inline-flex items-center gap-2 rounded-full border border-sky-200 bg-white/80 px-3 py-1.5 text-xs font-semibold !text-brand shadow-sm shadow-sky-950/5">
-            <Sparkles className="h-3.5 w-3.5 text-brand" aria-hidden="true" />
+          <span className="inline-flex items-center rounded-full border border-sky-200 bg-white/80 px-3 py-1.5 text-xs font-semibold !text-brand shadow-sm shadow-sky-950/5">
             Hayame, wherever you are
           </span>
           <h2 className="mt-5 max-w-xl text-3xl font-bold leading-tight tracking-tight !text-[#06223a] sm:text-4xl">
