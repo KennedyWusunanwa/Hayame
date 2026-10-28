@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 type RevealProps = {
@@ -10,45 +10,48 @@ type RevealProps = {
   delay?: number;
 };
 
+type State = "hidden" | "quick" | "visible";
+
 /**
- * Fades + slides content in once it actually scrolls into view, instead of
- * animating on page load (which finishes long before a user scrolls to
- * below-the-fold sections and leaves images popping in on their own).
- * Server-rendered hidden by the `.reveal` CSS class itself, so there's no
- * flash-of-hidden-content before hydration — see the noscript fallback in
- * the root layout for when JS never runs at all.
+ * Fades + lifts content in once it scrolls into view.
+ *
+ * Content that is already on screen when the component mounts (the top of a
+ * page right after navigation, or on first load) gets a short fade that lands
+ * together with the page's own entrance, instead of a second, slower slide-in
+ * stacked on top of it. Below-the-fold content keeps the scroll reveal.
+ * Server-rendered hidden by the `.reveal` CSS class, so there's no flash of
+ * content before hydration — see the noscript fallback in the root layout.
  */
 export function Reveal({ children, className, delay = 0 }: RevealProps) {
   const ref = useRef<HTMLDivElement>(null);
-  const [visible, setVisible] = useState(false);
+  const [state, setState] = useState<State>("hidden");
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const node = ref.current;
     if (!node) return;
 
     if (typeof IntersectionObserver === "undefined") {
-      setVisible(true);
+      setState("visible");
+      return;
+    }
+
+    const rect = node.getBoundingClientRect();
+    const inView = rect.top < window.innerHeight && rect.bottom > 0;
+    if (inView) {
+      // Already on screen: join the page entrance rather than animate separately.
+      setState("quick");
       return;
     }
 
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
-          // Defer a frame so the browser has actually painted the hidden
-          // state at least once first — otherwise an element that's already
-          // in view the moment it's observed (e.g. right after a page
-          // transition) jumps straight to visible instead of transitioning.
-          requestAnimationFrame(() => setVisible(true));
+          requestAnimationFrame(() => setState("visible"));
           observer.unobserve(node);
         }
       },
-      // threshold: 0 fires as soon as any part of the target enters the
-      // viewport. A higher threshold (e.g. 0.15 of the target's own area)
-      // breaks down for tall composite sections — on a short mobile
-      // viewport, a large wrapped block can sit with only its top sliver in
-      // frame at load, never crossing 15% of its own height until the user
-      // scrolls further, so it stays invisible even though it's on screen.
-      { threshold: 0, rootMargin: "0px 0px -10% 0px" },
+      // threshold 0 so a tall section whose top sliver is in frame still reveals.
+      { threshold: 0, rootMargin: "0px 0px -8% 0px" },
     );
 
     observer.observe(node);
@@ -58,8 +61,17 @@ export function Reveal({ children, className, delay = 0 }: RevealProps) {
   return (
     <div
       ref={ref}
-      className={cn("reveal", visible && "is-visible", className)}
-      style={delay ? { transitionDelay: `${delay}ms` } : undefined}
+      className={cn(
+        "reveal",
+        state === "visible" && "is-visible",
+        state === "quick" && "is-visible is-quick",
+        className,
+      )}
+      style={
+        delay && state !== "quick"
+          ? { transitionDelay: `${delay}ms` }
+          : undefined
+      }
     >
       {children}
     </div>

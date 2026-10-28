@@ -6,9 +6,9 @@ import { Navbar } from "@/components/navbar";
 import { Footer } from "@/components/footer";
 import { SiteChrome } from "@/components/site-chrome";
 import { NavigationLoader } from "@/components/navigation-loader";
+import { PageTransition } from "@/components/page-transition";
 import { MessagingProvider } from "@/components/messages/messaging-provider";
 import { ConsentBanner } from "@/components/consent-banner";
-import { MaintenanceAdminBanner } from "@/components/maintenance/maintenance-admin-banner";
 import { socialImageAlt } from "@/components/seo/social-preview-image";
 import { resolveSiteUrl } from "@/lib/site-url";
 
@@ -108,15 +108,14 @@ export default function RootLayout({
             <Suspense fallback={null}>
               <NavigationLoader />
             </Suspense>
-            <main className="flex-1 page-fade">{children}</main>
+            <main className="flex-1">
+              <PageTransition>{children}</PageTransition>
+            </main>
             <SiteChrome>
               <Footer />
             </SiteChrome>
           </div>
-          <SiteChrome>
-            <ConsentBanner />
-            <MaintenanceAdminBanner />
-          </SiteChrome>
+          <ConsentBanner />
         </MessagingProvider>
       </body>
     </html>
