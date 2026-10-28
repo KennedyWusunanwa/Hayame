@@ -33,12 +33,12 @@ export function EarningsCalculator({
   }, [daysRentedPerMonth, platformFeePercent, pricePerDay]);
 
   return (
-    <div className="space-y-4 rounded-2xl border border-border bg-white p-4 shadow-sm">
+    <div className="space-y-5 rounded-[1.5rem] border border-sky-100 bg-white p-5 shadow-[0_18px_50px_rgba(14,134,212,0.06)] sm:p-6">
       <div>
-        <p className="text-sm font-semibold text-foreground">
+        <h2 className="text-base font-bold !text-[#06223a] sm:text-lg">
           Earnings calculator
-        </p>
-        <p className="text-xs text-gray-600">
+        </h2>
+        <p className="mt-0.5 text-sm !text-slate-600">
           Estimates only. Actual earnings vary.
         </p>
         {isPlaceholderFee ? (
@@ -101,7 +101,7 @@ function Field({
 }) {
   return (
     <div className="space-y-1">
-      <label className="text-xs font-semibold text-gray-700">{label}</label>
+      <label className="text-xs font-semibold !text-slate-600">{label}</label>
       <Input
         type="number"
         min={min}
@@ -144,11 +144,11 @@ function normalizeFieldValue(
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-border bg-gray-50 p-3">
-      <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+    <div className="rounded-2xl border border-sky-100 bg-[#f6f9fc] p-3.5">
+      <p className="text-[11px] font-semibold uppercase tracking-wider !text-slate-500">
         {label}
       </p>
-      <p className="text-lg font-semibold text-foreground">{value}</p>
+      <p className="mt-1 text-lg font-bold !text-[#06223a]">{value}</p>
     </div>
   );
 }

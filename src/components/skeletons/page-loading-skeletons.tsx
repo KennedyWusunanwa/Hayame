@@ -411,28 +411,35 @@ export function CarDetailPageSkeleton() {
 
 export function DashboardPageSkeleton() {
   return (
-    <div className="space-y-6" aria-busy="true" aria-label="Loading dashboard">
-      <div className="space-y-3">
-        <Skeleton className="h-4 w-24" />
-        <Skeleton className="h-8 w-52" />
-        <Skeleton className="h-4 w-80 max-w-full" />
+    <div className="space-y-5 sm:space-y-7" aria-busy="true" aria-label="Loading dashboard">
+      <div className="rounded-[1.75rem] bg-[#0a3f68] p-5 sm:rounded-[2rem] sm:p-7 lg:p-9">
+        <Skeleton className="h-3 w-24 bg-white/20" />
+        <Skeleton className="mt-3 h-8 w-40 bg-white/25" />
+        <div className="mt-3 flex gap-2">
+          <Skeleton className="h-6 w-24 rounded-full bg-white/15" />
+          <Skeleton className="h-6 w-20 rounded-full bg-white/15" />
+        </div>
+        <div className="mt-6 grid max-w-md grid-cols-2 gap-4">
+          <Skeleton className="h-9 w-32 bg-white/25" />
+          <Skeleton className="h-9 w-32 bg-white/25" />
+        </div>
       </div>
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {Array.from({ length: 3 }).map((_, index) => (
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, index) => (
           <div
             key={index}
-            className="rounded-xl border border-border bg-white p-5"
+            className="rounded-[1.5rem] border border-sky-100 bg-white p-4 sm:p-5"
           >
-            <Skeleton className="h-5 w-28" />
-            <Skeleton className="mt-4 h-3 w-full" />
-            <Skeleton className="mt-2 h-3 w-2/3" />
+            <Skeleton className="h-9 w-9 rounded-xl" />
+            <Skeleton className="mt-3 h-6 w-24" />
+            <Skeleton className="mt-2 h-3 w-16" />
           </div>
         ))}
       </div>
-      <div className="rounded-xl border border-border bg-white p-5">
+      <div className="rounded-[1.5rem] border border-sky-100 bg-white p-5 sm:p-6">
         <Skeleton className="h-5 w-36" />
         <div className="mt-5 space-y-3">
-          {Array.from({ length: 5 }).map((_, index) => (
+          {Array.from({ length: 4 }).map((_, index) => (
             <Skeleton key={index} className="h-12 w-full rounded-xl" />
           ))}
         </div>

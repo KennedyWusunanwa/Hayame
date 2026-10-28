@@ -1,21 +1,26 @@
 import Link from "next/link";
 import { format, parseISO } from "date-fns";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { StatCard } from "@/components/dashboard/stat-card";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+  ArrowRight,
+  BellRing,
+  Car,
+  ChartBar,
+  CheckCircle2,
+  Eye,
+  Heart,
+  MapPin,
+  PlusCircle,
+  Settings,
+  ShieldCheck,
+  Star,
+  TrendingUp,
+  WalletCards,
+  type LucideIcon,
+} from "lucide-react";
+import { HostStatTile } from "@/components/dashboard/host-stat-tile";
 import { EarningsCalculator } from "@/components/host/earnings-calculator";
-import { VerifiedHostIndicator } from "@/components/verified-host-indicator";
 import { VerificationBadges } from "@/components/verification-badges";
-import { deriveHostBadgeType } from "@/lib/host-badges";
+import { Reveal } from "@/components/ui/reveal";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { formatCurrency } from "@/lib/utils";
 
@@ -158,253 +163,389 @@ export default async function DashboardHome() {
     trips: paidBookings.length,
     rating: averageRating,
   });
-  const hostBadgeType = deriveHostBadgeType({
-    hostLevel: explicitHostLevel,
-    isHost: true,
-    idVerified,
-    phoneVerified,
-    emailVerified,
-  });
+
+  const firstName = String(hostName).trim().split(" ")[0] || "there";
+  const recentBookings = bookingRows.slice(0, 6);
+  const monthName = format(now, "MMMM");
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <p className="text-sm font-semibold text-primary">Dashboard</p>
-          <h1 className="text-2xl font-semibold text-foreground">
-            Welcome back
-          </h1>
-          <p className="text-sm text-gray-600">
-            Track bookings, performance, and projected payouts in one place.
-          </p>
-        </div>
-        <Button asChild>
-          <Link href="/host/cars/new">Start Earning Today</Link>
-        </Button>
-      </div>
+    <div className="space-y-5 sm:space-y-7">
+      {/* Hero: the one place a host looks first. Brand surface like the rest
+          of the site, with the month's number front and centre. */}
+      <Reveal>
+        <section className="brand-panel relative isolate overflow-hidden rounded-[1.75rem] shadow-[0_24px_80px_rgba(6,34,58,0.18)] sm:rounded-[2rem]">
+          <div
+            aria-hidden
+            className="brand-dots pointer-events-none absolute inset-0 -z-10"
+          />
+          <div
+            aria-hidden
+            className="brand-streaks pointer-events-none absolute inset-0 -z-10 opacity-60"
+          />
+          <div
+            aria-hidden
+            className="pointer-events-none absolute -right-24 -top-24 -z-10 h-72 w-72 rounded-full bg-brand/30 blur-3xl"
+          />
+
+          <div className="flex flex-col gap-6 p-5 sm:p-7 lg:flex-row lg:items-end lg:justify-between lg:p-9">
+            <div className="min-w-0 flex-1">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] !text-white/60 sm:text-xs">
+                {greeting()}
+              </p>
+              <h1 className="mt-1 truncate text-2xl font-bold tracking-tight !text-white sm:text-3xl lg:text-4xl">
+                {firstName}
+              </h1>
+
+              <div className="mt-3 flex flex-wrap gap-2">
+                <HeroChip icon={ShieldCheck}>{hostLevel}</HeroChip>
+                <HeroChip icon={MapPin}>{hostCity}</HeroChip>
+                <HeroChip icon={Car}>
+                  {carIds.length} {carIds.length === 1 ? "listing" : "listings"}
+                </HeroChip>
+              </div>
+
+              <div className="mt-6 grid max-w-md grid-cols-2 gap-4 sm:gap-6">
+                <div className="min-w-0">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] !text-white/60">
+                    {monthName}
+                  </p>
+                  <p className="mt-1 truncate text-2xl font-bold tracking-tight !text-white sm:text-3xl">
+                    {formatCurrency(monthlyEarnings)}
+                  </p>
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] !text-white/60">
+                    Total earned
+                  </p>
+                  <p className="mt-1 truncate text-2xl font-bold tracking-tight !text-white sm:text-3xl">
+                    {formatCurrency(totalEarnings)}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex w-full flex-col gap-2 sm:flex-row lg:w-auto lg:flex-col">
+              <Link
+                href="/host/cars/new"
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-white px-5 text-sm font-semibold !text-[#06223a] shadow-lg transition-transform hover:-translate-y-0.5"
+              >
+                <PlusCircle className="h-4 w-4" />
+                New listing
+              </Link>
+              <Link
+                href="/host/bookings"
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-white/30 px-5 text-sm font-semibold !text-white transition-colors hover:bg-white/10"
+              >
+                {urgentBookingCount > 0
+                  ? `Review ${urgentBookingCount} ${urgentBookingCount === 1 ? "request" : "requests"}`
+                  : "View bookings"}
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+            </div>
+          </div>
+        </section>
+      </Reveal>
 
       {urgentBookingCount > 0 ? (
-        <Card className="border-red-200 bg-red-50">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base text-red-800">
-              Urgent: booking not attended to.
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3 pt-0">
-            <p className="text-sm text-red-700">
-              You have {urgentBookingCount} booking request
-              {urgentBookingCount > 1 ? "s" : ""} waiting for approval.
-            </p>
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-full bg-white px-2 py-1 text-xs font-semibold text-red-700">
-                Pending value: {formatCurrency(unattendedBookingValue)}
-              </span>
-              <Button
-                asChild
-                size="sm"
-                className="bg-red-600 text-white hover:bg-red-700"
-              >
-                <Link href="/host/bookings">Review now</Link>
-              </Button>
+        <Reveal delay={40}>
+          <Link
+            href="/host/bookings"
+            className="flex flex-col gap-4 rounded-[1.5rem] border border-rose-200 bg-rose-50 p-4 transition-transform hover:-translate-y-0.5 sm:flex-row sm:items-center sm:p-5"
+          >
+            <span className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-rose-500 !text-white">
+              <span
+                aria-hidden
+                className="absolute inset-0 animate-ping rounded-full bg-rose-400/60"
+              />
+              <BellRing className="relative h-5 w-5" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-bold !text-rose-900 sm:text-base">
+                {urgentBookingCount} paid{" "}
+                {urgentBookingCount === 1 ? "request needs" : "requests need"}{" "}
+                your answer
+              </p>
+              <p className="mt-0.5 text-sm !text-rose-700">
+                Guests have paid and are waiting for approval. Pending value:{" "}
+                <span className="font-semibold">
+                  {formatCurrency(unattendedBookingValue)}
+                </span>
+              </p>
             </div>
-          </CardContent>
-        </Card>
+            <span className="inline-flex h-10 shrink-0 items-center justify-center rounded-xl bg-rose-600 px-4 text-sm font-semibold !text-white">
+              Review now
+            </span>
+          </Link>
+        </Reveal>
       ) : null}
 
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="flex flex-wrap items-center gap-2">
-            Host profile
-            <Badge variant="outline">{hostLevel}</Badge>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="text-sm text-gray-700">
-              {hostName} - {hostCity}
-            </p>
-            <VerifiedHostIndicator show={hostBadgeType !== "new"} />
-          </div>
-          <VerificationBadges
-            idVerified={idVerified}
-            phoneVerified={phoneVerified}
-            emailVerified={emailVerified}
-          />
-        </CardContent>
-      </Card>
-
-      <Card className="lg:hidden">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">Overview snapshot</CardTitle>
-        </CardHeader>
-        <CardContent className="grid grid-cols-2 gap-2 pt-0">
-          <MobileMetric
-            label="Active bookings"
-            value={String(activeBookingsCount)}
-          />
-          <MobileMetric
-            label="Needs approval"
-            value={String(urgentBookingCount)}
-          />
-          <MobileMetric
-            label="Total earnings"
+      <Reveal delay={60}>
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+          <HostStatTile
+            label="Total earned"
             value={formatCurrency(totalEarnings)}
+            icon={WalletCards}
+            tone="green"
+            href="/host/earnings"
           />
-          <MobileMetric
+          <HostStatTile
             label="This month"
             value={formatCurrency(monthlyEarnings)}
+            icon={TrendingUp}
+            tone="blue"
+            href="/host/earnings"
           />
-          <MobileMetric
-            label="Reviews"
-            value={`${totalReviews} (${averageRating || 0}/5)`}
+          <HostStatTile
+            label="Booking rate"
+            value={`${bookingRate}%`}
+            hint={`${paidBookings.length} paid ${paidBookings.length === 1 ? "booking" : "bookings"}`}
+            icon={ChartBar}
+            tone="amber"
+            href="/host/bookings"
           />
-          <MobileMetric label="Conversion" value={`${conversionRate}%`} />
-        </CardContent>
-      </Card>
+          <HostStatTile
+            label="Rating"
+            value={totalReviews > 0 ? `${averageRating}/5` : "New"}
+            hint={`${totalReviews} ${totalReviews === 1 ? "review" : "reviews"}`}
+            icon={Star}
+            tone="rose"
+            href="/host/reviews"
+          />
+        </div>
+      </Reveal>
 
-      <div className="hidden grid-cols-2 gap-3 lg:grid lg:grid-cols-4">
-        <StatCard
-          title="Total earnings"
-          value={formatCurrency(totalEarnings)}
-        />
-        <StatCard
-          title="Monthly earnings"
-          value={formatCurrency(monthlyEarnings)}
-        />
-        <StatCard title="Booking rate" value={`${bookingRate}%`} />
-        <StatCard
-          title="Reviews"
-          value={`${totalReviews} (${averageRating || 0}/5)`}
-        />
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Host performance</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <PerformanceItem
-            label="Total earnings"
-            value={formatCurrency(totalEarnings)}
-          />
-          <PerformanceItem
-            label="Monthly earnings"
-            value={formatCurrency(monthlyEarnings)}
-          />
-          <PerformanceItem label="Booking rate" value={`${bookingRate}%`} />
-          <PerformanceItem label="Reviews" value={String(totalReviews)} />
-          <PerformanceItem label="Views" value={String(totalViews)} />
-          <PerformanceItem
-            label="Conversion rate"
-            value={`${conversionRate}%`}
-          />
-        </CardContent>
-      </Card>
-
-      <EarningsCalculator
-        defaultPlatformFeePercent={platformFeePercent}
-        isPlaceholderFee={isPlaceholderFee}
-      />
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Trip history</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="hidden overflow-x-auto lg:block">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Car</TableHead>
-                  <TableHead>Dates</TableHead>
-                  <TableHead>Booked</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Amount</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {bookingRows.slice(0, 8).map((booking) => (
-                  <TableRow key={booking.id}>
-                    <TableCell>{booking.cars?.title ?? "Car"}</TableCell>
-                    <TableCell>
-                      {formatDateLabel(booking.start_date)} -{" "}
-                      {formatDateLabel(booking.end_date)}
-                    </TableCell>
-                    <TableCell>{formatDateLabel(booking.created_at)}</TableCell>
-                    <TableCell>
-                      <span className="rounded-full bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-700">
-                        {booking.status}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-right font-semibold">
-                      {formatCurrency(Number(booking.total_price ?? 0))}
-                    </TableCell>
-                  </TableRow>
-                ))}
-                {bookingRows.length === 0 ? (
-                  <TableRow>
-                    <TableCell
-                      colSpan={5}
-                      className="text-center text-sm text-gray-600"
-                    >
-                      No trip history yet. Create your first listing to start
-                      earning.
-                    </TableCell>
-                  </TableRow>
-                ) : null}
-              </TableBody>
-            </Table>
-          </div>
-          <div className="space-y-2 lg:hidden">
-            {bookingRows.slice(0, 8).map((booking) => (
-              <div
-                key={booking.id}
-                className="rounded-lg border border-border bg-white p-3"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <p className="text-sm font-semibold text-foreground">
-                    {booking.cars?.title ?? "Car"}
-                  </p>
-                  {booking.status === "awaiting_host" ? (
-                    <span className="rounded-full bg-red-100 px-2 py-1 text-[10px] font-semibold text-red-700">
-                      Needs approval
-                    </span>
-                  ) : null}
-                </div>
-                <p className="text-xs text-gray-600">
-                  {formatDateLabel(booking.start_date)} -{" "}
-                  {formatDateLabel(booking.end_date)}
+      <Reveal delay={80}>
+        <div className="grid gap-4 lg:grid-cols-[1.35fr_1fr]">
+          <section className="rounded-[1.5rem] border border-sky-100 bg-white p-5 shadow-[0_18px_50px_rgba(14,134,212,0.06)] sm:p-6">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-base font-bold !text-[#06223a] sm:text-lg">
+                  Performance
+                </h2>
+                <p className="mt-0.5 text-sm !text-slate-600">
+                  How your listings are doing across the marketplace.
                 </p>
-                <p className="text-xs text-gray-600">
-                  Booked: {formatDateLabel(booking.created_at)}
-                </p>
-                <div className="mt-2 flex items-center justify-between">
-                  <span className="rounded-full bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-700">
-                    {booking.status}
-                  </span>
-                  <span className="text-sm font-semibold text-foreground">
-                    {formatCurrency(Number(booking.total_price ?? 0))}
-                  </span>
-                </div>
-                {booking.status === "awaiting_host" ? (
-                  <div className="mt-2">
-                    <Button asChild size="sm" className="h-8 text-xs">
-                      <Link href="/host/bookings">Open booking request</Link>
-                    </Button>
-                  </div>
-                ) : null}
               </div>
-            ))}
-            {bookingRows.length === 0 ? (
-              <p className="rounded-lg border border-border bg-gray-50 p-3 text-center text-sm text-gray-600">
-                No trip history yet. Create your first listing to start earning.
+              <span className="hidden rounded-full bg-sky-50 px-3 py-1 text-xs font-semibold !text-brand sm:inline-flex">
+                Live
+              </span>
+            </div>
+
+            <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
+              <MiniStat
+                label="Views"
+                value={String(totalViews)}
+                icon={Eye}
+              />
+              <MiniStat
+                label="Conversion"
+                value={`${conversionRate}%`}
+                icon={TrendingUp}
+              />
+              <MiniStat
+                label="Active bookings"
+                value={String(activeBookingsCount)}
+                icon={WalletCards}
+              />
+              <MiniStat
+                label="Needs approval"
+                value={String(urgentBookingCount)}
+                icon={BellRing}
+                highlight={urgentBookingCount > 0}
+              />
+              <MiniStat
+                label="Reviews"
+                value={String(totalReviews)}
+                icon={Star}
+              />
+              <MiniStat
+                label="Listings"
+                value={String(carIds.length)}
+                icon={Car}
+              />
+            </div>
+
+            <div className="mt-5">
+              <div className="flex items-center justify-between text-xs font-semibold">
+                <span className="!text-slate-500">Views that became bookings</span>
+                <span className="!text-brand">{conversionRate}%</span>
+              </div>
+              <div className="mt-2 h-2 overflow-hidden rounded-full bg-sky-100">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-brand to-sky-400"
+                  style={{ width: `${Math.min(100, Math.max(2, conversionRate))}%` }}
+                />
+              </div>
+            </div>
+
+            <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-sky-100 pt-4">
+              <VerificationBadges
+                idVerified={idVerified}
+                phoneVerified={phoneVerified}
+                emailVerified={emailVerified}
+              />
+            </div>
+          </section>
+
+          <section className="rounded-[1.5rem] border border-sky-100 bg-white p-5 shadow-[0_18px_50px_rgba(14,134,212,0.06)] sm:p-6">
+            <h2 className="text-base font-bold !text-[#06223a] sm:text-lg">
+              Quick actions
+            </h2>
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <QuickLink href="/host/cars" icon={Car} label="Vehicles" hint="Manage listings" tone="blue" />
+              <QuickLink href="/host/bookings" icon={WalletCards} label="Bookings" hint="Requests & trips" tone="amber" badge={urgentBookingCount} />
+              <QuickLink href="/host/earnings" icon={ChartBar} label="Earnings" hint="Payouts & trends" tone="green" />
+              <QuickLink href="/host/reviews" icon={Star} label="Reviews" hint="Guest feedback" tone="rose" />
+              <QuickLink href="/host/favorites" icon={Heart} label="Guest saves" hint="Most-saved cars" tone="rose" />
+              <QuickLink href="/host/profile" icon={Settings} label="Settings" hint="Profile & payouts" tone="navy" />
+            </div>
+          </section>
+        </div>
+      </Reveal>
+
+      <Reveal delay={100}>
+        <section className="rounded-[1.5rem] border border-sky-100 bg-white shadow-[0_18px_50px_rgba(14,134,212,0.06)]">
+          <div className="flex items-center justify-between gap-3 p-5 pb-3 sm:p-6 sm:pb-4">
+            <div>
+              <h2 className="text-base font-bold !text-[#06223a] sm:text-lg">
+                Recent trips
+              </h2>
+              <p className="mt-0.5 text-sm !text-slate-600">
+                Latest bookings across your cars.
               </p>
+            </div>
+            {bookingRows.length > 0 ? (
+              <Link
+                href="/host/bookings"
+                className="inline-flex shrink-0 items-center gap-1 text-sm font-semibold !text-brand hover:!text-[#06223a]"
+              >
+                All bookings
+                <ArrowRight className="h-4 w-4" />
+              </Link>
             ) : null}
           </div>
-        </CardContent>
-      </Card>
+
+          {recentBookings.length === 0 ? (
+            <div className="px-5 pb-6 sm:px-6">
+              <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-sky-200 bg-sky-50/60 p-6 text-center sm:flex-row sm:text-left">
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white !text-brand shadow-sm">
+                  <Car className="h-5 w-5" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-bold !text-[#06223a]">
+                    No trips yet
+                  </p>
+                  <p className="text-sm !text-slate-600">
+                    Bookings show up here the moment a guest books one of your cars.
+                  </p>
+                </div>
+                <Link
+                  href="/host/cars/new"
+                  className="inline-flex h-10 items-center justify-center rounded-xl bg-brand px-4 text-sm font-semibold !text-white"
+                >
+                  List a car
+                </Link>
+              </div>
+            </div>
+          ) : (
+            <>
+              {/* Table from md up */}
+              <div className="hidden overflow-x-auto px-2 pb-2 md:block">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-[11px] font-semibold uppercase tracking-wider !text-slate-500">
+                      <th className="px-4 py-2 font-semibold">Car</th>
+                      <th className="px-4 py-2 font-semibold">Dates</th>
+                      <th className="px-4 py-2 font-semibold">Booked</th>
+                      <th className="px-4 py-2 font-semibold">Status</th>
+                      <th className="px-4 py-2 text-right font-semibold">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {recentBookings.map((booking) => (
+                      <tr
+                        key={booking.id}
+                        className="border-t border-sky-100 transition-colors hover:bg-sky-50/60"
+                      >
+                        <td className="max-w-[220px] truncate px-4 py-3 font-semibold !text-[#06223a]">
+                          {booking.cars?.title ?? "Car"}
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-3 !text-slate-600">
+                          {formatDateLabel(booking.start_date)} –{" "}
+                          {formatDateLabel(booking.end_date)}
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-3 !text-slate-600">
+                          {formatDateLabel(booking.created_at)}
+                        </td>
+                        <td className="px-4 py-3">
+                          <StatusPill status={booking.status} />
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-3 text-right font-semibold !text-[#06223a]">
+                          {formatCurrency(Number(booking.total_price ?? 0))}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Stacked cards below md */}
+              <ul className="space-y-2 px-4 pb-4 md:hidden">
+                {recentBookings.map((booking) => (
+                  <li
+                    key={booking.id}
+                    className="rounded-2xl border border-sky-100 bg-[#f6f9fc] p-3.5"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <p className="min-w-0 truncate text-sm font-bold !text-[#06223a]">
+                        {booking.cars?.title ?? "Car"}
+                      </p>
+                      <StatusPill status={booking.status} />
+                    </div>
+                    <p className="mt-1 text-xs !text-slate-600">
+                      {formatDateLabel(booking.start_date)} –{" "}
+                      {formatDateLabel(booking.end_date)}
+                    </p>
+                    <div className="mt-2 flex items-center justify-between gap-3">
+                      <span className="text-xs !text-slate-500">
+                        Booked {formatDateLabel(booking.created_at)}
+                      </span>
+                      <span className="text-sm font-bold !text-[#06223a]">
+                        {formatCurrency(Number(booking.total_price ?? 0))}
+                      </span>
+                    </div>
+                    {booking.status === "awaiting_host" ? (
+                      <Link
+                        href="/host/bookings"
+                        className="mt-3 inline-flex h-9 w-full items-center justify-center rounded-xl bg-brand text-xs font-semibold !text-white"
+                      >
+                        Open booking request
+                      </Link>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </section>
+      </Reveal>
+
+      <Reveal delay={120}>
+        <EarningsCalculator
+          defaultPlatformFeePercent={platformFeePercent}
+          isPlaceholderFee={isPlaceholderFee}
+        />
+      </Reveal>
     </div>
   );
+}
+
+function greeting() {
+  // Ghana is UTC+0, so UTC hours line up with local time for most hosts.
+  const hour = new Date().getUTCHours();
+  if (hour < 12) return "Good morning";
+  if (hour < 17) return "Good afternoon";
+  return "Good evening";
 }
 
 function formatDateLabel(value?: string | null) {
@@ -416,34 +557,134 @@ function formatDateLabel(value?: string | null) {
   }
 }
 
-function PerformanceItem({
+function HeroChip({
+  icon: Icon,
+  children,
+}: {
+  icon: LucideIcon;
+  children: React.ReactNode;
+}) {
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-white/12 px-3 py-1 text-xs font-semibold !text-white ring-1 ring-inset ring-white/15">
+      <Icon className="h-3.5 w-3.5 !text-sky-200" />
+      {children}
+    </span>
+  );
+}
+
+function MiniStat({
   label,
   value,
-  note,
+  icon: Icon,
+  highlight = false,
 }: {
   label: string;
   value: string;
-  note?: string;
+  icon: LucideIcon;
+  highlight?: boolean;
 }) {
   return (
-    <div className="rounded-xl border border-border bg-gray-50 p-3">
-      <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-        {label}
+    <div
+      className={
+        highlight
+          ? "rounded-2xl border border-rose-200 bg-rose-50 p-3"
+          : "rounded-2xl border border-sky-100 bg-[#f6f9fc] p-3"
+      }
+    >
+      <div className="flex items-center gap-2">
+        <Icon
+          className={
+            highlight ? "h-4 w-4 !text-rose-600" : "h-4 w-4 !text-brand"
+          }
+        />
+        <p className="truncate text-[11px] font-semibold uppercase tracking-wider !text-slate-500">
+          {label}
+        </p>
+      </div>
+      <p
+        className={
+          highlight
+            ? "mt-1.5 text-lg font-bold !text-rose-700"
+            : "mt-1.5 text-lg font-bold !text-[#06223a]"
+        }
+      >
+        {value}
       </p>
-      <p className="text-lg font-semibold text-foreground">{value}</p>
-      {note ? <p className="text-xs text-amber-700">{note}</p> : null}
     </div>
   );
 }
 
-function MobileMetric({ label, value }: { label: string; value: string }) {
+const QUICK_TONES = {
+  blue: "bg-sky-50 !text-brand",
+  green: "bg-emerald-50 !text-emerald-600",
+  amber: "bg-amber-50 !text-amber-600",
+  rose: "bg-rose-50 !text-rose-600",
+  navy: "bg-slate-100 !text-[#06223a]",
+} as const;
+
+function QuickLink({
+  href,
+  icon: Icon,
+  label,
+  hint,
+  tone,
+  badge = 0,
+}: {
+  href: string;
+  icon: LucideIcon;
+  label: string;
+  hint: string;
+  tone: keyof typeof QUICK_TONES;
+  badge?: number;
+}) {
   return (
-    <div className="rounded-lg border border-border bg-gray-50 px-3 py-2">
-      <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">
-        {label}
-      </p>
-      <p className="text-sm font-semibold text-foreground">{value}</p>
-    </div>
+    <Link
+      href={href}
+      className="card-hover group relative flex min-w-0 flex-col gap-2 rounded-2xl border border-sky-100 bg-[#f6f9fc] p-3.5 hover:border-brand/30 hover:bg-white"
+    >
+      <span
+        className={`flex h-9 w-9 items-center justify-center rounded-xl ${QUICK_TONES[tone]}`}
+      >
+        <Icon className="h-4 w-4" />
+      </span>
+      {badge > 0 ? (
+        <span className="absolute right-3 top-3 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-rose-500 px-1.5 text-[11px] font-bold !text-white">
+          {badge > 99 ? "99+" : badge}
+        </span>
+      ) : null}
+      <span className="min-w-0">
+        <span className="block truncate text-sm font-bold !text-[#06223a]">
+          {label}
+        </span>
+        <span className="block truncate text-xs !text-slate-500">{hint}</span>
+      </span>
+    </Link>
+  );
+}
+
+const STATUS_STYLES: Record<string, { label: string; className: string }> = {
+  awaiting_host: { label: "Needs approval", className: "bg-amber-100 !text-amber-800" },
+  pending: { label: "Pending", className: "bg-slate-100 !text-slate-700" },
+  confirmed: { label: "Confirmed", className: "bg-sky-100 !text-brand" },
+  completed: { label: "Completed", className: "bg-emerald-100 !text-emerald-700" },
+  cancelled: { label: "Cancelled", className: "bg-rose-100 !text-rose-700" },
+  rejected: { label: "Declined", className: "bg-rose-100 !text-rose-700" },
+  refunded: { label: "Refunded", className: "bg-rose-100 !text-rose-700" },
+};
+
+function StatusPill({ status }: { status?: string | null }) {
+  const key = String(status ?? "").toLowerCase();
+  const style = STATUS_STYLES[key] ?? {
+    label: key ? key.replace(/_/g, " ") : "Unknown",
+    className: "bg-slate-100 !text-slate-700",
+  };
+  return (
+    <span
+      className={`inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-bold ${style.className}`}
+    >
+      {key === "completed" ? <CheckCircle2 className="h-3 w-3" /> : null}
+      {style.label}
+    </span>
   );
 }
 

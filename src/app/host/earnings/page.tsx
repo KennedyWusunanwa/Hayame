@@ -1,5 +1,6 @@
 import { EarningsChart } from "@/components/dashboard/earnings-chart";
-import { StatCard } from "@/components/dashboard/stat-card";
+import { HostStatTile } from "@/components/dashboard/host-stat-tile";
+import { CheckCircle2, Clock3, WalletCards } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -10,6 +11,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatCurrency } from "@/lib/utils";
+import { HostPageHeader } from "@/components/dashboard/host-page-header";
 
 const payouts = [
   { month: "Aug", amount: 5200, status: "paid" },
@@ -26,17 +28,16 @@ const earningsSeries = payouts.map((p) => ({
 export default function EarningsPage() {
   return (
     <div className="space-y-6">
-      <div>
-        <p className="text-sm font-semibold text-primary">Earnings</p>
-        <h1 className="text-2xl font-semibold text-foreground">
-          Payouts overview
-        </h1>
-      </div>
+      <HostPageHeader
+        eyebrow="Earnings"
+        title="Payouts overview"
+        description="What you have earned, what is pending and how it trends month to month."
+      />
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <StatCard title="Total earned" value={formatCurrency(25700)} />
-        <StatCard title="Pending" value={formatCurrency(7600)} />
-        <StatCard title="Completed trips" value="48" />
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3">
+        <HostStatTile label="Total earned" value={formatCurrency(25700)} icon={WalletCards} tone="green" />
+        <HostStatTile label="Pending" value={formatCurrency(7600)} icon={Clock3} tone="amber" />
+        <HostStatTile label="Completed trips" value="48" icon={CheckCircle2} tone="blue" className="col-span-2 md:col-span-1" />
       </div>
 
       <Card>

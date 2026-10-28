@@ -64,13 +64,15 @@ export default async function HostLayout({
   };
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-0 px-4 pb-4 lg:flex-row lg:px-0">
-      <DashboardSidebar host={host} pendingBookingCount={pendingBookingCount} />
-      <div className="flex-1 bg-gray-50/60 px-0 py-4 sm:px-4 lg:border-l lg:border-border lg:px-8">
-        <div className="mb-4 lg:hidden">
-          <DashboardMobileNav pendingBookingCount={pendingBookingCount} />
+    <div className="w-full bg-[#f6f9fc]">
+      <div className="mx-auto flex w-full max-w-6xl gap-8 px-4 py-5 sm:px-6 sm:py-8 lg:py-10">
+        <DashboardSidebar host={host} pendingBookingCount={pendingBookingCount} />
+        <div className="min-w-0 flex-1">
+          <div className="mb-4 lg:hidden">
+            <DashboardMobileNav pendingBookingCount={pendingBookingCount} />
+          </div>
+          {children}
         </div>
-        {children}
       </div>
     </div>
   );

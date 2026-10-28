@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ProfileSettings } from "@/components/dashboard/profile-settings";
+import { HostPageHeader } from "@/components/dashboard/host-page-header";
 import type { Database } from "@/lib/database.types";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -40,15 +41,11 @@ export default async function ProfilePage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <p className="text-sm font-semibold text-primary">Profile</p>
-        <h1 className="text-2xl font-semibold text-foreground">
-          Your host profile
-        </h1>
-        <p className="text-sm text-gray-600">
-          Update your photo and name. Guests will see this on your listings.
-        </p>
-      </div>
+      <HostPageHeader
+        eyebrow="Profile"
+        title="Your host profile"
+        description="Update your photo and name. Guests will see this on your listings."
+      />
       <Card>
         <CardHeader>
           <CardTitle>Profile details</CardTitle>

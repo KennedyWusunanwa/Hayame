@@ -1,14 +1,14 @@
 import { BookingsTable } from "@/components/dashboard/bookings-table";
+import { HostPageHeader } from "@/components/dashboard/host-page-header";
 
 export default function BookingsPage() {
   return (
     <div className="space-y-6">
-      <div>
-        <p className="text-sm font-semibold text-primary">Bookings</p>
-        <h1 className="text-2xl font-semibold text-foreground">
-          Guest bookings
-        </h1>
-      </div>
+      <HostPageHeader
+        eyebrow="Bookings"
+        title="Guest bookings"
+        description="Approve paid requests, track upcoming trips and review history."
+      />
       <BookingsTable mode="host" />
     </div>
   );
