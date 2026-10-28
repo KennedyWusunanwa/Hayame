@@ -48,12 +48,12 @@ function LinkColumn({ title, links }: { title: string; links: FooterLink[] }) {
       <p className="text-xs font-semibold uppercase tracking-wider text-white/45">
         {title}
       </p>
-      <ul className="mt-4 space-y-2.5">
+      <ul className="mt-3 space-y-1.5">
         {links.map((link) => (
           <li key={`${link.href}-${link.label}`}>
             <Link
               href={link.href}
-              className="footer-link text-sm !text-white/70 hover:!text-white"
+              className="footer-link text-[13px] !text-white/70 hover:!text-white"
             >
               {link.label}
             </Link>
@@ -81,34 +81,27 @@ export function Footer() {
       />
       <div
         aria-hidden
-        className="pointer-events-none absolute -right-32 -top-40 -z-10 h-[28rem] w-[28rem] rounded-full bg-brand/20 blur-3xl"
+        className="pointer-events-none absolute -right-32 -top-40 -z-10 h-[22rem] w-[22rem] rounded-full bg-brand/20 blur-3xl"
       />
 
       <div className="mx-auto max-w-6xl px-6">
-        {/* Conversion band. Most visitors reaching the footer have finished
-            reading and are deciding whether to act — give them the two things
-            they can actually do. */}
-        <div className="flex flex-col gap-5 border-b border-white/10 py-10 sm:flex-row sm:items-center sm:justify-between lg:py-12">
-          <div>
-            <h2 className="text-xl font-bold tracking-tight !text-white sm:text-2xl">
-              Got a car sitting idle?
-            </h2>
-            <p className="mt-1.5 max-w-lg text-sm !text-white/60">
-              List it on Hayame and earn from it on the days you don&apos;t need
-              it. Reviewed hosts, secured payments, local support.
-            </p>
-          </div>
-          <div className="flex shrink-0 flex-wrap gap-3">
+        {/* Conversion strip: one line, two actions. */}
+        <div className="flex flex-col gap-3 border-b border-white/10 py-6 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm !text-white/70">
+            <span className="font-semibold !text-white">Got a car sitting idle?</span>{" "}
+            List it on Hayame and earn on the days you don&apos;t need it.
+          </p>
+          <div className="flex shrink-0 flex-wrap gap-2.5">
             <Link
               href="/become-host"
-              className="group inline-flex h-11 items-center gap-2 rounded-xl bg-white px-5 text-sm font-semibold !text-[#06223a] transition-transform hover:scale-[1.02]"
+              className="group inline-flex h-9 items-center gap-1.5 rounded-lg bg-white px-4 text-[13px] font-semibold !text-[#06223a] transition-transform hover:scale-[1.02]"
             >
               Start hosting
-              <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+              <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
             </Link>
             <Link
               href="/explore"
-              className="inline-flex h-11 items-center rounded-xl border border-white/25 px-5 text-sm font-semibold !text-white transition-colors hover:bg-white/10"
+              className="inline-flex h-9 items-center rounded-lg border border-white/25 px-4 text-[13px] font-semibold !text-white transition-colors hover:bg-white/10"
             >
               Browse cars
             </Link>
@@ -116,7 +109,7 @@ export function Footer() {
         </div>
 
         {/* Link grid */}
-        <div className="grid gap-10 py-12 sm:grid-cols-2 lg:grid-cols-[1.4fr_1fr_1fr_1fr] lg:gap-8">
+        <div className="grid gap-7 py-8 sm:grid-cols-2 lg:grid-cols-[1.4fr_1fr_1fr_1fr] lg:gap-6">
           <div>
             <Link href="/" aria-label="Hayame" className="inline-block">
               <Image
@@ -124,15 +117,15 @@ export function Footer() {
                 alt="Hayame"
                 width={1808}
                 height={944}
-                className="h-9 w-auto object-contain"
+                className="h-7 w-auto object-contain"
               />
             </Link>
-            <p className="mt-4 max-w-xs text-sm leading-relaxed !text-white/60">
+            <p className="mt-3 max-w-xs text-[13px] leading-relaxed !text-white/60">
               Ghana&apos;s trusted car sharing network. Rent from verified local
               hosts, or earn from the car in your driveway.
             </p>
 
-            <div className="mt-5 space-y-2.5 text-sm">
+            <div className="mt-4 space-y-1.5 text-[13px]">
               <a
                 href={getSupportEmailHref()}
                 className="footer-link flex items-center gap-2 !text-white/70 hover:!text-white"
@@ -146,11 +139,11 @@ export function Footer() {
               </p>
             </div>
 
-            <div className="mt-7 border-t border-white/10 pt-5">
+            <div className="mt-5 border-t border-white/10 pt-4">
               <p className="text-[11px] font-semibold uppercase tracking-[0.16em] !text-white/45">
                 Take Hayame with you
               </p>
-              <AppDownloadButtons compact className="mt-3" />
+              <AppDownloadButtons compact className="mt-2.5" />
             </div>
           </div>
 
@@ -162,7 +155,7 @@ export function Footer() {
 
       {/* Bottom bar */}
       <div className="border-t border-white/10">
-        <div className="mx-auto flex max-w-6xl flex-col gap-3 px-6 py-5 text-xs !text-white/50 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mx-auto flex max-w-6xl flex-col gap-2 px-6 py-3.5 text-xs !text-white/50 sm:flex-row sm:items-center sm:justify-between">
           <span>© {year} Hayame. All rights reserved.</span>
           <span className="flex items-center gap-2">
             <ShieldCheck className="h-3.5 w-3.5 text-white/40" />
