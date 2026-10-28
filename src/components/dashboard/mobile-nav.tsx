@@ -2,18 +2,17 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Car, Home, MessageCircle, User, WalletCards } from "lucide-react";
+import { MessageCircle, PlusCircle } from "lucide-react";
 import { useMessaging } from "@/components/messages/messaging-provider";
+import { HOST_NAV, isHostLinkActive } from "@/components/dashboard/sidebar";
 import { cn } from "@/lib/utils";
 
-const links = [
-  { href: "/host", label: "Overview", icon: Home },
-  { href: "/host/cars", label: "Vehicles", icon: Car },
-  { href: "/host/bookings", label: "Bookings", icon: WalletCards },
-  { href: "/messages", label: "Chats", icon: MessageCircle },
-  { href: "/host/profile", label: "Settings", icon: User },
-];
-
+/**
+ * Phone and tablet host navigation: a sticky, horizontally scrollable row of
+ * pills with the same sections as the desktop sidebar, plus chats and a
+ * shortcut to create a listing. Snaps so the active pill is always reachable
+ * with a single thumb flick.
+ */
 export function DashboardMobileNav({
   pendingBookingCount = 0,
 }: {
@@ -24,57 +23,66 @@ export function DashboardMobileNav({
   const unreadLabel = unreadCount > 99 ? "99+" : String(unreadCount);
   const bookingCountLabel =
     pendingBookingCount > 99 ? "99+" : String(pendingBookingCount);
+
   return (
-    <nav className="sticky top-0 z-20 -mx-4 bg-white/95 px-4 py-2 shadow-sm backdrop-blur lg:hidden">
-      <div className="flex items-center justify-between">
-        <p className="text-sm font-semibold text-foreground">Host dashboard</p>
-        <span className="text-xs text-gray-500">Quick nav</span>
-      </div>
-      <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
-        {links.map((link) => {
-          const Icon = link.icon;
-          const active = pathname?.startsWith(link.href);
-          const showBookingDot =
-            link.href === "/host/bookings" && pendingBookingCount > 0;
-          const showChatDot = link.href === "/messages" && unreadCount > 0;
+    <nav
+      aria-label="Host sections"
+      className="sticky top-0 z-20 -mx-4 bg-[#f6f9fc]/90 px-4 py-2 backdrop-blur sm:-mx-6 sm:px-6 lg:hidden"
+    >
+      <div className="flex snap-x snap-mandatory gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {HOST_NAV.map((item) => {
+          const Icon = item.icon;
+          const active = isHostLinkActive(pathname, item);
+          const badge =
+            item.href === "/host/bookings" && pendingBookingCount > 0
+              ? bookingCountLabel
+              : null;
           return (
             <Link
-              key={link.href}
-              href={link.href}
+              key={item.href}
+              href={item.href}
+              aria-current={active ? "page" : undefined}
               className={cn(
-                "flex flex-shrink-0 items-center gap-2 rounded-full border border-border px-3 py-2 text-sm font-medium text-gray-700",
-                active && "border-primary bg-primary/10 text-primary",
+                "flex shrink-0 snap-start items-center gap-2 rounded-full border px-3.5 py-2 text-[13px] font-semibold transition-colors",
+                active
+                  ? "border-brand bg-brand !text-white shadow-[0_10px_24px_rgba(14,134,212,0.28)]"
+                  : "border-sky-100 bg-white !text-slate-600 hover:border-brand/40 hover:!text-brand",
               )}
             >
-              <span className="relative inline-flex">
-                <Icon className="h-4 w-4" />
-                {showBookingDot ? (
-                  <>
-                    <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-brand ring-2 ring-white" />
-                    <span className="sr-only">New booking requests</span>
-                  </>
-                ) : null}
-                {showChatDot ? (
-                  <>
-                    <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-brand ring-2 ring-white" />
-                    <span className="sr-only">Unread messages</span>
-                  </>
-                ) : null}
-              </span>
-              {link.label}
-              {showBookingDot ? (
-                <span className="ml-1 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-brand px-1 text-[11px] font-semibold text-white">
-                  {bookingCountLabel}
-                </span>
-              ) : null}
-              {showChatDot ? (
-                <span className="ml-1 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-brand px-1 text-[11px] font-semibold text-white">
-                  {unreadLabel}
+              <Icon className="h-4 w-4" />
+              {item.label}
+              {badge ? (
+                <span
+                  className={cn(
+                    "inline-flex h-5 min-w-[20px] items-center justify-center rounded-full px-1.5 text-[11px] font-bold",
+                    active ? "bg-white !text-brand" : "bg-brand !text-white",
+                  )}
+                >
+                  {badge}
                 </span>
               ) : null}
             </Link>
           );
         })}
+        <Link
+          href="/messages"
+          className="flex shrink-0 snap-start items-center gap-2 rounded-full border border-sky-100 bg-white px-3.5 py-2 text-[13px] font-semibold !text-slate-600 hover:border-brand/40 hover:!text-brand"
+        >
+          <MessageCircle className="h-4 w-4" />
+          Chats
+          {unreadCount > 0 ? (
+            <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-brand px-1.5 text-[11px] font-bold !text-white">
+              {unreadLabel}
+            </span>
+          ) : null}
+        </Link>
+        <Link
+          href="/host/cars/new"
+          className="flex shrink-0 snap-start items-center gap-1.5 rounded-full border border-dashed border-brand/40 bg-sky-50 px-3.5 py-2 text-[13px] font-semibold !text-brand"
+        >
+          <PlusCircle className="h-4 w-4" />
+          New listing
+        </Link>
       </div>
     </nav>
   );

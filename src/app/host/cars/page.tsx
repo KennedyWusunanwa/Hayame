@@ -16,6 +16,7 @@ import { CarActions } from "@/components/dashboard/car-actions";
 import { resolveCarImage } from "@/lib/car-images";
 import { loadOwnerCarsWithFavorites } from "@/lib/owner-cars";
 import { formatCurrency } from "@/lib/utils";
+import { HostPageHeader } from "@/components/dashboard/host-page-header";
 
 type PageProps = {
   searchParams?: { notice?: string } | Promise<{ notice?: string }>;
@@ -31,18 +32,19 @@ export default async function DashboardCarsPage({ searchParams }: PageProps) {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <p className="text-sm font-semibold text-primary">Inventory</p>
-          <h1 className="text-2xl font-semibold text-foreground">My cars</h1>
-        </div>
-        <Button asChild className="w-full shrink-0 sm:w-auto">
-          <Link href="/host/cars/new">
-            <PlusCircle className="mr-2 h-4 w-4" />
-            List Your Car &amp; Earn
-          </Link>
-        </Button>
-      </div>
+      <HostPageHeader
+        eyebrow="Inventory"
+        title="My cars"
+        description="Everything you have listed, its status and how guests are responding."
+        actions={
+          <Button asChild className="w-full shrink-0 sm:w-auto">
+            <Link href="/host/cars/new">
+              <PlusCircle className="mr-2 h-4 w-4" />
+              List Your Car &amp; Earn
+            </Link>
+          </Button>
+        }
+      />
       {notice ? (
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           {notice === "submitted"

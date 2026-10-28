@@ -15,6 +15,7 @@ import { resolveCarImage } from "@/lib/car-images";
 import { loadOwnerCarsWithFavorites } from "@/lib/owner-cars";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { formatCurrency } from "@/lib/utils";
+import { HostPageHeader } from "@/components/dashboard/host-page-header";
 
 export default async function FavoritesDashboardPage() {
   const { cars, favoriteCounts } = await loadOwnerCarsWithFavorites();
@@ -26,13 +27,11 @@ export default async function FavoritesDashboardPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <p className="text-sm font-semibold text-primary">Favorites</p>
-        <h1 className="text-2xl font-semibold text-foreground">Guest saves</h1>
-        <p className="text-sm text-gray-600">
-          See which cars guests are bookmarking most.
-        </p>
-      </div>
+      <HostPageHeader
+        eyebrow="Favorites"
+        title="Guest saves"
+        description="See which cars guests are bookmarking most."
+      />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <Card>

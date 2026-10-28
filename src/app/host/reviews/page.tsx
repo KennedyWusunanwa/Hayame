@@ -9,6 +9,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { HostPageHeader } from "@/components/dashboard/host-page-header";
 
 type ReviewRow = {
   id: string;
@@ -29,12 +30,11 @@ export default async function ReviewsPage() {
   if (!user) {
     return (
       <div className="space-y-6">
-        <div>
-          <p className="text-sm font-semibold text-primary">Reviews</p>
-          <h1 className="text-2xl font-semibold text-foreground">
-            Guest feedback
-          </h1>
-        </div>
+        <HostPageHeader
+          eyebrow="Reviews"
+          title="Guest feedback"
+          description="Ratings and comments guests left after their trips."
+        />
         <Card>
           <CardContent className="py-8 text-center text-sm text-gray-600">
             <Link className="font-semibold text-brand" href="/auth/login">
@@ -58,12 +58,11 @@ export default async function ReviewsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <p className="text-sm font-semibold text-primary">Reviews</p>
-        <h1 className="text-2xl font-semibold text-foreground">
-          Guest feedback
-        </h1>
-      </div>
+      <HostPageHeader
+        eyebrow="Reviews"
+        title="Guest feedback"
+        description="Ratings and comments guests left after their trips."
+      />
       <Card>
         <CardHeader>
           <CardTitle>Recent reviews</CardTitle>
