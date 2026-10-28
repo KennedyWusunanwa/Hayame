@@ -49,3 +49,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# macOS AppleDouble sidecars (exFAT) and Python bytecode
+._*
+__pycache__/
+*.pyc

@@ -164,6 +164,14 @@ export async function POST(req: Request, context: Params) {
     const replacePhotoId =
       String(formData.get("replacePhotoId") ?? "").trim() || null;
     const client = access.client;
+    // Storage requests use the service-role client rather than the user's
+    // session client: the session's JWT can expire mid-upload for larger
+    // files/slow connections, which Supabase Storage rejects with an
+    // "exp claim timestamp check failed" error even though ownership was
+    // already verified above.
+    const storageClient = access.isAdmin
+      ? access.client
+      : (createSupabaseAdminClient() as any);
     const existingPhotoCount = await client
       .from("car_photos")
       .select("id", { count: "exact", head: true })
@@ -191,7 +199,7 @@ export async function POST(req: Request, context: Params) {
     const ext = (file.name.split(".").pop() ?? "jpg").toLowerCase();
     const path = `${access.car.owner_id}/${carId}/${Date.now()}-${crypto.randomUUID()}.${ext}`;
     const bytes = Buffer.from(await file.arrayBuffer());
-    const { error: uploadError } = await client.storage
+    const { error: uploadError } = await storageClient.storage
       .from(bucket)
       .upload(path, bytes, {
         // Unique, never-overwritten path — immutable content, cache for a year.
@@ -203,7 +211,7 @@ export async function POST(req: Request, context: Params) {
 
     const {
       data: { publicUrl },
-    } = client.storage.from(bucket).getPublicUrl(path);
+    } = storageClient.storage.from(bucket).getPublicUrl(path);
 
     if (replacePhotoId) {
       const { data: updatedPhoto, error: updateError } = await client
@@ -214,13 +222,13 @@ export async function POST(req: Request, context: Params) {
         .select("id,url")
         .single();
       if (updateError) {
-        await client.storage.from(bucket).remove([path]);
+        await storageClient.storage.from(bucket).remove([path]);
         throw updateError;
       }
 
       const oldPath = getStoragePathFromPublicUrl(oldPhoto.data.url, bucket);
       if (oldPath) {
-        await client.storage.from(bucket).remove([oldPath]);
+        await storageClient.storage.from(bucket).remove([oldPath]);
       }
 
       return NextResponse.json({ data: updatedPhoto });
@@ -232,7 +240,7 @@ export async function POST(req: Request, context: Params) {
       .select("id,url")
       .single();
     if (insertError) {
-      await client.storage.from(bucket).remove([path]);
+      await storageClient.storage.from(bucket).remove([path]);
       throw insertError;
     }
 
@@ -288,7 +296,10 @@ export async function DELETE(req: Request, context: Params) {
     const bucket = getPhotoBucketName();
     const path = getStoragePathFromPublicUrl(photo.url, bucket);
     if (path) {
-      await client.storage.from(bucket).remove([path]);
+      const storageClient = access.isAdmin
+        ? access.client
+        : (createSupabaseAdminClient() as any);
+      await storageClient.storage.from(bucket).remove([path]);
     }
 
     return NextResponse.json({ ok: true });
