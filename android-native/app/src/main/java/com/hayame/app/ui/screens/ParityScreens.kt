@@ -33,7 +33,6 @@ import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.Refresh
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -520,7 +519,17 @@ fun HostFavoritesScreen(viewModel: AppViewModel, onBack: () -> Unit) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Text("GH₵${(car.daily_price ?: 0.0).toInt()} / day", color = LocalHayameColors.current.brandBlue, fontWeight = FontWeight.Bold)
                                         Spacer(modifier = Modifier.weight(1f))
-                                        AssistChip(onClick = {}, label = { Text("${(car.favorites_count ?: 0.0).toInt()} saves") })
+                                        Surface(
+                                            shape = RoundedCornerShape(999.dp),
+                                            color = LocalHayameColors.current.fieldBackground,
+                                        ) {
+                                            Text(
+                                                "${(car.favorites_count ?: 0.0).toInt()} saves",
+                                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                                color = LocalHayameColors.current.brandNavy,
+                                                fontWeight = FontWeight.SemiBold,
+                                            )
+                                        }
                                     }
                                 }
                             }

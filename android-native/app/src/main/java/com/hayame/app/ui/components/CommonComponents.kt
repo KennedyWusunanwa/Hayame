@@ -158,6 +158,7 @@ fun CarCard(
     car: CarDto,
     isFavorite: Boolean,
     imageHeight: Dp = 180.dp,
+    showsFavoriteButton: Boolean = true,
     onClick: () -> Unit,
     onFavoriteClick: () -> Unit,
 ) {
@@ -216,22 +217,24 @@ fun CarCard(
                     )
                 }
 
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(8.dp)
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .background(colors.floatingControlBackground)
-                        .clickable(onClick = onFavoriteClick),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-                        contentDescription = null,
-                        tint = if (isFavorite) Color.Red else colors.brandNavy,
-                        modifier = Modifier.size(20.dp),
-                    )
+                if (showsFavoriteButton) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(8.dp)
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(colors.floatingControlBackground)
+                            .clickable(onClick = onFavoriteClick),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                            contentDescription = "Favorite",
+                            tint = if (isFavorite) Color.Red else colors.brandNavy,
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
                 }
 
                 if (car.instant_book == true) {

@@ -1,6 +1,7 @@
 package com.hayame.app.ui.screens
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
@@ -9,6 +10,7 @@ import android.hardware.biometrics.BiometricPrompt
 import android.net.Uri
 import android.os.Build
 import android.os.CancellationSignal
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.DrawableRes
@@ -74,6 +76,7 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.outlined.AddCircleOutline
 import androidx.compose.material.icons.outlined.AccountBalance
 import androidx.compose.material.icons.outlined.AttachMoney
+import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.ChatBubble
 import androidx.compose.material.icons.outlined.Close
@@ -95,6 +98,7 @@ import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.PhoneIphone
 import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.Visibility
@@ -185,10 +189,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.hayame.app.core.analytics.AnalyticsService
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
@@ -826,6 +832,7 @@ private fun hasStoredBiometricCredentials(context: Context): Boolean {
     return loadBiometricCredentials(context) != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P
 }
 
+@SuppressLint("NewApi")
 private fun launchBiometricLogin(
     context: Context,
     onCredentials: (String, String) -> Unit,
@@ -1262,8 +1269,21 @@ private fun HomeTab(
     val conversationsState by viewModel.conversationsState.collectAsState()
     val favoriteIds = (favoritesState as? UiState.Success<Set<String>>)?.data ?: emptySet()
     val context = LocalContext.current
+    val homeLayoutPrefs = remember(context) {
+        context.getSharedPreferences(HomePopularLayoutPrefsName, Context.MODE_PRIVATE)
+    }
     val scope = rememberCoroutineScope()
     var selectedCat by rememberSaveable { mutableStateOf("All") }
+    var popularLayoutModeName by rememberSaveable {
+        mutableStateOf(
+            homeLayoutPrefs.getString(HomePopularLayoutPrefsKey, ExploreLayoutMode.LIST.name)
+                ?: ExploreLayoutMode.LIST.name,
+        )
+    }
+    val popularLayoutMode = remember(popularLayoutModeName) {
+        runCatching { ExploreLayoutMode.valueOf(popularLayoutModeName) }
+            .getOrElse { ExploreLayoutMode.LIST }
+    }
     var homeSearchText by rememberSaveable { mutableStateOf("") }
     var showHomeFilterSheet by rememberSaveable { mutableStateOf(false) }
     val homeFilterSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -1361,11 +1381,6 @@ private fun HomeTab(
     val browseRegion = browseLocation.second
     val effectiveCity = browseCity.ifBlank { homeLocation?.cityName?.trim().orEmpty() }
     val effectiveRegion = browseRegion.ifBlank { homeLocation?.regionName?.trim().orEmpty() }
-    val isWaitingForInitialBrowseLocation =
-        browseCity.isBlank() &&
-            browseRegion.isBlank() &&
-            homeLocation == null &&
-            homeLocationResolving
     val nearYouCars = remember(homeCars, homeLocation, effectiveCity, effectiveRegion) {
         val loc = homeLocation
         // Cars carry no coordinates from the API today, so proximity is
@@ -1433,15 +1448,20 @@ private fun HomeTab(
     }
 
     LaunchedEffect(Unit) {
-        homeLocationResolving = true
-        locationPermission.launch(Manifest.permission.ACCESS_COARSE_LOCATION)
-        homeLocation = fetchHomeLocation(context)
-        detectedCityName = homeLocation?.cityName ?: homeLocation?.regionName
-        homeLocationResolving = false
         viewModel.loadReferenceData()
         viewModel.loadCars(mapOf("sort" to "new_listings", "limit" to "48"))
         viewModel.loadFavorites()
         viewModel.loadConversations()
+
+        if (hasHomeLocationPermission(context)) {
+            homeLocationResolving = true
+            homeLocation = fetchHomeLocation(context)
+            detectedCityName = homeLocation?.cityName ?: homeLocation?.regionName
+            homeLocationResolving = false
+        } else {
+            homeLocationResolving = true
+            locationPermission.launch(Manifest.permission.ACCESS_COARSE_LOCATION)
+        }
     }
 
     LaunchedEffect(availableCategories) {
@@ -1660,37 +1680,83 @@ private fun HomeTab(
             UiState.Empty -> item { EmptyBlock("No cars yet", "No listings are available right now.") }
             is UiState.Success -> {
                 item {
-                    if (isWaitingForInitialBrowseLocation) {
-                        HomeNearYouPlaceholderSection()
-                    } else {
-                        HomeNearYouSection(
-                            cars = nearYouCars,
-                            title = when {
-                                effectiveCity.isNotBlank() ->
-                                    "Near ${AndroidReferenceData.cityDisplayName(effectiveCity)}"
-                                effectiveRegion.isNotBlank() -> "Near $effectiveRegion"
-                                else -> "Near you"
-                            },
-                            favoriteIds = favoriteIds,
-                            onOpen = onOpenCarDetail,
-                            onFavorite = { car ->
-                                viewModel.toggleFavorite(
-                                    carId = car.id,
-                                    currentlyFavorite = favoriteIds.contains(car.id),
-                                    authDestination = NavRoutes.main(MainTab.HOME),
-                                )
-                            },
-                            onSeeAll = onOpenExplore,
-                        )
-                    }
+                    HomeNearYouSection(
+                        cars = nearYouCars,
+                        title = when {
+                            effectiveCity.isNotBlank() ->
+                                "Near ${AndroidReferenceData.cityDisplayName(effectiveCity)}"
+                            effectiveRegion.isNotBlank() -> "Near $effectiveRegion"
+                            else -> "Near you"
+                        },
+                        favoriteIds = favoriteIds,
+                        onOpen = onOpenCarDetail,
+                        onFavorite = { car ->
+                            viewModel.toggleFavorite(
+                                carId = car.id,
+                                currentlyFavorite = favoriteIds.contains(car.id),
+                                authDestination = NavRoutes.main(MainTab.HOME),
+                            )
+                        },
+                        onSeeAll = onOpenExplore,
+                    )
                 }
                 item {
-                    HomeSectionTitlePlaceholderAware(title = "Popular picks", onSeeAll = onOpenExplore)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = "Popular picks",
+                            style = MaterialTheme.typography.titleLarge,
+                            color = colors.brandNavy,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        Spacer(modifier = Modifier.weight(1f))
+                        ExploreLayoutToggle(
+                            selectedLayout = popularLayoutMode,
+                            onSelect = { selected ->
+                                popularLayoutModeName = selected.name
+                                homeLayoutPrefs.edit()
+                                    .putString(HomePopularLayoutPrefsKey, selected.name)
+                                    .apply()
+                            },
+                        )
+                        TextButton(onClick = onOpenExplore) {
+                            Text("See all", color = colors.brandBlue, fontWeight = FontWeight.Bold)
+                        }
+                    }
                 }
                 if (homeCars.isEmpty()) {
                     item { EmptyBlock("No cars yet", "No listings are available right now.") }
+                } else if (popularLayoutMode == ExploreLayoutMode.GRID) {
+                    items(homeCars.take(6).chunked(2), key = { row -> row.first().id }) { row ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(14.dp),
+                            verticalAlignment = Alignment.Top,
+                        ) {
+                            row.forEach { car ->
+                                Box(modifier = Modifier.weight(1f)) {
+                                    ExploreGridCard(
+                                        car = car,
+                                        isFavorite = favoriteIds.contains(car.id),
+                                        imageHeight = 164.dp,
+                                        onClick = { onOpenCarDetail(car.id) },
+                                        onFavoriteClick = {
+                                            viewModel.toggleFavorite(
+                                                carId = car.id,
+                                                currentlyFavorite = favoriteIds.contains(car.id),
+                                                authDestination = NavRoutes.main(MainTab.HOME),
+                                            )
+                                        },
+                                    )
+                                }
+                            }
+                            if (row.size == 1) Spacer(modifier = Modifier.weight(1f))
+                        }
+                    }
                 } else {
-                    items(homeCars.take(3), key = { it.id }) { car ->
+                    items(homeCars.take(6), key = { it.id }) { car ->
                         HomeFeaturedCarRow(
                             car = car,
                             isFavorite = favoriteIds.contains(car.id),
@@ -1729,12 +1795,16 @@ private fun HomeTab(
                     detectedCity = detectedCityName,
                     onUseCurrentLocation = {
                         viewModel.setBrowseLocation("", "")
-                        locationPermission.launch(Manifest.permission.ACCESS_COARSE_LOCATION)
-                        scope.launch {
+                        if (hasHomeLocationPermission(context)) {
+                            scope.launch {
+                                homeLocationResolving = true
+                                homeLocation = fetchHomeLocation(context)
+                                detectedCityName = homeLocation?.cityName ?: homeLocation?.regionName
+                                homeLocationResolving = false
+                            }
+                        } else {
                             homeLocationResolving = true
-                            homeLocation = fetchHomeLocation(context)
-                            detectedCityName = homeLocation?.cityName ?: homeLocation?.regionName
-                            homeLocationResolving = false
+                            locationPermission.launch(Manifest.permission.ACCESS_COARSE_LOCATION)
                         }
                         showLocationSheet = false
                     },
@@ -2857,6 +2927,8 @@ private enum class ExploreLayoutMode {
 
 private const val ExploreLayoutPrefsName = "hayame_explore_layout"
 private const val ExploreLayoutPrefsKey = "layout_mode"
+private const val HomePopularLayoutPrefsName = "hayame_home_popular_layout"
+private const val HomePopularLayoutPrefsKey = "layout_mode"
 
 @Composable
 private fun PageTitle(title: String) {
@@ -3596,6 +3668,7 @@ private fun ExploreLayoutButton(
 private fun ExploreGridCard(
     car: CarDto,
     isFavorite: Boolean,
+    imageHeight: Dp = 164.dp,
     onClick: () -> Unit,
     onFavoriteClick: () -> Unit,
 ) {
@@ -3626,7 +3699,7 @@ private fun ExploreGridCard(
                         contentDescription = null,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(184.dp)
+                            .height(imageHeight)
                             .clip(RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp)),
                         contentScale = ContentScale.Crop,
                     )
@@ -3634,7 +3707,7 @@ private fun ExploreGridCard(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(184.dp)
+                            .height(imageHeight)
                             .background(colors.brandLight),
                         contentAlignment = Alignment.Center,
                     ) {
@@ -4193,6 +4266,7 @@ private fun MoreTab(
     val notificationPreferences by viewModel.notificationPreferences.collectAsState()
     var hostModeEnabled by remember { mutableStateOf(false) }
     var glowAppearanceSettings by remember { mutableStateOf(false) }
+    var analyticsEnabled by remember { mutableStateOf(AnalyticsService.hasConsent()) }
     val listState = rememberLazyListState()
 
     val displayName = me.preferredFullName() ?: "Guest User"
@@ -4442,6 +4516,53 @@ private fun MoreTab(
         }
 
         item {
+            SectionHeader("Privacy")
+        }
+
+        item {
+            Card(
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.BarChart,
+                        contentDescription = null,
+                        tint = colors.brandBlue,
+                        modifier = Modifier.size(24.dp),
+                    )
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            "Share usage analytics",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = colors.brandNavy,
+                        )
+                        Text(
+                            "Helps us see which cars people look for and where booking gets stuck. We never track you across other apps or sell your data. Turning this off deletes the analytics id stored on this device.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = colors.mutedText,
+                        )
+                    }
+                    Switch(
+                        checked = analyticsEnabled,
+                        onCheckedChange = { enabled ->
+                            AnalyticsService.setConsent(enabled)
+                            analyticsEnabled = enabled
+                        },
+                    )
+                }
+            }
+        }
+
+        item {
             SectionHeader("Hosting")
         }
 
@@ -4511,16 +4632,7 @@ private fun MoreTab(
                             SecondaryPillButton(
                                 text = "Review application",
                                 modifier = Modifier.fillMaxWidth(),
-                                onClick = {
-                                    if (isAuthenticated) {
-                                        onOpenBecomeHost()
-                                    } else {
-                                        viewModel.requireAuthentication(
-                                            message = "Sign in or sign up to review your host application.",
-                                            destination = NavRoutes.BecomeHost,
-                                        )
-                                    }
-                                },
+                                onClick = onOpenBecomeHost,
                             )
                         }
                     }
@@ -4538,16 +4650,7 @@ private fun MoreTab(
                             SecondaryPillButton(
                                 text = "Become a Host",
                                 modifier = Modifier.fillMaxWidth(),
-                                onClick = {
-                                    if (isAuthenticated) {
-                                        onOpenBecomeHost()
-                                    } else {
-                                        viewModel.requireAuthentication(
-                                            message = "Sign in or sign up to become a host.",
-                                            destination = NavRoutes.BecomeHost,
-                                        )
-                                    }
-                                },
+                                onClick = onOpenBecomeHost,
                             )
                         }
                     }
@@ -4843,6 +4946,7 @@ fun CarDetailScreen(
     val locations by viewModel.locations.collectAsState()
     val colors = LocalHayameColors.current
     val favoriteIds = (favoritesState as? UiState.Success<Set<String>>)?.data ?: emptySet()
+    val context = LocalContext.current
 
     LaunchedEffect(carId) {
         viewModel.loadCarDetail(carId)
@@ -4952,6 +5056,18 @@ fun CarDetailScreen(
                         ?: carTitle.removePrefix(carBrand).trim().ifBlank { "—" }
                 }
                 val addedDateLabel = remember(car.created_at) { formatAddedDateLabel(car.created_at) }
+
+                fun shareListing() {
+                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                        type = "text/plain"
+                        putExtra(Intent.EXTRA_SUBJECT, carTitle)
+                        putExtra(
+                            Intent.EXTRA_TEXT,
+                            "Check out $carTitle on Hayame\nhttps://www.hayamegh.com/cars/${car.id}",
+                        )
+                    }
+                    context.startActivity(Intent.createChooser(shareIntent, "Share $carTitle"))
+                }
 
                 var showGallery by rememberSaveable(car.id) { mutableStateOf(false) }
                 var selectedImageIndex by rememberSaveable(car.id) { mutableStateOf(0) }
@@ -5265,16 +5381,25 @@ fun CarDetailScreen(
                                                 )
                                             }
                                         }
-                                        FavoriteOverviewButton(
-                                            isFavorite = favoriteIds.contains(car.id),
-                                            onClick = {
-                                                viewModel.toggleFavorite(
-                                                    carId = car.id,
-                                                    currentlyFavorite = favoriteIds.contains(car.id),
-                                                    authDestination = NavRoutes.carDetail(car.id),
-                                                )
-                                            },
-                                        )
+                                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            CircularDetailActionButton(
+                                                icon = Icons.Outlined.Share,
+                                                contentDescription = "Share $carTitle",
+                                                onClick = ::shareListing,
+                                            )
+                                            CircularDetailActionButton(
+                                                icon = if (favoriteIds.contains(car.id)) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                                                contentDescription = if (favoriteIds.contains(car.id)) "Remove from favorites" else "Save to favorites",
+                                                tint = if (favoriteIds.contains(car.id)) Color.Red else LocalHayameColors.current.brandNavy,
+                                                onClick = {
+                                                    viewModel.toggleFavorite(
+                                                        carId = car.id,
+                                                        currentlyFavorite = favoriteIds.contains(car.id),
+                                                        authDestination = NavRoutes.carDetail(car.id),
+                                                    )
+                                                },
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -5836,34 +5961,26 @@ private fun DetailPill(
 }
 
 @Composable
-private fun FavoriteOverviewButton(
-    isFavorite: Boolean,
+private fun CircularDetailActionButton(
+    icon: ImageVector,
+    contentDescription: String,
+    tint: Color = LocalHayameColors.current.brandNavy,
     onClick: () -> Unit,
 ) {
     Surface(
         modifier = Modifier
-            .widthIn(min = 130.dp)
+            .size(44.dp)
             .clickable(onClick = onClick),
         color = LocalHayameColors.current.cardBackground,
-        shape = RoundedCornerShape(16.dp),
+        shape = CircleShape,
         border = BorderStroke(1.dp, LocalHayameColors.current.border),
     ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
+        Box(contentAlignment = Alignment.Center) {
             Icon(
-                imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-                contentDescription = "Favorite",
-                tint = if (isFavorite) Color.Red else LocalHayameColors.current.brandNavy,
-            )
-            Text(
-                text = "Save to favorites",
-                textAlign = TextAlign.Center,
-                style = MaterialTheme.typography.labelLarge,
-                color = LocalHayameColors.current.mutedText,
-                fontWeight = FontWeight.SemiBold,
+                imageVector = icon,
+                contentDescription = contentDescription,
+                tint = tint,
+                modifier = Modifier.size(20.dp),
             )
         }
     }
@@ -7980,7 +8097,13 @@ fun MessagesScreen(
     showBackButton: Boolean = true,
 ) {
     val state by viewModel.conversationsState.collectAsState()
-    LaunchedEffect(Unit) { viewModel.loadConversations() }
+    LaunchedEffect(Unit) {
+        viewModel.loadConversations()
+        while (true) {
+            delay(8_000)
+            viewModel.refreshConversations()
+        }
+    }
     val colors = LocalHayameColors.current
 
     Scaffold(
@@ -8051,8 +8174,19 @@ fun ConversationScreen(
     val messagesState by viewModel.messagesState.collectAsState()
     val me by viewModel.me.collectAsState()
     var draft by rememberSaveable { mutableStateOf("") }
+    val listState = rememberLazyListState()
 
-    LaunchedEffect(conversationId) { viewModel.selectConversation(conversationId) }
+    LaunchedEffect(conversationId) {
+        viewModel.selectConversation(conversationId)
+        while (true) {
+            delay(2_000)
+            viewModel.refreshMessages(conversationId)
+        }
+    }
+    val messageCount = (messagesState as? UiState.Success<List<com.hayame.app.core.network.MessageDto>>)?.data?.size ?: 0
+    LaunchedEffect(messageCount) {
+        if (messageCount > 0) listState.animateScrollToItem(messageCount)
+    }
     val colors = LocalHayameColors.current
 
     Scaffold(
@@ -8084,6 +8218,7 @@ fun ConversationScreen(
             UiState.Loading -> LoadingBlock()
             is UiState.Error -> ErrorBlock(s.message, onRetry = { viewModel.loadMessages(conversationId) })
             is UiState.Success -> LazyColumn(
+                state = listState,
                 modifier = Modifier.fillMaxSize().padding(inner).padding(horizontal = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 reverseLayout = false
@@ -8132,8 +8267,118 @@ private fun MessageBubble(message: com.hayame.app.core.network.MessageDto, isMe:
 }
 
 @Composable
-fun BecomeHostScreen(viewModel: AppViewModel, onBack: () -> Unit) {
+fun BecomeHostScreen(
+    viewModel: AppViewModel,
+    onBack: () -> Unit,
+    onOpenAuth: () -> Unit = {},
+    onOpenHostDashboard: () -> Unit = {},
+    onSubmissionCompleted: () -> Unit = onBack,
+) {
     val colors = LocalHayameColors.current
+    val context = LocalContext.current
+    val isAuthenticated by viewModel.isAuthenticated.collectAsState()
+    val me by viewModel.me.collectAsState()
+    val application = me?.host_application
+    val applicationStatus = (application?.status ?: me?.host_application_status ?: me?.host_status)
+        ?.trim()
+        ?.lowercase()
+        .orEmpty()
+    val isApproved = me?.is_host == true || applicationStatus == "approved"
+    val isPending = applicationStatus == "pending"
+
+    var fullName by rememberSaveable { mutableStateOf("") }
+    var phone by rememberSaveable { mutableStateOf("") }
+    var region by rememberSaveable { mutableStateOf(AndroidReferenceData.defaultRegion) }
+    var city by rememberSaveable { mutableStateOf("Accra") }
+    var idType by rememberSaveable { mutableStateOf("Ghana Card") }
+    var idNumber by rememberSaveable { mutableStateOf("") }
+    var experience by rememberSaveable { mutableStateOf("") }
+    var fleetSize by rememberSaveable { mutableStateOf(1) }
+    var note by rememberSaveable { mutableStateOf("") }
+    var didPrefill by rememberSaveable { mutableStateOf(false) }
+    var idFrontUri by remember { mutableStateOf<Uri?>(null) }
+    var idBackUri by remember { mutableStateOf<Uri?>(null) }
+    var faceUri by remember { mutableStateOf<Uri?>(null) }
+    var idFrontFile by remember { mutableStateOf<File?>(null) }
+    var idBackFile by remember { mutableStateOf<File?>(null) }
+    var faceFile by remember { mutableStateOf<File?>(null) }
+    var isSubmitting by rememberSaveable { mutableStateOf(false) }
+    var submissionError by rememberSaveable { mutableStateOf<String?>(null) }
+    var showSuccessDialog by rememberSaveable { mutableStateOf(false) }
+
+    val idFrontPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        uri ?: return@rememberLauncherForActivityResult
+        idFrontFile?.delete()
+        idFrontUri = uri
+        idFrontFile = copyUriToTempFile(context, uri, "host-id-front")
+        if (idFrontFile == null) submissionError = "Unable to process selected image."
+    }
+    val idBackPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        uri ?: return@rememberLauncherForActivityResult
+        idBackFile?.delete()
+        idBackUri = uri
+        idBackFile = copyUriToTempFile(context, uri, "host-id-back")
+        if (idBackFile == null) submissionError = "Unable to process selected image."
+    }
+    val facePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        uri ?: return@rememberLauncherForActivityResult
+        faceFile?.delete()
+        faceUri = uri
+        faceFile = copyUriToTempFile(context, uri, "host-face")
+        if (faceFile == null) submissionError = "Unable to process selected image."
+    }
+
+    val cityOptions = remember(region, city) {
+        buildList {
+            city.trim().takeIf { it.isNotBlank() }?.let(::add)
+            AndroidReferenceData.districtsByRegion[region].orEmpty().forEach(::add)
+        }.distinctBy { it.lowercase(Locale.US) }
+    }
+    val existingFrontPath = application?.id_front_path?.trim().orEmpty()
+    val existingBackPath = application?.id_back_path?.trim().orEmpty()
+
+    val blockingReason = when {
+        !isAuthenticated -> "Sign in to submit your host application."
+        isPending -> "Your application is under review."
+        isSubmitting -> "Please wait for uploads to finish."
+        fullName.trim().length < 2 -> "Enter your full name (at least 2 characters)."
+        phone.count(Char::isDigit) < 6 -> "Enter a valid phone number (at least 6 digits)."
+        region.trim().length < 2 || city.trim().length < 2 -> "Select your region and city."
+        idType.isBlank() -> "Select an ID type."
+        idNumber.trim().length < 4 -> "Enter your ID number (at least 4 characters)."
+        idFrontFile == null && existingFrontPath.isBlank() -> "Upload your ID front image."
+        idBackFile == null && existingBackPath.isBlank() -> "Upload your ID back image."
+        experience.trim().length < 3 -> "Add a short hosting experience (at least 3 characters)."
+        else -> null
+    }
+
+    LaunchedEffect(Unit) {
+        viewModel.loadHostStatus()
+    }
+
+    LaunchedEffect(me, application?.id) {
+        if (didPrefill || me == null) return@LaunchedEffect
+        fullName = application?.full_name ?: me.preferredFullName().orEmpty()
+        phone = application?.phone ?: me.preferredPhone().orEmpty()
+        region = application?.region ?: me.preferredRegion()?.takeIf { it.isNotBlank() }
+            ?: AndroidReferenceData.defaultRegion
+        city = application?.city ?: me.preferredCity()?.takeIf { it.isNotBlank() } ?: "Accra"
+        idType = application?.id_type ?: "Ghana Card"
+        idNumber = application?.id_number.orEmpty()
+        experience = application?.experience.orEmpty()
+        fleetSize = application?.fleet_size?.roundToInt()?.coerceIn(1, 50) ?: 1
+        note = application?.note.orEmpty()
+        didPrefill = true
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            idFrontFile?.delete()
+            idBackFile?.delete()
+            faceFile?.delete()
+        }
+    }
+
     Scaffold(
         containerColor = colors.pageBackground,
         topBar = {
@@ -8144,17 +8389,306 @@ fun BecomeHostScreen(viewModel: AppViewModel, onBack: () -> Unit) {
             modifier = Modifier.fillMaxSize().padding(inner).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            item { SectionHeader("Become Host") }
             item {
-                Card(
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
-                    border = BorderStroke(1.dp, colors.border),
-                ) {
-                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("Host application", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = colors.brandNavy)
-                        Text("Your Android host application form is being finalized to match iOS parity.", color = colors.mutedText)
-                        Button(onClick = { viewModel.loadHostStatus() }, modifier = Modifier.fillMaxWidth()) { Text("Refresh status") }
+                Text("Apply to list your cars", style = MaterialTheme.typography.bodyMedium, color = colors.mutedText)
+                Text(
+                    "We verify every host to keep the marketplace safe. Applications are typically reviewed within 1-2 business days.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.mutedText,
+                )
+            }
+
+            if (application != null || applicationStatus.isNotBlank()) {
+                item {
+                    Card(
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
+                        border = BorderStroke(1.dp, colors.border),
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text("Status", fontWeight = FontWeight.SemiBold, color = colors.brandNavy)
+                            Spacer(modifier = Modifier.weight(1f))
+                            Text(
+                                applicationStatus.ifBlank { "pending" }.replaceFirstChar { it.uppercase() },
+                                fontWeight = FontWeight.Bold,
+                                color = if (isApproved) colors.success else colors.warning,
+                            )
+                        }
                     }
+                }
+                if (isApproved) {
+                    item {
+                        GradientPillButton(
+                            text = "Open Host Dashboard",
+                            modifier = Modifier.fillMaxWidth(),
+                            onClick = onOpenHostDashboard,
+                        )
+                    }
+                } else if (isPending) {
+                    item {
+                        Text(
+                            "Your application is pending review. You will get host access once approved.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = colors.warning,
+                        )
+                    }
+                }
+            }
+
+            if (!isAuthenticated) {
+                item { EmptyBlock("Log in required", "Sign in to submit your host application.") }
+                item {
+                    GradientPillButton(
+                        text = "Log in",
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = onOpenAuth,
+                    )
+                }
+            } else if (!isPending && !isApproved) {
+                item {
+                    OutlinedTextField(
+                        value = fullName,
+                        onValueChange = { fullName = it },
+                        label = { Text("Full name") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                    )
+                }
+                item {
+                    OutlinedTextField(
+                        value = phone,
+                        onValueChange = { phone = it },
+                        label = { Text("Phone") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                        shape = RoundedCornerShape(12.dp),
+                    )
+                }
+                item {
+                    SelectionField(
+                        selected = region,
+                        placeholder = "Region",
+                        options = AndroidReferenceData.regionsIncluding(region),
+                        onSelected = { selected ->
+                            region = selected
+                            val availableCities = AndroidReferenceData.districtsByRegion[selected].orEmpty()
+                            if (availableCities.none { it.equals(city, ignoreCase = true) }) {
+                                city = availableCities.firstOrNull().orEmpty()
+                            }
+                        },
+                    )
+                }
+                item {
+                    SelectionField(
+                        selected = city,
+                        placeholder = "City",
+                        options = cityOptions,
+                        onSelected = { city = it },
+                    )
+                }
+                item {
+                    SelectionField(
+                        selected = idType,
+                        placeholder = "ID type",
+                        options = listOf("Ghana Card", "NHIS", "Voters ID", "Driving Licence"),
+                        onSelected = { idType = it },
+                    )
+                }
+                item {
+                    OutlinedTextField(
+                        value = idNumber,
+                        onValueChange = { idNumber = it },
+                        label = { Text("ID number") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                    )
+                }
+                item {
+                    OutlinedTextField(
+                        value = experience,
+                        onValueChange = { experience = it },
+                        label = { Text("Hosting experience") },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 3,
+                        maxLines = 6,
+                        shape = RoundedCornerShape(12.dp),
+                    )
+                }
+                item {
+                    Card(
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
+                        border = BorderStroke(1.dp, colors.border),
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text("Fleet size: $fleetSize", modifier = Modifier.weight(1f), fontWeight = FontWeight.SemiBold, color = colors.brandNavy)
+                            TextButton(onClick = { fleetSize = (fleetSize - 1).coerceAtLeast(1) }) { Text("−") }
+                            TextButton(onClick = { fleetSize = (fleetSize + 1).coerceAtMost(50) }) { Text("+") }
+                        }
+                    }
+                }
+                item {
+                    OutlinedTextField(
+                        value = note,
+                        onValueChange = { note = it },
+                        label = { Text("Notes (optional)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 2,
+                        maxLines = 5,
+                        shape = RoundedCornerShape(12.dp),
+                    )
+                }
+                item {
+                    HostApplicationPhotoCard(
+                        title = "ID front image",
+                        guidance = "Upload your ID front image.",
+                        actionLabel = if (idFrontFile != null || existingFrontPath.isNotBlank()) "Replace ID front" else "Upload ID front",
+                        selectedUri = idFrontUri,
+                        isSelected = idFrontFile != null || existingFrontPath.isNotBlank(),
+                        onChoose = { idFrontPicker.launch("image/*") },
+                    )
+                }
+                item {
+                    HostApplicationPhotoCard(
+                        title = "ID back image",
+                        guidance = "Upload your ID back image.",
+                        actionLabel = if (idBackFile != null || existingBackPath.isNotBlank()) "Replace ID back" else "Upload ID back",
+                        selectedUri = idBackUri,
+                        isSelected = idBackFile != null || existingBackPath.isNotBlank(),
+                        onChoose = { idBackPicker.launch("image/*") },
+                    )
+                }
+                item {
+                    HostApplicationPhotoCard(
+                        title = "Face photo",
+                        guidance = "Use a clear selfie that matches your ID.",
+                        actionLabel = "Upload face photo",
+                        selectedUri = faceUri,
+                        fallbackImageUrl = me.preferredAvatarRaw(),
+                        isSelected = faceFile != null || !me.preferredAvatarRaw().isNullOrBlank(),
+                        onChoose = { facePicker.launch("image/*") },
+                    )
+                }
+                if (!submissionError.isNullOrBlank()) {
+                    item { Text(submissionError.orEmpty(), color = colors.danger, fontWeight = FontWeight.SemiBold) }
+                }
+                if (!blockingReason.isNullOrBlank()) {
+                    item { Text(blockingReason.orEmpty(), color = colors.warning, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold) }
+                }
+                item {
+                    GradientPillButton(
+                        text = if (isSubmitting) "Submitting..." else "Submit application",
+                        modifier = Modifier.fillMaxWidth().alpha(if (blockingReason == null) 1f else 0.55f),
+                        onClick = {
+                            val userId = me?.user?.id ?: return@GradientPillButton
+                            if (blockingReason != null) return@GradientPillButton
+                            isSubmitting = true
+                            submissionError = null
+                            viewModel.submitHostApplicationWithDocuments(
+                                userId = userId,
+                                front = idFrontFile,
+                                back = idBackFile,
+                                existingFrontPath = existingFrontPath,
+                                existingBackPath = existingBackPath,
+                                face = faceFile,
+                                requestBuilder = { frontPath, backPath ->
+                                    HostApplicationRequest(
+                                        full_name = fullName.trim(),
+                                        phone = phone.trim(),
+                                        region = region.trim(),
+                                        city = city.trim(),
+                                        id_type = idType.trim(),
+                                        id_number = idNumber.trim(),
+                                        id_front_path = frontPath,
+                                        id_back_path = backPath,
+                                        note = note.trim().takeIf { it.isNotBlank() },
+                                        experience = experience.trim(),
+                                        fleet_size = fleetSize,
+                                    )
+                                },
+                                onResult = { error ->
+                                    isSubmitting = false
+                                    submissionError = error
+                                    if (error == null) showSuccessDialog = true
+                                },
+                            )
+                        },
+                    )
+                }
+            }
+            item { Spacer(modifier = Modifier.height(24.dp)) }
+        }
+    }
+
+    if (showSuccessDialog) {
+        AlertDialog(
+            onDismissRequest = {},
+            title = { Text("Application submitted") },
+            text = { Text("Your host request is being reviewed. We will email you once there is an update.") },
+            confirmButton = {
+                Button(onClick = {
+                    showSuccessDialog = false
+                    onSubmissionCompleted()
+                }) { Text("Go to dashboard") }
+            },
+        )
+    }
+}
+
+@Composable
+private fun HostApplicationPhotoCard(
+    title: String,
+    guidance: String,
+    actionLabel: String,
+    selectedUri: Uri?,
+    fallbackImageUrl: String? = null,
+    isSelected: Boolean,
+    onChoose: () -> Unit,
+) {
+    val colors = LocalHayameColors.current
+    Card(
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
+        border = BorderStroke(1.dp, colors.border),
+    ) {
+        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(title, style = MaterialTheme.typography.labelLarge, color = colors.mutedText, fontWeight = FontWeight.SemiBold)
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (selectedUri != null || !fallbackImageUrl.isNullOrBlank()) {
+                    AsyncImage(
+                        model = selectedUri ?: resolveAppImage(fallbackImageUrl),
+                        contentDescription = "$title preview",
+                        modifier = Modifier.size(64.dp).clip(CircleShape).border(1.dp, colors.controlStroke, CircleShape),
+                        contentScale = ContentScale.Crop,
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier.size(64.dp).background(colors.brandLight, CircleShape).border(1.dp, colors.controlStroke, CircleShape),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(Icons.Outlined.Person, contentDescription = null, tint = colors.brandNavy)
+                    }
+                }
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(guidance, style = MaterialTheme.typography.bodyMedium, color = colors.mutedText)
+                    SecondaryPillButton(text = actionLabel, onClick = onChoose)
+                }
+            }
+            if (isSelected) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Outlined.Check, contentDescription = null, tint = colors.success, modifier = Modifier.size(16.dp))
+                    Text("Selected", color = colors.success, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                 }
             }
         }
@@ -8309,7 +8843,6 @@ fun HostDashboardScreen(
                 }
             }
             item { Text("Quick nav", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.ExtraBold, color = colors.brandNavy) }
-            item { HostQuickActionCard("Overview", "Snapshot of host performance", Icons.Outlined.Home, onClick = {}) }
             item { HostQuickActionCard("Vehicles", "Create and manage car listings", Icons.Outlined.DirectionsCar, onOpenCars) }
             item { HostQuickActionCard("Add car", "Create a new listing", Icons.Outlined.AddCircleOutline, onOpenCreateCar) }
             item { HostQuickActionCard("Bookings", "Review requests and trip history", Icons.Outlined.CalendarMonth, onOpenBookings) }
@@ -11191,36 +11724,14 @@ fun HostPublicProfileScreen(
                 carsState is UiState.Loading -> items(3) { HostListingPlaceholderRow() }
                 hostCars.isEmpty() -> item { EmptyBlock("No listings", "This host has no active listings.") }
                 else -> items(hostCars, key = { it.id }) { car ->
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .shadow(0.dp, RoundedCornerShape(16.dp), false, colors.cardShadow, colors.cardShadow)
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(colors.cardBackground)
-                            .border(1.dp, colors.border, RoundedCornerShape(16.dp))
-                            .clickable { onOpenCarDetail(car.id) }
-                            .padding(14.dp),
-                    ) {
-                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text(
-                                car.title ?: listOfNotNull(car.brand, car.model).joinToString(" "),
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = colors.brandNavy,
-                            )
-                            Text(
-                                listOfNotNull(car.city, car.region).joinToString(", "),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = colors.mutedText,
-                            )
-                            Text(
-                                "GH₵${(car.daily_price ?: 0.0).toInt()} / day",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = colors.brandBlue,
-                            )
-                        }
-                    }
+                    CarCard(
+                        car = car,
+                        isFavorite = false,
+                        imageHeight = 164.dp,
+                        showsFavoriteButton = false,
+                        onClick = { onOpenCarDetail(car.id) },
+                        onFavoriteClick = {},
+                    )
                 }
             }
 
@@ -11240,9 +11751,17 @@ fun AdminShellScreen(
     viewModel: AppViewModel,
     onExitAdmin: () -> Unit,
     onOpenConversation: (String) -> Unit,
+    onOpenCarEditor: (String) -> Unit = {},
 ) {
     var selectedTab by remember { mutableStateOf(AdminTab.HOME) }
+    var adminPage by rememberSaveable { mutableStateOf("home") }
+    var previewCarId by rememberSaveable { mutableStateOf<String?>(null) }
     val colors = LocalHayameColors.current
+
+    BackHandler(enabled = selectedTab == AdminTab.HOME && adminPage != "home") {
+        adminPage = "home"
+        previewCarId = null
+    }
 
     Scaffold(
         containerColor = colors.pageBackground,
@@ -11253,7 +11772,11 @@ fun AdminShellScreen(
             ) {
                 NavigationBarItem(
                     selected = selectedTab == AdminTab.HOME,
-                    onClick = { selectedTab = AdminTab.HOME },
+                    onClick = {
+                        selectedTab = AdminTab.HOME
+                        adminPage = "home"
+                        previewCarId = null
+                    },
                     icon = { Icon(Icons.Outlined.Shield, contentDescription = null) },
                     label = { Text("Admin") },
                     colors = NavigationBarItemDefaults.colors(
@@ -11294,7 +11817,32 @@ fun AdminShellScreen(
         },
     ) { inner ->
         when (selectedTab) {
-            AdminTab.HOME -> AdminHomeScreen(viewModel = viewModel, paddingValues = inner)
+            AdminTab.HOME -> when (adminPage) {
+                "platform" -> AdminPlatformScreen(
+                    viewModel = viewModel,
+                    paddingValues = inner,
+                    onBack = { adminPage = "home" },
+                    onPreviewCar = { carId -> previewCarId = carId; adminPage = "car" },
+                )
+                "filters" -> AdminFiltersScreen(paddingValues = inner, onBack = { adminPage = "home" })
+                "user" -> AdminUserDetailScreen(viewModel = viewModel, paddingValues = inner, onBack = { adminPage = "home" })
+                "car" -> AdminCarPreviewScreen(
+                    viewModel = viewModel,
+                    carId = previewCarId.orEmpty(),
+                    paddingValues = inner,
+                    onBack = { adminPage = "home"; previewCarId = null },
+                    onEdit = onOpenCarEditor,
+                )
+                else -> AdminHomeScreen(
+                    viewModel = viewModel,
+                    paddingValues = inner,
+                    onOpenPlatform = { adminPage = "platform" },
+                    onOpenMessages = { selectedTab = AdminTab.MESSAGES },
+                    onOpenFilters = { adminPage = "filters" },
+                    onOpenUser = { adminPage = "user" },
+                    onPreviewCar = { carId -> previewCarId = carId; adminPage = "car" },
+                )
+            }
             AdminTab.MESSAGES -> MessagesScreen(
                 viewModel = viewModel,
                 onBack = {},
@@ -11312,7 +11860,15 @@ fun AdminShellScreen(
 }
 
 @Composable
-private fun AdminHomeScreen(viewModel: AppViewModel, paddingValues: PaddingValues) {
+private fun AdminHomeScreen(
+    viewModel: AppViewModel,
+    paddingValues: PaddingValues,
+    onOpenPlatform: () -> Unit,
+    onOpenMessages: () -> Unit,
+    onOpenFilters: () -> Unit,
+    onOpenUser: () -> Unit,
+    onPreviewCar: (String) -> Unit,
+) {
     val colors = LocalHayameColors.current
     val carsState by viewModel.carsState.collectAsState()
     val me by viewModel.me.collectAsState()
@@ -11345,6 +11901,23 @@ private fun AdminHomeScreen(viewModel: AppViewModel, paddingValues: PaddingValue
                 title = "Platform controls",
                 subtitle = "${pendingCars.size} pending listing${if (pendingCars.size == 1) "" else "s"}",
                 icon = Icons.Outlined.Shield,
+                onClick = onOpenPlatform,
+            )
+        }
+        item {
+            AdminNavCard(
+                title = "Office messages",
+                subtitle = "Open admin conversations",
+                icon = Icons.Outlined.MailOutline,
+                onClick = onOpenMessages,
+            )
+        }
+        item {
+            AdminNavCard(
+                title = "Filter catalog",
+                subtitle = "Browse vehicle makes and models",
+                icon = Icons.Outlined.Tune,
+                onClick = onOpenFilters,
             )
         }
         item {
@@ -11352,6 +11925,7 @@ private fun AdminHomeScreen(viewModel: AppViewModel, paddingValues: PaddingValue
                 title = "User details",
                 subtitle = "Signed in as ${me?.profile?.full_name ?: me?.user?.email ?: "Admin"}",
                 icon = Icons.Outlined.Person,
+                onClick = onOpenUser,
             )
         }
 
@@ -11366,13 +11940,13 @@ private fun AdminHomeScreen(viewModel: AppViewModel, paddingValues: PaddingValue
                     }
                 } else {
                     items(pendingCars.take(5), key = { it.id }) { car ->
-                        AdminListingModerationCard(car = car, viewModel = viewModel)
+                        AdminListingModerationCard(car = car, viewModel = viewModel, onPreview = { onPreviewCar(car.id) })
                     }
                 }
                 if (allCars.isNotEmpty()) {
                     item { SectionHeader("All listings (${allCars.size})") }
                     items(allCars, key = { "all_${it.id}" }) { car ->
-                        AdminListingModerationCard(car = car, viewModel = viewModel)
+                        AdminListingModerationCard(car = car, viewModel = viewModel, onPreview = { onPreviewCar(car.id) })
                     }
                 }
             }
@@ -11383,7 +11957,12 @@ private fun AdminHomeScreen(viewModel: AppViewModel, paddingValues: PaddingValue
 }
 
 @Composable
-private fun AdminNavCard(title: String, subtitle: String, icon: androidx.compose.ui.graphics.vector.ImageVector) {
+private fun AdminNavCard(
+    title: String,
+    subtitle: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    onClick: () -> Unit,
+) {
     val colors = LocalHayameColors.current
     Box(
         modifier = Modifier
@@ -11392,6 +11971,7 @@ private fun AdminNavCard(title: String, subtitle: String, icon: androidx.compose
             .clip(RoundedCornerShape(16.dp))
             .background(colors.cardBackground)
             .border(1.dp, colors.border, RoundedCornerShape(16.dp))
+            .clickable(onClick = onClick)
             .padding(16.dp),
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -11414,7 +11994,11 @@ private fun AdminNavCard(title: String, subtitle: String, icon: androidx.compose
 }
 
 @Composable
-private fun AdminListingModerationCard(car: CarDto, viewModel: AppViewModel) {
+private fun AdminListingModerationCard(
+    car: CarDto,
+    viewModel: AppViewModel,
+    onPreview: () -> Unit = {},
+) {
     val colors = LocalHayameColors.current
     val isApproved = car.approval_status.orEmpty().equals("approved", ignoreCase = true)
 
@@ -11425,6 +12009,7 @@ private fun AdminListingModerationCard(car: CarDto, viewModel: AppViewModel) {
             .clip(RoundedCornerShape(16.dp))
             .background(colors.cardBackground)
             .border(1.dp, colors.border, RoundedCornerShape(16.dp))
+            .clickable(onClick = onPreview)
             .padding(14.dp),
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -11467,6 +12052,195 @@ private fun AdminListingModerationCard(car: CarDto, viewModel: AppViewModel) {
                         onClick = { viewModel.updateCarApprovalStatus(car.id, "rejected") },
                     )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AdminPlatformScreen(
+    viewModel: AppViewModel,
+    paddingValues: PaddingValues,
+    onBack: () -> Unit,
+    onPreviewCar: (String) -> Unit,
+) {
+    val carsState by viewModel.carsState.collectAsState()
+    val pendingCars = (carsState as? UiState.Success<List<CarDto>>)?.data.orEmpty().filter {
+        !it.approval_status.orEmpty().equals("approved", ignoreCase = true)
+    }
+
+    Column(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
+        PageTopBar(title = "Admin Platform", onBack = onBack)
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            item { Spacer(modifier = Modifier.height(8.dp)) }
+            item { SectionHeader("Platform Controls") }
+            item { SectionHeader("Listing approvals") }
+            when (carsState) {
+                UiState.Loading, UiState.Idle -> items(3) { HostListingPlaceholderRow() }
+                is UiState.Error -> item {
+                    ErrorBlock((carsState as UiState.Error).message, onRetry = { viewModel.loadCars(mapOf("limit" to "100")) })
+                }
+                else -> {
+                    if (pendingCars.isEmpty()) {
+                        item { EmptyBlock("No pending listings", "All listings are approved.") }
+                    } else {
+                        items(pendingCars, key = { it.id }) { car ->
+                            AdminListingModerationCard(
+                                car = car,
+                                viewModel = viewModel,
+                                onPreview = { onPreviewCar(car.id) },
+                            )
+                        }
+                    }
+                }
+            }
+            item { Spacer(modifier = Modifier.height(24.dp)) }
+        }
+    }
+}
+
+@Composable
+private fun AdminFiltersScreen(
+    paddingValues: PaddingValues,
+    onBack: () -> Unit,
+) {
+    val colors = LocalHayameColors.current
+    val allModels = remember {
+        AndroidReferenceData.carModelsByMake.values.flatten().distinct().sortedWith(String.CASE_INSENSITIVE_ORDER)
+    }
+
+    Column(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
+        PageTopBar(title = "Filter Catalog", onBack = onBack)
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            item { Spacer(modifier = Modifier.height(8.dp)) }
+            item { SectionHeader("Car makes") }
+            items(AndroidReferenceData.carMakes, key = { "make_$it" }) { make ->
+                Text(
+                    make,
+                    modifier = Modifier.fillMaxWidth().background(colors.cardBackground, RoundedCornerShape(12.dp)).padding(12.dp),
+                    color = colors.brandNavy,
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+            }
+            item { SectionHeader("Models") }
+            items(allModels, key = { "model_$it" }) { model ->
+                Text(
+                    model,
+                    modifier = Modifier.fillMaxWidth().background(colors.cardBackground, RoundedCornerShape(12.dp)).padding(12.dp),
+                    color = colors.brandNavy,
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+            }
+            item { Spacer(modifier = Modifier.height(24.dp)) }
+        }
+    }
+}
+
+@Composable
+private fun AdminUserDetailScreen(
+    viewModel: AppViewModel,
+    paddingValues: PaddingValues,
+    onBack: () -> Unit,
+) {
+    val me by viewModel.me.collectAsState()
+    val colors = LocalHayameColors.current
+    val profile = me?.profile
+
+    Column(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
+        PageTopBar(title = "User Details", onBack = onBack)
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            item { SectionHeader(me.preferredFullName() ?: "Hayame User") }
+            item {
+                Card(
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
+                    border = BorderStroke(1.dp, colors.border),
+                ) {
+                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        InfoRow("Email", me?.user?.email ?: "—")
+                        InfoRow("Phone", profile?.phone ?: "—")
+                        InfoRow("City", profile?.city ?: "—")
+                        InfoRow("Region", profile?.region ?: "—")
+                        InfoRow("Role", me.preferredRole()?.replaceFirstChar { it.uppercase() } ?: "Admin")
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AdminCarPreviewScreen(
+    viewModel: AppViewModel,
+    carId: String,
+    paddingValues: PaddingValues,
+    onBack: () -> Unit,
+    onEdit: (String) -> Unit,
+) {
+    val carsState by viewModel.carsState.collectAsState()
+    val colors = LocalHayameColors.current
+    val car = (carsState as? UiState.Success<List<CarDto>>)?.data?.firstOrNull { it.id == carId }
+
+    Column(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
+        PageTopBar(title = "Listing Preview", onBack = onBack)
+        if (car == null) {
+            EmptyBlock("Listing unavailable", "This listing could not be loaded.")
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize().padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                item {
+                    val imageUrl = resolveAppImage(car.image_url)
+                        ?: car.car_photos.orEmpty().firstNotNullOfOrNull { resolveAppImage(it.url) }
+                    if (!imageUrl.isNullOrBlank()) {
+                        AsyncImage(
+                            model = imageUrl,
+                            contentDescription = car.title,
+                            modifier = Modifier.fillMaxWidth().height(220.dp).clip(RoundedCornerShape(16.dp)),
+                            contentScale = ContentScale.Crop,
+                        )
+                    }
+                }
+                item {
+                    Text(
+                        car.title ?: listOfNotNull(car.brand, car.model).joinToString(" "),
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = colors.brandNavy,
+                    )
+                }
+                item { Text(car.description ?: "No description available.", color = colors.mutedText) }
+                item {
+                    Card(
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
+                        border = BorderStroke(1.dp, colors.border),
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            InfoRow("Status", car.approval_status?.replaceFirstChar { it.uppercase() } ?: "Pending")
+                            InfoRow("Price", "GHS${(car.daily_price ?: 0.0).roundToInt()}/day")
+                            InfoRow("Host", car.host_name ?: car.owner?.full_name ?: "Unknown")
+                        }
+                    }
+                }
+                item {
+                    GradientPillButton(
+                        text = "Edit Listing",
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = { onEdit(car.id) },
+                    )
+                }
+                item { Spacer(modifier = Modifier.height(24.dp)) }
             }
         }
     }

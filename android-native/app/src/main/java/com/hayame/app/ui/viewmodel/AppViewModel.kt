@@ -2,6 +2,7 @@ package com.hayame.app.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.hayame.app.core.analytics.AnalyticsService
 import com.hayame.app.core.network.AvailabilityEnvelope
 import com.hayame.app.core.network.AppAnnouncementDto
 import com.hayame.app.core.network.BookingDto
@@ -43,6 +44,8 @@ import kotlinx.serialization.json.put
 import retrofit2.HttpException
 import java.io.File
 import java.time.Instant
+import java.time.LocalDate
+import java.time.temporal.ChronoUnit
 import kotlin.math.roundToInt
 
 data class BookingDraft(
@@ -186,6 +189,10 @@ class AppViewModel(
 
     private var pendingAnnouncements: List<AppAnnouncementDto> = emptyList()
     private var firstLaunchAtMillis: Long? = null
+    private var referenceDataLoaded = false
+    private var referenceDataLoading = false
+    private var carsRequestVersion = 0L
+    private var carReviewsCarId: String? = null
 
     init {
         bootstrap()
@@ -224,26 +231,22 @@ class AppViewModel(
                 val loggedIn = authRepository.isLoggedIn()
                 _isAuthenticated.value = loggedIn
                 if (loggedIn) {
-                    runCatching { loadMeWithAvatarFallback() }
-                        .onSuccess {
-                            _me.value = it
-                            loadAfterAuth()
-                        }
-                        .onFailure {
-                            _snackbar.value = it.readableMessage("Session expired. Please log in again.")
-                            authRepository.logout()
-                            _isAuthenticated.value = false
-                        }
+                    loadAfterAuth()
+                    registerPushIfAvailable()
+                    viewModelScope.launch {
+                        runCatching { loadMeWithAvatarFallback() }
+                            .onSuccess { _me.value = it }
+                            .onFailure {
+                                _snackbar.value = it.readableMessage("Session expired. Please log in again.")
+                                authRepository.logout()
+                                _isAuthenticated.value = false
+                            }
+                    }
                 }
                 loadReferenceData()
                 refreshActiveAnnouncements()
                 if (!loggedIn) {
-                    _carsState.value = UiState.Loading
-                    runCatching { carsRepository.getCars() }
-                        .onSuccess { envelope ->
-                            _carsState.value = if (envelope.data.isEmpty()) UiState.Empty else UiState.Success(envelope.data)
-                        }
-                        .onFailure { _carsState.value = UiState.Error(it.readableMessage("Unable to load cars.")) }
+                    loadCars()
                 }
             } catch (error: Throwable) {
                 _snackbar.value = error.readableMessage("Unable to finish app startup.")
@@ -253,7 +256,7 @@ class AppViewModel(
         }
     }
 
-    private suspend fun loadAfterAuth() {
+    private fun loadAfterAuth() {
         loadCars()
         loadFavorites()
         loadBookings()
@@ -279,6 +282,7 @@ class AppViewModel(
                     _me.value = loadMeWithAvatarFallback()
                     loadAfterAuth()
                     registerPushIfAvailable()
+                    AnalyticsService.track("login_completed")
                     onSuccess()
                 }
                 .onFailure { onFailure(it.loginFailureMessage()) }
@@ -300,6 +304,7 @@ class AppViewModel(
             runCatching {
                 authRepository.signup(firstName, lastName, email, password, city, region)
             }.onSuccess { session ->
+                AnalyticsService.track("signup_completed")
                 if ((session.requires_email_confirmation == true) || session.access_token.isNullOrBlank()) {
                     _snackbar.value = "Account created. Please confirm your email before logging in."
                     onSuccess(true)
@@ -391,9 +396,12 @@ class AppViewModel(
     }
 
     fun loadReferenceData() {
+        if (referenceDataLoaded || referenceDataLoading) return
+        referenceDataLoading = true
         viewModelScope.launch {
-            runCatching { carsRepository.getLocations() }
-                .onSuccess { envelope ->
+            try {
+                runCatching { carsRepository.getLocations() }
+                    .onSuccess { envelope ->
                     val remote = envelope.data.orEmpty().filterKeys { it.isNotBlank() }
                     _locations.value = if (remote.isEmpty()) {
                         AndroidReferenceData.districtsByRegion
@@ -408,9 +416,9 @@ class AppViewModel(
                             }
                         }
                     }
-                }
-            runCatching { carsRepository.getCarCatalog() }
-                .onSuccess { envelope ->
+                    }
+                runCatching { carsRepository.getCarCatalog() }
+                    .onSuccess { envelope ->
                     val remote = envelope.makes
                         .filter { it.name.isNotBlank() }
                         .associate { make ->
@@ -429,11 +437,16 @@ class AppViewModel(
                             }
                         }
                     }
-                }
+                    }
+                referenceDataLoaded = true
+            } finally {
+                referenceDataLoading = false
+            }
         }
     }
 
     fun loadCars(params: Map<String, String> = emptyMap()) {
+        val requestVersion = ++carsRequestVersion
         viewModelScope.launch {
             val hasExistingCars = _carsState.value is UiState.Success<List<CarDto>>
             if (!hasExistingCars) {
@@ -441,9 +454,12 @@ class AppViewModel(
             }
             runCatching { carsRepository.getCars(params) }
                 .onSuccess { envelope ->
-                    _carsState.value = if (envelope.data.isEmpty()) UiState.Empty else UiState.Success(envelope.data)
+                    if (requestVersion == carsRequestVersion) {
+                        _carsState.value = if (envelope.data.isEmpty()) UiState.Empty else UiState.Success(envelope.data)
+                    }
                 }
                 .onFailure {
+                    if (requestVersion != carsRequestVersion) return@onFailure
                     val message = it.readableMessage("Unable to load cars.")
                     if (hasExistingCars) {
                         _snackbar.value = message
@@ -456,16 +472,27 @@ class AppViewModel(
 
     fun loadCarDetail(carId: String) {
         viewModelScope.launch {
-            _carDetailState.value = UiState.Loading
+            val current = (_carDetailState.value as? UiState.Success<CarDto>)?.data
+            val cached = (_carsState.value as? UiState.Success<List<CarDto>>)?.data?.firstOrNull { it.id == carId }
+            if (current?.id != carId) {
+                _carDetailState.value = cached?.let { UiState.Success(it) } ?: UiState.Loading
+            }
             runCatching { carsRepository.getCarDetail(carId).data }
                 .onSuccess { _carDetailState.value = UiState.Success(it) }
-                .onFailure { _carDetailState.value = UiState.Error(it.readableMessage("Unable to load car details.")) }
+                .onFailure {
+                    if ((_carDetailState.value as? UiState.Success<CarDto>)?.data?.id != carId) {
+                        _carDetailState.value = UiState.Error(it.readableMessage("Unable to load car details."))
+                    }
+                }
         }
     }
 
     fun loadCarReviews(carId: String) {
         viewModelScope.launch {
-            _carReviewsState.value = UiState.Loading
+            if (carReviewsCarId != carId) {
+                _carReviewsState.value = UiState.Loading
+            }
+            carReviewsCarId = carId
             runCatching { bookingRepository.getCarReviews(carId).data }
                 .onSuccess { reviews ->
                     _carReviewsState.value = if (reviews.isEmpty()) UiState.Empty else UiState.Success(reviews)
@@ -518,7 +545,9 @@ class AppViewModel(
                 _favoritesState.value = UiState.Empty
                 return@launch
             }
-            _favoritesState.value = UiState.Loading
+            if (_favoritesState.value !is UiState.Success && _favoritesState.value !is UiState.Empty) {
+                _favoritesState.value = UiState.Loading
+            }
             runCatching { carsRepository.getFavorites().data.map { it.car_id }.toSet() }
                 .onSuccess { ids ->
                     _favoritesState.value = if (ids.isEmpty()) UiState.Empty else UiState.Success(ids)
@@ -537,7 +566,13 @@ class AppViewModel(
                 return@launch
             }
             runCatching { carsRepository.setFavorite(carId, !currentlyFavorite) }
-                .onSuccess { loadFavorites() }
+                .onSuccess {
+                    AnalyticsService.track(
+                        if (currentlyFavorite) "car_unfavorited" else "car_favorited",
+                        mapOf("car_id" to carId),
+                    )
+                    loadFavorites()
+                }
                 .onFailure { _snackbar.value = it.readableMessage("Unable to update favorite") }
         }
     }
@@ -545,7 +580,9 @@ class AppViewModel(
     fun loadBookings() {
         viewModelScope.launch {
             if (!_isAuthenticated.value) return@launch
-            _bookingsState.value = UiState.Loading
+            if (_bookingsState.value !is UiState.Success && _bookingsState.value !is UiState.Empty) {
+                _bookingsState.value = UiState.Loading
+            }
             runCatching { bookingRepository.getBookings().data }
                 .onSuccess { list ->
                     _bookingsState.value = if (list.isEmpty()) UiState.Empty else UiState.Success(list)
@@ -571,6 +608,14 @@ class AppViewModel(
         onError: (String) -> Unit = {},
     ) {
         viewModelScope.launch {
+            val tripDays = runCatching {
+                ChronoUnit.DAYS.between(LocalDate.parse(startDate), LocalDate.parse(endDate))
+                    .coerceAtLeast(0)
+            }.getOrDefault(0)
+            AnalyticsService.track(
+                "booking_started",
+                mapOf("car_id" to carId, "region" to tripUseRegion, "days" to tripDays),
+            )
             runCatching {
                 val hold = bookingRepository.createHold(
                     carId = carId,
@@ -605,6 +650,13 @@ class AppViewModel(
                 )
             }.onSuccess { init ->
                 _pendingCheckout.value = init
+                AnalyticsService.track(
+                    "booking_payment_started",
+                    mapOf(
+                        "car_id" to carId,
+                        "price_bucket" to analyticsPriceBucket((init.amount ?: 0.0) / 100.0),
+                    ),
+                )
                 onReady(init)
             }.onFailure {
                 val message = it.readableMessage("Unable to start booking")
@@ -629,6 +681,10 @@ class AppViewModel(
                     }
                     _pendingCheckout.value = null
                     _bookingDraft.value = null
+                    AnalyticsService.track(
+                        "booking_completed",
+                        mapOf("car_id" to request.carId, "region" to request.tripUseRegion),
+                    )
                     loadBookings()
                     loadConversations()
                     onSuccess(result.conversationId)
@@ -682,6 +738,7 @@ class AppViewModel(
             runCatching { bookingRepository.submitReview(bookingId, rating, comment) }
                 .onSuccess {
                     _snackbar.value = "Review submitted."
+                    AnalyticsService.track("review_submitted")
                     onSuccess()
                 }
                 .onFailure {
@@ -849,12 +906,24 @@ class AppViewModel(
     fun loadConversations() {
         viewModelScope.launch {
             if (!_isAuthenticated.value) return@launch
-            _conversationsState.value = UiState.Loading
+            if (_conversationsState.value !is UiState.Success && _conversationsState.value !is UiState.Empty) {
+                _conversationsState.value = UiState.Loading
+            }
             runCatching { messagingRepository.conversations().data }
                 .onSuccess { list ->
                     _conversationsState.value = if (list.isEmpty()) UiState.Empty else UiState.Success(list)
                 }
                 .onFailure { _conversationsState.value = UiState.Error(it.readableMessage("Unable to load conversations.")) }
+        }
+    }
+
+    fun refreshConversations() {
+        viewModelScope.launch {
+            if (!_isAuthenticated.value) return@launch
+            runCatching { messagingRepository.conversations().data }
+                .onSuccess { list ->
+                    _conversationsState.value = if (list.isEmpty()) UiState.Empty else UiState.Success(list)
+                }
         }
     }
 
@@ -917,12 +986,46 @@ class AppViewModel(
         }
     }
 
+    fun refreshMessages(conversationId: String) {
+        viewModelScope.launch {
+            if (!_isAuthenticated.value) return@launch
+            val current = (_messagesState.value as? UiState.Success<List<MessageDto>>)?.data.orEmpty()
+            val since = current.maxByOrNull { it.created_at }?.created_at
+            runCatching {
+                messagingRepository.messages(
+                    conversationId = conversationId,
+                    since = since,
+                    markRead = true,
+                ).data
+            }.onSuccess { incoming ->
+                if (incoming.isNotEmpty()) {
+                    val merged = (current + incoming)
+                        .associateBy { it.id }
+                        .values
+                        .sortedBy { it.created_at }
+                    _messagesState.value = UiState.Success(merged)
+                } else if (_messagesState.value is UiState.Loading) {
+                    _messagesState.value = if (current.isEmpty()) UiState.Empty else UiState.Success(current)
+                }
+                refreshConversations()
+            }
+        }
+    }
+
     fun sendMessage(conversationId: String, body: String) {
         viewModelScope.launch {
             if (body.isBlank()) return@launch
             runCatching { messagingRepository.sendMessage(conversationId, body.trim()) }
-                .onSuccess {
-                    loadMessages(conversationId)
+                .onSuccess { response ->
+                    val current = (_messagesState.value as? UiState.Success<List<MessageDto>>)?.data.orEmpty()
+                    _messagesState.value = UiState.Success(
+                        (current + response.data)
+                            .associateBy { it.id }
+                            .values
+                            .sortedBy { it.created_at },
+                    )
+                    AnalyticsService.track("message_sent")
+                    refreshConversations()
                 }
                 .onFailure { _snackbar.value = it.readableMessage("Unable to send message") }
         }
@@ -1011,7 +1114,9 @@ class AppViewModel(
 
     fun loadMyCars() {
         viewModelScope.launch {
-            _myCarsState.value = UiState.Loading
+            if (_myCarsState.value !is UiState.Success && _myCarsState.value !is UiState.Empty) {
+                _myCarsState.value = UiState.Loading
+            }
             runCatching { carsRepository.getMyCars().data }
                 .onSuccess { list ->
                     _myCarsState.value = if (list.isEmpty()) UiState.Empty else UiState.Success(list)
@@ -1239,6 +1344,72 @@ class AppViewModel(
         }
     }
 
+    fun submitHostApplicationWithDocuments(
+        userId: String,
+        front: File?,
+        back: File?,
+        existingFrontPath: String? = null,
+        existingBackPath: String? = null,
+        face: File?,
+        requestBuilder: (frontPath: String, backPath: String) -> HostApplicationRequest,
+        onResult: (error: String?) -> Unit,
+    ) {
+        viewModelScope.launch {
+            AnalyticsService.track("host_application_started")
+            runCatching {
+                val frontPath = front?.let {
+                    storageRepository.uploadHostId(userId = userId, side = "front", file = it)
+                } ?: existingFrontPath?.trim()?.takeIf { it.isNotBlank() }
+                    ?: throw IllegalArgumentException("ID front image is required")
+                val backPath = back?.let {
+                    storageRepository.uploadHostId(userId = userId, side = "back", file = it)
+                } ?: existingBackPath?.trim()?.takeIf { it.isNotBlank() }
+                    ?: throw IllegalArgumentException("ID back image is required")
+
+                if (face != null) {
+                    val avatarUrl = storageRepository.uploadAvatar(userId = userId, file = face)
+                    val current = _me.value
+                    val fullName = current?.profile?.full_name
+                        ?.trim()
+                        ?.takeIf { it.isNotBlank() }
+                        ?: requestBuilder(frontPath, backPath).full_name
+                    val nameParts = fullName.split(Regex("\\s+")).filter { it.isNotBlank() }
+                    carsRepository.upsertProfile(
+                        ProfileUpsertRequest(
+                            id = userId,
+                            first_name = current?.profile?.first_name ?: nameParts.firstOrNull().orEmpty(),
+                            last_name = current?.profile?.last_name ?: nameParts.drop(1).joinToString(" "),
+                            full_name = fullName,
+                            city = current?.profile?.city ?: requestBuilder(frontPath, backPath).city,
+                            region = current?.profile?.region ?: requestBuilder(frontPath, backPath).region,
+                            phone = current?.profile?.phone ?: requestBuilder(frontPath, backPath).phone,
+                            avatar_url = avatarUrl,
+                        ),
+                    )
+                }
+
+                hostRepository.submitHostApplication(requestBuilder(frontPath, backPath))
+            }.onSuccess { response ->
+                _hostApplicationMessage.value = "Application submitted."
+                AnalyticsService.track("host_application_submitted")
+                val current = _me.value
+                if (current != null) {
+                    _me.value = current.copy(
+                        host_application_status = response.data?.status ?: "pending",
+                        host_application = response.data ?: current.host_application,
+                    )
+                }
+                runCatching { loadMeWithAvatarFallback() }.onSuccess { _me.value = it }
+                loadHostStatus()
+                onResult(null)
+            }.onFailure { error ->
+                val message = error.readableMessage("Unable to submit application. Please check your details and try again.")
+                _hostApplicationMessage.value = message
+                onResult(message)
+            }
+        }
+    }
+
     fun registerPushIfAvailable(token: String? = null) {
         viewModelScope.launch {
             val pushToken =
@@ -1264,6 +1435,16 @@ class AppViewModel(
         if (!me.preferredAvatarRaw().isNullOrBlank()) return me
         val fallbackAvatar = runCatching { storageRepository.findLatestAvatarUrl(me.user.id) }.getOrNull()
         return me.withAvatarFallback(fallbackAvatar)
+    }
+
+    private fun analyticsPriceBucket(amountGhs: Double): String = when {
+        !amountGhs.isFinite() || amountGhs < 0 -> "unknown"
+        amountGhs < 200 -> "0-199"
+        amountGhs < 500 -> "200-499"
+        amountGhs < 1_000 -> "500-999"
+        amountGhs < 2_000 -> "1000-1999"
+        amountGhs < 5_000 -> "2000-4999"
+        else -> "5000+"
     }
 
     companion object {

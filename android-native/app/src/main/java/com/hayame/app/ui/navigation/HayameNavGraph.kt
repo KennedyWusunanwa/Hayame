@@ -11,6 +11,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -56,6 +58,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -102,7 +105,7 @@ import com.hayame.app.ui.viewmodel.AppViewModel
 import com.hayame.app.ui.theme.LocalHayameColors
 import kotlinx.coroutines.delay
 
-private const val SplashMinimumDurationMs = 5_000L
+private const val SplashMinimumDurationMs = 450L
 
 @Composable
 fun HayameNavApp(
@@ -110,6 +113,7 @@ fun HayameNavApp(
     pendingConversationId: String?,
     pendingBookingId: String?,
     pendingBookingRecipientRole: String?,
+    pendingCarId: String?,
     pendingPaystackCallbackUri: String?,
     pendingAnnouncementId: String?,
     pendingAnnouncementTitle: String?,
@@ -118,6 +122,7 @@ fun HayameNavApp(
     pendingAnnouncementCtaUrl: String?,
     onConversationConsumed: () -> Unit,
     onBookingConsumed: () -> Unit,
+    onCarConsumed: () -> Unit,
     onPaystackCallbackConsumed: () -> Unit,
     onAnnouncementConsumed: () -> Unit,
 ) {
@@ -285,6 +290,15 @@ fun HayameNavApp(
         onBookingConsumed()
     }
 
+    LaunchedEffect(pendingCarId, bootstrapping, hasAppAccess) {
+        val carId = pendingCarId
+        if (bootstrapping || !hasAppAccess || carId.isNullOrBlank()) return@LaunchedEffect
+        navController.navigate(NavRoutes.carDetail(carId)) {
+            launchSingleTop = true
+        }
+        onCarConsumed()
+    }
+
     if (canShowAnnouncement) activeAnnouncement?.let { announcement ->
         val ctaUrl = announcement.cta_url?.takeIf { it.isNotBlank() }
         val colors = LocalHayameColors.current
@@ -428,10 +442,27 @@ fun HayameNavApp(
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
     ) { innerPadding ->
         val isSplashRoute = currentRoute == NavRoutes.Splash || currentRoute == null
+        val layoutDirection = LocalLayoutDirection.current
+        val ownsBottomNavigation = currentRoute in setOf(
+            NavRoutes.MainRoute,
+            NavRoutes.HostShell,
+            NavRoutes.AdminShell,
+        )
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .then(if (isSplashRoute) Modifier else Modifier.padding(innerPadding)),
+                .then(
+                    if (isSplashRoute) {
+                        Modifier
+                    } else {
+                        Modifier.padding(
+                            start = innerPadding.calculateStartPadding(layoutDirection),
+                            top = innerPadding.calculateTopPadding(),
+                            end = innerPadding.calculateEndPadding(layoutDirection),
+                            bottom = if (ownsBottomNavigation) 0.dp else innerPadding.calculateBottomPadding(),
+                        )
+                    },
+                ),
         ) {
             NavHost(
                 navController = navController,
@@ -627,6 +658,13 @@ fun HayameNavApp(
                     BecomeHostScreen(
                         viewModel = viewModel,
                         onBack = { navController.popBackStack() },
+                        onOpenAuth = { navController.navigate(NavRoutes.Login) },
+                        onOpenHostDashboard = { navController.navigate(NavRoutes.HostShell) },
+                        onSubmissionCompleted = {
+                            navController.navigate(NavRoutes.HostPending) {
+                                popUpTo(NavRoutes.BecomeHost) { inclusive = true }
+                            }
+                        },
                     )
                 }
                 composable(NavRoutes.HostPending) {
@@ -783,6 +821,7 @@ fun HayameNavApp(
                             if (!popped) navController.navigate(NavRoutes.HostShell) { launchSingleTop = true }
                         },
                         onOpenConversation = { navController.navigate(NavRoutes.conversation(it)) },
+                        onOpenCarEditor = { navController.navigate(NavRoutes.hostCarEditor(it)) },
                     )
                 }
             }

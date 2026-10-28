@@ -1,6 +1,7 @@
 package com.hayame.app.ui.screens
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.PackageManager
 import android.location.Geocoder
@@ -9,7 +10,10 @@ import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.CancellationTokenSource
 import com.hayame.app.ui.reference.AndroidReferenceData
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.util.Locale
 
 data class HomeLocation(
@@ -19,24 +23,32 @@ data class HomeLocation(
     val regionName: String? = null,
 )
 
-suspend fun fetchHomeLocation(context: Context): HomeLocation? {
-    val hasPermission = ContextCompat.checkSelfPermission(
+fun hasHomeLocationPermission(context: Context): Boolean =
+    ContextCompat.checkSelfPermission(
         context,
         Manifest.permission.ACCESS_COARSE_LOCATION,
     ) == PackageManager.PERMISSION_GRANTED
-    if (!hasPermission) return null
 
-    return try {
+@SuppressLint("MissingPermission")
+suspend fun fetchHomeLocation(context: Context): HomeLocation? = withContext(Dispatchers.IO) {
+    if (!hasHomeLocationPermission(context)) return@withContext null
+
+    try {
         val client = LocationServices.getFusedLocationProviderClient(context)
         val cts = CancellationTokenSource()
-        val loc = client.getCurrentLocation(Priority.PRIORITY_BALANCED_POWER_ACCURACY, cts.token).await()
-            ?: return null
+        val loc = try {
+            withTimeoutOrNull(2_500) {
+                client.getCurrentLocation(Priority.PRIORITY_BALANCED_POWER_ACCURACY, cts.token).await()
+            } ?: withTimeoutOrNull(750) { client.lastLocation.await() }
+        } finally {
+            cts.cancel()
+        } ?: return@withContext null
         val geocoder = Geocoder(context, Locale.getDefault())
         @Suppress("DEPRECATION")
         val addresses = geocoder.getFromLocation(loc.latitude, loc.longitude, 1)
         val address = addresses?.firstOrNull()
         val countryCode = address?.countryCode?.trim()?.uppercase(Locale.US)
-        if (!countryCode.isNullOrBlank() && countryCode != "GH") return null
+        if (!countryCode.isNullOrBlank() && countryCode != "GH") return@withContext null
 
         val rawRegion = address?.adminArea?.trim().orEmpty()
         val strippedRegion = rawRegion.removeSuffix(" Region").trim()
@@ -49,7 +61,7 @@ suspend fun fetchHomeLocation(context: Context): HomeLocation? {
             .firstNotNullOfOrNull { candidate ->
                 AndroidReferenceData.canonicalCity(candidate, region)
             }
-        if (countryCode != "GH" && city == null && region == null) return null
+        if (countryCode != "GH" && city == null && region == null) return@withContext null
         HomeLocation(loc.latitude, loc.longitude, city, region)
     } catch (_: Exception) {
         null
