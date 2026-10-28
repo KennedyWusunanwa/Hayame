@@ -3,11 +3,13 @@ import SwiftUI
 struct SplashScreen: View {
     var darkMode: Bool = false
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var appeared = false
     @State private var animateRings = false
     @State private var animateField = false
     @State private var breathing = false
     @State private var sweep = false
+    @State private var revealStart = Date()
 
     // Deterministic decorative "bokeh" pattern so the layout never jitters
     // between launches. Values are relative to the screen size.
@@ -23,25 +25,21 @@ struct SplashScreen: View {
 
     var body: some View {
         GeometryReader { geo in
-            let logoWidth = min(max(geo.size.width * 0.53, 205), 260)
+            let logoWidth = min(max(geo.size.width * 0.62, 230), 300)
 
             ZStack {
                 animatedBackground(size: geo.size)
                 bokehLayer(size: geo.size)
 
-                VStack(spacing: 30) {
+                VStack(spacing: 34) {
                     ZStack {
                         logoGlow
                         rippleRings
-                        Image("hayame_launch_logo")
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: logoWidth)
-                            .scaleEffect((appeared ? 1 : 0.6) * (breathing ? 1.025 : 0.99))
-                            .opacity(appeared ? 1 : 0)
+                        HayameLogoReveal(width: logoWidth, startDate: revealStart, darkMode: darkMode)
+                            .scaleEffect(breathing ? 1.02 : 0.995)
                             .shadow(color: logoShadow, radius: 20, x: 0, y: 6)
                     }
-                    .frame(height: logoWidth * 1.2)
+                    .frame(height: logoWidth * 0.9)
 
                     loaderDots
                         .opacity(appeared ? 1 : 0)
@@ -53,10 +51,12 @@ struct SplashScreen: View {
         .ignoresSafeArea()
         .onAppear {
             logSplash("view appeared")
-            withAnimation(.spring(response: 0.78, dampingFraction: 0.66)) {
+            revealStart = Date()
+            // The loader dots join once the wordmark has been drawn.
+            withAnimation(.easeOut(duration: 0.5).delay(reduceMotion ? 0.2 : 2.9)) {
                 appeared = true
             }
-            withAnimation(.easeInOut(duration: 2.8).repeatForever(autoreverses: true)) {
+            withAnimation(.easeInOut(duration: 2.8).repeatForever(autoreverses: true).delay(3.0)) {
                 breathing = true
             }
             withAnimation(.easeInOut(duration: 8).repeatForever(autoreverses: true)) {
@@ -141,7 +141,6 @@ struct SplashScreen: View {
                     )
             }
         }
-        .opacity(appeared ? 1 : 0)
     }
 
     // MARK: - Center decorations
@@ -217,4 +216,251 @@ private struct BokehDot {
     let opacity: Double
     let drift: CGFloat
     let phase: Double
+}
+
+// MARK: - Wordmark centerline
+
+/// The single-stroke centerline of the HAYAME wordmark, authored in the logo
+/// PNG's own 1808x944 pixel space so it lines up exactly under the bitmap.
+/// Subpaths are ordered the way a pen would write the word, so trimming the
+/// path from 0 to 1 "draws" it left to right.
+struct HayameWordmarkShape: Shape {
+    static let designSize = CGSize(width: 1808, height: 944)
+    /// Everything above this design-space y is the car silhouette.
+    static let carSplitY: CGFloat = 344
+    /// Stroke thickness of the bitmap letterforms, in design pixels.
+    static let strokeWidth: CGFloat = 47
+
+    func path(in rect: CGRect) -> Path {
+        let scale = rect.width / Self.designSize.width
+        let transform = CGAffineTransform(translationX: rect.minX, y: rect.minY)
+            .scaledBy(x: scale, y: scale)
+        return Self.designPath.applying(transform)
+    }
+
+    static let designPath: Path = {
+        var p = Path()
+        let top: CGFloat = 374
+        let bottom: CGFloat = 675
+        let bar: CGFloat = 522
+
+        // In SwiftUI's y-down space, increasing angles run visually clockwise.
+        // `visuallyClockwise` keeps the authoring readable.
+        func arc(_ center: CGPoint, _ radius: CGFloat, from: Double, to: Double, visuallyClockwise: Bool) {
+            p.addArc(
+                center: center,
+                radius: radius,
+                startAngle: .degrees(from),
+                endAngle: .degrees(to),
+                clockwise: !visuallyClockwise
+            )
+        }
+
+        // H
+        p.move(to: CGPoint(x: 64.5, y: top)); p.addLine(to: CGPoint(x: 64.5, y: bottom))
+        p.move(to: CGPoint(x: 64.5, y: bar)); p.addLine(to: CGPoint(x: 269, y: bar))
+        p.move(to: CGPoint(x: 269, y: top)); p.addLine(to: CGPoint(x: 269, y: bottom))
+
+        // A, Y and the second A share one continuous stroke.
+        p.move(to: CGPoint(x: 341, y: bottom)); p.addLine(to: CGPoint(x: 341, y: 477))
+        arc(CGPoint(x: 449, y: 477), 108, from: 180, to: 360, visuallyClockwise: true)      // first arch
+        p.addLine(to: CGPoint(x: 557, y: 565))
+        arc(CGPoint(x: 663.5, y: 565), 106.5, from: 180, to: 0, visuallyClockwise: false)   // Y bowl
+        p.addLine(to: CGPoint(x: 770, y: 475.5))
+        arc(CGPoint(x: 877.5, y: 475.5), 107.5, from: 180, to: 360, visuallyClockwise: true) // second arch
+        p.addLine(to: CGPoint(x: 985, y: bottom))
+
+        // Y descender
+        p.move(to: CGPoint(x: 770, y: 565)); p.addLine(to: CGPoint(x: 770, y: 883))
+
+        // A crossbars
+        p.move(to: CGPoint(x: 341, y: bar)); p.addLine(to: CGPoint(x: 557, y: bar))
+        p.move(to: CGPoint(x: 770, y: bar)); p.addLine(to: CGPoint(x: 985, y: bar))
+
+        // M: two flat-topped arches
+        let mR: CGFloat = 72
+        p.move(to: CGPoint(x: 1058, y: bottom)); p.addLine(to: CGPoint(x: 1058, y: 368 + mR))
+        arc(CGPoint(x: 1058 + mR, y: 368 + mR), mR, from: 180, to: 270, visuallyClockwise: true)
+        p.addLine(to: CGPoint(x: 1231.5 - mR, y: 368))
+        arc(CGPoint(x: 1231.5 - mR, y: 368 + mR), mR, from: 270, to: 360, visuallyClockwise: true)
+        p.addLine(to: CGPoint(x: 1231.5, y: 657))
+        p.move(to: CGPoint(x: 1231.5, y: 368 + mR))
+        arc(CGPoint(x: 1231.5 + mR, y: 368 + mR), mR, from: 180, to: 270, visuallyClockwise: true)
+        p.addLine(to: CGPoint(x: 1404.5 - mR, y: 368))
+        arc(CGPoint(x: 1404.5 - mR, y: 368 + mR), mR, from: 270, to: 360, visuallyClockwise: true)
+        p.addLine(to: CGPoint(x: 1404.5, y: bottom))
+
+        // E
+        let eR: CGFloat = 80
+        p.move(to: CGPoint(x: 1741, y: 366.5)); p.addLine(to: CGPoint(x: 1472.5 + eR, y: 366.5))
+        arc(CGPoint(x: 1472.5 + eR, y: 366.5 + eR), eR, from: 270, to: 180, visuallyClockwise: false)
+        p.addLine(to: CGPoint(x: 1472.5, y: 673 - eR))
+        arc(CGPoint(x: 1472.5 + eR, y: 673 - eR), eR, from: 180, to: 90, visuallyClockwise: false)
+        p.addLine(to: CGPoint(x: 1741, y: 673))
+        p.move(to: CGPoint(x: 1472.5, y: bar)); p.addLine(to: CGPoint(x: 1724, y: bar))
+
+        return p
+    }()
+}
+
+// MARK: - Logo reveal
+
+/// Draws the wordmark with a glowing pen stroke, flashes it solid, then slides
+/// the car silhouette in over the top. Time-driven, so every launch plays the
+/// same choreography. Reduce Motion shows the finished logo immediately.
+struct HayameLogoReveal: View {
+    let width: CGFloat
+    let startDate: Date
+    var darkMode: Bool = false
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    // Choreography, in seconds from `startDate`.
+    private let traceStart = 0.35
+    private let traceDuration = 1.85
+    private let fillStart = 2.15
+    private let fillDuration = 0.35
+    private let carStart = 2.3
+    private let carDuration = 0.8
+
+    /// Total time until the logo is fully assembled and at rest.
+    static let settleTime = 3.2
+
+    private var height: CGFloat { width * HayameWordmarkShape.designSize.height / HayameWordmarkShape.designSize.width }
+    private var scale: CGFloat { width / HayameWordmarkShape.designSize.width }
+    private var carSplit: CGFloat { HayameWordmarkShape.carSplitY * scale }
+
+    var body: some View {
+        Group {
+            if reduceMotion {
+                logoImage
+            } else {
+                TimelineView(.animation(minimumInterval: 1.0 / 60.0)) { context in
+                    animatedLogo(at: context.date.timeIntervalSince(startDate))
+                }
+            }
+        }
+        .frame(width: width, height: height)
+    }
+
+    private var logoImage: some View {
+        Image("Logo")
+            .renderingMode(.template)
+            .resizable()
+            .scaledToFit()
+            .foregroundStyle(.white)
+            .frame(width: width, height: height)
+    }
+
+    @ViewBuilder
+    private func animatedLogo(at time: TimeInterval) -> some View {
+        let trace = easeInOutCubic(clamp01((time - traceStart) / traceDuration))
+        let fill = easeOutCubic(clamp01((time - fillStart) / fillDuration))
+        let car = clamp01((time - carStart) / carDuration)
+        let carEase = easeOutBack(car)
+        let flash = max(0, 1 - abs((time - (fillStart + 0.1)) / 0.28))
+        let strokeWidth = HayameWordmarkShape.strokeWidth * scale
+        let glowColor = darkMode ? Color(red: 0.45, green: 0.78, blue: 1.0) : Color.white
+
+        ZStack {
+            // Glow trail behind the pen.
+            HayameWordmarkShape()
+                .trim(from: 0, to: trace)
+                .stroke(glowColor.opacity(0.75), style: StrokeStyle(lineWidth: strokeWidth * 2.2, lineCap: .round, lineJoin: .round))
+                .blur(radius: 9)
+                .opacity(1 - fill)
+
+            // The pen stroke itself.
+            HayameWordmarkShape()
+                .trim(from: 0, to: trace)
+                .stroke(.white, style: StrokeStyle(lineWidth: strokeWidth, lineCap: .round, lineJoin: .round))
+                .opacity(1 - fill * 0.85)
+
+            // Finished wordmark (bitmap, lower part of the logo).
+            logoImage
+                .mask(alignment: .bottom) {
+                    Rectangle().padding(.top, carSplit)
+                }
+                .opacity(fill)
+
+            // Flash as the stroke becomes solid.
+            logoImage
+                .mask(alignment: .bottom) {
+                    Rectangle().padding(.top, carSplit)
+                }
+                .blur(radius: 8)
+                .opacity(flash * 0.9)
+
+            // Car silhouette slides in from the left with a light streak.
+            ZStack {
+                ForEach(0..<3, id: \.self) { index in
+                    Capsule()
+                        .fill(Color.white.opacity(0.55))
+                        .frame(width: width * (0.34 - CGFloat(index) * 0.08), height: 2.5)
+                        .blur(radius: 1.2)
+                        .offset(
+                            x: -width * 0.22 - CGFloat(index) * 10,
+                            y: carSplit * (0.42 + CGFloat(index) * 0.18)
+                        )
+                }
+            }
+            .frame(width: width, height: height, alignment: .topLeading)
+            .opacity(car > 0 && car < 1 ? sin(car * .pi) * 0.9 : 0)
+            .offset(x: -width * 0.5 * (1 - carEase))
+
+            logoImage
+                .mask(alignment: .top) {
+                    Rectangle().padding(.bottom, height - carSplit)
+                }
+                .offset(x: -width * 0.55 * (1 - carEase))
+                .opacity(clamp01(car * 2.2))
+
+            // Pen head.
+            if trace > 0 && trace < 1 {
+                let point = HayameWordmarkShape.designPath.trimmedPath(from: 0, to: trace).currentPoint ?? .zero
+                ZStack {
+                    Circle()
+                        .fill(glowColor.opacity(0.7))
+                        .frame(width: strokeWidth * 3.2, height: strokeWidth * 3.2)
+                        .blur(radius: 6)
+                    Circle()
+                        .fill(.white)
+                        .frame(width: strokeWidth * 1.5, height: strokeWidth * 1.5)
+                        .shadow(color: .white.opacity(0.9), radius: 6)
+                }
+                .position(x: point.x * scale, y: point.y * scale)
+            }
+        }
+        .frame(width: width, height: height)
+    }
+
+    private func clamp01(_ value: Double) -> Double { min(max(value, 0), 1) }
+
+    private func easeInOutCubic(_ x: Double) -> Double {
+        x < 0.5 ? 4 * x * x * x : 1 - pow(-2 * x + 2, 3) / 2
+    }
+
+    private func easeOutCubic(_ x: Double) -> Double {
+        1 - pow(1 - x, 3)
+    }
+
+    private func easeOutBack(_ x: Double) -> Double {
+        let c1 = 1.25
+        let c3 = c1 + 1
+        return 1 + c3 * pow(x - 1, 3) + c1 * pow(x - 1, 2)
+    }
+}
+
+/// Zoom-through exit used when the splash hands off to the app, echoing the
+/// logo flying toward the viewer. Drive `progress` from 0 to 1 with an
+/// animation; the app flips `showSplash` off once it reaches 1.
+struct SplashZoomOutModifier: ViewModifier {
+    let progress: Double
+
+    func body(content: Content) -> some View {
+        content
+            .scaleEffect(1 + progress * 6)
+            .opacity(1 - progress)
+            .allowsHitTesting(progress == 0)
+    }
 }

@@ -166,18 +166,24 @@ struct HostPublicProfileScreen: View {
 
                 SectionHeader(title: "Listings")
 
-                ForEach(hostCars) { car in
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(car.displayTitle)
-                            .font(.system(size: 15, weight: .bold, design: .rounded))
-                            .foregroundStyle(HayameTheme.brandNavy)
-                        Text("\(car.city), \(car.region)")
-                            .hayameCaptionStyle()
-                        Text("GHS\(car.dailyPrice)/day")
-                            .font(.system(size: 14, weight: .bold, design: .rounded))
-                            .foregroundStyle(HayameTheme.brandBlue)
+                if hostCars.isEmpty {
+                    Text("No listings yet.")
+                        .hayameCaptionStyle()
+                        .hayameCard()
+                } else {
+                    ForEach(hostCars) { car in
+                        NavigationLink {
+                            CarDetailScreen(car: car)
+                        } label: {
+                            CarCardView(
+                                car: car,
+                                isFavorite: false,
+                                showsFavoriteButton: false,
+                                favoriteAction: {}
+                            )
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .hayameCard()
                 }
             }
             .padding(16)
@@ -251,7 +257,7 @@ struct MarketingPagesListScreen: View {
                     NavigationLink {
                         MarketingWebPageScreen(
                             title: page.title,
-                            url: URL(string: "https://www.hayame.com\(page.path)")
+                            url: URL(string: "\(AppState.productionBaseURL)\(page.path)")
                         )
                     } label: {
                         HStack(spacing: 10) {

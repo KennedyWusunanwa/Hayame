@@ -7,6 +7,8 @@ struct HayameIOSApp: App {
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var appState = AppState()
     @State private var showSplash = true
+    @State private var isHandingOffFromSplash = false
+    @State private var splashExitProgress = 0.0
     @State private var showAppearanceTransition = false
     @State private var hideContentForAppearanceTransition = false
     @State private var appearanceTransitionTargetsDarkMode = false
@@ -39,15 +41,27 @@ struct HayameIOSApp: App {
         #endif
     }
 
+    /// The app content stays hidden until the splash starts its exit.
+    private var isRootHidden: Bool {
+        (showSplash && !isHandingOffFromSplash) || hideContentForAppearanceTransition
+    }
+
     private var liveRoot: some View {
         ZStack {
                 RootView()
                     .environmentObject(appState)
-                    .opacity(showSplash || hideContentForAppearanceTransition ? 0 : 1)
-                    .animation(.easeOut(duration: 0.45), value: showSplash)
+                    .opacity(isRootHidden ? 0 : 1)
+                    // The app settles in from slightly enlarged while the splash
+                    // logo zooms past the viewer, so the handoff reads as one move.
+                    .scaleEffect(isRootHidden && !HayameMotion.reduceMotion ? 1.05 : 1)
+                    .animation(.easeOut(duration: 0.55), value: isRootHidden)
 
                 if showSplash {
                     SplashScreen(darkMode: appState.darkModeEnabled)
+                        .modifier(SplashZoomOutModifier(progress: splashExitProgress))
+                        // Explicit animation: App-level state changes made after an
+                        // await do not reliably carry the withAnimation transaction.
+                        .animation(.easeIn(duration: 0.6), value: splashExitProgress)
                         .transition(.opacity)
                         .zIndex(10)
                 }
@@ -75,13 +89,28 @@ struct HayameIOSApp: App {
             .task {
                 guard showSplash else { return }
                 logSplash("root timer started")
-                try? await Task.sleep(nanoseconds: 5_000_000_000)
+                // Long enough for the wordmark to be drawn and settle (see
+                // HayameLogoReveal.settleTime), plus a beat of rest.
+                try? await Task.sleep(nanoseconds: 4_700_000_000)
                 guard !Task.isCancelled else {
                     logSplash("root timer cancelled")
                     return
                 }
                 logSplash("root timer finished")
-                withAnimation(.easeOut(duration: 0.45)) {
+                if HayameMotion.reduceMotion {
+                    withAnimation(.easeOut(duration: 0.45)) {
+                        showSplash = false
+                    }
+                } else {
+                    // Zoom the splash through the viewer while the app fades up
+                    // underneath, then drop the splash once it is out of sight.
+                    withAnimation(.easeOut(duration: 0.55)) {
+                        isHandingOffFromSplash = true
+                    }
+                    withAnimation(.easeIn(duration: 0.6)) {
+                        splashExitProgress = 1
+                    }
+                    try? await Task.sleep(nanoseconds: 650_000_000)
                     showSplash = false
                 }
                 hasHandledInitialAppearance = true

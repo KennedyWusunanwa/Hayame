@@ -15,6 +15,8 @@ enum ScreenshotRoute: String, CaseIterable, Identifiable {
     case bookingReview = "booking-review"
     case bookingPayment = "booking-payment"
     case paymentProcessing = "payment-processing"
+    case bookingSuccess = "booking-success"
+    case hostBookings = "host-bookings"
     case trips
     case favorites
     case messages

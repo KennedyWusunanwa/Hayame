@@ -574,12 +574,18 @@ struct CarCardView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             ZStack(alignment: .topTrailing) {
-                NetworkOrFallbackImage(
-                    urlString: car.imageNames.first,
-                    targetSize: CGSize(width: 420, height: 300)
-                )
-                    .frame(height: 164)
+                GeometryReader { geometry in
+                    NetworkOrFallbackImage(
+                        urlString: car.imageNames.first,
+                        targetSize: CGSize(width: 420, height: 300)
+                    )
+                    // Use the card's actual proposed width. A scaled-to-fill image
+                    // otherwise reports a source-aspect-ratio ideal width while it
+                    // loads, which can widen a lazy cell during measurement.
+                    .frame(width: geometry.size.width, height: 164)
                     .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                }
+                .frame(height: 164)
 
                 if showsFavoriteButton {
                     Button(action: favoriteAction) {
@@ -624,16 +630,21 @@ struct CarCardView: View {
                     Spacer()
                 }
 
-                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                (
                     Text("GHS\(car.dailyPrice)")
                         .font(.system(size: 20, weight: .bold, design: .rounded))
-                        .foregroundStyle(HayameTheme.brandNavy)
-                    Text("/ day")
+                        .foregroundColor(HayameTheme.brandNavy)
+                    + Text(" / day")
                         .font(.system(size: 12, weight: .semibold, design: .rounded))
-                        .foregroundStyle(HayameTheme.brandBlue)
-                }
+                        .foregroundColor(HayameTheme.brandBlue)
+                )
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
             }
         }
+        // Accept the finite width proposed by the listing row. The card can grow
+        // vertically for wrapped text, but never horizontally beyond its column.
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
         .background(HayameTheme.cardBackground)
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
@@ -648,13 +659,20 @@ struct BookingStatusBadge: View {
     let status: BookingDisplayStatus
 
     var body: some View {
-        Text(status.label)
-            .font(.system(size: 11, weight: .bold, design: .rounded))
-            .foregroundStyle(foreground)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(background)
-            .clipShape(Capsule())
+        // The label pops to its new value and the capsule recolors in step, so a
+        // booking moving from Pending to Confirmed is felt, not just noticed.
+        ZStack {
+            Text(status.label)
+                .id(status.label)
+                .transition(.scale(scale: 0.7).combined(with: .opacity))
+        }
+        .font(.system(size: 11, weight: .bold, design: .rounded))
+        .foregroundStyle(foreground)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(background)
+        .clipShape(Capsule())
+        .animation(HayameMotion.snappy, value: status.label)
     }
 
     private var background: Color {

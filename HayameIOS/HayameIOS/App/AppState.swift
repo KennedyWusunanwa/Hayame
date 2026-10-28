@@ -1450,38 +1450,35 @@ final class AppState: ObservableObject {
     }
 
     func approveBooking(_ booking: Booking) {
-        guard authToken != nil else {
-            syncErrorMessage = "Log in to approve bookings."
-            return
-        }
-
-        Task {
-            do {
-                try await withAuthenticatedToken { token in
-                    try await api.updateBookingDecision(baseURL: apiBaseURL, token: token, bookingID: booking.id, approve: true)
-                }
-                await syncBookings()
-            } catch {
-                syncErrorMessage = errorMessage(error, fallback: "Unable to approve booking.")
-            }
-        }
+        Task { await decideBooking(booking, approve: true) }
     }
 
     func rejectBooking(_ booking: Booking) {
+        Task { await decideBooking(booking, approve: false) }
+    }
+
+    /// Approves or rejects a booking request and refreshes bookings. Returns
+    /// whether the decision was accepted by the server, so screens can show
+    /// in-flight and success states instead of firing and forgetting.
+    @discardableResult
+    func decideBooking(_ booking: Booking, approve: Bool) async -> Bool {
         guard authToken != nil else {
-            syncErrorMessage = "Log in to reject bookings."
-            return
+            syncErrorMessage = approve ? "Log in to approve bookings." : "Log in to reject bookings."
+            return false
         }
 
-        Task {
-            do {
-                try await withAuthenticatedToken { token in
-                    try await api.updateBookingDecision(baseURL: apiBaseURL, token: token, bookingID: booking.id, approve: false)
-                }
-                await syncBookings()
-            } catch {
-                syncErrorMessage = errorMessage(error, fallback: "Unable to reject booking.")
+        do {
+            try await withAuthenticatedToken { token in
+                try await api.updateBookingDecision(baseURL: apiBaseURL, token: token, bookingID: booking.id, approve: approve)
             }
+            await syncBookings()
+            return true
+        } catch {
+            syncErrorMessage = errorMessage(
+                error,
+                fallback: approve ? "Unable to approve booking." : "Unable to reject booking."
+            )
+            return false
         }
     }
 

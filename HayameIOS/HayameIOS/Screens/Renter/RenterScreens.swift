@@ -1,7 +1,9 @@
 import SwiftUI
+import MapKit
 import PhotosUI
 import UIKit
 import CoreLocation
+import LinkPresentation
 
 enum MoreRoute: String, Identifiable {
     case messages
@@ -220,6 +222,31 @@ struct ScreenshotRenterRouteView: View {
         case .paymentProcessing:
             bookingSheet(step: .payment, processing: true)
 
+        case .bookingSuccess:
+            BookingSuccessStage(
+                car: screenshotCar,
+                bookingID: "screenshot-booking",
+                startDate: startDate,
+                endDate: endDate,
+                onDone: {}
+            )
+
+        case .hostBookings:
+            NavigationStack {
+                HostBookingsScreen()
+            }
+            .onAppear {
+                // Reuse the renter fixtures as incoming requests so the host
+                // decision cards can be captured without a second account.
+                guard appState.hostBookings.isEmpty else { return }
+                appState.hostBookings = appState.renterBookings.enumerated().map { index, booking in
+                    var request = booking
+                    if index == 0 { request.status = .awaitingHost }
+                    return request
+                }
+                appState.bookingsLoadState = appState.hostBookings.isEmpty ? .empty : .loaded
+            }
+
         case .splash, .authLogin, .authSignup:
             EmptyView()
         }
@@ -298,6 +325,27 @@ struct RenterHomeScreen: View {
     @AppStorage("hayame.browse_region") private var browseRegion = ""
     @AppStorage("hayame.detected_browse_city") private var cachedDetectedCity = ""
     @AppStorage("hayame.detected_browse_region") private var cachedDetectedRegion = ""
+    @AppStorage("hayame.home_popular_layout_mode") private var popularLayoutRawValue = ExploreLayoutMode.list.rawValue
+
+    private let pagePadding: CGFloat = 16
+    private let popularColumnSpacing: CGFloat = 14
+
+    private var popularLayoutMode: ExploreLayoutMode {
+        ExploreLayoutMode(rawValue: popularLayoutRawValue) ?? .list
+    }
+
+    private var popularCars: [Car] {
+        Array(appState.cars.prefix(6))
+    }
+
+    private var popularVehicleRows: [HomePopularVehicleRow] {
+        stride(from: 0, to: popularCars.count, by: 2).map { index in
+            HomePopularVehicleRow(
+                leading: popularCars[index],
+                trailing: popularCars.indices.contains(index + 1) ? popularCars[index + 1] : nil
+            )
+        }
+    }
 
     private var detectedCity: String {
         let live = locationManager.cityName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -385,6 +433,12 @@ struct RenterHomeScreen: View {
     }
 
     var body: some View {
+        GeometryReader { geometry in
+            let popularCardWidth = max(
+                0,
+                (geometry.size.width - (pagePadding * 2) - popularColumnSpacing) / 2
+            )
+
         ZStack(alignment: .topLeading) {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 16) {
@@ -496,6 +550,9 @@ struct RenterHomeScreen: View {
                     HStack {
                         SectionHeader(title: "Popular picks")
                         Spacer()
+                        ExploreLayoutToggle(selectedLayout: popularLayoutMode) { layout in
+                            popularLayoutRawValue = layout.rawValue
+                        }
                         Button("See all") {
                             appState.renterTab = .explore
                         }
@@ -518,28 +575,48 @@ struct RenterHomeScreen: View {
                             systemImage: "car.rear.and.tire.marks"
                         )
                     } else {
-                        VStack(spacing: 12) {
-                            ForEach(appState.cars.prefix(3), id: \.id) { car in
-                                ZStack(alignment: .topTrailing) {
-                                    NavigationLink {
-                                        CarDetailScreen(car: car)
-                                    } label: {
-                                        HomeFeaturedCarRow(
-                                            car: car,
-                                            isFavorite: appState.favoriteCarIDs.contains(car.id),
-                                            showsFavoriteButton: false,
-                                            imageFrame: CGSize(width: 136, height: 104),
-                                            targetImageSize: CGSize(width: 320, height: 240)
-                                        ) {
-                                            appState.toggleFavorite(carID: car.id)
+                        if popularLayoutMode == .grid {
+                            LazyVStack(spacing: popularColumnSpacing) {
+                                ForEach(popularVehicleRows) { row in
+                                    HStack(alignment: .top, spacing: popularColumnSpacing) {
+                                        homePopularGridCard(row.leading)
+                                            .frame(width: popularCardWidth, alignment: .topLeading)
+
+                                        if let trailing = row.trailing {
+                                            homePopularGridCard(trailing)
+                                                .frame(width: popularCardWidth, alignment: .topLeading)
+                                        } else {
+                                            Color.clear
+                                                .frame(width: popularCardWidth)
+                                                .accessibilityHidden(true)
                                         }
                                     }
-                                    .buttonStyle(.plain)
+                                }
+                            }
+                        } else {
+                            LazyVStack(spacing: 12) {
+                                ForEach(popularCars) { car in
+                                    ZStack(alignment: .topTrailing) {
+                                        NavigationLink {
+                                            CarDetailScreen(car: car)
+                                        } label: {
+                                            HomeFeaturedCarRow(
+                                                car: car,
+                                                isFavorite: appState.favoriteCarIDs.contains(car.id),
+                                                showsFavoriteButton: false,
+                                                imageFrame: CGSize(width: 136, height: 104),
+                                                targetImageSize: CGSize(width: 320, height: 240)
+                                            ) {
+                                                appState.toggleFavorite(carID: car.id)
+                                            }
+                                        }
+                                        .buttonStyle(.plain)
 
-                                    FavoriteBadgeButton(isFavorite: appState.favoriteCarIDs.contains(car.id)) {
-                                        appState.toggleFavorite(carID: car.id)
+                                        FavoriteBadgeButton(isFavorite: appState.favoriteCarIDs.contains(car.id)) {
+                                            appState.toggleFavorite(carID: car.id)
+                                        }
+                                        .padding(8)
                                     }
-                                    .padding(8)
                                 }
                             }
                         }
@@ -608,6 +685,7 @@ struct RenterHomeScreen: View {
             .zIndex(9)
         }
         }
+        }
         .sheet(isPresented: $showHomeFilters) {
             NavigationStack {
                 ExploreFilterSheet()
@@ -631,6 +709,27 @@ struct RenterHomeScreen: View {
         .onChange(of: locationManager.didResolveLocation) { _, didResolve in
             guard didResolve else { return }
             syncDetectedBrowseCache()
+        }
+    }
+
+    private func homePopularGridCard(_ car: Car) -> some View {
+        ZStack(alignment: .topTrailing) {
+            NavigationLink {
+                CarDetailScreen(car: car)
+            } label: {
+                CarCardView(
+                    car: car,
+                    isFavorite: appState.favoriteCarIDs.contains(car.id),
+                    showsFavoriteButton: false,
+                    favoriteAction: {}
+                )
+            }
+            .buttonStyle(HayamePressableStyle(scale: 0.97))
+
+            FavoriteBadgeButton(isFavorite: appState.favoriteCarIDs.contains(car.id)) {
+                appState.toggleFavorite(carID: car.id)
+            }
+            .padding(8)
         }
     }
 
@@ -658,6 +757,13 @@ struct RenterHomeScreen: View {
             cachedDetectedRegion = region
         }
     }
+}
+
+private struct HomePopularVehicleRow: Identifiable {
+    let leading: Car
+    let trailing: Car?
+
+    var id: String { leading.id }
 }
 
 private struct HomeTopHeader: View {
@@ -829,6 +935,18 @@ private struct HomeCategoryPills: View {
     }
 }
 
+private struct LocationPickerRow: Identifiable, Hashable {
+    enum Kind: Hashable {
+        case header
+        case allOfRegion
+        case city(String)
+    }
+
+    let id: String
+    let region: String
+    let kind: Kind
+}
+
 private struct HomeLocationPickerDropdown: View {
     let selectedCity: String
     let selectedRegion: String
@@ -855,6 +973,25 @@ private struct HomeLocationPickerDropdown: View {
                 MockDataService.citySearchText($0).localizedCaseInsensitiveContains(trimmedQuery)
             }
             return matches.isEmpty ? nil : (region, matches)
+        }
+    }
+
+    // Flattened so every header/row is its own LazyVStack child. Nesting a
+    // full (non-lazy) ForEach per region inside the outer LazyVStack forced
+    // SwiftUI to lay out an entire region's rows (up to ~47 for Ashanti) in
+    // one burst as it scrolled into view — the resulting frame drop plus the
+    // subsequent content-height correction visibly snapped the scroll
+    // position back toward the top.
+    private var flattenedRows: [LocationPickerRow] {
+        regionsWithCities.flatMap { entry -> [LocationPickerRow] in
+            var rows: [LocationPickerRow] = [
+                LocationPickerRow(id: "header|\(entry.region)", region: entry.region, kind: .header),
+                LocationPickerRow(id: "all|\(entry.region)", region: entry.region, kind: .allOfRegion),
+            ]
+            rows.append(contentsOf: entry.cities.map { city in
+                LocationPickerRow(id: "city|\(entry.region)|\(city)", region: entry.region, kind: .city(city))
+            })
+            return rows
         }
     }
 
@@ -945,7 +1082,7 @@ private struct HomeLocationPickerDropdown: View {
 
             ScrollView(showsIndicators: true) {
                 LazyVStack(alignment: .leading, spacing: 8) {
-                    if regionsWithCities.isEmpty {
+                    if flattenedRows.isEmpty {
                         Text("No matching locations.")
                             .font(.system(size: 13, weight: .medium, design: .rounded))
                             .foregroundStyle(HayameTheme.mutedText)
@@ -953,31 +1090,32 @@ private struct HomeLocationPickerDropdown: View {
                             .padding(.vertical, 12)
                     }
 
-                    ForEach(regionsWithCities, id: \.region) { entry in
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text(entry.region)
+                    ForEach(flattenedRows) { row in
+                        switch row.kind {
+                        case .header:
+                            Text(row.region)
                                 .font(.system(size: 12, weight: .bold, design: .rounded))
                                 .foregroundStyle(HayameTheme.mutedText)
                                 .textCase(.uppercase)
                                 .padding(.top, 4)
 
+                        case .allOfRegion:
                             locationRow(
-                                title: "All of \(entry.region)",
+                                title: "All of \(row.region)",
                                 subtitle: "Show vehicles across this region",
                                 isSelected: selectedCity.isEmpty &&
-                                    selectedRegion.caseInsensitiveCompare(entry.region) == .orderedSame
+                                    selectedRegion.caseInsensitiveCompare(row.region) == .orderedSame
                             ) {
-                                onSelect("", entry.region)
+                                onSelect("", row.region)
                             }
 
-                            ForEach(entry.cities, id: \.self) { city in
-                                locationRow(
-                                    title: MockDataService.cityDisplayName(city),
-                                    subtitle: entry.region,
-                                    isSelected: selectedCity.caseInsensitiveCompare(city) == .orderedSame
-                                ) {
-                                    onSelect(city, entry.region)
-                                }
+                        case .city(let city):
+                            locationRow(
+                                title: MockDataService.cityDisplayName(city),
+                                subtitle: row.region,
+                                isSelected: selectedCity.caseInsensitiveCompare(city) == .orderedSame
+                            ) {
+                                onSelect(city, row.region)
                             }
                         }
                     }
@@ -1350,8 +1488,19 @@ struct ExploreScreen: View {
     @State private var showFilters = false
     @FocusState private var isSearchFieldFocused: Bool
 
-    private let columns = [GridItem(.flexible(), spacing: 14), GridItem(.flexible(), spacing: 14)]
+    private let pagePadding: CGFloat = 16
+    private let columnSpacing: CGFloat = 14
     private let popularVehicleBrands = ["Toyota", "Honda", "Kia", "Hyundai", "Range Rover", "Mercedes-Benz", "BMW", "Nissan", "Ford", "Mitsubishi"]
+
+    private var vehicleRows: [ExploreVehicleRow] {
+        let cars = appState.filteredCars
+        return stride(from: 0, to: cars.count, by: 2).map { index in
+            ExploreVehicleRow(
+                leading: cars[index],
+                trailing: cars.indices.contains(index + 1) ? cars[index + 1] : nil
+            )
+        }
+    }
 
     private var vehicleBrandOptions: [String] {
         let liveBrands = appState.cars
@@ -1368,8 +1517,11 @@ struct ExploreScreen: View {
     }
 
     var body: some View {
-        ScrollView(showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 14) {
+        GeometryReader { geometry in
+            let cardWidth = max(0, (geometry.size.width - (pagePadding * 2) - columnSpacing) / 2)
+
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: columnSpacing) {
                 PageTitle("Explore")
 
                 HStack(spacing: 8) {
@@ -1439,9 +1591,14 @@ struct ExploreScreen: View {
 
                 if case .loading = appState.publicCarsLoadState {
                     if appState.exploreLayoutMode == .grid {
-                        LazyVGrid(columns: columns, spacing: 14) {
-                            ForEach(0..<6, id: \.self) { _ in
-                                ListingGridPlaceholderCard()
+                        LazyVStack(spacing: columnSpacing) {
+                            ForEach(0..<3, id: \.self) { _ in
+                                HStack(alignment: .top, spacing: columnSpacing) {
+                                    ListingGridPlaceholderCard()
+                                        .frame(width: cardWidth, alignment: .topLeading)
+                                    ListingGridPlaceholderCard()
+                                        .frame(width: cardWidth, alignment: .topLeading)
+                                }
                             }
                         }
                     } else {
@@ -1461,25 +1618,20 @@ struct ExploreScreen: View {
                     }
                 } else {
                     if appState.exploreLayoutMode == .grid {
-                        LazyVGrid(columns: columns, spacing: 14) {
-                            ForEach(appState.filteredCars) { car in
-                                ZStack(alignment: .topTrailing) {
-                                    NavigationLink {
-                                        CarDetailScreen(car: car)
-                                    } label: {
-                                        CarCardView(
-                                            car: car,
-                                            isFavorite: appState.favoriteCarIDs.contains(car.id),
-                                            showsFavoriteButton: false,
-                                            favoriteAction: {}
-                                        )
-                                    }
-                                    .buttonStyle(.plain)
+                        LazyVStack(spacing: columnSpacing) {
+                            ForEach(vehicleRows) { row in
+                                HStack(alignment: .top, spacing: columnSpacing) {
+                                    exploreGridCard(row.leading)
+                                        .frame(width: cardWidth, alignment: .topLeading)
 
-                                    FavoriteBadgeButton(isFavorite: appState.favoriteCarIDs.contains(car.id)) {
-                                        appState.toggleFavorite(carID: car.id)
+                                    if let trailing = row.trailing {
+                                        exploreGridCard(trailing)
+                                            .frame(width: cardWidth, alignment: .topLeading)
+                                    } else {
+                                        Color.clear
+                                            .frame(width: cardWidth)
+                                            .accessibilityHidden(true)
                                     }
-                                    .padding(8)
                                 }
                             }
                         }
@@ -1511,14 +1663,15 @@ struct ExploreScreen: View {
                         )
                     }
                 }
+                }
+                .padding(pagePadding)
             }
-            .padding(16)
-        }
-        .background(HayameTheme.pageBackground)
-        .toolbar(.hidden, for: .navigationBar)
-        .scrollDismissesKeyboard(.interactively)
-        .refreshable {
-            await appState.refreshAllRemoteData()
+            .background(HayameTheme.pageBackground)
+            .toolbar(.hidden, for: .navigationBar)
+            .scrollDismissesKeyboard(.interactively)
+            .refreshable {
+                await appState.refreshAllRemoteData()
+            }
         }
         .sheet(isPresented: $showFilters) {
             NavigationStack {
@@ -1526,6 +1679,34 @@ struct ExploreScreen: View {
             }
         }
     }
+
+    private func exploreGridCard(_ car: Car) -> some View {
+        ZStack(alignment: .topTrailing) {
+            NavigationLink {
+                CarDetailScreen(car: car)
+            } label: {
+                CarCardView(
+                    car: car,
+                    isFavorite: appState.favoriteCarIDs.contains(car.id),
+                    showsFavoriteButton: false,
+                    favoriteAction: {}
+                )
+            }
+            .buttonStyle(HayamePressableStyle(scale: 0.97))
+
+            FavoriteBadgeButton(isFavorite: appState.favoriteCarIDs.contains(car.id)) {
+                appState.toggleFavorite(carID: car.id)
+            }
+            .padding(8)
+        }
+    }
+}
+
+private struct ExploreVehicleRow: Identifiable {
+    let leading: Car
+    let trailing: Car?
+
+    var id: String { leading.id }
 }
 
 private struct PageTitle: View {
@@ -2402,6 +2583,8 @@ struct CarDetailScreen: View {
     @State private var showFloatingBookingBar = false
     @State private var isLoadingBookingAvailability = false
     @State private var activeDateField: BookingDateSelectionTarget?
+    @State private var sharePayload: ListingSharePayload?
+    @State private var isPreparingShare = false
 
     init(car: Car) {
         self.seedCar = car
@@ -2417,6 +2600,16 @@ struct CarDetailScreen: View {
 
     private var isFavorite: Bool {
         appState.favoriteCarIDs.contains(car.id)
+    }
+
+    // Opens in-app via Universal Links when Hayame is installed, otherwise
+    // falls back to this same listing on the website.
+    private var shareURL: URL {
+        URL(string: "\(AppState.productionBaseURL)/cars/\(car.id)") ?? URL(string: AppState.productionBaseURL)!
+    }
+
+    private var shareMessage: String {
+        "Check out \(car.displayTitle) on Hayame"
     }
 
     private var daysCount: Int {
@@ -2594,23 +2787,35 @@ struct CarDetailScreen: View {
                             Spacer()
 
                             Button {
+                                prepareListingShare()
+                            } label: {
+                                Group {
+                                    if isPreparingShare {
+                                        ProgressView()
+                                            .tint(HayameTheme.brandNavy)
+                                    } else {
+                                        Image(systemName: "square.and.arrow.up")
+                                            .font(.system(size: 18, weight: .bold))
+                                    }
+                                }
+                                .foregroundStyle(HayameTheme.brandNavy)
+                                .frame(width: 44, height: 44)
+                                .background(HayameTheme.elevatedBackground)
+                                .clipShape(Circle())
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(isPreparingShare)
+                            .accessibilityLabel("Share \(car.displayTitle)")
+
+                            Button {
                                 appState.toggleFavorite(carID: car.id)
                             } label: {
-                                VStack(spacing: 4) {
-                                    Image(systemName: isFavorite ? "heart.fill" : "heart")
-                                        .font(.system(size: 18, weight: .bold))
-                                        .foregroundStyle(isFavorite ? .red : HayameTheme.brandNavy)
-                                    Text("Save to favorites")
-                                        .font(.system(size: 10, weight: .semibold, design: .rounded))
-                                        .foregroundStyle(HayameTheme.mutedText)
-                                }
-                                .padding(10)
-                                .background(HayameTheme.elevatedBackground)
-                                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                        .stroke(HayameTheme.controlStroke, lineWidth: 1)
-                                )
+                                Image(systemName: isFavorite ? "heart.fill" : "heart")
+                                    .font(.system(size: 18, weight: .bold))
+                                    .foregroundStyle(isFavorite ? .red : HayameTheme.brandNavy)
+                                    .frame(width: 44, height: 44)
+                                    .background(HayameTheme.elevatedBackground)
+                                    .clipShape(Circle())
                             }
                         }
                     }
@@ -3075,6 +3280,10 @@ struct CarDetailScreen: View {
                 }
             )
         }
+        .sheet(item: $sharePayload) { payload in
+            ListingShareSheet(payload: payload)
+                .presentationDetents([.medium, .large])
+        }
         .fullScreenCover(isPresented: $showGallery) {
             CarImageGalleryFullScreen(images: galleryImages, selectedIndex: $selectedImageIndex)
         }
@@ -3132,6 +3341,36 @@ struct CarDetailScreen: View {
                newValue != bookingAddingDays(selectedQuickDuration, to: startDate) {
                 self.selectedQuickDuration = nil
             }
+        }
+    }
+
+    private func prepareListingShare() {
+        guard !isPreparingShare else { return }
+        isPreparingShare = true
+
+        Task {
+            let coverURL = car.imageNames.compactMap(RemoteImageURLResolver.resolve).first
+            let coverImage: UIImage?
+            if let coverURL {
+                coverImage = await RemoteImagePipeline.shared.loadImage(
+                    from: coverURL,
+                    targetPixelSize: CGSize(width: 1200, height: 630)
+                )
+            } else {
+                coverImage = nil
+            }
+
+            let thumbnail = ListingShareThumbnailRenderer.render(
+                carImage: coverImage,
+                listingTitle: car.displayTitle
+            )
+            sharePayload = ListingSharePayload(
+                title: car.displayTitle,
+                message: shareMessage,
+                url: shareURL,
+                thumbnail: thumbnail
+            )
+            isPreparingShare = false
         }
     }
 
@@ -3310,6 +3549,159 @@ struct CarDetailScreen: View {
                 draft: message
             )
         }
+    }
+}
+
+private struct ListingSharePayload: Identifiable {
+    let id = UUID()
+    let title: String
+    let message: String
+    let url: URL
+    let thumbnail: UIImage
+}
+
+private struct ListingShareSheet: UIViewControllerRepresentable {
+    let payload: ListingSharePayload
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(
+            activityItems: [ListingShareItemSource(payload: payload), payload.message],
+            applicationActivities: nil
+        )
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
+}
+
+private final class ListingShareItemSource: NSObject, UIActivityItemSource {
+    private let payload: ListingSharePayload
+
+    init(payload: ListingSharePayload) {
+        self.payload = payload
+    }
+
+    func activityViewControllerPlaceholderItem(_ activityViewController: UIActivityViewController) -> Any {
+        payload.url
+    }
+
+    func activityViewController(
+        _ activityViewController: UIActivityViewController,
+        itemForActivityType activityType: UIActivity.ActivityType?
+    ) -> Any? {
+        payload.url
+    }
+
+    func activityViewController(
+        _ activityViewController: UIActivityViewController,
+        subjectForActivityType activityType: UIActivity.ActivityType?
+    ) -> String {
+        payload.title
+    }
+
+    func activityViewControllerLinkMetadata(_ activityViewController: UIActivityViewController) -> LPLinkMetadata? {
+        let metadata = LPLinkMetadata()
+        metadata.title = payload.title
+        metadata.originalURL = payload.url
+        metadata.url = payload.url
+        metadata.imageProvider = NSItemProvider(object: payload.thumbnail)
+        return metadata
+    }
+}
+
+@MainActor
+private enum ListingShareThumbnailRenderer {
+    private static let canvasSize = CGSize(width: 1200, height: 630)
+
+    static func render(carImage: UIImage?, listingTitle: String) -> UIImage {
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        format.opaque = true
+
+        return UIGraphicsImageRenderer(size: canvasSize, format: format).image { context in
+            let canvas = CGRect(origin: .zero, size: canvasSize)
+            UIColor(red: 0.02, green: 0.18, blue: 0.34, alpha: 1).setFill()
+            context.fill(canvas)
+
+            if let carImage {
+                carImage.draw(in: aspectFillRect(for: carImage.size, inside: canvas))
+            } else {
+                drawFallbackCar(in: canvas)
+            }
+
+            drawBottomShade(in: canvas)
+            drawLogo(in: canvas)
+            drawTitle(listingTitle, in: canvas)
+        }
+    }
+
+    private static func aspectFillRect(for imageSize: CGSize, inside bounds: CGRect) -> CGRect {
+        guard imageSize.width > 0, imageSize.height > 0 else { return bounds }
+        let scale = max(bounds.width / imageSize.width, bounds.height / imageSize.height)
+        let size = CGSize(width: imageSize.width * scale, height: imageSize.height * scale)
+        return CGRect(
+            x: bounds.midX - (size.width / 2),
+            y: bounds.midY - (size.height / 2),
+            width: size.width,
+            height: size.height
+        )
+    }
+
+    private static func drawBottomShade(in canvas: CGRect) {
+        let colors = [
+            UIColor.clear.cgColor,
+            UIColor.black.withAlphaComponent(0.78).cgColor,
+        ] as CFArray
+        guard let gradient = CGGradient(
+            colorsSpace: CGColorSpaceCreateDeviceRGB(),
+            colors: colors,
+            locations: [0, 1]
+        ), let context = UIGraphicsGetCurrentContext() else { return }
+
+        context.drawLinearGradient(
+            gradient,
+            start: CGPoint(x: canvas.midX, y: canvas.height * 0.48),
+            end: CGPoint(x: canvas.midX, y: canvas.maxY),
+            options: []
+        )
+    }
+
+    private static func drawLogo(in canvas: CGRect) {
+        guard let logo = UIImage(named: "hayame_logo_white") else { return }
+        // Keep the brand inside the centered square crop used by the compact
+        // iOS share-sheet preview, not at the landscape image's outer edge.
+        let badgeRect = CGRect(x: canvas.midX - 170, y: 28, width: 340, height: 132)
+        UIColor.black.withAlphaComponent(0.48).setFill()
+        UIBezierPath(roundedRect: badgeRect, cornerRadius: 32).fill()
+
+        let logoWidth: CGFloat = 250
+        let ratio = logo.size.height / max(logo.size.width, 1)
+        let logoRect = CGRect(
+            x: canvas.midX - (logoWidth / 2),
+            y: badgeRect.midY - ((logoWidth * ratio) / 2),
+            width: logoWidth,
+            height: logoWidth * ratio
+        )
+        logo.draw(in: logoRect)
+    }
+
+    private static func drawTitle(_ title: String, in canvas: CGRect) {
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineBreakMode = .byTruncatingTail
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: UIFont.systemFont(ofSize: 48, weight: .bold),
+            .foregroundColor: UIColor.white,
+            .paragraphStyle: paragraph,
+        ]
+        let titleRect = CGRect(x: 42, y: canvas.maxY - 118, width: 820, height: 68)
+        title.draw(in: titleRect, withAttributes: attributes)
+    }
+
+    private static func drawFallbackCar(in canvas: CGRect) {
+        let configuration = UIImage.SymbolConfiguration(pointSize: 180, weight: .bold)
+        guard let carSymbol = UIImage(systemName: "car.fill", withConfiguration: configuration)?
+            .withTintColor(.white, renderingMode: .alwaysOriginal) else { return }
+        let rect = CGRect(x: canvas.midX - 150, y: canvas.midY - 100, width: 300, height: 200)
+        carSymbol.draw(in: rect, blendMode: .normal, alpha: 0.32)
     }
 }
 
@@ -3498,6 +3890,8 @@ private struct BookingSheet: View {
     @State private var isLoadingAvailability = false
     @State private var activeDateField: BookingDateSelectionTarget?
     @State private var selectedQuickDuration: Int?
+    /// Set once payment is verified; drives the success stage over the checkout.
+    @State private var successBookingID: String?
 
     init(car: Car, startDate: Date, endDate: Date, region: String, city: String, address: String, blockedDates: Set<Date> = []) {
         self.car = car
@@ -3665,7 +4059,7 @@ private struct BookingSheet: View {
                 HayameTheme.pageBackground.ignoresSafeArea()
 
                 VStack(spacing: 0) {
-                    BookingProgressHeader(currentStep: currentStep)
+                    BookingProgressHeader(currentStep: currentStep, isMovingForward: isMovingForward)
                         .padding(.horizontal, 16)
                         .padding(.top, 8)
                         .padding(.bottom, 10)
@@ -3677,10 +4071,28 @@ private struct BookingSheet: View {
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 }
+
+                if let successBookingID {
+                    BookingSuccessStage(
+                        car: car,
+                        bookingID: successBookingID,
+                        startDate: startDate,
+                        endDate: endDate,
+                        onDone: {
+                            appState.renterTab = .trips
+                            dismiss()
+                        }
+                    )
+                    .transition(.opacity.combined(with: .scale(scale: 1.04)))
+                    .zIndex(5)
+                }
             }
-            .navigationTitle(currentStep.navigationTitle)
+            .navigationTitle(successBookingID == nil ? currentStep.navigationTitle : "")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar(successBookingID == nil ? .visible : .hidden, for: .navigationBar)
+            .interactiveDismissDisabled(successBookingID != nil)
             .safeAreaInset(edge: .bottom, spacing: 0) {
+              if successBookingID == nil {
                 VStack(spacing: 10) {
                     if let paymentMessage, !paymentMessage.isEmpty {
                         Text(paymentMessage)
@@ -3728,6 +4140,7 @@ private struct BookingSheet: View {
                         .fill(HayameTheme.bottomBarSeparator)
                         .frame(height: 1)
                 }
+              }
             }
             .onChange(of: startDate) { _, newValue in
                 if let adjustedEnd = preferredBookingEndDate(
@@ -3807,7 +4220,10 @@ private struct BookingSheet: View {
 
     private func quickDateButton(title: String, days: Int) -> some View {
         Button {
-            applyQuickTripDuration(days)
+            HayameHaptics.select()
+            withAnimation(HayameMotion.snappy) {
+                applyQuickTripDuration(days)
+            }
         } label: {
             Text(title)
                 .font(.system(size: 15, weight: .semibold, design: .rounded))
@@ -3826,7 +4242,7 @@ private struct BookingSheet: View {
                         )
                 )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(HayamePressableStyle(scale: 0.96, haptic: false))
     }
 
     @MainActor
@@ -4309,7 +4725,8 @@ private struct BookingSheet: View {
         guard let previousStep = currentStep.previous else { return }
         isMovingForward = false
         paymentMessage = nil
-        withAnimation(.spring(response: 0.42, dampingFraction: 0.88)) {
+        HayameHaptics.select()
+        withAnimation(HayameMotion.settle) {
             currentStep = previousStep
         }
     }
@@ -4317,7 +4734,8 @@ private struct BookingSheet: View {
     private func moveTo(_ step: BookingCheckoutStep) {
         isMovingForward = step.rawValue > currentStep.rawValue
         paymentMessage = nil
-        withAnimation(.spring(response: 0.42, dampingFraction: 0.88)) {
+        HayameHaptics.select()
+        withAnimation(HayameMotion.settle) {
             currentStep = step
         }
     }
@@ -4397,16 +4815,14 @@ private struct BookingSheet: View {
                     callbackScheme: "hayame"
                 )
                 _ = try await appState.completeBookingPayment(checkout: checkout, callbackURL: callbackURL)
-                appState.renterTab = .trips
-                dismiss()
+                presentSuccess(bookingID: checkout.bookingID)
                 return
             } catch {
                 if let browserError = error as? InAppBrowserAuthenticatorError,
                    browserError.shouldAttemptPaymentVerificationFallback {
                     do {
                         _ = try await appState.completeBookingPayment(checkout: checkout)
-                        appState.renterTab = .trips
-                        dismiss()
+                        presentSuccess(bookingID: checkout.bookingID)
                         return
                     } catch let verificationError {
                         throw verificationError
@@ -4419,6 +4835,16 @@ private struct BookingSheet: View {
             paymentMessage = message.isEmpty ? "Unable to complete payment." : message
             appState.paymentFlowNotice = paymentMessage
             appState.paymentFlowNoticeIsError = true
+        }
+    }
+
+    /// Swaps the checkout for the celebration and "waiting for host" stage.
+    /// The sheet stays up until the renter chooses to view the trip.
+    @MainActor
+    private func presentSuccess(bookingID: String) {
+        HayameHaptics.success()
+        withAnimation(HayameMotion.settle) {
+            successBookingID = bookingID
         }
     }
 }
@@ -4480,23 +4906,40 @@ private enum BookingCheckoutStep: Int, CaseIterable, Identifiable {
 
 private struct BookingProgressHeader: View {
     let currentStep: BookingCheckoutStep
+    var isMovingForward = true
+
+    private let itemSpacing: CGFloat = 8
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Step \(currentStep.stepNumber) of \(BookingCheckoutStep.allCases.count)")
                 .font(.system(size: 12, weight: .bold, design: .rounded))
                 .foregroundStyle(HayameTheme.brandBlue)
+                .contentTransition(.numericText())
+                .animation(HayameMotion.snappy, value: currentStep)
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text(currentStep.title)
-                    .font(.system(size: 28, weight: .bold, design: .rounded))
-                    .foregroundStyle(HayameTheme.brandNavy)
-                Text(currentStep.subtitle)
-                    .font(.system(size: 13, weight: .medium, design: .rounded))
-                    .foregroundStyle(HayameTheme.mutedText)
+            // The title slides in from the direction of travel.
+            ZStack(alignment: .topLeading) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(currentStep.title)
+                        .font(.system(size: 28, weight: .bold, design: .rounded))
+                        .foregroundStyle(HayameTheme.brandNavy)
+                    Text(currentStep.subtitle)
+                        .font(.system(size: 13, weight: .medium, design: .rounded))
+                        .foregroundStyle(HayameTheme.mutedText)
+                }
+                .id(currentStep)
+                .transition(
+                    .asymmetric(
+                        insertion: .move(edge: isMovingForward ? .trailing : .leading).combined(with: .opacity),
+                        removal: .opacity
+                    )
+                )
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .clipped()
 
-            HStack(spacing: 8) {
+            HStack(spacing: itemSpacing) {
                 ForEach(BookingCheckoutStep.allCases) { step in
                     BookingProgressItem(
                         step: step,
@@ -4505,6 +4948,32 @@ private struct BookingProgressHeader: View {
                     )
                 }
             }
+            .background(alignment: .topLeading) { progressTrack }
+        }
+    }
+
+    /// A rail behind the step circles that fills up to the current step.
+    private var progressTrack: some View {
+        GeometryReader { geometry in
+            let count = CGFloat(BookingCheckoutStep.allCases.count)
+            let columnWidth = (geometry.size.width - itemSpacing * (count - 1)) / count
+            let center: (Int) -> CGFloat = { index in
+                CGFloat(index) * (columnWidth + itemSpacing) + columnWidth / 2
+            }
+            let start = center(0)
+            let end = center(BookingCheckoutStep.allCases.count - 1)
+            let filled = center(currentStep.rawValue)
+
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(HayameTheme.controlStroke)
+                    .frame(width: max(0, end - start), height: 2)
+                Capsule()
+                    .fill(HayameTheme.brandBlue)
+                    .frame(width: max(0, filled - start), height: 2)
+                    .animation(HayameMotion.settle, value: currentStep)
+            }
+            .offset(x: start, y: 13)
         }
     }
 }
@@ -4524,15 +4993,27 @@ private struct BookingProgressItem: View {
                         Circle()
                             .stroke((isActive || isCompleted) ? HayameTheme.brandBlue : HayameTheme.controlStroke, lineWidth: 1)
                     )
+                    .background {
+                        // Soft halo marks the step you are on.
+                        if isActive {
+                            Circle()
+                                .fill(HayameTheme.brandBlue.opacity(0.16))
+                                .frame(width: 42, height: 42)
+                                .transition(.scale(scale: 0.5).combined(with: .opacity))
+                        }
+                    }
+                    .scaleEffect(isActive ? 1.06 : 1)
 
                 if isCompleted {
                     Image(systemName: "checkmark")
                         .font(.system(size: 12, weight: .bold))
                         .foregroundStyle(.white)
+                        .transition(.scale(scale: 0.3).combined(with: .opacity))
                 } else {
                     Text("\(step.stepNumber)")
                         .font(.system(size: 12, weight: .bold, design: .rounded))
                         .foregroundStyle(isActive ? .white : HayameTheme.mutedText)
+                        .transition(.opacity)
                 }
             }
 
@@ -4542,6 +5023,8 @@ private struct BookingProgressItem: View {
                 .lineLimit(1)
         }
         .frame(maxWidth: .infinity)
+        .animation(HayameMotion.settle, value: isActive)
+        .animation(HayameMotion.bouncy, value: isCompleted)
     }
 }
 
@@ -4954,7 +5437,10 @@ private struct BookingTripModeButton: View {
     let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
+        Button {
+            HayameHaptics.select()
+            action()
+        } label: {
             HStack(alignment: .top, spacing: 12) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(title)
@@ -4973,16 +5459,21 @@ private struct BookingTripModeButton: View {
                         .font(.system(size: 12, weight: .bold, design: .rounded))
                         .foregroundStyle(HayameTheme.brandBlue)
 
-                    Circle()
-                        .fill(isSelected ? HayameTheme.brandBlue : Color.clear)
-                        .frame(width: 18, height: 18)
-                        .overlay(
-                            Circle()
-                                .stroke(
-                                    isSelected ? HayameTheme.brandBlue : HayameTheme.controlStroke,
-                                    lineWidth: 2
-                                )
-                        )
+                    // Radio dot springs in when chosen.
+                    ZStack {
+                        Circle()
+                            .stroke(
+                                isSelected ? HayameTheme.brandBlue : HayameTheme.controlStroke,
+                                lineWidth: 2
+                            )
+                        Circle()
+                            .fill(HayameTheme.brandBlue)
+                            .padding(4)
+                            .scaleEffect(isSelected ? 1 : 0.2)
+                            .opacity(isSelected ? 1 : 0)
+                    }
+                    .frame(width: 18, height: 18)
+                    .animation(HayameMotion.bouncy, value: isSelected)
                 }
             }
             .padding(14)
@@ -4997,8 +5488,9 @@ private struct BookingTripModeButton: View {
                         lineWidth: 1
                     )
             )
+            .animation(HayameMotion.fade, value: isSelected)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(HayamePressableStyle(scale: 0.98, haptic: false))
     }
 }
 
@@ -5128,6 +5620,282 @@ private struct BookingPaymentMethodRow: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
         .background(HayameTheme.brandLight, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+}
+
+// MARK: - Post-payment success stage
+
+/// Shown over the checkout once payment is verified: a celebration beat, then
+/// the booking sits on a live scene while the host is asked to confirm. The
+/// status pill follows the real booking so a quick host reply shows up here.
+private struct BookingSuccessStage: View {
+    @EnvironmentObject private var appState: AppState
+
+    let car: Car
+    let bookingID: String
+    let startDate: Date
+    let endDate: Date
+    let onDone: () -> Void
+
+    private enum Phase { case celebrate, waiting }
+    private enum Outcome { case waiting, confirmed, declined }
+
+    @State private var phase: Phase = .celebrate
+    @State private var messageIndex = 0
+
+    private var liveBooking: Booking? {
+        appState.renterBookings.first { $0.id == bookingID }
+    }
+
+    private var hostName: String {
+        let name = car.hostName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return name.isEmpty ? "the host" : name
+    }
+
+    private var outcome: Outcome {
+        guard let liveBooking else { return .waiting }
+        switch liveBooking.status {
+        case .confirmed, .completed: return .confirmed
+        case .rejected, .cancelled, .refunded: return .declined
+        case .pending, .awaitingHost: return .waiting
+        }
+    }
+
+    private var waitingMessages: [String] {
+        ["Payment received", "Request sent to \(hostName)", "Waiting for \(hostName) to confirm"]
+    }
+
+    private var pillText: String {
+        switch outcome {
+        case .confirmed: return "\(hostName) confirmed your trip"
+        case .declined: return "Request declined"
+        case .waiting: return waitingMessages[min(messageIndex, waitingMessages.count - 1)]
+        }
+    }
+
+    private var pillTone: HayameStatusPill.Tone {
+        switch outcome {
+        case .confirmed: return .success
+        case .declined: return .danger
+        case .waiting: return .info
+        }
+    }
+
+    private var pillSymbol: String? {
+        switch outcome {
+        case .confirmed: return "checkmark"
+        case .declined: return "xmark"
+        case .waiting: return nil
+        }
+    }
+
+    private var title: String {
+        switch outcome {
+        case .confirmed: return "You're all set"
+        case .declined: return "This one didn't work out"
+        case .waiting: return "Request sent"
+        }
+    }
+
+    private var subtitle: String {
+        switch outcome {
+        case .confirmed: return "\(hostName) approved your booking. Pickup details are in Trips."
+        case .declined: return "\(hostName) couldn't take this booking. Your payment will be refunded."
+        case .waiting: return "We've let \(hostName) know. You'll get a notification the moment they respond."
+        }
+    }
+
+    private var timelineCompleted: Int {
+        outcome == .confirmed ? 2 : 1
+    }
+
+    var body: some View {
+        ZStack {
+            BookingWaitingScene(car: car, isSearching: outcome == .waiting)
+                .ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                HayameStatusPill(
+                    text: pillText,
+                    tone: pillTone,
+                    isLive: outcome == .waiting,
+                    systemImage: pillSymbol
+                )
+                .padding(.top, 14)
+                .opacity(phase == .waiting ? 1 : 0)
+                .offset(y: phase == .waiting ? 0 : -12)
+
+                Spacer()
+
+                if phase == .waiting {
+                    summaryCard
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 12)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+
+            if phase == .celebrate {
+                ZStack {
+                    Circle()
+                        .fill(HayameTheme.cardBackground.opacity(0.92))
+                        .frame(width: 200, height: 200)
+                        .blur(radius: 22)
+                    HayameSparkleBurst(radius: 96, delay: 0.25)
+                    HayameSuccessCheck(size: 116, delay: 0.1)
+                }
+                .transition(.scale(scale: 0.5).combined(with: .opacity))
+            }
+        }
+        .background(HayameTheme.pageBackground)
+        .task {
+            try? await Task.sleep(nanoseconds: 1_600_000_000)
+            guard !Task.isCancelled else { return }
+            withAnimation(HayameMotion.gentle) { phase = .waiting }
+            for index in 1..<waitingMessages.count {
+                try? await Task.sleep(nanoseconds: 1_900_000_000)
+                guard !Task.isCancelled else { return }
+                withAnimation(HayameMotion.settle) { messageIndex = index }
+            }
+        }
+        .onChange(of: outcome) { _, newValue in
+            switch newValue {
+            case .confirmed: HayameHaptics.success()
+            case .declined: HayameHaptics.warning()
+            case .waiting: break
+            }
+        }
+    }
+
+    private var summaryCard: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .center, spacing: 14) {
+                HayameSuccessCheck(size: 48, color: outcome == .declined ? HayameTheme.danger : HayameTheme.success)
+                    .id(outcome == .declined)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .font(.system(size: 20, weight: .bold, design: .rounded))
+                        .foregroundStyle(HayameTheme.brandNavy)
+                        .contentTransition(.opacity)
+                    Text(subtitle)
+                        .font(.system(size: 13, weight: .medium, design: .rounded))
+                        .foregroundStyle(HayameTheme.mutedText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .animation(HayameMotion.settle, value: title)
+
+            HStack(spacing: 12) {
+                NetworkOrFallbackImage(urlString: car.imageNames.first, targetSize: CGSize(width: 160, height: 120))
+                    .frame(width: 72, height: 56)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(car.displayTitle)
+                        .font(.system(size: 15, weight: .bold, design: .rounded))
+                        .foregroundStyle(HayameTheme.brandNavy)
+                        .lineLimit(1)
+                    Text("\(startDate.hayameDateLabel()) - \(endDate.hayameDateLabel())")
+                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                        .foregroundStyle(HayameTheme.mutedText)
+                    Text("\(car.city), \(car.region)")
+                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                        .foregroundStyle(HayameTheme.mutedText)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(12)
+            .background(HayameTheme.fieldBackground, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+
+            HayameTimelineStepper(
+                titles: ["Paid", "Host confirms", "Pickup", "Return"],
+                completedCount: timelineCompleted,
+                progress: outcome == .waiting ? 0.5 : 0.1,
+                caption: outcome == .waiting ? "Awaiting host" : nil,
+                accent: outcome == .declined ? HayameTheme.danger : HayameTheme.brandBlue,
+                showsMarker: outcome != .declined
+            )
+
+            Button(action: onDone) {
+                Text("View in Trips")
+            }
+            .buttonStyle(PrimaryPillButtonStyle())
+        }
+        .padding(18)
+        .background(HayameTheme.cardBackground, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 26, style: .continuous)
+                .stroke(HayameTheme.cardStroke, lineWidth: 1)
+        )
+        .shadow(color: HayameTheme.cardShadow, radius: 18, x: 0, y: 10)
+    }
+}
+
+/// Backdrop for the success stage: the car on a real map when the listing has
+/// coordinates, otherwise a soft radar grid. The marker pulses while the host
+/// is still being asked.
+private struct BookingWaitingScene: View {
+    let car: Car
+    let isSearching: Bool
+
+    private var coordinate: CLLocationCoordinate2D? {
+        guard let latitude = car.latitude, let longitude = car.longitude else { return nil }
+        let candidate = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+        guard CLLocationCoordinate2DIsValid(candidate),
+              abs(latitude) > 0.0001 || abs(longitude) > 0.0001 else { return nil }
+        return candidate
+    }
+
+    var body: some View {
+        ZStack {
+            if let coordinate {
+                Map(
+                    initialPosition: .region(
+                        MKCoordinateRegion(
+                            center: coordinate,
+                            span: MKCoordinateSpan(latitudeDelta: 0.014, longitudeDelta: 0.014)
+                        )
+                    )
+                ) {
+                    Annotation("", coordinate: coordinate, anchor: .center) {
+                        marker
+                    }
+                }
+                .mapStyle(.standard(elevation: .flat, pointsOfInterest: .excludingAll, showsTraffic: false))
+                .mapControlVisibility(.hidden)
+                .allowsHitTesting(false)
+            } else {
+                HayameRadarScene()
+                marker.offset(y: -70)
+            }
+
+            // Fade the scene into the card so text stays legible.
+            LinearGradient(
+                colors: [.clear, HayameTheme.pageBackground.opacity(0.85), HayameTheme.pageBackground],
+                startPoint: UnitPoint(x: 0.5, y: 0.35),
+                endPoint: .bottom
+            )
+            .allowsHitTesting(false)
+        }
+    }
+
+    private var marker: some View {
+        ZStack {
+            if isSearching {
+                HayameRadarPulse(color: HayameTheme.brandBlue, rings: 3, maxScale: 3.2)
+                    .frame(width: 64, height: 64)
+            }
+            ZStack {
+                Circle().fill(HayameTheme.brandBlue)
+                Image(systemName: "car.fill")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(.white)
+            }
+            .frame(width: 42, height: 42)
+            .overlay(Circle().stroke(.white, lineWidth: 3))
+            .shadow(color: HayameTheme.brandBlue.opacity(0.35), radius: 10, x: 0, y: 5)
+        }
+        .animation(HayameMotion.fade, value: isSearching)
     }
 }
 
@@ -5464,7 +6232,7 @@ struct TripsScreen: View {
                                 systemImage: "calendar.badge.exclamationmark"
                             )
                         } else {
-                            ForEach(upcoming) { booking in
+                            ForEach(Array(upcoming.enumerated()), id: \.element.id) { index, booking in
                                 TripBookingCard(
                                     booking: booking,
                                     car: car(for: booking),
@@ -5473,6 +6241,7 @@ struct TripsScreen: View {
                                     onDispute: { disputeBooking = booking },
                                     isHighlighted: highlightedBookingID == booking.id
                                 )
+                                .hayameAppear(index: index)
                                 .id(booking.id)
                             }
                         }
@@ -5487,7 +6256,7 @@ struct TripsScreen: View {
                                 systemImage: "clock.arrow.circlepath"
                             )
                         } else {
-                            ForEach(past) { booking in
+                            ForEach(Array(past.enumerated()), id: \.element.id) { index, booking in
                                 TripBookingCard(
                                     booking: booking,
                                     car: car(for: booking),
@@ -5496,6 +6265,7 @@ struct TripsScreen: View {
                                     onDispute: { disputeBooking = booking },
                                     isHighlighted: highlightedBookingID == booking.id
                                 )
+                                .hayameAppear(index: index)
                                 .id(booking.id)
                             }
                         }
@@ -5646,9 +6416,13 @@ private struct PaymentNoticeCard: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
-            Image(systemName: isError ? "xmark.octagon.fill" : "checkmark.circle.fill")
-                .font(.system(size: 18, weight: .bold))
-                .foregroundStyle(isError ? HayameTheme.danger : HayameTheme.success)
+            if isError {
+                Image(systemName: "xmark.octagon.fill")
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundStyle(HayameTheme.danger)
+            } else {
+                HayameSuccessCheck(size: 24)
+            }
 
             Text(message)
                 .font(.system(size: 13, weight: .semibold, design: .rounded))
@@ -5663,6 +6437,7 @@ private struct PaymentNoticeCard: View {
         }
         .padding(12)
         .hayameCard()
+        .hayameAppear(offsetY: -10)
     }
 }
 
@@ -5761,6 +6536,8 @@ private struct TripBookingCard: View {
                 }
             }
 
+            TripJourneyTimeline(booking: booking)
+
             VStack(alignment: .leading, spacing: 8) {
                 InfoLine(label: "Dates", value: datesLabel)
                 InfoLine(label: "Duration", value: "\(booking.nights) night(s)")
@@ -5819,6 +6596,119 @@ private struct TripBookingCard: View {
                     .font(.system(size: 20, weight: .bold))
                     .foregroundStyle(HayameTheme.brandBlue)
             )
+    }
+}
+
+/// The journey line on a trip card: Requested, Confirmed, Pickup, Return, with
+/// the car marker travelling toward the next milestone and a countdown.
+private struct TripJourneyTimeline: View {
+    let booking: Booking
+
+    @State private var now = Date()
+    private let clock = Timer.publish(every: 60, on: .main, in: .common).autoconnect()
+
+    private struct JourneyState {
+        var completed: Int
+        var progress: Double
+        var caption: String?
+        var accent: Color
+        var showsMarker: Bool
+        var footer: String?
+    }
+
+    var body: some View {
+        let state = journeyState(at: now)
+        VStack(alignment: .leading, spacing: 8) {
+            HayameTimelineStepper(
+                titles: ["Requested", "Confirmed", "Pickup", "Return"],
+                completedCount: state.completed,
+                progress: state.progress,
+                caption: state.caption,
+                accent: state.accent,
+                showsMarker: state.showsMarker
+            )
+
+            if let footer = state.footer {
+                HStack(spacing: 10) {
+                    HayameProgressBar(fraction: state.progress, tint: state.accent)
+                    Text(footer)
+                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        .foregroundStyle(HayameTheme.mutedText)
+                        .lineLimit(1)
+                        .fixedSize()
+                }
+            }
+        }
+        .padding(.vertical, 4)
+        .onReceive(clock) { now = $0 }
+    }
+
+    private func journeyState(at now: Date) -> JourneyState {
+        switch booking.displayStatus {
+        case .pending:
+            return JourneyState(
+                completed: 1,
+                progress: 0.5,
+                caption: "Awaiting host",
+                accent: HayameTheme.warning,
+                showsMarker: true,
+                footer: nil
+            )
+        case .confirmed:
+            let progress = fraction(from: booking.createdAt, to: booking.startDate, at: now)
+            return JourneyState(
+                completed: 2,
+                progress: progress,
+                caption: "Pickup in \(Self.remainingLabel(until: booking.startDate, from: now))",
+                accent: HayameTheme.brandBlue,
+                showsMarker: true,
+                footer: "Starts \(booking.startDate.hayameDateLabel())"
+            )
+        case .ongoing:
+            let progress = fraction(from: booking.startDate, to: booking.endDate, at: now)
+            return JourneyState(
+                completed: 3,
+                progress: progress,
+                caption: "Return in \(Self.remainingLabel(until: booking.endDate, from: now))",
+                accent: HayameTheme.success,
+                showsMarker: true,
+                footer: "Ends \(booking.endDate.hayameDateLabel())"
+            )
+        case .completed:
+            return JourneyState(
+                completed: 4,
+                progress: 1,
+                caption: nil,
+                accent: HayameTheme.brandBlue,
+                showsMarker: false,
+                footer: nil
+            )
+        case .cancelled, .rejected, .refunded:
+            return JourneyState(
+                completed: 1,
+                progress: 0,
+                caption: nil,
+                accent: HayameTheme.danger,
+                showsMarker: false,
+                footer: nil
+            )
+        }
+    }
+
+    private func fraction(from start: Date, to end: Date, at now: Date) -> Double {
+        let total = end.timeIntervalSince(start)
+        guard total > 0 else { return 1 }
+        return min(max(now.timeIntervalSince(start) / total, 0), 1)
+    }
+
+    static func remainingLabel(until date: Date, from now: Date) -> String {
+        let seconds = max(0, date.timeIntervalSince(now))
+        let days = Int(seconds / 86_400)
+        let hours = Int(seconds.truncatingRemainder(dividingBy: 86_400) / 3_600)
+        let minutes = Int(seconds.truncatingRemainder(dividingBy: 3_600) / 60)
+        if days > 0 { return hours > 0 ? "\(days)d \(hours)h" : "\(days)d" }
+        if hours > 0 { return minutes > 0 ? "\(hours)h \(minutes)m" : "\(hours)h" }
+        return "\(max(minutes, 1))m"
     }
 }
 

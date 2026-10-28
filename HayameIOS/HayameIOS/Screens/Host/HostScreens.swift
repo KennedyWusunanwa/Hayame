@@ -2536,6 +2536,10 @@ private struct KeyboardDismissTapView: UIViewRepresentable {
 struct HostBookingsScreen: View {
     @EnvironmentObject private var appState: AppState
     @State private var highlightedBookingID: String?
+    /// bookingID → approve? while a decision request is in flight.
+    @State private var decisionsInFlight: [String: Bool] = [:]
+    /// bookingID → approved? for a short confirmation stamp after the server accepts it.
+    @State private var recentDecisions: [String: Bool] = [:]
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -2556,10 +2560,17 @@ struct HostBookingsScreen: View {
                     } else if appState.hostBookings.isEmpty {
                         EmptyStateView(title: "No host bookings", message: "Requests will show here when guests book your cars.", systemImage: "calendar.badge.plus")
                     } else {
-                        ForEach(appState.hostBookings) { booking in
+                        ForEach(Array(appState.hostBookings.enumerated()), id: \.element.id) { index, booking in
                             let canAct = booking.status == .awaitingHost && booking.paymentStatus == .paid
+                            let inFlight = decisionsInFlight[booking.id]
+                            let decided = recentDecisions[booking.id]
 
                             VStack(alignment: .leading, spacing: 10) {
+                                if canAct {
+                                    HostRequestBanner()
+                                        .transition(.move(edge: .top).combined(with: .opacity))
+                                }
+
                                 BookingStatusHeader(
                                     title: booking.carTitle,
                                     subtitle: booking.renterName.isEmpty ? nil : "Renter: \(booking.renterName)",
@@ -2598,18 +2609,29 @@ struct HostBookingsScreen: View {
                                     .buttonStyle(SecondaryPillButtonStyle())
 
                                     if canAct {
-                                        Button("Reject") {
-                                            appState.rejectBooking(booking)
+                                        Button {
+                                            decide(booking, approve: false)
+                                        } label: {
+                                            HostDecisionLabel(title: "Reject", isBusy: inFlight == false, tint: HayameTheme.brandNavy)
                                         }
                                         .buttonStyle(SecondaryPillButtonStyle())
+                                        .disabled(inFlight != nil)
 
-                                        Button("Approve") {
-                                            appState.approveBooking(booking)
+                                        Button {
+                                            decide(booking, approve: true)
+                                        } label: {
+                                            HostDecisionLabel(title: "Approve", isBusy: inFlight == true, tint: .white)
                                         }
                                         .buttonStyle(PrimaryPillButtonStyle())
+                                        .disabled(inFlight != nil)
                                     }
                                 }
-
+                            }
+                            .overlay {
+                                if let decided {
+                                    HostDecisionStamp(approved: decided)
+                                        .transition(.scale(scale: 0.6).combined(with: .opacity))
+                                }
                             }
                             .hayameCard()
                             .overlay(
@@ -2625,6 +2647,9 @@ struct HostBookingsScreen: View {
                                 x: 0,
                                 y: 6
                             )
+                            .animation(HayameMotion.settle, value: canAct)
+                            .animation(HayameMotion.settle, value: decided)
+                            .hayameAppear(index: index)
                             .id(booking.id)
                         }
                     }
@@ -2645,6 +2670,35 @@ struct HostBookingsScreen: View {
         }
     }
 
+    /// Sends the decision, keeping the buttons busy until the server answers,
+    /// then stamps the card so the host sees it landed.
+    private func decide(_ booking: Booking, approve: Bool) {
+        guard decisionsInFlight[booking.id] == nil else { return }
+        HayameHaptics.medium()
+        withAnimation(HayameMotion.snappy) {
+            decisionsInFlight[booking.id] = approve
+        }
+
+        Task {
+            let accepted = await appState.decideBooking(booking, approve: approve)
+            withAnimation(HayameMotion.settle) {
+                decisionsInFlight[booking.id] = nil
+                if accepted {
+                    recentDecisions[booking.id] = approve
+                }
+            }
+            if accepted {
+                if approve { HayameHaptics.success() } else { HayameHaptics.warning() }
+            } else {
+                HayameHaptics.error()
+            }
+            try? await Task.sleep(nanoseconds: 2_200_000_000)
+            withAnimation(HayameMotion.fade) {
+                recentDecisions[booking.id] = nil
+            }
+        }
+    }
+
     private func focusPendingBookingIfNeeded(proxy: ScrollViewProxy) {
         guard let pendingID = appState.pendingBookingID else { return }
         guard appState.hostBookings.contains(where: { $0.id == pendingID }) else { return }
@@ -2653,6 +2707,66 @@ struct HostBookingsScreen: View {
             proxy.scrollTo(pendingID, anchor: .top)
         }
         appState.consumePendingBookingFocus(ifMatches: pendingID)
+    }
+}
+
+/// Strip shown on bookings that are waiting for the host's decision.
+private struct HostRequestBanner: View {
+    var body: some View {
+        HStack(spacing: 10) {
+            HayameStatusPill(text: "Awaiting your decision", tone: .warning, isLive: true)
+            Spacer(minLength: 0)
+        }
+    }
+}
+
+private struct HostDecisionLabel: View {
+    let title: String
+    let isBusy: Bool
+    let tint: Color
+
+    var body: some View {
+        HStack(spacing: 8) {
+            if isBusy {
+                ProgressView()
+                    .controlSize(.small)
+                    .tint(tint)
+                    .transition(.scale.combined(with: .opacity))
+            }
+            Text(isBusy ? "Sending…" : title)
+                .contentTransition(.opacity)
+        }
+        .animation(HayameMotion.snappy, value: isBusy)
+    }
+}
+
+/// Short-lived confirmation laid over a card after a decision is accepted.
+private struct HostDecisionStamp: View {
+    let approved: Bool
+
+    var body: some View {
+        HStack(spacing: 10) {
+            if approved {
+                HayameSuccessCheck(size: 30)
+            } else {
+                ZStack {
+                    Circle().fill(HayameTheme.danger)
+                    Image(systemName: "xmark")
+                        .font(.system(size: 13, weight: .black))
+                        .foregroundStyle(.white)
+                }
+                .frame(width: 30, height: 30)
+            }
+            Text(approved ? "Approved" : "Declined")
+                .font(.system(size: 15, weight: .bold, design: .rounded))
+                .foregroundStyle(HayameTheme.brandNavy)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(.ultraThinMaterial, in: Capsule())
+        .background(HayameTheme.floatingControlBackground, in: Capsule())
+        .overlay(Capsule().strokeBorder(HayameTheme.controlStroke, lineWidth: 1))
+        .shadow(color: HayameTheme.cardShadow, radius: 14, x: 0, y: 8)
     }
 }
 
