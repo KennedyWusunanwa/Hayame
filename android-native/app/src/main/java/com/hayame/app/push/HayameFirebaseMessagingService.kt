@@ -1,13 +1,16 @@
 package com.hayame.app.push
 
+import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import com.hayame.app.HayameApplication
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
@@ -78,8 +81,17 @@ class HayameFirebaseMessagingService : FirebaseMessagingService() {
             .setContentIntent(pendingIntent)
             .build()
 
-        NotificationManagerCompat.from(this)
-            .notify((System.currentTimeMillis() % Int.MAX_VALUE).toInt(), notification)
+        val notificationsAllowed = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) ==
+            PackageManager.PERMISSION_GRANTED
+        if (notificationsAllowed) {
+            try {
+                NotificationManagerCompat.from(this)
+                    .notify((System.currentTimeMillis() % Int.MAX_VALUE).toInt(), notification)
+            } catch (_: SecurityException) {
+                // Permission may be revoked between the check and notification delivery.
+            }
+        }
     }
 
     private fun ensureChannel(category: String): String {

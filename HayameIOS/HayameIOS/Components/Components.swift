@@ -466,7 +466,7 @@ struct HayameLogoTitle: View {
                 .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
 
             Text("Ghana Car Sharing")
-                .font(.system(size: 10, weight: .medium, design: .rounded))
+                .font(.hayame(size: 10, weight: .medium))
                 .foregroundStyle(.white.opacity(0.82))
             Spacer()
         }
@@ -485,10 +485,10 @@ struct HeroBannerCard: View {
 
             VStack(alignment: .leading, spacing: 6) {
                 Text(subtitle.uppercased())
-                    .font(.system(size: 10, weight: .semibold, design: .rounded))
+                    .font(.hayame(size: 10, weight: .semibold))
                     .foregroundStyle(.white.opacity(0.72))
                 Text(title)
-                    .font(.system(size: 32, weight: .bold, design: .rounded))
+                    .font(.hayame(size: 32, weight: .bold))
                     .foregroundStyle(.white)
                     .lineSpacing(2)
             }
@@ -501,12 +501,12 @@ struct HeroBannerCard: View {
         .background(
             ZStack {
                 LinearGradient(
-                    colors: [HayameTheme.brandNavy, HayameTheme.brandBlue],
+                    colors: [HayameTheme.heroEnd, HayameTheme.heroStart],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 )
                 Circle()
-                    .fill(Color.white.opacity(0.08))
+                    .fill(HayameTheme.heroHighlight.opacity(0.3))
                     .frame(width: 220, height: 220)
                     .offset(x: 120, y: -60)
             }
@@ -524,10 +524,10 @@ struct StatTile: View {
     var body: some View {
         let content = VStack(alignment: .leading, spacing: 4) {
             Text(title.uppercased())
-                .font(.system(size: 10, weight: .semibold, design: .rounded))
+                .font(.hayame(size: 10, weight: .semibold))
                 .foregroundStyle(HayameTheme.mutedText)
             Text(value)
-                .font(.system(size: 20, weight: .bold, design: .rounded))
+                .font(.hayame(size: 20, weight: .bold))
                 .foregroundStyle(HayameTheme.brandNavy)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -553,94 +553,15 @@ struct SectionHeader: View {
     var body: some View {
         HStack {
             Text(title)
-                .font(.system(size: 22, weight: .bold, design: .rounded))
+                .font(.hayame(size: 22, weight: .bold))
                 .foregroundStyle(HayameTheme.brandNavy)
             Spacer()
             if let actionTitle, let action {
                 Button(actionTitle, action: action)
-                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                    .font(.hayame(size: 14, weight: .semibold))
                     .foregroundStyle(HayameTheme.brandBlue)
             }
         }
-    }
-}
-
-struct CarCardView: View {
-    let car: Car
-    let isFavorite: Bool
-    var showsFavoriteButton: Bool = true
-    let favoriteAction: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            ZStack(alignment: .topTrailing) {
-                NetworkOrFallbackImage(
-                    urlString: car.imageNames.first,
-                    targetSize: CGSize(width: 420, height: 300)
-                )
-                    .frame(height: 164)
-                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-
-                if showsFavoriteButton {
-                    Button(action: favoriteAction) {
-                        Image(systemName: isFavorite ? "heart.fill" : "heart")
-                            .font(.system(size: 14, weight: .bold))
-                            .foregroundStyle(isFavorite ? Color.red : HayameTheme.brandNavy)
-                            .padding(8)
-                            .background(HayameTheme.floatingControlBackground)
-                            .clipShape(Circle())
-                    }
-                    .buttonStyle(.plain)
-                    .padding(8)
-                }
-            }
-
-            VStack(alignment: .leading, spacing: 6) {
-                Text(car.displayTitle)
-                    .font(.system(size: 16, weight: .bold, design: .rounded))
-                    .foregroundStyle(HayameTheme.brandNavy)
-                    .lineLimit(2)
-
-                Text("\(car.city), \(car.region)")
-                    .font(.system(size: 13, weight: .medium, design: .rounded))
-                    .foregroundStyle(HayameTheme.mutedText)
-                    .lineLimit(2)
-
-                HStack(spacing: 8) {
-                    Label(String(format: "%.1f", car.rating), systemImage: "star.fill")
-                        .font(.system(size: 12, weight: .semibold, design: .rounded))
-                        .foregroundStyle(.orange)
-
-                    if car.instantBook {
-                        Text("Instant")
-                            .font(.system(size: 10, weight: .bold, design: .rounded))
-                            .foregroundStyle(HayameTheme.success)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(HayameTheme.success.opacity(0.14))
-                            .clipShape(Capsule())
-                    }
-
-                    Spacer()
-                }
-
-                HStack(alignment: .firstTextBaseline, spacing: 4) {
-                    Text("GHS\(car.dailyPrice)")
-                        .font(.system(size: 20, weight: .bold, design: .rounded))
-                        .foregroundStyle(HayameTheme.brandNavy)
-                    Text("/ day")
-                        .font(.system(size: 12, weight: .semibold, design: .rounded))
-                        .foregroundStyle(HayameTheme.brandBlue)
-                }
-            }
-        }
-        .padding(12)
-        .background(HayameTheme.cardBackground)
-        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(HayameTheme.cardStroke, lineWidth: 1)
-        )
     }
 }
 
@@ -648,13 +569,20 @@ struct BookingStatusBadge: View {
     let status: BookingDisplayStatus
 
     var body: some View {
-        Text(status.label)
-            .font(.system(size: 11, weight: .bold, design: .rounded))
-            .foregroundStyle(foreground)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(background)
-            .clipShape(Capsule())
+        // The label pops to its new value and the capsule recolors in step, so a
+        // booking moving from Pending to Confirmed is felt, not just noticed.
+        ZStack {
+            Text(status.label)
+                .id(status.label)
+                .transition(.scale(scale: 0.7).combined(with: .opacity))
+        }
+        .font(.hayame(size: 11, weight: .bold))
+        .foregroundStyle(foreground)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(background)
+        .clipShape(Capsule())
+        .animation(HayameMotion.snappy, value: status.label)
     }
 
     private var background: Color {
@@ -683,7 +611,7 @@ struct BookingPaymentBadge: View {
 
     var body: some View {
         Text(label)
-            .font(.system(size: 10, weight: .bold, design: .rounded))
+            .font(.hayame(size: 10, weight: .bold))
             .foregroundStyle(HayameTheme.success)
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
@@ -703,18 +631,18 @@ struct BookingStatusHeader: View {
         HStack(alignment: .top, spacing: 12) {
             VStack(alignment: .leading, spacing: 6) {
                 Text(title)
-                    .font(.system(size: 16, weight: .bold, design: .rounded))
+                    .font(.hayame(size: 16, weight: .bold))
                     .foregroundStyle(HayameTheme.brandNavy)
 
                 if let subtitle, !subtitle.isEmpty {
                     Text(subtitle)
-                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                        .font(.hayame(size: 12, weight: .medium))
                         .foregroundStyle(HayameTheme.mutedText)
                 }
 
                 if let helperText, !helperText.isEmpty {
                     Text(helperText)
-                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .font(.hayame(size: 12, weight: .semibold))
                         .foregroundStyle(HayameTheme.mutedText)
                 }
             }
@@ -749,162 +677,20 @@ struct BookingRowCard: View {
                 Label("\(booking.nights) night(s)", systemImage: "moon.stars")
                 Spacer()
             }
-            .font(.system(size: 12, weight: .semibold, design: .rounded))
+            .font(.hayame(size: 12, weight: .semibold))
             .foregroundStyle(HayameTheme.mutedText)
 
             HStack {
                 Text("GHS\(booking.totalPrice)")
-                    .font(.system(size: 20, weight: .bold, design: .rounded))
+                    .font(.hayame(size: 20, weight: .bold))
                     .foregroundStyle(HayameTheme.brandNavy)
                 Spacer()
                 Text(booking.paymentStatus.rawValue.capitalized)
-                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                    .font(.hayame(size: 11, weight: .bold))
                     .foregroundStyle(HayameTheme.brandBlue)
             }
         }
         .hayameCard()
-    }
-}
-
-struct ConversationRowView: View {
-    let conversation: Conversation
-
-    var body: some View {
-        HStack(spacing: 12) {
-            avatarView
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(conversation.participantName)
-                    .font(.system(size: 15, weight: .semibold, design: .rounded))
-                    .foregroundStyle(HayameTheme.brandNavy)
-                    .lineLimit(1)
-
-                Text(conversation.lastMessagePreview)
-                    .font(.system(size: 12, weight: .medium, design: .rounded))
-                    .foregroundStyle(HayameTheme.mutedText)
-                    .lineLimit(1)
-            }
-
-            Spacer()
-
-            VStack(alignment: .trailing, spacing: 6) {
-                Text(conversation.updatedAt.hayameTimeLabel())
-                    .font(.system(size: 10, weight: .medium, design: .rounded))
-                    .foregroundStyle(HayameTheme.mutedText)
-                if conversation.unreadCount > 0 {
-                    Text("\(conversation.unreadCount)")
-                        .font(.system(size: 10, weight: .bold, design: .rounded))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(HayameTheme.brandBlue)
-                        .clipShape(Capsule())
-                }
-            }
-        }
-        .padding(10)
-        .background(HayameTheme.cardBackground)
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(HayameTheme.cardStroke, lineWidth: 1)
-        )
-    }
-
-    @ViewBuilder
-    private var avatarView: some View {
-        if let url = RemoteImageURLResolver.resolve(conversation.participantAvatar) {
-            CachedRemoteImage(url: url, targetSize: CGSize(width: 42, height: 42)) {
-                Circle().fill(HayameTheme.brandLight)
-            } failure: {
-                fallbackAvatar
-            }
-            .frame(width: 42, height: 42)
-            .clipShape(Circle())
-            .overlay(Circle().stroke(HayameTheme.cardStroke, lineWidth: 1))
-        } else {
-            fallbackAvatar
-                .frame(width: 42, height: 42)
-                .overlay(Circle().stroke(HayameTheme.cardStroke, lineWidth: 1))
-        }
-    }
-
-    private var fallbackAvatar: some View {
-        Circle()
-            .fill(HayameTheme.brandLight)
-            .overlay(
-                Text(initials(from: conversation.participantName))
-                    .font(.system(size: 13, weight: .bold, design: .rounded))
-                    .foregroundStyle(HayameTheme.brandNavy)
-            )
-    }
-
-    private func initials(from name: String) -> String {
-        name
-            .split(separator: " ")
-            .prefix(2)
-            .compactMap { $0.first.map(String.init) }
-            .joined()
-            .uppercased()
-    }
-}
-
-struct ChatBubble: View {
-    let message: ChatMessage
-
-    var body: some View {
-        HStack {
-            if message.isMine { Spacer(minLength: 40) }
-
-            VStack(alignment: .leading, spacing: 4) {
-                if !message.isMine {
-                    Text(message.senderName)
-                        .font(.system(size: 10, weight: .bold, design: .rounded))
-                        .foregroundStyle(HayameTheme.brandBlue)
-                }
-                Text(message.body)
-                    .font(.system(size: 14, weight: .medium, design: .rounded))
-                    .foregroundStyle(message.isMine ? .white : HayameTheme.brandNavy)
-                if message.isMine {
-                    Text(statusText)
-                        .font(.system(size: 10, weight: .medium, design: .rounded))
-                        .foregroundStyle(statusColor)
-                } else {
-                    Text(message.createdAt.hayameTimeLabel())
-                        .font(.system(size: 10, weight: .medium, design: .rounded))
-                        .foregroundStyle(HayameTheme.mutedText)
-                }
-            }
-            .padding(10)
-            .background(message.isMine ? HayameTheme.brandBlue : HayameTheme.cardBackground)
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .stroke(message.isMine ? Color.clear : HayameTheme.cardStroke, lineWidth: 1)
-            )
-
-            if !message.isMine { Spacer(minLength: 40) }
-        }
-    }
-
-    private var statusText: String {
-        switch message.deliveryState {
-        case .sending:
-            return "Sending..."
-        case .failed:
-            return "Failed to send"
-        case .sent:
-            return message.createdAt.hayameTimeLabel()
-        }
-    }
-
-    private var statusColor: Color {
-        switch message.deliveryState {
-        case .failed:
-            return Color(red: 1, green: 0.86, blue: 0.86)
-        case .sending, .sent:
-            return .white.opacity(0.8)
-        }
     }
 }
 
@@ -935,7 +721,7 @@ struct NetworkOrFallbackImage: View {
         ZStack {
             Rectangle().fill(HayameTheme.brandLight)
             Image(systemName: "car.fill")
-                .font(.system(size: 26, weight: .bold))
+                .font(.hayame(size: 26, weight: .bold))
                 .foregroundStyle(HayameTheme.brandBlue.opacity(0.45))
         }
     }
@@ -949,13 +735,13 @@ struct EmptyStateView: View {
     var body: some View {
         VStack(spacing: 10) {
             Image(systemName: systemImage)
-                .font(.system(size: 34, weight: .bold))
+                .font(.hayame(size: 34, weight: .bold))
                 .foregroundStyle(HayameTheme.brandBlue)
             Text(title)
-                .font(.system(size: 18, weight: .bold, design: .rounded))
+                .font(.hayame(size: 18, weight: .bold))
                 .foregroundStyle(HayameTheme.brandNavy)
             Text(message)
-                .font(.system(size: 13, weight: .medium, design: .rounded))
+                .font(.hayame(size: 13, weight: .medium))
                 .foregroundStyle(HayameTheme.mutedText)
                 .multilineTextAlignment(.center)
         }
@@ -972,11 +758,11 @@ struct InfoLine: View {
     var body: some View {
         HStack {
             Text(label)
-                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                .font(.hayame(size: 13, weight: .semibold))
                 .foregroundStyle(HayameTheme.mutedText)
             Spacer()
             Text(value)
-                .font(.system(size: 13, weight: .bold, design: .rounded))
+                .font(.hayame(size: 13, weight: .bold))
                 .foregroundStyle(HayameTheme.brandNavy)
         }
     }
@@ -991,10 +777,10 @@ struct LoadingStateCard: View {
             ProgressView()
                 .tint(HayameTheme.brandBlue)
             Text(title)
-                .font(.system(size: 16, weight: .bold, design: .rounded))
+                .font(.hayame(size: 16, weight: .bold))
                 .foregroundStyle(HayameTheme.brandNavy)
             Text(message)
-                .font(.system(size: 12, weight: .medium, design: .rounded))
+                .font(.hayame(size: 12, weight: .medium))
                 .foregroundStyle(HayameTheme.mutedText)
                 .multilineTextAlignment(.center)
         }
@@ -1013,13 +799,13 @@ struct ErrorStateCard: View {
     var body: some View {
         VStack(spacing: 10) {
             Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 28, weight: .bold))
+                .font(.hayame(size: 28, weight: .bold))
                 .foregroundStyle(HayameTheme.warning)
             Text(title)
-                .font(.system(size: 16, weight: .bold, design: .rounded))
+                .font(.hayame(size: 16, weight: .bold))
                 .foregroundStyle(HayameTheme.brandNavy)
             Text(message)
-                .font(.system(size: 12, weight: .medium, design: .rounded))
+                .font(.hayame(size: 12, weight: .medium))
                 .foregroundStyle(HayameTheme.mutedText)
                 .multilineTextAlignment(.center)
             Button(actionTitle, action: action)
@@ -1225,30 +1011,6 @@ struct BookingPlaceholderCard: View {
     }
 }
 
-struct ConversationPlaceholderRow: View {
-    var body: some View {
-        HStack(spacing: 12) {
-            SkeletonBlock(width: 48, height: 48, cornerRadius: 24)
-
-            VStack(alignment: .leading, spacing: 6) {
-                SkeletonBlock(width: 118, height: 13, cornerRadius: 6)
-                SkeletonBlock(width: 188, height: 11, cornerRadius: 6)
-            }
-
-            Spacer()
-
-            SkeletonBlock(width: 34, height: 10, cornerRadius: 5)
-        }
-        .padding(12)
-        .background(HayameTheme.cardBackground)
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(HayameTheme.cardStroke, lineWidth: 1)
-        )
-    }
-}
-
 struct HostListingPlaceholderRow: View {
     var body: some View {
         HStack(spacing: 10) {
@@ -1260,5 +1022,67 @@ struct HostListingPlaceholderRow: View {
             SkeletonBlock(width: 84, height: 20, cornerRadius: 10)
         }
         .padding(.vertical, 8)
+    }
+}
+
+
+// MARK: - Car type icons
+
+/// Maps a listing's car type (and the Home category pills) to the bundled
+/// `cartype-*` vector icons, with common aliases folded in.
+enum CarTypeIconCatalog {
+    static func assetName(for type: String) -> String {
+        let key = type.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        switch key {
+        case "all": return "cartype-all"
+        case "suv", "4x4", "jeep", "4wd": return "cartype-suv"
+        case "sedan", "saloon": return "cartype-sedan"
+        case "hatchback", "compact", "hatch", "mini", "small": return "cartype-hatchback"
+        case "crossover": return "cartype-crossover"
+        case "convertible", "cabriolet", "roadster": return "cartype-convertible"
+        case "coupe", "coupé", "sports", "sport", "sports car": return "cartype-coupe"
+        case "pickup", "pick-up", "pick up", "bakkie": return "cartype-pickup"
+        case "truck", "lorry": return "cartype-truck"
+        case "van", "bus", "cargo van": return "cartype-van"
+        case "minivan", "mpv", "people carrier", "mini van": return "cartype-minivan"
+        case "electric", "ev", "hybrid", "plug-in": return "cartype-electric"
+        case "luxury", "executive", "limousine", "limo", "premium": return "cartype-luxury"
+        default: return "cartype-sedan"
+        }
+    }
+}
+
+struct CarTypeIcon: View {
+    let type: String
+
+    var body: some View {
+        Image(CarTypeIconCatalog.assetName(for: type))
+            .renderingMode(.template)
+            .resizable()
+            .scaledToFit()
+    }
+}
+
+/// Category pill matching for the Home feed: exact type match, with the
+/// aliases buyers actually use (Compact and Hatchback, Pickup and Truck...).
+enum HomeCategoryFilter {
+    private static let groups: [[String]] = [
+        ["hatchback", "compact", "hatch", "mini", "small"],
+        ["pickup", "pick-up", "pick up", "truck", "bakkie"],
+        ["electric", "ev"],
+        ["coupe", "coupé", "sports", "sport", "sports car"],
+        ["luxury", "executive", "limousine", "limo", "premium"],
+        ["van", "cargo van", "bus"],
+        ["minivan", "mpv", "mini van", "people carrier"],
+        ["convertible", "cabriolet", "roadster"],
+        ["suv", "4x4", "jeep", "4wd"],
+    ]
+
+    static func matches(carType: String, category: String) -> Bool {
+        let selected = category.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !selected.isEmpty, selected != "all" else { return true }
+        let type = carType.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if type == selected { return true }
+        return groups.contains { $0.contains(selected) && $0.contains(type) }
     }
 }

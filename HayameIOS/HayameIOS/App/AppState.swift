@@ -75,9 +75,21 @@ final class AppState: ObservableObject {
     @Published var signupConfirmationPromptMessage: String?
     @Published var paymentFlowNotice: String?
     @Published var paymentFlowNoticeIsError = false
+    /// Checkout the renter started paying for and did not finish (server-held).
+    @Published var pendingCheckout: PendingCheckout?
+    /// Selections saved on this device before any payment was attempted.
+    @Published var checkoutDraft: CheckoutDraft?
+    @Published var pendingCheckoutLoadState: ViewLoadState = .idle
+    /// Bumped whenever a checkout is paid, so any sheet still showing it can close.
+    @Published var lastCompletedCheckoutBookingID: String?
     @Published var notificationPreferences = NotificationPreferences.defaults
     @Published var activeAnnouncement: AppAnnouncement?
+    /// Effective appearance: true when the UI should be dark right now.
     @Published var darkModeEnabled = false
+    /// What the user chose in Settings: follow the phone, always light, or always dark.
+    @Published private(set) var appearanceMode: AppearanceMode = .system
+    /// The phone's own setting, tracked while `appearanceMode` is `.system`.
+    @Published private(set) var systemPrefersDark = false
     @Published var listingEditorActive = false
 
     private let api = APIClient.shared
@@ -91,7 +103,10 @@ final class AppState: ObservableObject {
     private let seenAnnouncementIDsKey = "hayame.seen_announcement_ids"
     private let firstLaunchAtKey = "hayame.first_launch_at"
     private let darkModeKey = "hayame.dark_mode_enabled"
+    private let appearanceModeKey = "hayame.appearance_mode"
     private let exploreLayoutModeKey = "hayame.explore_layout_mode"
+    private let checkoutDraftKey = "hayame.checkout_draft"
+    private var lastPendingCheckoutRefresh: Date?
 
     private var authToken: String?
     private var refreshToken: String?
@@ -176,7 +191,16 @@ final class AppState: ObservableObject {
                 }
             }
         }
-        darkModeEnabled = defaults.bool(forKey: darkModeKey)
+        if let raw = defaults.string(forKey: appearanceModeKey), let mode = AppearanceMode(rawValue: raw) {
+            appearanceMode = mode
+        } else if defaults.object(forKey: darkModeKey) != nil {
+            // Older builds stored a plain on/off switch.
+            appearanceMode = defaults.bool(forKey: darkModeKey) ? .dark : .light
+        } else {
+            appearanceMode = .system
+        }
+        systemPrefersDark = Self.systemPrefersDarkNow()
+        darkModeEnabled = resolvedDarkMode
         if let rawLayout = defaults.string(forKey: exploreLayoutModeKey),
            let persistedLayout = ExploreLayoutMode(rawValue: rawLayout) {
             exploreLayoutMode = persistedLayout
@@ -232,9 +256,11 @@ final class AppState: ObservableObject {
             guard let self else { return }
             Task { @MainActor in
                 await self.refreshActiveAnnouncements()
+                await self.refreshPendingCheckout()
             }
         }
         routePendingPushNotificationIfNeeded()
+        loadCheckoutDraft()
         Task {
             async let referenceTask: Void = refreshReferenceData()
             async let publicCarsTask: Void = syncPublicCars()
@@ -248,6 +274,7 @@ final class AppState: ObservableObject {
     private func configureForScreenshots() {
         stopPolling()
         stopRealtimeMessages()
+        appearanceMode = Self.screenshotDarkModeEnabled ? .dark : .light
         darkModeEnabled = Self.screenshotDarkModeEnabled
         apiBaseURL = Self.productionBaseURL
         isAuthenticated = true
@@ -268,11 +295,17 @@ final class AppState: ObservableObject {
         listingReviewsByCarID = [:]
         conversations = MockDataService.conversations
         messagesByConversation = MockDataService.messagesByConversation
+        if Self.isStoreScreenshotRun {
+            messagesByConversation["conv-001"] = Self.storeScreenshotChat
+        }
         notificationPreferences = .defaults
         activeAnnouncement = nil
         syncErrorMessage = nil
         authInfoMessage = nil
-        paymentFlowNotice = "Payment started. Your booking will appear here after checkout."
+        // Store screenshots (-HAYAME_STORE_SHOTS) leave the demo notice out.
+        paymentFlowNotice = ProcessInfo.processInfo.arguments.contains("-HAYAME_STORE_SHOTS")
+            ? nil
+            : "Payment started. Your booking will appear here after checkout."
         paymentFlowNoticeIsError = false
 
         publicCarsLoadState = .loading
@@ -352,10 +385,42 @@ final class AppState: ObservableObject {
         await RemoteImagePipeline.shared.warm(work, maxConcurrent: 6)
     }
 
+    /// Store screenshots (-HAYAME_STORE_SHOTS) use fuller demo content.
+    private static var isStoreScreenshotRun: Bool {
+        ProcessInfo.processInfo.arguments.contains("-HAYAME_STORE_SHOTS")
+    }
+
+    private static var storeScreenshotChat: [ChatMessage] {
+        let lines: [(String, Bool, Int)] = [
+            ("Hi Ama, the Corolla is free from Friday.", false, -42),
+            ("Great! Can I pick it up around 10 AM?", true, -38),
+            ("Yes, 10 AM works. I'm in Adenta, near the Shell station.", false, -35),
+            ("Perfect. Do you need anything from me?", true, -31),
+            ("Just your Ghana Card and licence. The tank will be full.", false, -27),
+            ("See you on Friday!", true, -24)
+        ]
+        return lines.enumerated().map { index, line in
+            ChatMessage(
+                id: "store-msg-\(index)",
+                conversationID: "conv-001",
+                senderName: line.1 ? "Ama Owusu" : "Stanley Abu",
+                body: line.0,
+                isMine: line.1,
+                createdAt: Calendar.current.date(byAdding: .minute, value: line.2, to: .now) ?? .now
+            )
+        }
+    }
+
     private static func screenshotRenterBookings(from cars: [Car]) -> [Booking] {
-        cars.prefix(2).enumerated().map { index, car in
-            let start = Calendar.current.date(byAdding: .day, value: index == 0 ? 2 : -15, to: .now) ?? .now
-            let end = Calendar.current.date(byAdding: .day, value: index == 0 ? 5 : -12, to: .now) ?? .now
+        // Store screenshots add a second upcoming trip so the Trips tab looks lived in.
+        let plan: [(start: Int, end: Int, upcoming: Bool)] = isStoreScreenshotRun
+            ? [(2, 5, true), (-15, -12, false), (12, 15, true)]
+            : [(2, 5, true), (-15, -12, false)]
+        let pool = Array(cars.prefix(plan.count))
+        return pool.enumerated().map { index, car in
+            let slot = plan[index]
+            let start = Calendar.current.date(byAdding: .day, value: slot.start, to: .now) ?? .now
+            let end = Calendar.current.date(byAdding: .day, value: slot.end, to: .now) ?? .now
             let nights = max(1, Calendar.current.dateComponents([.day], from: start, to: end).day ?? 1)
             let subtotal = car.dailyPrice * nights
             let platformFee = Int(Double(subtotal) * 0.10)
@@ -375,7 +440,7 @@ final class AppState: ObservableObject {
                 hostName: car.hostName,
                 startDate: start,
                 endDate: end,
-                status: index == 0 ? .confirmed : .completed,
+                status: slot.upcoming ? .confirmed : .completed,
                 paymentStatus: .paid,
                 totalPrice: subtotal + platformFee + deliveryFee + insuranceFee + depositAmount,
                 deliveryAddress: index == 0 && car.deliveryAvailable ? "22 Airport Bypass, Accra" : "",
@@ -592,6 +657,9 @@ final class AppState: ObservableObject {
         favoriteCarIDs = []
         renterBookings = []
         hostBookings = []
+        pendingCheckout = nil
+        pendingCheckoutLoadState = .idle
+        checkoutDraft = nil
         hostReviews = []
         listingReviewsByCarID = [:]
         conversations = []
@@ -766,8 +834,52 @@ final class AppState: ObservableObject {
     }
 
     func setDarkMode(_ enabled: Bool) {
-        darkModeEnabled = enabled
-        defaults.set(enabled, forKey: darkModeKey)
+        setAppearanceMode(enabled ? .dark : .light)
+    }
+
+    func setAppearanceMode(_ mode: AppearanceMode) {
+        appearanceMode = mode
+        defaults.set(mode.rawValue, forKey: appearanceModeKey)
+        if mode == .system {
+            systemPrefersDark = Self.systemPrefersDarkNow()
+        }
+        refreshDarkMode()
+    }
+
+    /// Called by the root view whenever the phone's own appearance changes.
+    func updateSystemAppearance(prefersDark: Bool) {
+        guard systemPrefersDark != prefersDark else { return }
+        systemPrefersDark = prefersDark
+        refreshDarkMode()
+    }
+
+    /// Re-reads the phone's setting, for when the app comes back to the foreground.
+    func refreshSystemAppearanceIfFollowingSystem() {
+        guard appearanceMode == .system else { return }
+        updateSystemAppearance(prefersDark: Self.systemPrefersDarkNow())
+    }
+
+    private var resolvedDarkMode: Bool {
+        switch appearanceMode {
+        case .system: return systemPrefersDark
+        case .light: return false
+        case .dark: return true
+        }
+    }
+
+    private func refreshDarkMode() {
+        let resolved = resolvedDarkMode
+        defaults.set(resolved, forKey: darkModeKey)
+        if darkModeEnabled != resolved {
+            darkModeEnabled = resolved
+        }
+    }
+
+    /// The phone's appearance, independent of any override the app applies.
+    static func systemPrefersDarkNow() -> Bool {
+        let scene = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
+        let style = scene?.screen.traitCollection.userInterfaceStyle ?? UITraitCollection.current.userInterfaceStyle
+        return style == .dark
     }
 
     func setExploreLayoutMode(_ mode: ExploreLayoutMode) {
@@ -1132,6 +1244,32 @@ final class AppState: ObservableObject {
         )
     }
 
+    /// Re-sends a message that failed to deliver, keeping its place in the thread.
+    func retryMessage(conversationID: String, messageID: String) {
+        guard let message = messagesByConversation[conversationID]?.first(where: { $0.id == messageID }),
+              message.deliveryState == .failed,
+              authToken != nil else { return }
+        updateLocalMessageDeliveryState(conversationID: conversationID, messageID: messageID, state: .sending)
+
+        Task {
+            do {
+                let sent = try await withAuthenticatedToken { token in
+                    try await api.sendMessage(
+                        baseURL: apiBaseURL,
+                        token: token,
+                        conversationID: conversationID,
+                        body: message.body
+                    )
+                }
+                let mapped = mapMessage(sent.data, participantName: participantName(for: conversationID))
+                resolveLocalMessageSendSuccess(conversationID: conversationID, messageID: messageID, serverMessage: mapped)
+            } catch {
+                updateLocalMessageDeliveryState(conversationID: conversationID, messageID: messageID, state: .failed)
+                syncErrorMessage = errorMessage(error, fallback: "Unable to send message.")
+            }
+        }
+    }
+
     func addMessageIfMissing(conversationID: String, body: String) async {
         let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
@@ -1450,38 +1588,35 @@ final class AppState: ObservableObject {
     }
 
     func approveBooking(_ booking: Booking) {
-        guard authToken != nil else {
-            syncErrorMessage = "Log in to approve bookings."
-            return
-        }
-
-        Task {
-            do {
-                try await withAuthenticatedToken { token in
-                    try await api.updateBookingDecision(baseURL: apiBaseURL, token: token, bookingID: booking.id, approve: true)
-                }
-                await syncBookings()
-            } catch {
-                syncErrorMessage = errorMessage(error, fallback: "Unable to approve booking.")
-            }
-        }
+        Task { await decideBooking(booking, approve: true) }
     }
 
     func rejectBooking(_ booking: Booking) {
+        Task { await decideBooking(booking, approve: false) }
+    }
+
+    /// Approves or rejects a booking request and refreshes bookings. Returns
+    /// whether the decision was accepted by the server, so screens can show
+    /// in-flight and success states instead of firing and forgetting.
+    @discardableResult
+    func decideBooking(_ booking: Booking, approve: Bool) async -> Bool {
         guard authToken != nil else {
-            syncErrorMessage = "Log in to reject bookings."
-            return
+            syncErrorMessage = approve ? "Log in to approve bookings." : "Log in to reject bookings."
+            return false
         }
 
-        Task {
-            do {
-                try await withAuthenticatedToken { token in
-                    try await api.updateBookingDecision(baseURL: apiBaseURL, token: token, bookingID: booking.id, approve: false)
-                }
-                await syncBookings()
-            } catch {
-                syncErrorMessage = errorMessage(error, fallback: "Unable to reject booking.")
+        do {
+            try await withAuthenticatedToken { token in
+                try await api.updateBookingDecision(baseURL: apiBaseURL, token: token, bookingID: booking.id, approve: approve)
             }
+            await syncBookings()
+            return true
+        } catch {
+            syncErrorMessage = errorMessage(
+                error,
+                fallback: approve ? "Unable to approve booking." : "Unable to reject booking."
+            )
+            return false
         }
     }
 
@@ -1631,6 +1766,7 @@ final class AppState: ObservableObject {
             syncErrorMessage = nil
             paymentFlowNotice = "Payment successful. Your booking is now in Trips."
             paymentFlowNoticeIsError = false
+            markCheckoutCompleted(bookingID: checkout.bookingID)
             return finalized.conversationId
         } catch {
             syncErrorMessage = errorMessage(error, fallback: "Payment completed but booking finalization failed.")
@@ -1638,6 +1774,348 @@ final class AppState: ObservableObject {
             paymentFlowNoticeIsError = true
             throw error
         }
+    }
+
+    // MARK: - Resumable checkout
+
+    /// Whatever the renter can pick back up. The server-held checkout wins
+    /// because it already has a booking id and the live price; a local draft
+    /// is the fallback for selections made before any payment attempt.
+    var resumableCheckout: ResumableCheckout? {
+        guard isAuthenticated else { return nil }
+        if let pendingCheckout { return .held(pendingCheckout) }
+        if let checkoutDraft, checkoutDraft.userID == currentUser.id { return .draft(checkoutDraft) }
+        return nil
+    }
+
+    func resumableCheckout(forCar carID: String) -> ResumableCheckout? {
+        guard let resumable = resumableCheckout, resumable.carID == carID else { return nil }
+        return resumable
+    }
+
+    /// Asks the server for an unfinished checkout. Throttled so Home, Trips and
+    /// foregrounding do not each fire a request; `force` skips the throttle.
+    func refreshPendingCheckout(force: Bool = false) async {
+        #if DEBUG
+        if Self.isScreenshotMode { return }
+        #endif
+        guard isAuthenticated, authToken != nil else {
+            pendingCheckout = nil
+            pendingCheckoutLoadState = .idle
+            return
+        }
+        if !force, let last = lastPendingCheckoutRefresh, Date().timeIntervalSince(last) < 20 {
+            return
+        }
+        lastPendingCheckoutRefresh = Date()
+        if pendingCheckout == nil, pendingCheckoutLoadState == .idle {
+            pendingCheckoutLoadState = .loading
+        }
+        do {
+            let envelope = try await withAuthenticatedToken { token in
+                try await api.getPendingCheckout(baseURL: apiBaseURL, token: token)
+            }
+            if let completed = envelope.completed, let bookingID = completed.bookingId {
+                // A payment that had gone through while the app was away was
+                // just confirmed by the server. Nothing left to resume.
+                markCheckoutCompleted(bookingID: bookingID)
+                paymentFlowNotice = "Your earlier payment went through. The booking is now in Trips."
+                paymentFlowNoticeIsError = false
+                await syncBookings()
+                await syncConversations()
+                return
+            }
+            let mapped = envelope.data.map(mapPendingCheckout)
+            pendingCheckout = mapped
+            pendingCheckoutLoadState = mapped == nil ? .empty : .loaded
+            if let mapped, let checkoutDraft, checkoutDraft.carID == mapped.carID {
+                // The server copy carries the same choices plus a booking id.
+                _ = checkoutDraft
+                clearCheckoutDraft()
+            }
+        } catch {
+            pendingCheckoutLoadState = pendingCheckout == nil ? .empty : .loaded
+        }
+    }
+
+    #if DEBUG
+    /// Fixture for the `checkout-resume-*` screenshot routes.
+    static func screenshotPendingCheckout(from car: Car, startDate: Date, endDate: Date, blocked: Bool) -> PendingCheckout {
+        let nights = max(1, Calendar.current.dateComponents([.day], from: startDate, to: endDate).day ?? 1)
+        let subtotal = car.dailyPrice * nights
+        let platformFee = Int(Double(subtotal) * 0.10)
+        let deliveryFee = max(car.deliveryFee, 0)
+        let total = subtotal + platformFee + max(car.insuranceFee, 0) + deliveryFee + max(car.depositAmount, 0)
+        return PendingCheckout(
+            id: "screenshot-checkout",
+            carID: car.id,
+            state: blocked ? .expired : .held,
+            holdExpiresAt: blocked ? nil : Date().addingTimeInterval(11 * 60 + 42),
+            createdAt: Date().addingTimeInterval(-40 * 60),
+            startDate: startDate,
+            endDate: endDate,
+            startDateString: dateOnlyFormatter.string(from: startDate),
+            endDateString: dateOnlyFormatter.string(from: endDate),
+            nights: nights,
+            tripMode: .delivery,
+            tripUseRegion: "Greater Accra Region",
+            tripUseCity: "Accra",
+            tripUseAddress: "Airport Residential",
+            delivery: BookingDeliveryDetails(address: "22 Airport Bypass, Accra", time: "10:00", contactPhone: "+233 24 555 0001", notes: ""),
+            carTitle: car.displayTitle,
+            carImageURL: car.imageNames.first,
+            carDailyPrice: car.dailyPrice,
+            carCity: car.city,
+            carRegion: car.region,
+            carInstantBook: car.instantBook,
+            carDeliveryAvailable: true,
+            hostName: car.hostName,
+            pricing: CheckoutPricing(
+                nights: nights,
+                dailyRate: car.dailyPrice,
+                subtotal: subtotal,
+                platformFee: platformFee,
+                insuranceFee: max(car.insuranceFee, 0),
+                deliveryFee: deliveryFee,
+                outsideAccraSurcharge: 0,
+                depositAmount: max(car.depositAmount, 0),
+                total: total,
+                amountMinor: total * 100
+            ),
+            issues: blocked ? [CheckoutIssue(code: "dates_taken", message: "Someone else booked these dates. Pick new dates to continue.")] : [],
+            canResume: !blocked,
+            paymentReference: nil
+        )
+    }
+    #endif
+
+    /// Re-checks every condition server-side and refreshes the hold. Does not
+    /// open Paystack; the caller decides what to do with the outcome.
+    func resumePendingCheckout(_ checkout: PendingCheckout) async throws -> CheckoutResumeOutcome {
+        #if DEBUG
+        if Self.isScreenshotMode {
+            try? await Task.sleep(nanoseconds: 1_400_000_000)
+            return checkout.issues.isEmpty ? .ready(checkout) : .blocked(checkout)
+        }
+        #endif
+        guard authToken != nil else {
+            throw APIError(message: "Log in to continue your booking.")
+        }
+        do {
+            let result = try await withAuthenticatedToken { token in
+                try await api.resumeCheckout(baseURL: apiBaseURL, token: token, bookingID: checkout.bookingID)
+            }
+            switch result.outcome {
+            case "completed":
+                let bookingID = result.bookingId ?? checkout.bookingID
+                markCheckoutCompleted(bookingID: bookingID)
+                await syncBookings()
+                await syncConversations()
+                return .completed(bookingID: bookingID, conversationID: result.conversationId)
+            case "ready":
+                guard let dto = result.checkout else {
+                    throw APIError(message: "We couldn't resume your booking. Please try again.")
+                }
+                let mapped = mapPendingCheckout(dto)
+                pendingCheckout = mapped
+                pendingCheckoutLoadState = .loaded
+                return .ready(mapped)
+            default:
+                guard let dto = result.checkout else {
+                    throw APIError(message: "We couldn't resume your booking. Please try again.")
+                }
+                let mapped = mapPendingCheckout(dto)
+                pendingCheckout = mapped
+                pendingCheckoutLoadState = .loaded
+                return .blocked(mapped)
+            }
+        } catch let apiError as APIError where apiError.statusCode == 404 {
+            // Gone for good (abandoned elsewhere, or outside the resume window).
+            pendingCheckout = nil
+            pendingCheckoutLoadState = .empty
+            throw apiError
+        }
+    }
+
+    /// Starts Paystack for a checkout the server just marked ready. Reuses the
+    /// held booking instead of creating a second hold.
+    func beginResumedCheckoutPayment(_ checkout: PendingCheckout) async throws -> PaystackCheckoutSession {
+        guard authToken != nil else {
+            throw APIError(message: "Log in to continue your booking.")
+        }
+        paymentFlowNotice = nil
+        paymentFlowNoticeIsError = false
+        let initiated = try await withAuthenticatedToken { token in
+            try await api.initiatePaystackCheckout(
+                baseURL: apiBaseURL,
+                token: token,
+                bookingID: checkout.bookingID,
+                callbackURL: "hayame://payment-callback"
+            )
+        }
+        let amountMinor = max(initiated.amount?.intValue ?? 0, 0)
+        guard amountMinor > 0 else {
+            throw APIError(message: "Invalid payment amount from server.")
+        }
+        let checkoutURL = (initiated.payment_url ?? initiated.authorization_url).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !checkoutURL.isEmpty else {
+            throw APIError(message: "Missing payment URL from server.")
+        }
+        AnalyticsService.shared.track(AnalyticsEvent.bookingPaymentStarted, [
+            "car_id": checkout.carID,
+            "price_bucket": Self.analyticsPriceBucket(Double(amountMinor) / 100.0),
+            "resumed": true,
+        ])
+        return PaystackCheckoutSession(
+            bookingID: checkout.bookingID,
+            carID: checkout.carID,
+            startDate: checkout.startDateString,
+            endDate: checkout.endDateString,
+            tripUseRegion: checkout.tripUseRegion,
+            tripUseCity: checkout.tripUseCity,
+            tripUseAddress: checkout.tripUseAddress,
+            reference: initiated.reference,
+            amountMinor: amountMinor,
+            authorizationURL: checkoutURL
+        )
+    }
+
+    /// Drops the saved checkout: releases the hold server-side and forgets any
+    /// local draft. Returns false only when the server refused.
+    @discardableResult
+    func abandonResumableCheckout(_ resumable: ResumableCheckout) async -> Bool {
+        switch resumable {
+        case .draft:
+            clearCheckoutDraft()
+            return true
+        case .held(let checkout):
+            do {
+                let result = try await withAuthenticatedToken { token in
+                    try await api.abandonCheckout(baseURL: apiBaseURL, token: token, bookingID: checkout.bookingID)
+                }
+                if result?.outcome == "completed", let bookingID = result?.bookingId {
+                    markCheckoutCompleted(bookingID: bookingID)
+                    paymentFlowNotice = "Your earlier payment went through, so this booking was kept. Find it in Trips."
+                    paymentFlowNoticeIsError = false
+                    await syncBookings()
+                    return true
+                }
+                if pendingCheckout?.id == checkout.id {
+                    pendingCheckout = nil
+                    pendingCheckoutLoadState = .empty
+                }
+                if checkoutDraft?.carID == checkout.carID {
+                    clearCheckoutDraft()
+                }
+                AnalyticsService.shared.track(AnalyticsEvent.bookingAbandoned, ["car_id": checkout.carID, "stage": "resume"])
+                return true
+            } catch {
+                syncErrorMessage = errorMessage(error, fallback: "We couldn't clear that booking. Please try again.")
+                return false
+            }
+        }
+    }
+
+    func saveCheckoutDraft(_ draft: CheckoutDraft) {
+        var stamped = draft
+        stamped.userID = currentUser.id
+        stamped.updatedAt = Date()
+        checkoutDraft = stamped
+        if let data = try? JSONEncoder().encode(stamped) {
+            defaults.set(data, forKey: checkoutDraftKey)
+        }
+    }
+
+    func clearCheckoutDraft() {
+        checkoutDraft = nil
+        defaults.removeObject(forKey: checkoutDraftKey)
+    }
+
+    private func loadCheckoutDraft() {
+        guard let data = defaults.data(forKey: checkoutDraftKey),
+              let draft = try? JSONDecoder().decode(CheckoutDraft.self, from: data) else { return }
+        // Drafts older than three days are stale: the dates have likely passed.
+        guard Date().timeIntervalSince(draft.updatedAt) < 72 * 60 * 60 else {
+            defaults.removeObject(forKey: checkoutDraftKey)
+            return
+        }
+        checkoutDraft = draft
+    }
+
+    private func markCheckoutCompleted(bookingID: String) {
+        pendingCheckout = nil
+        pendingCheckoutLoadState = .empty
+        clearCheckoutDraft()
+        lastCompletedCheckoutBookingID = bookingID
+    }
+
+    private static func nonEmpty(_ value: String?) -> String? {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private func mapPendingCheckout(_ dto: PendingCheckoutDTO) -> PendingCheckout {
+        let car = dto.car
+        let pricingDTO = dto.pricing
+        let pricing = CheckoutPricing(
+            nights: max(pricingDTO?.nights?.intValue ?? dto.nights?.intValue ?? 1, 1),
+            dailyRate: max(pricingDTO?.dailyRate?.intValue ?? 0, 0),
+            subtotal: max(pricingDTO?.subtotal?.intValue ?? 0, 0),
+            platformFee: max(pricingDTO?.platformFee?.intValue ?? 0, 0),
+            insuranceFee: max(pricingDTO?.insuranceFee?.intValue ?? 0, 0),
+            deliveryFee: max(pricingDTO?.deliveryFee?.intValue ?? 0, 0),
+            outsideAccraSurcharge: max(pricingDTO?.outsideAccraSurcharge?.intValue ?? 0, 0),
+            depositAmount: max(pricingDTO?.depositAmount?.intValue ?? 0, 0),
+            total: max(pricingDTO?.total?.intValue ?? 0, 0),
+            amountMinor: max(pricingDTO?.amountMinor?.intValue ?? 0, 0)
+        )
+        let startDate = Self.dateOnlyFormatter.date(from: dto.startDate) ?? .now
+        let endDate = Self.dateOnlyFormatter.date(from: dto.endDate) ?? startDate
+        let holdExpiresAt: Date? = dto.holdExpiresAt.flatMap { raw in
+            Self.iso8601WithFractional.date(from: raw) ?? Self.iso8601Basic.date(from: raw)
+        }
+        let createdAt: Date? = dto.createdAt.flatMap { raw in
+            Self.iso8601WithFractional.date(from: raw) ?? Self.iso8601Basic.date(from: raw)
+        }
+        let issues = (dto.issues ?? []).compactMap { issue -> CheckoutIssue? in
+            guard let message = issue.message?.trimmingCharacters(in: .whitespacesAndNewlines), !message.isEmpty else { return nil }
+            return CheckoutIssue(code: issue.code ?? "blocked", message: message)
+        }
+        let rawRegion = dto.tripUseRegion?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return PendingCheckout(
+            id: dto.bookingId,
+            carID: dto.carId,
+            state: (dto.state == "held" && holdExpiresAt != nil) ? .held : .expired,
+            holdExpiresAt: holdExpiresAt,
+            createdAt: createdAt,
+            startDate: startDate,
+            endDate: endDate,
+            startDateString: dto.startDate,
+            endDateString: dto.endDate,
+            nights: pricing.nights,
+            tripMode: dto.tripMode == "delivery" ? .delivery : .pickup,
+            tripUseRegion: rawRegion.isEmpty ? "" : MockDataService.normalizedRegion(rawRegion),
+            tripUseCity: dto.tripUseCity?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
+            tripUseAddress: dto.tripUseAddress?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
+            delivery: BookingDeliveryDetails(
+                address: dto.deliveryAddress ?? "",
+                time: dto.deliveryTime ?? "",
+                contactPhone: dto.contactPhone ?? "",
+                notes: dto.deliveryNotes ?? ""
+            ),
+            carTitle: Self.nonEmpty(car?.title) ?? "Hayame listing",
+            carImageURL: RemoteImageURLResolver.canonicalString(car?.imageUrl),
+            carDailyPrice: max(car?.dailyPrice?.intValue ?? 0, 0),
+            carCity: car?.city ?? "",
+            carRegion: MockDataService.normalizedRegion(car?.region ?? MockDataService.defaultRegion),
+            carInstantBook: car?.instantBook ?? false,
+            carDeliveryAvailable: car?.deliveryAvailable ?? false,
+            hostName: Self.nonEmpty(car?.hostName) ?? "Host",
+            pricing: pricing,
+            issues: issues,
+            canResume: (dto.canResume ?? issues.isEmpty) && issues.isEmpty,
+            paymentReference: dto.paymentReference
+        )
     }
 
     // Universal Link entry point: hayamegh.com/cars/{id} opened from Safari,
@@ -2360,6 +2838,7 @@ final class AppState: ObservableObject {
         await syncConversations()
         await syncHostApplication()
         await syncHostReviews()
+        await refreshPendingCheckout(force: true)
     }
 
     private func loadNotificationPreferences() async {
@@ -3071,6 +3550,7 @@ final class AppState: ObservableObject {
             hostLevel: humanizeHostLevel(dto.host_level ?? owner?.host_level),
             instantBook: dto.instant_book ?? false,
             deliveryAvailable: deliveryAvailable,
+            allowOneDayBooking: dto.allow_one_day_booking ?? false,
             airConditioning: dto.air_conditioning ?? false,
             deliveryFee: deliveryAvailable ? max(dto.delivery_fee?.intValue ?? 0, 0) : 0,
             insuranceFee: max(dto.insurance_fee?.intValue ?? 0, 0),
@@ -3319,6 +3799,7 @@ final class AppState: ObservableObject {
             "is_available": true,
             "instant_book": draft.instantBook,
             "delivery_available": draft.deliveryAvailable,
+            "allow_one_day_booking": draft.allowOneDayBooking,
             "air_conditioning": draft.airConditioning,
             "delivery_fee": draft.deliveryAvailable ? draft.deliveryFee : 0,
             "insurance_fee": draft.insuranceFee,

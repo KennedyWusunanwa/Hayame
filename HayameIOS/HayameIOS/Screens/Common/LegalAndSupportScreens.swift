@@ -16,7 +16,7 @@ struct ContactScreen: View {
                     Label("support@hayamegh.com", systemImage: "envelope.fill")
                     Label("Accra Digital Centre, Ring Road West", systemImage: "mappin.and.ellipse")
                 }
-                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                .font(.hayame(size: 14, weight: .semibold))
                 .foregroundStyle(HayameTheme.brandNavy)
                 .hayameCard()
             }
@@ -33,7 +33,7 @@ struct PrivacyScreen: View {
             VStack(alignment: .leading, spacing: 14) {
                 SectionHeader(title: "Privacy")
                 Text("We store only the information required to operate bookings, payments, messages and listings. For account/data requests, contact support@hayamegh.com.")
-                    .font(.system(size: 14, weight: .medium, design: .rounded))
+                    .font(.hayame(size: 14, weight: .medium))
                     .foregroundStyle(HayameTheme.mutedText)
                     .hayameCard()
             }
@@ -82,10 +82,10 @@ struct ProtectionScreen: View {
                 ForEach(sections, id: \.title) { section in
                     VStack(alignment: .leading, spacing: 6) {
                         Text(section.title)
-                            .font(.system(size: 15, weight: .bold, design: .rounded))
+                            .font(.hayame(size: 15, weight: .bold))
                             .foregroundStyle(HayameTheme.brandNavy)
                         Text(section.body)
-                            .font(.system(size: 13, weight: .medium, design: .rounded))
+                            .font(.hayame(size: 13, weight: .medium))
                             .foregroundStyle(HayameTheme.mutedText)
                     }
                     .hayameCard()
@@ -106,7 +106,7 @@ struct CancellationPolicyScreen: View {
 
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Flexible")
-                        .font(.system(size: 15, weight: .bold, design: .rounded))
+                        .font(.hayame(size: 15, weight: .bold))
                     Text("Best for last-minute changes and quick rebooking.")
                         .hayameCaptionStyle()
                 }
@@ -114,7 +114,7 @@ struct CancellationPolicyScreen: View {
 
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Moderate")
-                        .font(.system(size: 15, weight: .bold, design: .rounded))
+                        .font(.hayame(size: 15, weight: .bold))
                     Text("Balanced terms for guests and hosts. Default on new listings.")
                         .hayameCaptionStyle()
                 }
@@ -122,7 +122,7 @@ struct CancellationPolicyScreen: View {
 
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Strict")
-                        .font(.system(size: 15, weight: .bold, design: .rounded))
+                        .font(.hayame(size: 15, weight: .bold))
                     Text("For high-demand inventory with higher late-cancel risk.")
                         .hayameCaptionStyle()
                 }
@@ -136,9 +136,17 @@ struct CancellationPolicyScreen: View {
 }
 
 struct HostPublicProfileScreen: View {
+    @EnvironmentObject private var appState: AppState
     let hostName: String
     let hostAvatar: String?
     let hostCars: [Car]
+
+    /// The host's cars as they are now, so pull to refresh picks up changes.
+    private var listedCars: [Car] {
+        let ids = Set(hostCars.map(\.id))
+        let live = appState.cars.filter { ids.contains($0.id) }
+        return live.isEmpty ? hostCars : live
+    }
 
     var body: some View {
         ScrollView {
@@ -147,7 +155,7 @@ struct HostPublicProfileScreen: View {
                     hostAvatarView
                     VStack(alignment: .leading, spacing: 3) {
                         Text(hostName)
-                            .font(.system(size: 24, weight: .bold, design: .rounded))
+                            .font(.hayame(size: 24, weight: .bold))
                             .foregroundStyle(HayameTheme.brandNavy)
                         Text("Verified host profile")
                             .hayameCaptionStyle()
@@ -160,29 +168,33 @@ struct HostPublicProfileScreen: View {
                     Label("Phone Verified", systemImage: "phone.fill")
                     Label("Email Verified", systemImage: "envelope.fill")
                 }
-                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                .font(.hayame(size: 13, weight: .semibold))
                 .foregroundStyle(HayameTheme.brandNavy)
                 .hayameCard()
 
                 SectionHeader(title: "Listings")
 
-                ForEach(hostCars) { car in
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(car.displayTitle)
-                            .font(.system(size: 15, weight: .bold, design: .rounded))
-                            .foregroundStyle(HayameTheme.brandNavy)
-                        Text("\(car.city), \(car.region)")
-                            .hayameCaptionStyle()
-                        Text("GHS\(car.dailyPrice)/day")
-                            .font(.system(size: 14, weight: .bold, design: .rounded))
-                            .foregroundStyle(HayameTheme.brandBlue)
+                if listedCars.isEmpty {
+                    Text("No listings yet.")
+                        .hayameCaptionStyle()
+                        .hayameCard()
+                } else {
+                    ForEach(listedCars) { car in
+                        NavigationLink {
+                            CarDetailScreen(car: car)
+                        } label: {
+                            ListingCard(car: car, isFavorite: false, layout: .tile(imageHeight: 170), showsFavoriteButton: false)
+                        }
+                        .buttonStyle(HayamePressableStyle(scale: 0.98))
                     }
-                    .hayameCard()
                 }
             }
             .padding(16)
         }
         .background(HayameTheme.pageBackground)
+        .refreshable {
+            await appState.refreshAllRemoteData()
+        }
         .navigationTitle("Host")
     }
 
@@ -215,7 +227,7 @@ struct HostPublicProfileScreen: View {
             .fill(HayameTheme.brandLight)
             .overlay(
                 Text(initials.isEmpty ? "H" : initials)
-                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                    .font(.hayame(size: 14, weight: .bold))
                     .foregroundStyle(HayameTheme.brandNavy)
             )
     }
@@ -251,17 +263,17 @@ struct MarketingPagesListScreen: View {
                     NavigationLink {
                         MarketingWebPageScreen(
                             title: page.title,
-                            url: URL(string: "https://www.hayame.com\(page.path)")
+                            url: URL(string: "\(AppState.productionBaseURL)\(page.path)")
                         )
                     } label: {
                         HStack(spacing: 10) {
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(page.title)
-                                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                                    .font(.hayame(size: 14, weight: .semibold))
                                     .foregroundStyle(HayameTheme.brandNavy)
                                 if page.isFlagged {
                                     Text("Feature flagged off")
-                                        .font(.system(size: 11, weight: .bold, design: .rounded))
+                                        .font(.hayame(size: 11, weight: .bold))
                                         .foregroundStyle(HayameTheme.warning)
                                 }
                             }
@@ -398,16 +410,16 @@ struct BecomeHostScreen: View {
                 Text("Apply to list your cars")
                     .hayameCaptionStyle()
                 Text("We verify every host to keep the marketplace safe. Applications are typically reviewed within 1-2 business days.")
-                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .font(.hayame(size: 12, weight: .medium))
                     .foregroundStyle(HayameTheme.mutedText)
 
                 if let hostApplication = appState.hostApplication {
                     HStack {
                         Text("Status")
-                            .font(.system(size: 14, weight: .semibold, design: .rounded))
+                            .font(.hayame(size: 14, weight: .semibold))
                         Spacer()
                         Text(hostApplication.status.rawValue.capitalized)
-                            .font(.system(size: 13, weight: .bold, design: .rounded))
+                            .font(.hayame(size: 13, weight: .bold))
                             .foregroundStyle(hostApplication.status == .approved ? HayameTheme.success : HayameTheme.warning)
                     }
                     .hayameCard()
@@ -420,7 +432,7 @@ struct BecomeHostScreen: View {
                         .buttonStyle(PrimaryPillButtonStyle())
                     } else if appState.hostAccessState == .pending {
                         Text("Your application is pending review. You will get host access once approved.")
-                            .font(.system(size: 12, weight: .semibold, design: .rounded))
+                            .font(.hayame(size: 12, weight: .semibold))
                             .foregroundStyle(HayameTheme.warning)
                     }
                 }
@@ -455,7 +467,7 @@ struct BecomeHostScreen: View {
 
                     VStack(alignment: .leading, spacing: 8) {
                         Text("ID front image")
-                            .font(.system(size: 12, weight: .semibold, design: .rounded))
+                            .font(.hayame(size: 12, weight: .semibold))
                             .foregroundStyle(HayameTheme.mutedText)
                         PhotosPicker(selection: $idFrontPhotoItem, matching: .images) {
                             Text(isUploadingIDFront ? "Uploading..." : (idFrontPath.isEmpty ? "Upload ID front" : "Replace ID front"))
@@ -464,7 +476,7 @@ struct BecomeHostScreen: View {
                         .disabled(isUploading)
                         if !idFrontPath.isEmpty {
                             Label("ID front uploaded", systemImage: "checkmark.circle.fill")
-                                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                .font(.hayame(size: 12, weight: .semibold))
                                 .foregroundStyle(HayameTheme.success)
                         }
                     }
@@ -472,7 +484,7 @@ struct BecomeHostScreen: View {
 
                     VStack(alignment: .leading, spacing: 8) {
                         Text("ID back image")
-                            .font(.system(size: 12, weight: .semibold, design: .rounded))
+                            .font(.hayame(size: 12, weight: .semibold))
                             .foregroundStyle(HayameTheme.mutedText)
                         PhotosPicker(selection: $idBackPhotoItem, matching: .images) {
                             Text(isUploadingIDBack ? "Uploading..." : (idBackPath.isEmpty ? "Upload ID back" : "Replace ID back"))
@@ -481,7 +493,7 @@ struct BecomeHostScreen: View {
                         .disabled(isUploading)
                         if !idBackPath.isEmpty {
                             Label("ID back uploaded", systemImage: "checkmark.circle.fill")
-                                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                .font(.hayame(size: 12, weight: .semibold))
                                 .foregroundStyle(HayameTheme.success)
                         }
                     }
@@ -489,14 +501,14 @@ struct BecomeHostScreen: View {
 
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Face photo")
-                            .font(.system(size: 12, weight: .semibold, design: .rounded))
+                            .font(.hayame(size: 12, weight: .semibold))
                             .foregroundStyle(HayameTheme.mutedText)
 
                         HStack(spacing: 12) {
                             facePhotoPreview
                             VStack(alignment: .leading, spacing: 6) {
                                 Text("Use a clear selfie that matches your ID.")
-                                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                                    .font(.hayame(size: 12, weight: .medium))
                                     .foregroundStyle(HayameTheme.mutedText)
                                 PhotosPicker(selection: $facePhotoItem, matching: .images) {
                                     Text(isUploadingFace ? "Uploading..." : "Upload face photo")
@@ -510,19 +522,19 @@ struct BecomeHostScreen: View {
 
                     if let uploadErrorMessage, !uploadErrorMessage.isEmpty {
                         Text(uploadErrorMessage)
-                            .font(.system(size: 12, weight: .semibold, design: .rounded))
+                            .font(.hayame(size: 12, weight: .semibold))
                             .foregroundStyle(HayameTheme.danger)
                     }
 
                     if let syncMessage = appState.syncErrorMessage, !syncMessage.isEmpty {
                         Text(syncMessage)
-                            .font(.system(size: 12, weight: .semibold, design: .rounded))
+                            .font(.hayame(size: 12, weight: .semibold))
                             .foregroundStyle(HayameTheme.danger)
                     }
 
                     if let submitBlockingReason, !submitBlockingReason.isEmpty {
                         Text(submitBlockingReason)
-                            .font(.system(size: 12, weight: .semibold, design: .rounded))
+                            .font(.hayame(size: 12, weight: .semibold))
                             .foregroundStyle(HayameTheme.warning)
                     }
 
@@ -572,6 +584,9 @@ struct BecomeHostScreen: View {
             .padding(16)
         }
         .background(HayameTheme.pageBackground)
+        .refreshable {
+            await appState.refreshAllRemoteData()
+        }
         .navigationTitle("Become Host")
         .alert("Application submitted", isPresented: $showSubmissionAlert) {
             Button("Go to dashboard") {
@@ -659,7 +674,7 @@ struct BecomeHostScreen: View {
             .fill(HayameTheme.brandLight)
             .overlay(
                 Text(initials.isEmpty ? "U" : initials)
-                    .font(.system(size: 16, weight: .bold, design: .rounded))
+                    .font(.hayame(size: 16, weight: .bold))
                     .foregroundStyle(HayameTheme.brandNavy)
             )
     }
@@ -739,7 +754,7 @@ private struct MenuField: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title)
-                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                .font(.hayame(size: 12, weight: .semibold))
                 .foregroundStyle(HayameTheme.mutedText)
 
             Menu {
@@ -751,11 +766,11 @@ private struct MenuField: View {
             } label: {
                 HStack {
                     Text(selection)
-                        .font(.system(size: 14, weight: .semibold, design: .rounded))
+                        .font(.hayame(size: 14, weight: .semibold))
                         .foregroundStyle(HayameTheme.brandNavy)
                     Spacer()
                     Image(systemName: "chevron.down")
-                        .font(.system(size: 12, weight: .bold))
+                        .font(.hayame(size: 12, weight: .bold))
                         .foregroundStyle(HayameTheme.mutedText)
                 }
                 .padding(12)

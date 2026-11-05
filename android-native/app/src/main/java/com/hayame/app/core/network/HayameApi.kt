@@ -131,6 +131,21 @@ interface HayameApi {
         @Body body: PaystackFinalizeRequest,
     ): PaystackFinalizeEnvelope
 
+    @GET("api/mobile/bookings/checkout")
+    suspend fun pendingCheckout(@Header("Authorization") auth: String): PendingCheckoutEnvelope
+
+    @POST("api/mobile/bookings/checkout/resume")
+    suspend fun resumeCheckout(
+        @Header("Authorization") auth: String,
+        @Body body: CheckoutBookingIdRequest,
+    ): CheckoutResumeEnvelope
+
+    @POST("api/mobile/bookings/checkout/abandon")
+    suspend fun abandonCheckout(
+        @Header("Authorization") auth: String,
+        @Body body: CheckoutBookingIdRequest,
+    ): CheckoutAbandonEnvelope
+
     @PATCH("api/bookings/{id}")
     suspend fun bookingDecision(
         @Path("id") bookingId: String,

@@ -1,0 +1,5 @@
+<resources>
+    <style name="Theme.Hayame" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="android:windowLightNavigationBar">false</item>
+    </style>
+</resources>

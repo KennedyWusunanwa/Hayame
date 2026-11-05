@@ -10,6 +10,8 @@ type Props = {
   startDate?: string;
   endDate?: string;
   disabledDates?: string[];
+  /** Shortest trip the listing accepts, in nights. Hosts opt in to 1. */
+  minNights?: number;
   onChange: (range: { startDate: string; endDate: string }) => void;
   onInvalidRange?: (message: string) => void;
 };
@@ -18,6 +20,7 @@ export function DateRangePicker({
   startDate,
   endDate,
   disabledDates = [],
+  minNights = 1,
   onChange,
   onInvalidRange,
 }: Props) {
@@ -26,6 +29,8 @@ export function DateRangePicker({
     [startDate, endDate],
   );
   const blocked = useMemo(() => new Set(disabledDates), [disabledDates]);
+  const shortestTrip = Math.max(1, Math.floor(minNights));
+  const quickPicks = [1, 2, 5, 7].filter((days) => days >= shortestTrip);
 
   const quickSelect = (days: number) => {
     const start = new Date();
@@ -52,10 +57,14 @@ export function DateRangePicker({
             onChange={(e) =>
               (() => {
                 const nextStart = e.target.value;
+                const earliestEnd = format(
+                  addDays(new Date(nextStart), shortestTrip),
+                  "yyyy-MM-dd",
+                );
                 const endCandidate =
-                  endDate && new Date(endDate) > new Date(nextStart)
+                  endDate && new Date(endDate) >= new Date(earliestEnd)
                     ? endDate
-                    : format(addDays(new Date(nextStart), 1), "yyyy-MM-dd");
+                    : earliestEnd;
                 const nextEnd = endCandidate;
                 if (rangeHasBlockedDates(nextStart, nextEnd, blocked)) {
                   onInvalidRange?.("Start date falls on an unavailable day.");
@@ -78,7 +87,10 @@ export function DateRangePicker({
             value={endDate ?? ""}
             min={
               startDate
-                ? format(addDays(new Date(startDate), 1), "yyyy-MM-dd")
+                ? format(
+                    addDays(new Date(startDate), shortestTrip),
+                    "yyyy-MM-dd",
+                  )
                 : undefined
             }
             onChange={(e) =>
@@ -100,7 +112,7 @@ export function DateRangePicker({
       </div>
       <div className="flex flex-wrap gap-2 text-xs text-gray-600">
         <span>Quick select:</span>
-        {[2, 5, 7].map((days) => (
+        {quickPicks.map((days) => (
           <Button
             key={days}
             type="button"
@@ -108,12 +120,17 @@ export function DateRangePicker({
             size="sm"
             onClick={() => quickSelect(days)}
           >
-            {days} days
+            {days === 1 ? "1 day" : `${days} days`}
           </Button>
         ))}
       </div>
       <div className="text-sm text-gray-700">
-        {nights > 0 ? `${nights} night stay` : "Pick your dates"}
+        {nights > 0
+          ? `${nights} day${nights === 1 ? "" : "s"}`
+          : "Pick your dates"}
+        {shortestTrip > 1 ? (
+          <span className="text-gray-500"> · {shortestTrip}-day minimum</span>
+        ) : null}
       </div>
     </div>
   );

@@ -1,10 +1,19 @@
 import { NextResponse } from "next/server";
-import { addMinutes, isAfter, parseISO } from "date-fns";
+import {
+  addMinutes,
+  differenceInCalendarDays,
+  isAfter,
+  parseISO,
+} from "date-fns";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getRequestUser } from "@/lib/supabase/request-auth";
 import { bookingSchema } from "@/lib/validators";
-import { isLocationOutsideAccra, isOutsideListingRegion } from "@/lib/utils";
+import {
+  isLocationOutsideAccra,
+  isOutsideListingRegion,
+  minimumTripNights,
+} from "@/lib/utils";
 import { failJson } from "@/lib/api-errors";
 
 const BLOCKING_STATUSES = ["pending", "awaiting_host", "confirmed"];
@@ -55,7 +64,7 @@ export async function POST(req: Request) {
     const { data: car, error: carError } = await db
       .from("cars")
       .select(
-        "id,owner_id,is_available,approval_status,city,region,outside_accra_fee,delivery_available",
+        "id,owner_id,is_available,approval_status,city,region,outside_accra_fee,delivery_available,allow_one_day_booking",
       )
       .eq("id", parsed.carId)
       .maybeSingle();
@@ -86,6 +95,16 @@ export async function POST(req: Request) {
     if (parsed.tripMode === "delivery" && !(car as any).delivery_available) {
       return NextResponse.json(
         { message: "Delivery is not available for this car" },
+        { status: 400 },
+      );
+    }
+    // Hosts opt in to single-day trips per listing; otherwise 2 days minimum.
+    const minimumNights = minimumTripNights(car as any);
+    if (differenceInCalendarDays(end, start) < minimumNights) {
+      return NextResponse.json(
+        {
+          message: `This car has a ${minimumNights}-day minimum trip. Pick a later return date.`,
+        },
         { status: 400 },
       );
     }
@@ -169,9 +188,24 @@ export async function POST(req: Request) {
           })
           .eq("id", existingHold.id);
       }
+      // The renter is actively checking out again (retry after a failed or
+      // abandoned payment): give the hold a fresh 15 minutes so Paystack has
+      // time to complete instead of expiring mid-payment.
+      let holdExpiresAt = existingHold.hold_expires_at;
+      if (admin) {
+        const extended = addMinutes(now, HOLD_MINUTES).toISOString();
+        const { data: refreshed } = await admin
+          .from("bookings")
+          .update({ hold_expires_at: extended })
+          .eq("id", existingHold.id)
+          .eq("status", "pending")
+          .select("hold_expires_at")
+          .maybeSingle();
+        if (refreshed?.hold_expires_at) holdExpiresAt = refreshed.hold_expires_at;
+      }
       return NextResponse.json({
         bookingId: existingHold.id,
-        hold_expires_at: existingHold.hold_expires_at,
+        hold_expires_at: holdExpiresAt,
       });
     }
 

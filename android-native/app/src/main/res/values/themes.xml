@@ -2,8 +2,20 @@
     <style name="Theme.Hayame" parent="Theme.Material3.DayNight.NoActionBar">
         <item name="android:windowBackground">@drawable/splash_window_background</item>
         <item name="android:windowLightStatusBar">false</item>
-        <item name="android:windowLightNavigationBar">false</item>
-        <item name="android:navigationBarColor">#0F85E3</item>
-        <item name="android:statusBarColor">#0F85E3</item>
+        <item name="android:navigationBarColor">@color/splash_bottom</item>
+        <item name="android:statusBarColor">@color/splash_top</item>
+    </style>
+
+    <!-- Used when the app's appearance is forced light, so launch never flashes the other palette. -->
+    <style name="Theme.Hayame.ForcedLight">
+        <item name="android:windowBackground">@drawable/splash_window_background_light</item>
+        <item name="android:navigationBarColor">@color/splash_light_bottom</item>
+        <item name="android:statusBarColor">@color/splash_light_top</item>
+    </style>
+    <!-- Used when the app's appearance is forced dark, so launch never flashes the other palette. -->
+    <style name="Theme.Hayame.ForcedDark">
+        <item name="android:windowBackground">@drawable/splash_window_background_dark</item>
+        <item name="android:navigationBarColor">@color/splash_dark_bottom</item>
+        <item name="android:statusBarColor">@color/splash_dark_top</item>
     </style>
 </resources>

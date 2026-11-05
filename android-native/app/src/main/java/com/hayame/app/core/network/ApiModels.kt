@@ -171,6 +171,8 @@ data class CarDto(
     val is_available: Boolean? = null,
     val instant_book: Boolean? = null,
     val delivery_available: Boolean? = null,
+    /** Hosts opt in to single-day trips; off means a 2-day minimum. */
+    val allow_one_day_booking: Boolean? = null,
     val air_conditioning: Boolean? = null,
     val approval_status: String? = null,
     val created_at: String? = null,
@@ -189,7 +191,10 @@ data class CarDto(
     val image_url: String? = null,
     val car_photos: List<CarPhotoDto>? = null,
     val owner: OwnerDto? = null,
-)
+) {
+    /** Shortest trip this listing accepts, in days. Mirrors the server rule. */
+    val minimumTripDays: Int get() = if (allow_one_day_booking == true) 1 else 2
+}
 
 @Serializable
 data class CarsEnvelope(
@@ -839,3 +844,126 @@ private fun preferredNonBlankValue(vararg candidates: String?): String? {
     }
     return null
 }
+
+// MARK: Resumable checkout ----------------------------------------------------------------------
+
+@Serializable
+data class PendingCheckoutEnvelope(
+    val data: PendingCheckoutDto? = null,
+    val completed: PendingCheckoutCompletedDto? = null,
+)
+
+@Serializable
+data class PendingCheckoutCompletedDto(
+    val bookingId: String? = null,
+    val status: String? = null,
+    val conversationId: String? = null,
+)
+
+/** A checkout the renter started paying for and did not finish, held server-side. */
+@Serializable
+data class PendingCheckoutDto(
+    val bookingId: String,
+    val carId: String,
+    val state: String? = null,
+    val holdExpiresAt: String? = null,
+    val createdAt: String? = null,
+    val startDate: String,
+    val endDate: String,
+    @Serializable(with = FlexibleDoubleSerializer::class)
+    val nights: Double? = null,
+    val tripMode: String? = null,
+    val tripUseRegion: String? = null,
+    val tripUseCity: String? = null,
+    val tripUseAddress: String? = null,
+    val deliveryAddress: String? = null,
+    val deliveryTime: String? = null,
+    val contactPhone: String? = null,
+    val deliveryNotes: String? = null,
+    val car: PendingCheckoutCarDto? = null,
+    val pricing: CheckoutPricingDto? = null,
+    val issues: List<CheckoutIssueDto> = emptyList(),
+    val canResume: Boolean? = null,
+    val paymentReference: String? = null,
+    val paymentStatus: String? = null,
+) {
+    val isHeld: Boolean get() = state == "held" && !holdExpiresAt.isNullOrBlank()
+    val isDelivery: Boolean get() = tripMode == "delivery"
+    val nightCount: Int get() = (pricing?.nights ?: nights ?: 1.0).toInt().coerceAtLeast(1)
+    val totalAmount: Int get() = (pricing?.total ?: 0.0).toInt().coerceAtLeast(0)
+}
+
+@Serializable
+data class PendingCheckoutCarDto(
+    val id: String? = null,
+    val title: String? = null,
+    val imageUrl: String? = null,
+    @Serializable(with = FlexibleDoubleSerializer::class)
+    val dailyPrice: Double? = null,
+    val city: String? = null,
+    val region: String? = null,
+    val instantBook: Boolean? = null,
+    val deliveryAvailable: Boolean? = null,
+    val hostName: String? = null,
+)
+
+@Serializable
+data class CheckoutPricingDto(
+    @Serializable(with = FlexibleDoubleSerializer::class)
+    val nights: Double? = null,
+    @Serializable(with = FlexibleDoubleSerializer::class)
+    val dailyRate: Double? = null,
+    @Serializable(with = FlexibleDoubleSerializer::class)
+    val subtotal: Double? = null,
+    @Serializable(with = FlexibleDoubleSerializer::class)
+    val platformFee: Double? = null,
+    @Serializable(with = FlexibleDoubleSerializer::class)
+    val insuranceFee: Double? = null,
+    @Serializable(with = FlexibleDoubleSerializer::class)
+    val deliveryFee: Double? = null,
+    @Serializable(with = FlexibleDoubleSerializer::class)
+    val outsideAccraSurcharge: Double? = null,
+    @Serializable(with = FlexibleDoubleSerializer::class)
+    val depositAmount: Double? = null,
+    @Serializable(with = FlexibleDoubleSerializer::class)
+    val total: Double? = null,
+    @Serializable(with = FlexibleDoubleSerializer::class)
+    val amountMinor: Double? = null,
+)
+
+@Serializable
+data class CheckoutIssueDto(
+    val code: String? = null,
+    val message: String? = null,
+)
+
+@Serializable
+data class CheckoutResumeEnvelope(
+    val data: CheckoutResumeDto,
+)
+
+@Serializable
+data class CheckoutResumeDto(
+    val outcome: String,
+    val checkout: PendingCheckoutDto? = null,
+    val bookingId: String? = null,
+    val conversationId: String? = null,
+)
+
+@Serializable
+data class CheckoutAbandonEnvelope(
+    val data: CheckoutAbandonDto? = null,
+    val message: String? = null,
+)
+
+@Serializable
+data class CheckoutAbandonDto(
+    val outcome: String? = null,
+    val bookingId: String? = null,
+    val conversationId: String? = null,
+)
+
+@Serializable
+data class CheckoutBookingIdRequest(
+    val bookingId: String,
+)

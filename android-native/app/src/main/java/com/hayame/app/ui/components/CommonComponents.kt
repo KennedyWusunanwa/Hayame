@@ -1,5 +1,18 @@
 package com.hayame.app.ui.components
 
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.delay
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
+import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -32,6 +45,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import com.hayame.app.ui.theme.Warning
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -149,138 +164,6 @@ fun EmptyBlock(title: String, subtitle: String) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(text = title, style = MaterialTheme.typography.titleMedium, color = colors.brandNavy)
             Text(text = subtitle, style = MaterialTheme.typography.bodyMedium, color = colors.mutedText)
-        }
-    }
-}
-
-@Composable
-fun CarCard(
-    car: CarDto,
-    isFavorite: Boolean,
-    imageHeight: Dp = 180.dp,
-    onClick: () -> Unit,
-    onFavoriteClick: () -> Unit,
-) {
-    val colors = LocalHayameColors.current
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .shadow(
-                elevation = 10.dp,
-                shape = RoundedCornerShape(20.dp),
-                clip = false,
-                ambientColor = colors.cardShadow,
-                spotColor = colors.cardShadow,
-            )
-            .clip(RoundedCornerShape(20.dp))
-            .background(colors.cardBackground)
-            .border(1.dp, colors.border, RoundedCornerShape(20.dp))
-            .clickable(onClick = onClick),
-    ) {
-        Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(imageHeight)
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(colors.brandLight),
-            ) {
-                val imageUrl = resolvedCarImageUrl(car)
-                if (!imageUrl.isNullOrBlank()) {
-                    // Blur-up LQIP: a tiny variant blurred behind the full image. Only when
-                    // a real (smaller) thumbnail variant exists — otherwise it would just
-                    // load the full original twice (transforms are currently disabled).
-                    val thumbUrl = RemoteImageUrlResolver.transformed(
-                        RemoteImageUrlResolver.originalUrl(imageUrl),
-                        width = 40,
-                        quality = 40,
-                    )
-                    if (thumbUrl != null && thumbUrl != imageUrl) {
-                        AsyncImage(
-                            model = thumbUrl,
-                            contentDescription = null,
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .blur(14.dp),
-                            contentScale = ContentScale.Crop,
-                        )
-                    }
-                    AsyncImage(
-                        model = imageUrl,
-                        contentDescription = car.title,
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop,
-                    )
-                }
-
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(8.dp)
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .background(colors.floatingControlBackground)
-                        .clickable(onClick = onFavoriteClick),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-                        contentDescription = null,
-                        tint = if (isFavorite) Color.Red else colors.brandNavy,
-                        modifier = Modifier.size(20.dp),
-                    )
-                }
-
-                if (car.instant_book == true) {
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.BottomStart)
-                            .padding(8.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(colors.brandBlue)
-                            .padding(horizontal = 8.dp, vertical = 4.dp),
-                    ) {
-                        Text("INSTANT", color = Color.White, style = MaterialTheme.typography.labelSmall)
-                    }
-                }
-            }
-
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(
-                    text = car.title.orEmpty(),
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    color = colors.brandNavy,
-                )
-
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Outlined.LocationOn, contentDescription = null, tint = colors.mutedText, modifier = Modifier.size(14.dp))
-                    Text(
-                        text = listOfNotNull(car.city, car.region).joinToString(", "),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = colors.mutedText,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            }
-
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = "GH₵${car.daily_price?.toInt() ?: 0}",
-                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.ExtraBold),
-                    color = colors.brandBlue,
-                )
-                Text(text = " / day", style = MaterialTheme.typography.bodySmall, color = colors.mutedText)
-                Spacer(modifier = Modifier.weight(1f))
-                if (car.avg_rating != null && car.avg_rating!! > 0) {
-                    Text(text = "⭐ ${String.format("%.1f", car.avg_rating)}", style = MaterialTheme.typography.labelLarge, color = colors.brandNavy)
-                }
-            }
         }
     }
 }
@@ -409,4 +292,50 @@ fun ExploreListRowPlaceholder() {
             }
         }
     }
+}
+
+/**
+ * Pull down to refresh, in brand colours. [onRefresh] starts the reloads; the
+ * spinner shows for at least a moment and then until [isBusy] reports done
+ * (capped, so a slow network never leaves it spinning).
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun HayameRefreshBox(
+    onRefresh: () -> Unit,
+    modifier: Modifier = Modifier,
+    indicatorTopPadding: Dp = 0.dp,
+    isBusy: () -> Boolean = { false },
+    content: @Composable BoxScope.() -> Unit,
+) {
+    val colors = LocalHayameColors.current
+    var refreshing by remember { mutableStateOf(false) }
+    val state = rememberPullToRefreshState()
+    LaunchedEffect(refreshing) {
+        if (!refreshing) return@LaunchedEffect
+        delay(700)
+        withTimeoutOrNull(8_000) { snapshotFlow { isBusy() }.first { !it } }
+        refreshing = false
+    }
+    PullToRefreshBox(
+        isRefreshing = refreshing,
+        onRefresh = {
+            refreshing = true
+            onRefresh()
+        },
+        modifier = modifier,
+        state = state,
+        indicator = {
+            PullToRefreshDefaults.Indicator(
+                state = state,
+                isRefreshing = refreshing,
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = indicatorTopPadding),
+                containerColor = colors.cardBackground,
+                color = colors.brandBlue,
+            )
+        },
+        content = content,
+    )
 }

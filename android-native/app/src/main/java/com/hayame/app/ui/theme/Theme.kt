@@ -4,6 +4,10 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
+import com.hayame.app.R
+import androidx.compose.ui.text.font.FontVariation
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.Font
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
@@ -91,14 +95,39 @@ private val DarkHayameColorScheme: ColorScheme = darkColorScheme(
     scrim = Color(0x52000000),
 )
 
+// Manrope everywhere. The variable font lives in res/font (SIL OFL); each weight the
+// app uses is pinned to the matching axis value so Compose picks the right face.
+@OptIn(androidx.compose.ui.text.ExperimentalTextApi::class)
+val ManropeFamily: FontFamily = FontFamily(
+    listOf(200, 300, 400, 500, 600, 700, 800).map { weight ->
+        Font(
+            resId = R.font.manrope,
+            weight = FontWeight(weight),
+            variationSettings = FontVariation.Settings(FontVariation.weight(weight)),
+        )
+    },
+)
+
+private val MaterialDefaults = Typography()
+
+private fun TextStyle.manrope(): TextStyle = copy(fontFamily = ManropeFamily)
+
 private val HayameTypography = Typography(
-    headlineLarge = TextStyle(fontSize = 26.sp, fontWeight = FontWeight.Bold),
-    headlineMedium = TextStyle(fontSize = 22.sp, fontWeight = FontWeight.Bold),
-    titleLarge = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.Bold),
-    titleMedium = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
-    bodyLarge = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium),
-    bodyMedium = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Medium),
-    labelLarge = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold),
+    displayLarge = MaterialDefaults.displayLarge.manrope(),
+    displayMedium = MaterialDefaults.displayMedium.manrope(),
+    displaySmall = MaterialDefaults.displaySmall.manrope(),
+    headlineLarge = TextStyle(fontSize = 26.sp, fontWeight = FontWeight.Bold).manrope(),
+    headlineMedium = TextStyle(fontSize = 22.sp, fontWeight = FontWeight.Bold).manrope(),
+    headlineSmall = MaterialDefaults.headlineSmall.manrope(),
+    titleLarge = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.Bold).manrope(),
+    titleMedium = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold).manrope(),
+    titleSmall = MaterialDefaults.titleSmall.manrope(),
+    bodyLarge = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium).manrope(),
+    bodyMedium = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Medium).manrope(),
+    bodySmall = MaterialDefaults.bodySmall.manrope(),
+    labelLarge = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold).manrope(),
+    labelMedium = MaterialDefaults.labelMedium.manrope(),
+    labelSmall = MaterialDefaults.labelSmall.manrope(),
 )
 
 @Composable

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Splash field: the first Compose frame draws this exact top-to-bottom
+         gradient, so the window background and system splash match it. -->
+    <color name="splash_top">#29A3F5</color>
+    <color name="splash_mid">#148AE6</color>
+    <color name="splash_bottom">#0D70CC</color>
+    <!-- Fixed palettes for when the app is forced light or dark, whatever the phone uses. -->
+    <color name="splash_light_top">#29A3F5</color>
+    <color name="splash_light_mid">#148AE6</color>
+    <color name="splash_light_bottom">#0D70CC</color>
+    <color name="splash_dark_top">#0D2A49</color>
+    <color name="splash_dark_mid">#081A2E</color>
+    <color name="splash_dark_bottom">#03101D</color>
+</resources>

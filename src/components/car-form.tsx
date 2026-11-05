@@ -105,6 +105,7 @@ export function CarForm({
       is_available: true,
       instant_book: false,
       delivery_available: false,
+      allow_one_day_booking: false,
       air_conditioning: false,
       cancellation_policy: "moderate",
       ...defaultValues,
@@ -180,9 +181,13 @@ export function CarForm({
         throw new Error(message);
       }
       const payload = (await res.json().catch(() => ({}))) as {
-        data?: { id?: string };
+        data?: { id?: string; approval_status?: string | null };
       };
       const newCarId = targetCarId ?? payload?.data?.id;
+      // An approved listing stays live after an edit (admins are notified);
+      // anything else waits in the review queue.
+      const stayedLive =
+        !createMode && payload?.data?.approval_status === "approved";
       if (!carId && newCarId) {
         setDraftCarId(newCarId);
       }
@@ -209,7 +214,7 @@ export function CarForm({
 
       const postSubmitRedirectPath = buildPostSubmitRedirectPath(
         postSubmitBasePath,
-        createMode ? "submitted" : "updated",
+        createMode ? "submitted" : stayedLive ? "updated-live" : "updated",
       );
       navigateAfterSubmit(router, postSubmitRedirectPath);
     } catch (err: unknown) {
@@ -929,6 +934,22 @@ export function CarForm({
         </label>
       </div>
 
+      <div className="flex items-center justify-between rounded-lg border border-border bg-white p-4">
+        <div>
+          <p className="text-sm font-semibold text-foreground">
+            1-day bookings
+          </p>
+          <p className="text-xs text-gray-600">
+            Let guests book this car for a single day. When off, every trip
+            must be at least 2 days.
+          </p>
+        </div>
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" {...register("allow_one_day_booking")} />
+          Allow
+        </label>
+      </div>
+
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
       {photoWarning ? (
         <p className="text-sm text-amber-700">{photoWarning}</p>
@@ -1096,7 +1117,7 @@ function normalizeOptionalFeeDefault(value: unknown) {
 
 function buildPostSubmitRedirectPath(
   basePath: string,
-  notice: "submitted" | "updated",
+  notice: "submitted" | "updated" | "updated-live",
 ) {
   if (!basePath.startsWith("/host/cars")) return basePath;
 

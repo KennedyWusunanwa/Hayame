@@ -19,6 +19,7 @@ import {
   formatCurrency,
   isLocationOutsideAccra,
   isOutsideListingRegion,
+  minimumTripNights,
 } from "@/lib/utils";
 import { friendlyError } from "@/lib/client-errors";
 
@@ -28,6 +29,7 @@ type Props = {
   platformFeePercent?: number;
   instantBook?: boolean | null;
   deliveryAvailable?: boolean | null;
+  allowOneDayBooking?: boolean | null;
   deliveryFee?: number | null;
   insuranceFee?: number | null;
   depositAmount?: number | null;
@@ -48,6 +50,7 @@ export function BookingWidget({
   platformFeePercent = 10,
   instantBook,
   deliveryAvailable,
+  allowOneDayBooking,
   deliveryFee,
   insuranceFee,
   depositAmount,
@@ -81,6 +84,10 @@ export function BookingWidget({
   );
 
   const nights = calculateNights(startDate, endDate);
+  const minNights = minimumTripNights({
+    allow_one_day_booking: allowOneDayBooking,
+  });
+  const tripTooShort = nights > 0 && nights < minNights;
 
   // Picking valid dates is the step between "looking" and "intending to book".
   useEffect(() => {
@@ -186,6 +193,12 @@ export function BookingWidget({
     if (!startDate || !endDate) return;
     if (nights <= 0) {
       setMessage("End date must be after start date.");
+      return;
+    }
+    if (nights < minNights) {
+      setMessage(
+        `This car has a ${minNights}-day minimum trip. Pick a later return date.`,
+      );
       return;
     }
     if (!tripUseRegion || !tripUseCity || tripUseAddress.trim().length < 3) {
@@ -386,15 +399,20 @@ export function BookingWidget({
               : "Pay now with Paystack; host approval required before pickup."}
           </div>
         </div>
-        {instantBook ? (
-          <div className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
-            Instant Book
+        <div className="flex flex-col items-end gap-1">
+          {instantBook ? (
+            <div className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
+              Instant Book
+            </div>
+          ) : (
+            <div className="rounded-full bg-brand/10 px-3 py-1 text-xs font-medium text-brand">
+              Refunded if host rejects
+            </div>
+          )}
+          <div className="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">
+            {minNights === 1 ? "1-day bookings OK" : `${minNights}-day minimum`}
           </div>
-        ) : (
-          <div className="rounded-full bg-brand/10 px-3 py-1 text-xs font-medium text-brand">
-            Refunded if host rejects
-          </div>
-        )}
+        </div>
       </div>
       <div className="space-y-2 rounded-xl border border-border bg-gray-50 p-3">
         <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
@@ -422,6 +440,7 @@ export function BookingWidget({
         startDate={startDate}
         endDate={endDate}
         disabledDates={blockedDates}
+        minNights={minNights}
         onChange={({ startDate: start, endDate: end }) => {
           setMessage(null);
           setStartDate(start);
@@ -582,7 +601,14 @@ export function BookingWidget({
           Reserved for {holdRemaining}. Complete payment to confirm.
         </p>
       ) : null}
-      {message ? <p className="text-xs text-amber-700">{message}</p> : null}
+      {message ? (
+        <p className="text-xs text-amber-700">{message}</p>
+      ) : tripTooShort ? (
+        <p className="text-xs text-amber-700">
+          This car has a {minNights}-day minimum trip. Pick a later return
+          date.
+        </p>
+      ) : null}
       <div className="space-y-2 rounded-xl border border-border bg-white p-3 text-sm">
         <PriceRow
           label={`Daily rate x ${billableNights} day(s)`}
@@ -626,7 +652,7 @@ export function BookingWidget({
       <Button
         className="w-full shadow-soft"
         onClick={submit}
-        disabled={loading || !startDate || !endDate}
+        disabled={loading || !startDate || !endDate || tripTooShort}
       >
         {loading ? "Processing..." : instantBook ? "Instant Book" : "Book Now"}
       </Button>

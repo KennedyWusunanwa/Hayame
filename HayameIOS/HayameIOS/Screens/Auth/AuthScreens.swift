@@ -76,10 +76,10 @@ private struct LoginScreenView: View {
                     Toggle(isOn: $saveLoginWithBiometrics) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Save login for \(biometricName)")
-                                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                                .font(.hayame(size: 13, weight: .semibold))
                                 .foregroundStyle(HayameTheme.brandNavy)
                             Text("Use it for quick login after signing out.")
-                                .font(.system(size: 11, weight: .medium, design: .rounded))
+                                .font(.hayame(size: 11, weight: .medium))
                                 .foregroundStyle(HayameTheme.mutedText)
                         }
                     }
@@ -102,7 +102,7 @@ private struct LoginScreenView: View {
                         appState.resendSignupConfirmation(email: email)
                     } label: {
                         Text("Resend verification email")
-                            .font(.system(size: 14, weight: .semibold, design: .rounded))
+                            .font(.hayame(size: 14, weight: .semibold))
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 12)
                             .background(
@@ -118,7 +118,7 @@ private struct LoginScreenView: View {
                     Button("Forgot password?") {
                         appState.requestPasswordReset(email: email)
                     }
-                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    .font(.hayame(size: 13, weight: .semibold))
                     .foregroundStyle(HayameTheme.brandBlue)
                     .disabled(appState.isSyncingRemote)
 
@@ -127,17 +127,17 @@ private struct LoginScreenView: View {
                         Button("Resend verification email") {
                             appState.resendSignupConfirmation(email: email)
                         }
-                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+                        .font(.hayame(size: 13, weight: .semibold))
                         .foregroundStyle(HayameTheme.brandBlue)
                         .disabled(appState.isSyncingRemote)
                     }
 
                     HStack(spacing: 4) {
                         Text("No account?")
-                            .font(.system(size: 13, design: .rounded))
+                            .font(.hayame(size: 13))
                             .foregroundStyle(HayameTheme.mutedText)
                         Button("Sign up", action: goToSignup)
-                            .font(.system(size: 13, weight: .semibold, design: .rounded))
+                            .font(.hayame(size: 13, weight: .semibold))
                             .foregroundStyle(HayameTheme.brandBlue)
                     }
                 }
@@ -290,7 +290,7 @@ private struct SignupScreenView: View {
 
                     if let mismatchMessage {
                         Text(mismatchMessage)
-                            .font(.system(size: 11, weight: .semibold, design: .rounded))
+                            .font(.hayame(size: 11, weight: .semibold))
                             .foregroundStyle(HayameTheme.danger)
                     }
                 }
@@ -313,10 +313,10 @@ private struct SignupScreenView: View {
 
                 HStack(spacing: 4) {
                     Text("Already registered?")
-                        .font(.system(size: 13, design: .rounded))
+                        .font(.hayame(size: 13))
                         .foregroundStyle(HayameTheme.mutedText)
                     Button("Log in", action: goToLogin)
-                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+                        .font(.hayame(size: 13, weight: .semibold))
                         .foregroundStyle(HayameTheme.brandBlue)
                 }
                 .frame(maxWidth: .infinity)
@@ -327,7 +327,7 @@ private struct SignupScreenView: View {
                     Button("Resend verification email") {
                         appState.resendSignupConfirmation(email: email)
                     }
-                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    .font(.hayame(size: 13, weight: .semibold))
                     .foregroundStyle(HayameTheme.brandBlue)
                     .frame(maxWidth: .infinity)
                     .disabled(appState.isSyncingRemote)
@@ -365,12 +365,12 @@ private struct AuthMessages: View {
         VStack(alignment: .leading, spacing: 8) {
             if let error, !error.isEmpty {
                 Text(error)
-                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .font(.hayame(size: 12, weight: .semibold))
                     .foregroundStyle(HayameTheme.danger)
             }
             if let info, !info.isEmpty {
                 Text(info)
-                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .font(.hayame(size: 12, weight: .semibold))
                     .foregroundStyle(HayameTheme.success)
             }
         }
@@ -510,7 +510,7 @@ struct PasswordStrengthView: View {
                         }
                     }
                     Text(strength.label)
-                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        .font(.hayame(size: 11, weight: .semibold))
                         .foregroundStyle(PasswordPolicy.color(for: strength.score))
                 }
 
@@ -519,10 +519,10 @@ struct PasswordStrengthView: View {
                         let met = strength.passedRuleIDs.contains(rule.id)
                         HStack(spacing: 6) {
                             Image(systemName: met ? "checkmark.circle.fill" : "circle")
-                                .font(.system(size: 11))
+                                .font(.hayame(size: 11))
                                 .foregroundStyle(met ? Color.green : HayameTheme.mutedText)
                             Text(rule.label)
-                                .font(.system(size: 11, weight: .medium, design: .rounded))
+                                .font(.hayame(size: 11, weight: .medium))
                                 .foregroundStyle(met ? Color.green : HayameTheme.mutedText)
                         }
                     }

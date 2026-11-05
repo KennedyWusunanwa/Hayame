@@ -25,7 +25,9 @@ type PageProps = {
 export default async function DashboardCarsPage({ searchParams }: PageProps) {
   const resolvedSearch = (await searchParams) ?? {};
   const notice =
-    resolvedSearch.notice === "submitted" || resolvedSearch.notice === "updated"
+    resolvedSearch.notice === "submitted" ||
+    resolvedSearch.notice === "updated" ||
+    resolvedSearch.notice === "updated-live"
       ? resolvedSearch.notice
       : undefined;
   const { cars, favoriteCounts } = await loadOwnerCarsWithFavorites();
@@ -46,10 +48,18 @@ export default async function DashboardCarsPage({ searchParams }: PageProps) {
         }
       />
       {notice ? (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        <div
+          className={
+            notice === "updated-live"
+              ? "rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900"
+              : "rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+          }
+        >
           {notice === "submitted"
             ? "Your car ad has been uploaded successfully and is now under review. It will appear publicly after approval."
-            : "Your car changes were saved and the listing is now under review until approval."}
+            : notice === "updated-live"
+              ? "Your changes are live. Approved listings stay live when you edit them; the Hayame team is notified of the change."
+              : "Your car changes were saved and the listing is now under review until approval."}
         </div>
       ) : null}
       <Card className="overflow-hidden">

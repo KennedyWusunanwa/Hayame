@@ -40,7 +40,7 @@ Scope note: this schema inventory is based on SQL files checked into `db/` plus 
 ### `cars`
 
 - Purpose: listing inventory.
-- Key fields: `owner_id`, `title`, `daily_price`, `city`, `region`, `car_type`, `brand`, `model`, `fuel_type`, `car_year`, `features`, `is_available`, `instant_book`, `delivery_available`, `air_conditioning`, `delivery_fee`, `insurance_fee`, `deposit_amount`, `outside_accra_fee`, `cancellation_policy`, `approval_status`, moderation fields.
+- Key fields: `owner_id`, `title`, `daily_price`, `city`, `region`, `car_type`, `brand`, `model`, `fuel_type`, `car_year`, `features`, `is_available`, `instant_book`, `delivery_available`, `allow_one_day_booking`, `air_conditioning`, `delivery_fee`, `insurance_fee`, `deposit_amount`, `outside_accra_fee`, `cancellation_policy`, `approval_status`, moderation fields.
 - Relationships:
   - `owner_id -> profiles.id`
   - `location_id -> locations.id`

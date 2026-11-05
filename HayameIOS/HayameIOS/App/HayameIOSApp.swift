@@ -7,6 +7,8 @@ struct HayameIOSApp: App {
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var appState = AppState()
     @State private var showSplash = true
+    @State private var isHandingOffFromSplash = false
+    @State private var splashExitProgress = 0.0
     @State private var showAppearanceTransition = false
     @State private var hideContentForAppearanceTransition = false
     @State private var appearanceTransitionTargetsDarkMode = false
@@ -27,9 +29,15 @@ struct HayameIOSApp: App {
         if let screenshotRoute = ScreenshotRoute.current {
             ScreenshotRootView(route: screenshotRoute)
                 .environmentObject(appState)
-                .preferredColorScheme(appState.darkModeEnabled ? .dark : .light)
+                .font(.hayame(size: 15))
+                .preferredColorScheme(appState.appearanceMode.preferredColorScheme)
                 .onAppear {
                     applyWindowStyle(appState.darkModeEnabled)
+                    AppIconManager.shared.applyLaunchArgumentIfNeeded()
+                    scheduleScreenshotDarkModeToggleIfNeeded()
+                    scheduleScreenshotHostToggleIfNeeded()
+                    scheduleScreenshotHostTabSwitchIfNeeded()
+                    scheduleScreenshotRenterTabSwitchIfNeeded()
                 }
         } else {
             liveRoot
@@ -39,15 +47,28 @@ struct HayameIOSApp: App {
         #endif
     }
 
+    /// The app content stays hidden until the splash starts its exit.
+    private var isRootHidden: Bool {
+        (showSplash && !isHandingOffFromSplash) || hideContentForAppearanceTransition
+    }
+
     private var liveRoot: some View {
         ZStack {
                 RootView()
                     .environmentObject(appState)
-                    .opacity(showSplash || hideContentForAppearanceTransition ? 0 : 1)
-                    .animation(.easeOut(duration: 0.45), value: showSplash)
+                    .coachMarkHost()
+                    .opacity(isRootHidden ? 0 : 1)
+                    // The app settles in from slightly enlarged while the splash
+                    // logo zooms past the viewer, so the handoff reads as one move.
+                    .scaleEffect(isRootHidden && !HayameMotion.reduceMotion ? 1.05 : 1)
+                    .animation(.easeOut(duration: 0.55), value: isRootHidden)
 
                 if showSplash {
                     SplashScreen(darkMode: appState.darkModeEnabled)
+                        .modifier(SplashZoomOutModifier(progress: splashExitProgress))
+                        // Explicit animation: App-level state changes made after an
+                        // await do not reliably carry the withAnimation transaction.
+                        .animation(.easeIn(duration: 0.6), value: splashExitProgress)
                         .transition(.opacity)
                         .zIndex(10)
                 }
@@ -60,7 +81,8 @@ struct HayameIOSApp: App {
                 }
 
             }
-            .preferredColorScheme(appState.darkModeEnabled ? .dark : .light)
+            .background(SystemAppearanceReporter(appState: appState))
+            .preferredColorScheme(appState.appearanceMode.preferredColorScheme)
             .onAppear {
                 logSplash("root appeared")
                 applyWindowStyle(appState.darkModeEnabled)
@@ -75,13 +97,28 @@ struct HayameIOSApp: App {
             .task {
                 guard showSplash else { return }
                 logSplash("root timer started")
-                try? await Task.sleep(nanoseconds: 5_000_000_000)
+                // Long enough for the wordmark to be drawn and settle (see
+                // HayameLogoReveal.settleTime), plus a beat of rest.
+                try? await Task.sleep(nanoseconds: 4_700_000_000)
                 guard !Task.isCancelled else {
                     logSplash("root timer cancelled")
                     return
                 }
                 logSplash("root timer finished")
-                withAnimation(.easeOut(duration: 0.45)) {
+                if HayameMotion.reduceMotion {
+                    withAnimation(.easeOut(duration: 0.45)) {
+                        showSplash = false
+                    }
+                } else {
+                    // Zoom the splash through the viewer while the app fades up
+                    // underneath, then drop the splash once it is out of sight.
+                    withAnimation(.easeOut(duration: 0.55)) {
+                        isHandingOffFromSplash = true
+                    }
+                    withAnimation(.easeIn(duration: 0.6)) {
+                        splashExitProgress = 1
+                    }
+                    try? await Task.sleep(nanoseconds: 650_000_000)
                     showSplash = false
                 }
                 hasHandledInitialAppearance = true
@@ -111,6 +148,7 @@ struct HayameIOSApp: App {
             }
             .onChange(of: scenePhase) { _, phase in
                 if phase == .active {
+                    appState.refreshSystemAppearanceIfFollowingSystem()
                     applyWindowStyle(appState.darkModeEnabled)
             } else {
                 // Backgrounding is the last chance to send queued events before
@@ -124,6 +162,77 @@ struct HayameIOSApp: App {
     private func applyWindowStyle(_ darkMode: Bool) {
         HayameSystemAppearance.configure(darkMode: darkMode)
     }
+
+    #if DEBUG
+    /// `-HAYAME_TOGGLE_HOST_AFTER <seconds>[,<seconds>...]` flips host mode at each
+    /// listed time on the `mode-switch` screenshot route, to capture the interstitial.
+    private func scheduleScreenshotHostToggleIfNeeded() {
+        let args = ProcessInfo.processInfo.arguments
+        guard let index = args.firstIndex(of: "-HAYAME_TOGGLE_HOST_AFTER"), args.indices.contains(index + 1) else { return }
+        let times = args[index + 1].split(separator: ",").compactMap { Double($0.trimmingCharacters(in: .whitespaces)) }
+        for seconds in times {
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+                appState.hostModeEnabled.toggle()
+            }
+        }
+    }
+
+    /// `-HAYAME_HOST_TAB_AFTER <seconds>:<tab>[,<seconds>:<tab>...]` switches the
+    /// host tab (dashboard, cars, bookings, earnings, inbox, profile) at each
+    /// listed time on the host screenshot routes, to capture tab transitions.
+    private func scheduleScreenshotHostTabSwitchIfNeeded() {
+        let args = ProcessInfo.processInfo.arguments
+        guard let index = args.firstIndex(of: "-HAYAME_HOST_TAB_AFTER"), args.indices.contains(index + 1) else { return }
+        for entry in args[index + 1].split(separator: ",") {
+            let parts = entry.split(separator: ":", maxSplits: 1).map { $0.trimmingCharacters(in: .whitespaces) }
+            let tabByName: [String: HostTab] = [
+                "dashboard": .dashboard, "cars": .cars, "bookings": .bookings,
+                "earnings": .earnings, "inbox": .inbox, "profile": .profile,
+            ]
+            guard parts.count == 2, let seconds = Double(parts[0]), let tab = tabByName[parts[1].lowercased()] else { continue }
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+                appState.hostTab = tab
+            }
+        }
+    }
+
+    /// `-HAYAME_RENTER_TAB_AFTER <seconds>:<tab>[,...]` switches the renter tab
+    /// (home, explore, trips, favorites, more, inbox, profile, dashboard). The
+    /// inbox, profile and dashboard tabs push their page from More.
+    private func scheduleScreenshotRenterTabSwitchIfNeeded() {
+        let args = ProcessInfo.processInfo.arguments
+        guard let index = args.firstIndex(of: "-HAYAME_RENTER_TAB_AFTER"), args.indices.contains(index + 1) else { return }
+        for entry in args[index + 1].split(separator: ",") {
+            let parts = entry.split(separator: ":", maxSplits: 1).map { $0.trimmingCharacters(in: .whitespaces) }
+            let tabByName: [String: RenterTab] = [
+                "home": .home, "explore": .explore, "trips": .trips, "favorites": .favorites,
+                "more": .more, "inbox": .inbox, "profile": .profile, "dashboard": .dashboard,
+            ]
+            guard parts.count == 2, let seconds = Double(parts[0]), let tab = tabByName[parts[1].lowercased()] else { continue }
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+                appState.renterTab = tab
+            }
+        }
+    }
+
+    /// `-HAYAME_TOGGLE_DARK_AFTER <seconds>[,<seconds>...]` flips dark mode at
+    /// each listed time while a screenshot route is on screen, to check that bars
+    /// follow the scheme change live in both directions.
+    private func scheduleScreenshotDarkModeToggleIfNeeded() {
+        let args = ProcessInfo.processInfo.arguments
+        guard let index = args.firstIndex(of: "-HAYAME_TOGGLE_DARK_AFTER"), args.indices.contains(index + 1) else { return }
+        let times = args[index + 1].split(separator: ",").compactMap { Double($0.trimmingCharacters(in: .whitespaces)) }
+        for seconds in times {
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+                appState.setDarkMode(!appState.darkModeEnabled)
+            }
+        }
+    }
+    #endif
 
     private func logSplash(_ message: String) {
         #if DEBUG
@@ -222,14 +331,14 @@ private struct AppearanceTransitionOverlay: View {
                         .frame(width: 118, height: 118)
 
                     Image(systemName: systemImage)
-                        .font(.system(size: 54, weight: .semibold))
+                        .font(.hayame(size: 54, weight: .semibold))
                         .foregroundStyle(foreground)
                         .scaleEffect(iconScale)
                         .rotationEffect(.degrees(iconRotation))
                 }
 
                 Text(modeTitle)
-                    .font(.system(size: 22, weight: .bold, design: .rounded))
+                    .font(.hayame(size: 22, weight: .bold))
                     .foregroundStyle(foreground)
             }
         }
@@ -244,5 +353,24 @@ private struct AppearanceTransitionOverlay: View {
                 haloOpacity = 0.72
             }
         }
+    }
+}
+
+/// Reports the phone's light/dark setting to `AppState` while the app follows
+/// the system, so a change in Control Centre or at sunset applies right away.
+private struct SystemAppearanceReporter: View {
+    @ObservedObject var appState: AppState
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        Color.clear
+            .onAppear(perform: report)
+            .onChange(of: colorScheme) { _, _ in report() }
+            .onChange(of: appState.appearanceMode) { _, _ in report() }
+    }
+
+    private func report() {
+        guard appState.appearanceMode == .system else { return }
+        appState.updateSystemAppearance(prefersDark: colorScheme == .dark)
     }
 }

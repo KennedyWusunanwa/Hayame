@@ -33,6 +33,10 @@ object NavRoutes {
     const val Marketing = "marketing"
     const val HostPublicProfile = "host_public_profile"
     const val AdminShell = "admin_shell"
+    const val Settings = "settings"
+    const val SettingsRoute = "settings?highlight={highlight}"
+    const val ProfileOverview = "profile_overview"
+    const val ResumeCheckout = "resume_checkout"
 
     fun main(tab: MainTab? = null): String = if (tab == null) {
         Main
@@ -51,6 +55,7 @@ object NavRoutes {
         HostCarEditor + "/" + carId
     }
     fun hostPublicProfile(ownerId: String): String = HostPublicProfile + "/" + ownerId
+    fun settings(highlightAppearance: Boolean = false): String = "$Settings?highlight=${if (highlightAppearance) 1 else 0}"
 }
 
 fun parseMainTab(raw: String?): MainTab {

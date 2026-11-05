@@ -20,15 +20,15 @@ struct AnalyticsConsentSheet: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     Image(systemName: "chart.bar.xaxis")
-                        .font(.system(size: 40, weight: .semibold))
+                        .font(.hayame(size: 40, weight: .semibold))
                         .foregroundStyle(HayameTheme.brandBlue)
                         .padding(.top, 8)
 
                     Text("Help us improve Hayame?")
-                        .font(.title2.weight(.bold))
+                        .font(.hayame(size: 22, weight: .bold))
 
                     Text("We'd like to measure how people search and book, so we can fix what's broken and list the cars you're actually looking for.")
-                        .font(.subheadline)
+                        .font(.hayame(size: 15, weight: .regular))
                         .foregroundStyle(.secondary)
 
                     VStack(alignment: .leading, spacing: 12) {
@@ -60,7 +60,7 @@ struct AnalyticsConsentSheet: View {
                     dismiss()
                 } label: {
                     Text("Allow")
-                        .font(.headline)
+                        .font(.hayame(size: 17, weight: .semibold))
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
                         .background(HayameTheme.brandBlue)
@@ -73,7 +73,7 @@ struct AnalyticsConsentSheet: View {
                     dismiss()
                 } label: {
                     Text("No thanks")
-                        .font(.headline)
+                        .font(.hayame(size: 17, weight: .semibold))
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
                         .background(Color.secondary.opacity(0.12))
@@ -97,9 +97,9 @@ struct AnalyticsConsentSheet: View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: icon)
                 .foregroundStyle(tint)
-                .font(.system(size: 16))
+                .font(.hayame(size: 16))
             Text(text)
-                .font(.footnote)
+                .font(.hayame(size: 13, weight: .regular))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }

@@ -233,6 +233,7 @@ enum MockDataService {
             hostLevel: "Verified Host",
             instantBook: true,
             deliveryAvailable: true,
+            allowOneDayBooking: true,
             airConditioning: true,
             approvalStatus: "approved",
             isAvailable: true,

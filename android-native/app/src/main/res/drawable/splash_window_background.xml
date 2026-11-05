@@ -1,4 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Same top-to-bottom field as the first frame of the Compose splash. -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android">
-    <solid android:color="#0F85E3" />
+    <gradient
+        android:angle="270"
+        android:startColor="@color/splash_top"
+        android:centerColor="@color/splash_mid"
+        android:endColor="@color/splash_bottom"
+        android:type="linear" />
 </shape>

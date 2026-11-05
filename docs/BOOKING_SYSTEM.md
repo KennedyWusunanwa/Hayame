@@ -16,6 +16,12 @@ This document explains how the Hayame booking system works end-to-end: availabil
 - `public.cars`
   - `is_available` boolean
   - `instant_book` boolean
+  - `allow_one_day_booking` boolean (default false). Hosts opt a listing in to
+    single-day trips (pick-up at the 10:00 hand-off, return next day). When
+    false the hold, checkout and mobile initiate routes reject trips shorter
+    than 2 nights (`minimumTripNights` in `src/lib/utils.ts`). Apply
+    `db/patch_cars_allow_one_day_booking.sql` before deploying: the mobile
+    list endpoint selects the column from `car_search_view`.
 - `public.bookings`
   - `start_date`, `end_date` (exclusive end)
   - `status` (`pending`, `awaiting_host`, `confirmed`, `rejected`, `cancelled`, `completed`, `refunded`)

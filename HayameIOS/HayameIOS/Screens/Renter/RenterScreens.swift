@@ -1,7 +1,9 @@
 import SwiftUI
+import MapKit
 import PhotosUI
 import UIKit
 import CoreLocation
+import LinkPresentation
 
 enum MoreRoute: String, Identifiable {
     case messages
@@ -16,16 +18,30 @@ struct RenterTabShell: View {
     @State private var moreRoute: MoreRoute?
 
     var body: some View {
-        activeContent
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(HayameTheme.pageBackground.ignoresSafeArea())
-            .tint(HayameTheme.brandBlue)
-            .hayameNavigationChrome(colorScheme: colorScheme)
+        ZStack {
+            activeContent
+                .id(activePage)
+                .transition(HayameTabSwitch.transition)
+        }
+        .animation(HayameTabSwitch.animation, value: activePage)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(HayameTheme.pageBackground.ignoresSafeArea())
+        .tint(HayameTheme.brandBlue)
+        .hayameNavigationChrome(colorScheme: colorScheme)
         .onAppear {
             routeLegacyTabIfNeeded(appState.renterTab)
         }
         .onChange(of: appState.renterTab) { _, newValue in
             routeLegacyTabIfNeeded(newValue)
+        }
+    }
+
+    /// The legacy inbox/profile/dashboard tabs all land on the More page, so
+    /// they share one identity and do not re-animate the page.
+    private var activePage: RenterTab {
+        switch appState.renterTab {
+        case .more, .inbox, .profile, .dashboard: return .more
+        default: return appState.renterTab
         }
     }
 
@@ -41,7 +57,7 @@ struct RenterTabShell: View {
         case .favorites:
             renterStack { FavoritesScreen() }
         case .more, .inbox, .profile, .dashboard:
-            renterStack { GuestProfileScreen(requestedRoute: $moreRoute) }
+            renterStack { MoreScreen(requestedRoute: $moreRoute) }
         }
     }
 
@@ -53,7 +69,9 @@ struct RenterTabShell: View {
         NavigationStack {
             content()
                 .safeAreaInset(edge: .bottom, spacing: 0) {
-                    HayameBottomTabBar(selection: $appState.renterTab, items: renterTabItems)
+                    if !HayameScreenshotMode.hidesTabBar {
+                        HayameBottomTabBar(selection: $appState.renterTab, items: renterTabItems)
+                    }
                 }
         }
     }
@@ -164,16 +182,68 @@ struct ScreenshotRenterRouteView: View {
 
         case .messages:
             NavigationStack {
-                InboxScreen()
+                InboxScreen(isTabRoot: true)
             }
 
-        case .profile:
+        case .chatThread:
+            NavigationStack {
+                ChatThreadScreen(conversationID: "conv-001", participantName: "Stanley Abu")
+            }
+
+        case .hostReviews, .hostReviewsEmpty:
+            NavigationStack {
+                HostReviewsScreen()
+            }
+            .onAppear {
+                applyHostFixtures()
+                if route == .hostReviewsEmpty { appState.hostReviews = [] }
+            }
+
+        case .profile, .more:
             renterTab(.more)
+                .onAppear(perform: useDemoProfileForScreenshots)
+
+        case .profilePage:
+            NavigationStack {
+                ProfileScreen()
+            }
+            .onAppear(perform: useDemoProfileForScreenshots)
+
+        case .settings:
+            NavigationStack {
+                SettingsScreen()
+            }
+            .onAppear(perform: useDemoProfileForScreenshots)
 
         case .renterDashboard:
             NavigationStack {
                 RenterDashboardScreen()
             }
+
+        case .checkoutResumeHome:
+            renterTab(.home)
+                .onAppear { applyResumeCheckoutFixture(blocked: false) }
+
+        case .checkoutResumeTrips:
+            renterTab(.trips)
+                .onAppear { applyResumeCheckoutFixture(blocked: false) }
+
+        case .checkoutResumeDetail:
+            NavigationStack {
+                CarDetailScreen(car: screenshotCar)
+            }
+            .onAppear { applyResumeCheckoutFixture(blocked: false) }
+
+        case .checkoutResumeSheet, .checkoutResumeBlocked:
+            CheckoutResumeSheet(
+                initial: AppState.screenshotPendingCheckout(
+                    from: screenshotCar,
+                    startDate: startDate,
+                    endDate: endDate,
+                    blocked: route == .checkoutResumeBlocked
+                )
+            )
+            .onAppear { applyResumeCheckoutFixture(blocked: route == .checkoutResumeBlocked) }
 
         case .exploreFilters:
             NavigationStack {
@@ -220,8 +290,71 @@ struct ScreenshotRenterRouteView: View {
         case .paymentProcessing:
             bookingSheet(step: .payment, processing: true)
 
+        case .bookingSuccess:
+            BookingSuccessStage(
+                car: screenshotCar,
+                bookingID: "screenshot-booking",
+                startDate: startDate,
+                endDate: endDate,
+                onDone: {}
+            )
+
+        case .hostBookings:
+            NavigationStack {
+                HostBookingsScreen()
+            }
+            .onAppear {
+                // Reuse the renter fixtures as incoming requests so the host
+                // decision cards can be captured without a second account.
+                guard appState.hostBookings.isEmpty else { return }
+                appState.hostBookings = appState.renterBookings.enumerated().map { index, booking in
+                    var request = booking
+                    if index == 0 { request.status = .awaitingHost }
+                    return request
+                }
+                appState.bookingsLoadState = appState.hostBookings.isEmpty ? .empty : .loaded
+            }
+
+        case .modeSwitch:
+            RootView()
+                .onAppear {
+                    useDemoProfileForScreenshots()
+                    applyHostFixtures()
+                    appState.hostModeEnabled = false
+                }
+
+        case .hostHome, .hostProfile:
+            HostTabShell()
+                .onAppear {
+                    useDemoProfileForScreenshots()
+                    applyHostFixtures()
+                    appState.hostTab = route == .hostHome ? .dashboard : .profile
+                }
+
         case .splash, .authLogin, .authSignup:
             EmptyView()
+        }
+    }
+
+    /// Demo host data (bookings, reviews, listings) for the host screenshot routes.
+    private func applyHostFixtures() {
+        useDemoProfileForScreenshots()
+        appState.hostAccessState = .host
+        appState.hostModeEnabled = true
+        if appState.hostBookings.isEmpty {
+            appState.hostBookings = appState.renterBookings.enumerated().map { index, booking in
+                var request = booking
+                if index == 0 { request.status = .awaitingHost; request.paymentStatus = .paid }
+                if index == 1 { request.status = .completed }
+                return request
+            }
+            appState.bookingsLoadState = appState.hostBookings.isEmpty ? .empty : .loaded
+        }
+        if appState.hostReviews.isEmpty {
+            appState.hostReviews = MockDataService.hostReviews
+        }
+        if appState.ownedCars.isEmpty {
+            appState.ownedCars = Array(appState.cars.prefix(3))
         }
     }
 
@@ -230,6 +363,26 @@ struct ScreenshotRenterRouteView: View {
             .onAppear {
                 appState.renterTab = tab
             }
+    }
+
+    /// A held, unfinished checkout for the first live listing, so the resume
+    /// card, strip and sheet can be captured without a real abandoned payment.
+    private func applyResumeCheckoutFixture(blocked: Bool) {
+        useDemoProfileForScreenshots()
+        appState.pendingCheckout = AppState.screenshotPendingCheckout(
+            from: screenshotCar,
+            startDate: startDate,
+            endDate: endDate,
+            blocked: blocked
+        )
+        appState.pendingCheckoutLoadState = .loaded
+    }
+
+    /// Profile screenshots want a signed-in look without a real session.
+    private func useDemoProfileForScreenshots() {
+        guard !appState.isAuthenticated else { return }
+        appState.currentUser = .demoGuest
+        appState.isAuthenticated = true
     }
 
     private func bookingSheet(step: BookingCheckoutStep, processing: Bool = false) -> some View {
@@ -254,7 +407,7 @@ private struct ScreenshotLiveListingsLoadingView: View {
             ProgressView()
                 .tint(HayameTheme.brandBlue)
             Text("Loading live car listings")
-                .font(.system(size: 16, weight: .bold, design: .rounded))
+                .font(.hayame(size: 16, weight: .bold))
                 .foregroundStyle(HayameTheme.brandNavy)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -268,13 +421,13 @@ private struct ScreenshotLiveListingsErrorView: View {
     var body: some View {
         VStack(spacing: 12) {
             Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 28, weight: .bold))
+                .font(.hayame(size: 28, weight: .bold))
                 .foregroundStyle(HayameTheme.warning)
             Text("Live listings unavailable")
-                .font(.system(size: 18, weight: .bold, design: .rounded))
+                .font(.hayame(size: 18, weight: .bold))
                 .foregroundStyle(HayameTheme.brandNavy)
             Text(message)
-                .font(.system(size: 13, weight: .medium, design: .rounded))
+                .font(.hayame(size: 13, weight: .medium))
                 .foregroundStyle(HayameTheme.mutedText)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 24)
@@ -292,12 +445,39 @@ struct RenterHomeScreen: View {
     @State private var homeSearchText = ""
     @State private var showHomeFilters = false
     @State private var showLocationPicker = false
+    @State private var resumeTarget: ResumableCheckout?
     // Browse location — deliberately separate from the profile city. A manual
     // choice wins; otherwise the GPS-detected city/region is used.
     @AppStorage("hayame.browse_city") private var browseCity = ""
     @AppStorage("hayame.browse_region") private var browseRegion = ""
     @AppStorage("hayame.detected_browse_city") private var cachedDetectedCity = ""
     @AppStorage("hayame.detected_browse_region") private var cachedDetectedRegion = ""
+    @AppStorage("hayame.home_popular_layout_mode") private var popularLayoutRawValue = ExploreLayoutMode.list.rawValue
+
+    private let pagePadding: CGFloat = 16
+    private let popularColumnSpacing: CGFloat = 14
+
+    private var popularLayoutMode: ExploreLayoutMode {
+        ExploreLayoutMode(rawValue: popularLayoutRawValue) ?? .list
+    }
+
+    /// Every listing that fits the selected category pill (All passes everything).
+    private var categoryCars: [Car] {
+        appState.cars.filter { HomeCategoryFilter.matches(carType: $0.type, category: selectedCategory) }
+    }
+
+    private var popularCars: [Car] {
+        Array(categoryCars.prefix(6))
+    }
+
+    private var popularVehicleRows: [HomePopularVehicleRow] {
+        stride(from: 0, to: popularCars.count, by: 2).map { index in
+            HomePopularVehicleRow(
+                leading: popularCars[index],
+                trailing: popularCars.indices.contains(index + 1) ? popularCars[index + 1] : nil
+            )
+        }
+    }
 
     private var detectedCity: String {
         let live = locationManager.cityName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -346,7 +526,17 @@ struct RenterHomeScreen: View {
             .map { $0.type.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
         let unique = Array(Set(defaultTypes + types)).sorted()
-        return ["All"] + unique
+        // Most populated body type first; ties stay alphabetical, empty ones trail.
+        var counts: [String: Int] = [:]
+        for category in unique {
+            counts[category] = appState.cars.filter { HomeCategoryFilter.matches(carType: $0.type, category: category) }.count
+        }
+        let ranked = unique.sorted { lhs, rhs in
+            let left = counts[lhs] ?? 0
+            let right = counts[rhs] ?? 0
+            return left != right ? left > right : lhs < rhs
+        }
+        return ["All"] + ranked
     }
 
     private var nearYouCars: [Car] {
@@ -354,7 +544,7 @@ struct RenterHomeScreen: View {
         let region = effectiveRegion.lowercased()
         let coord = locationManager.coordinate
         if city.isEmpty && region.isEmpty && coord == nil {
-            return Array(appState.cars.prefix(5))
+            return Array(categoryCars.prefix(5))
         }
 
         // Listings carry no coordinates from the API today, so proximity is
@@ -378,13 +568,19 @@ struct RenterHomeScreen: View {
             }
             return userLocation.distance(from: CLLocation(latitude: lat, longitude: lng))
         }
-        return appState.cars
+        return categoryCars
             .sorted { (locationRank($0), distance($0)) < (locationRank($1), distance($1)) }
             .prefix(5)
             .map { $0 }
     }
 
     var body: some View {
+        GeometryReader { geometry in
+            let popularCardWidth = max(
+                0,
+                (geometry.size.width - (pagePadding * 2) - popularColumnSpacing) / 2
+            )
+
         ZStack(alignment: .topLeading) {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 16) {
@@ -415,60 +611,76 @@ struct RenterHomeScreen: View {
                     }
                 )
 
-                HStack(spacing: 10) {
-                    HStack(spacing: 8) {
-                        Image(systemName: "magnifyingglass")
-                            .foregroundStyle(HayameTheme.mutedText)
-                            .font(.system(size: 14))
-                        TextField("Car, city, or host...", text: $homeSearchText)
-                            .font(.system(size: 14, design: .rounded))
-                            .autocorrectionDisabled()
-                            .textInputAutocapitalization(.never)
-                            .submitLabel(.search)
-                            .onSubmit { applyHomeSearchToExplore() }
-                        Spacer()
-                        if !homeSearchText.isEmpty {
-                            Button {
-                                homeSearchText = ""
-                            } label: {
-                                Image(systemName: "xmark.circle.fill")
-                                    .foregroundStyle(HayameTheme.mutedText)
-                                    .font(.system(size: 14))
-                            }
-                            .buttonStyle(.plain)
-                        }
+                HStack(spacing: 4) {
+                    TextField("Car, city, or host...", text: $homeSearchText)
+                        .font(.hayame(size: 15))
+                        .foregroundStyle(HayameTheme.brandNavy)
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.never)
+                        .submitLabel(.search)
+                        .onSubmit { applyHomeSearchToExplore() }
+                        .frame(maxWidth: .infinity)
+
+                    if !homeSearchText.isEmpty {
                         Button {
-                            showHomeFilters = true
+                            homeSearchText = ""
                         } label: {
-                            Image(systemName: "line.3.horizontal.decrease")
-                                .font(.system(size: 14, weight: .semibold))
-                                .foregroundStyle(.white)
-                                .padding(10)
-                                .background(HayameTheme.brandBlue)
-                                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.hayame(size: 15, weight: .semibold))
+                                .foregroundStyle(HayameTheme.mutedText)
+                                .frame(width: 30, height: 36)
                         }
                         .buttonStyle(.plain)
+                        .accessibilityLabel("Clear search")
                     }
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 12)
-                    .background(HayameTheme.fieldBackground)
-                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+
+                    Button {
+                        showHomeFilters = true
+                    } label: {
+                        Image(systemName: "slider.horizontal.3")
+                            .font(.hayame(size: 17, weight: .semibold))
+                            .foregroundStyle(HayameTheme.brandNavy)
+                            .frame(width: 36, height: 36)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Filters")
+                    .coachMark("home.filters")
 
                     Button {
                         applyHomeSearchToExplore()
                     } label: {
-                        Text("Search")
-                            .font(.system(size: 14, weight: .semibold, design: .rounded))
+                        Image(systemName: "magnifyingglass")
+                            .font(.hayame(size: 16, weight: .bold))
                             .foregroundStyle(.white)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 12)
-                            .background(HayameTheme.brandBlue)
-                            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                            .frame(width: 40, height: 40)
+                            .background(HayameTheme.brandBlue, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(HayamePressableStyle(scale: 0.92))
+                    .accessibilityLabel("Search")
                 }
+                .padding(.leading, 16)
+                .padding(.trailing, 6)
+                .padding(.vertical, 6)
+                .background(HayameTheme.fieldBackground)
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(HayameTheme.cardStroke, lineWidth: 1)
+                )
+                .coachMark("home.search")
 
                 HomeCategoryPills(selected: $selectedCategory, categories: availableCategories)
+                    .coachMark("home.categories")
+                    .coachTour(.home)
+
+                if let resumable = appState.resumableCheckout {
+                    ResumeCheckoutCard(resumable: resumable) {
+                        resumeTarget = resumable
+                    }
+                    .id(resumable.id)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                }
 
                 if case .loading = appState.publicCarsLoadState {
                     HomeNearYouPlaceholderSection()
@@ -496,10 +708,13 @@ struct RenterHomeScreen: View {
                     HStack {
                         SectionHeader(title: "Popular picks")
                         Spacer()
+                        ExploreLayoutToggle(selectedLayout: popularLayoutMode) { layout in
+                            popularLayoutRawValue = layout.rawValue
+                        }
                         Button("See all") {
                             appState.renterTab = .explore
                         }
-                        .font(.system(size: 13, weight: .medium, design: .rounded))
+                        .font(.hayame(size: 13, weight: .medium))
                         .foregroundStyle(HayameTheme.brandBlue)
                     }
 
@@ -517,29 +732,67 @@ struct RenterHomeScreen: View {
                             message: "No listings are available right now.",
                             systemImage: "car.rear.and.tire.marks"
                         )
-                    } else {
+                    } else if categoryCars.isEmpty {
                         VStack(spacing: 12) {
-                            ForEach(appState.cars.prefix(3), id: \.id) { car in
-                                ZStack(alignment: .topTrailing) {
-                                    NavigationLink {
-                                        CarDetailScreen(car: car)
-                                    } label: {
-                                        HomeFeaturedCarRow(
-                                            car: car,
-                                            isFavorite: appState.favoriteCarIDs.contains(car.id),
-                                            showsFavoriteButton: false,
-                                            imageFrame: CGSize(width: 136, height: 104),
-                                            targetImageSize: CGSize(width: 320, height: 240)
-                                        ) {
+                            CarTypeIcon(type: selectedCategory)
+                                .frame(width: 44, height: 34)
+                                .foregroundStyle(HayameTheme.brandBlue)
+                            Text("No \(selectedCategory.lowercased()) listings yet")
+                                .font(.hayame(size: 16, weight: .bold))
+                                .foregroundStyle(HayameTheme.brandNavy)
+                            Text("Try another type, or browse everything that's available right now.")
+                                .font(.hayame(size: 13, weight: .medium))
+                                .foregroundStyle(HayameTheme.mutedText)
+                                .multilineTextAlignment(.center)
+                            Button("Show all cars") {
+                                withAnimation(HayameMotion.snappy) { selectedCategory = "All" }
+                            }
+                            .font(.hayame(size: 14, weight: .bold))
+                            .foregroundStyle(HayameTheme.brandBlue)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(22)
+                        .hayameCard()
+                        .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                    } else {
+                        if popularLayoutMode == .grid {
+                            LazyVStack(spacing: popularColumnSpacing) {
+                                ForEach(popularVehicleRows) { row in
+                                    HStack(alignment: .top, spacing: popularColumnSpacing) {
+                                        homePopularGridCard(row.leading)
+                                            .frame(width: popularCardWidth, alignment: .topLeading)
+
+                                        if let trailing = row.trailing {
+                                            homePopularGridCard(trailing)
+                                                .frame(width: popularCardWidth, alignment: .topLeading)
+                                        } else {
+                                            Color.clear
+                                                .frame(width: popularCardWidth)
+                                                .accessibilityHidden(true)
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            LazyVStack(spacing: 12) {
+                                ForEach(popularCars) { car in
+                                    ZStack(alignment: .topTrailing) {
+                                        NavigationLink {
+                                            CarDetailScreen(car: car)
+                                        } label: {
+                                            ListingCard(
+                                                car: car,
+                                                isFavorite: appState.favoriteCarIDs.contains(car.id),
+                                                layout: .row,
+                                                showsFavoriteButton: false
+                                            )
+                                        }
+                                        .buttonStyle(HayamePressableStyle(scale: 0.98))
+
+                                        ListingHeartButton(isFavorite: appState.favoriteCarIDs.contains(car.id), onDark: false) {
                                             appState.toggleFavorite(carID: car.id)
                                         }
                                     }
-                                    .buttonStyle(.plain)
-
-                                    FavoriteBadgeButton(isFavorite: appState.favoriteCarIDs.contains(car.id)) {
-                                        appState.toggleFavorite(carID: car.id)
-                                    }
-                                    .padding(8)
                                 }
                             }
                         }
@@ -552,17 +805,23 @@ struct RenterHomeScreen: View {
                     Text("Explore More")
                         .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(PrimaryPillButtonStyle())
+                .buttonStyle(SolidPillButtonStyle())
 
                 if let message = appState.syncErrorMessage, !message.isEmpty {
                     Text(message)
-                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .font(.hayame(size: 12, weight: .semibold))
                         .foregroundStyle(HayameTheme.danger)
                 }
             }
             .padding(16)
+            .animation(HayameMotion.settle, value: appState.resumableCheckout)
+            .animation(HayameMotion.settle, value: selectedCategory)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .resumeCheckoutPresenter(target: $resumeTarget)
+        .task(id: appState.isAuthenticated) {
+            await appState.refreshPendingCheckout()
+        }
         .background(HayameTheme.pageBackground)
         .toolbar(.hidden, for: .navigationBar)
         if showLocationPicker {
@@ -608,6 +867,7 @@ struct RenterHomeScreen: View {
             .zIndex(9)
         }
         }
+        }
         .sheet(isPresented: $showHomeFilters) {
             NavigationStack {
                 ExploreFilterSheet()
@@ -631,6 +891,27 @@ struct RenterHomeScreen: View {
         .onChange(of: locationManager.didResolveLocation) { _, didResolve in
             guard didResolve else { return }
             syncDetectedBrowseCache()
+        }
+    }
+
+    private func homePopularGridCard(_ car: Car) -> some View {
+        ZStack(alignment: .topTrailing) {
+            NavigationLink {
+                CarDetailScreen(car: car)
+            } label: {
+                ListingCard(
+                    car: car,
+                    isFavorite: appState.favoriteCarIDs.contains(car.id),
+                    layout: .tile(imageHeight: 136),
+                    showsFavoriteButton: false
+                )
+            }
+            .buttonStyle(HayamePressableStyle(scale: 0.97))
+
+            ListingHeartButton(isFavorite: appState.favoriteCarIDs.contains(car.id)) {
+                appState.toggleFavorite(carID: car.id)
+            }
+            .padding(8)
         }
     }
 
@@ -658,6 +939,13 @@ struct RenterHomeScreen: View {
             cachedDetectedRegion = region
         }
     }
+}
+
+private struct HomePopularVehicleRow: Identifiable {
+    let leading: Car
+    let trailing: Car?
+
+    var id: String { leading.id }
 }
 
 private struct HomeTopHeader: View {
@@ -710,7 +998,7 @@ private struct HomeTopHeader: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Button(action: onProfileTap) {
                         Text(displayName)
-                            .font(.system(size: 16, weight: .bold, design: .rounded))
+                            .font(.hayame(size: 16, weight: .bold))
                             .foregroundStyle(HayameTheme.brandNavy)
                             .lineLimit(1)
                     }
@@ -719,18 +1007,19 @@ private struct HomeTopHeader: View {
                     Button(action: onLocationTap) {
                         HStack(spacing: 4) {
                             Image(systemName: "mappin.circle.fill")
-                                .font(.system(size: 11))
+                                .font(.hayame(size: 11))
                                 .foregroundStyle(HayameTheme.mutedText)
                             Text(locationText)
-                                .font(.system(size: 13, weight: .medium, design: .rounded))
+                                .font(.hayame(size: 13, weight: .medium))
                                 .foregroundStyle(HayameTheme.mutedText)
                             Image(systemName: "chevron.down")
-                                .font(.system(size: 10, weight: .bold))
+                                .font(.hayame(size: 10, weight: .bold))
                                 .foregroundStyle(HayameTheme.brandBlue)
                         }
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Change browse location, currently \(locationText)")
+                    .coachMark("home.location")
                 }
             }
 
@@ -739,7 +1028,7 @@ private struct HomeTopHeader: View {
             Button(action: onChatTap) {
                 ZStack(alignment: .topTrailing) {
                     Image(systemName: "message.fill")
-                        .font(.system(size: 17, weight: .semibold))
+                        .font(.hayame(size: 17, weight: .semibold))
                         .foregroundStyle(HayameTheme.brandNavy)
                         .frame(width: 42, height: 42)
                         .background(HayameTheme.cardBackground)
@@ -782,7 +1071,7 @@ private struct HomeTopHeader: View {
             .fill(HayameTheme.brandLight)
             .overlay(
                 Text(initials.isEmpty ? "U" : initials)
-                    .font(.system(size: 12, weight: .bold, design: .rounded))
+                    .font(.hayame(size: 12, weight: .bold))
                     .foregroundStyle(HayameTheme.brandNavy)
             )
     }
@@ -797,7 +1086,7 @@ private struct SearchChip: View {
             Image(systemName: icon)
             Text(title)
         }
-        .font(.system(size: 12, weight: .semibold, design: .rounded))
+        .font(.hayame(size: 12, weight: .semibold))
         .foregroundStyle(HayameTheme.brandNavy)
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
@@ -815,18 +1104,43 @@ private struct HomeCategoryPills: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
                 ForEach(categories, id: \.self) { cat in
-                    Button(cat) { selected = cat }
-                        .font(.system(size: 13, weight: .medium, design: .rounded))
-                        .padding(.horizontal, 14)
+                    let isSelected = selected == cat
+                    Button {
+                        guard !isSelected else { return }
+                        HayameHaptics.select()
+                        withAnimation(HayameMotion.snappy) { selected = cat }
+                    } label: {
+                        HStack(spacing: 7) {
+                            CarTypeIcon(type: cat)
+                                .frame(width: 20, height: 15)
+                            Text(cat)
+                                .font(.hayame(size: 13, weight: isSelected ? .bold : .semibold))
+                        }
+                        .foregroundStyle(isSelected ? .white : HayameTheme.brandNavy)
+                        .padding(.horizontal, 13)
                         .padding(.vertical, 8)
-                        .background(selected == cat ? HayameTheme.brandBlue : HayameTheme.chipBackground)
-                        .foregroundStyle(selected == cat ? .white : HayameTheme.brandNavy)
-                        .clipShape(Capsule())
-                        .overlay(Capsule().stroke(HayameTheme.controlStroke, lineWidth: selected == cat ? 0 : 1))
+                        .background(isSelected ? HayameTheme.brandBlue : HayameTheme.chipBackground, in: Capsule())
+                        .overlay(Capsule().stroke(HayameTheme.controlStroke, lineWidth: isSelected ? 0 : 1))
+                    }
+                    .buttonStyle(HayamePressableStyle(scale: 0.95, haptic: false))
                 }
             }
+            .padding(.horizontal, 1)
+            .padding(.vertical, 1)
         }
     }
+}
+
+private struct LocationPickerRow: Identifiable, Hashable {
+    enum Kind: Hashable {
+        case header
+        case allOfRegion
+        case city(String)
+    }
+
+    let id: String
+    let region: String
+    let kind: Kind
 }
 
 private struct HomeLocationPickerDropdown: View {
@@ -858,15 +1172,34 @@ private struct HomeLocationPickerDropdown: View {
         }
     }
 
+    // Flattened so every header/row is its own LazyVStack child. Nesting a
+    // full (non-lazy) ForEach per region inside the outer LazyVStack forced
+    // SwiftUI to lay out an entire region's rows (up to ~47 for Ashanti) in
+    // one burst as it scrolled into view — the resulting frame drop plus the
+    // subsequent content-height correction visibly snapped the scroll
+    // position back toward the top.
+    private var flattenedRows: [LocationPickerRow] {
+        regionsWithCities.flatMap { entry -> [LocationPickerRow] in
+            var rows: [LocationPickerRow] = [
+                LocationPickerRow(id: "header|\(entry.region)", region: entry.region, kind: .header),
+                LocationPickerRow(id: "all|\(entry.region)", region: entry.region, kind: .allOfRegion),
+            ]
+            rows.append(contentsOf: entry.cities.map { city in
+                LocationPickerRow(id: "city|\(entry.region)|\(city)", region: entry.region, kind: .city(city))
+            })
+            return rows
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Browse location")
-                        .font(.system(size: 16, weight: .bold, design: .rounded))
+                        .font(.hayame(size: 16, weight: .bold))
                         .foregroundStyle(HayameTheme.brandNavy)
                     Text("Changes nearby cars only, not your profile.")
-                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                        .font(.hayame(size: 12, weight: .medium))
                         .foregroundStyle(HayameTheme.mutedText)
                 }
 
@@ -874,7 +1207,7 @@ private struct HomeLocationPickerDropdown: View {
 
                 Button(action: onDismiss) {
                     Image(systemName: "xmark")
-                        .font(.system(size: 12, weight: .bold))
+                        .font(.hayame(size: 12, weight: .bold))
                         .foregroundStyle(HayameTheme.mutedText)
                         .frame(width: 30, height: 30)
                         .background(HayameTheme.subtleFill)
@@ -886,23 +1219,23 @@ private struct HomeLocationPickerDropdown: View {
             Button(action: onUseCurrentLocation) {
                 HStack(spacing: 10) {
                     Image(systemName: "location.fill")
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.hayame(size: 14, weight: .semibold))
                         .foregroundStyle(HayameTheme.brandBlue)
                         .frame(width: 30, height: 30)
                         .background(HayameTheme.brandLight)
                         .clipShape(Circle())
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Use my current location")
-                            .font(.system(size: 14, weight: .semibold, design: .rounded))
+                            .font(.hayame(size: 14, weight: .semibold))
                             .foregroundStyle(HayameTheme.brandNavy)
                         Text(detectedCity?.isEmpty == false ? "Detected: \(detectedCity!)" : "Uses a Ghana location when available")
-                            .font(.system(size: 12, weight: .medium, design: .rounded))
+                            .font(.hayame(size: 12, weight: .medium))
                             .foregroundStyle(HayameTheme.mutedText)
                     }
                 }
                 Spacer()
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 11, weight: .bold))
+                    .font(.hayame(size: 11, weight: .bold))
                     .foregroundStyle(HayameTheme.mutedText)
             }
             .buttonStyle(.plain)
@@ -916,10 +1249,10 @@ private struct HomeLocationPickerDropdown: View {
 
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.hayame(size: 13, weight: .semibold))
                     .foregroundStyle(HayameTheme.mutedText)
                 TextField("Search city or region", text: $query)
-                    .font(.system(size: 14, weight: .medium, design: .rounded))
+                    .font(.hayame(size: 14, weight: .medium))
                     .foregroundStyle(HayameTheme.brandNavy)
                     .textInputAutocapitalization(.words)
                     .autocorrectionDisabled()
@@ -928,7 +1261,7 @@ private struct HomeLocationPickerDropdown: View {
                         query = ""
                     } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 14, weight: .semibold))
+                            .font(.hayame(size: 14, weight: .semibold))
                             .foregroundStyle(HayameTheme.mutedText)
                     }
                     .buttonStyle(.plain)
@@ -945,39 +1278,40 @@ private struct HomeLocationPickerDropdown: View {
 
             ScrollView(showsIndicators: true) {
                 LazyVStack(alignment: .leading, spacing: 8) {
-                    if regionsWithCities.isEmpty {
+                    if flattenedRows.isEmpty {
                         Text("No matching locations.")
-                            .font(.system(size: 13, weight: .medium, design: .rounded))
+                            .font(.hayame(size: 13, weight: .medium))
                             .foregroundStyle(HayameTheme.mutedText)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.vertical, 12)
                     }
 
-                    ForEach(regionsWithCities, id: \.region) { entry in
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text(entry.region)
-                                .font(.system(size: 12, weight: .bold, design: .rounded))
+                    ForEach(flattenedRows) { row in
+                        switch row.kind {
+                        case .header:
+                            Text(row.region)
+                                .font(.hayame(size: 12, weight: .bold))
                                 .foregroundStyle(HayameTheme.mutedText)
                                 .textCase(.uppercase)
                                 .padding(.top, 4)
 
+                        case .allOfRegion:
                             locationRow(
-                                title: "All of \(entry.region)",
+                                title: "All of \(row.region)",
                                 subtitle: "Show vehicles across this region",
                                 isSelected: selectedCity.isEmpty &&
-                                    selectedRegion.caseInsensitiveCompare(entry.region) == .orderedSame
+                                    selectedRegion.caseInsensitiveCompare(row.region) == .orderedSame
                             ) {
-                                onSelect("", entry.region)
+                                onSelect("", row.region)
                             }
 
-                            ForEach(entry.cities, id: \.self) { city in
-                                locationRow(
-                                    title: MockDataService.cityDisplayName(city),
-                                    subtitle: entry.region,
-                                    isSelected: selectedCity.caseInsensitiveCompare(city) == .orderedSame
-                                ) {
-                                    onSelect(city, entry.region)
-                                }
+                        case .city(let city):
+                            locationRow(
+                                title: MockDataService.cityDisplayName(city),
+                                subtitle: row.region,
+                                isSelected: selectedCity.caseInsensitiveCompare(city) == .orderedSame
+                            ) {
+                                onSelect(city, row.region)
                             }
                         }
                     }
@@ -1006,18 +1340,18 @@ private struct HomeLocationPickerDropdown: View {
             HStack(spacing: 10) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
-                        .font(.system(size: 14, weight: .semibold, design: .rounded))
+                        .font(.hayame(size: 14, weight: .semibold))
                         .foregroundStyle(isSelected ? HayameTheme.brandBlue : HayameTheme.brandNavy)
                         .lineLimit(2)
                     Text(subtitle)
-                        .font(.system(size: 11, weight: .medium, design: .rounded))
+                        .font(.hayame(size: 11, weight: .medium))
                         .foregroundStyle(HayameTheme.mutedText)
                         .lineLimit(1)
                 }
                 Spacer()
                 if isSelected {
                     Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(.hayame(size: 16, weight: .semibold))
                         .foregroundStyle(HayameTheme.brandBlue)
                 }
             }
@@ -1046,164 +1380,38 @@ private struct HomeNearYouSection: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text(title)
-                    .font(.system(size: 18, weight: .semibold, design: .rounded))
+                    .font(.hayame(size: 18, weight: .semibold))
                     .foregroundStyle(HayameTheme.brandNavy)
                 Spacer()
                 Button("See all", action: onSeeAll)
-                    .font(.system(size: 13, weight: .medium, design: .rounded))
+                    .font(.hayame(size: 13, weight: .medium))
                     .foregroundStyle(HayameTheme.brandBlue)
             }
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 14) {
                     ForEach(cars.prefix(5), id: \.id) { car in
-                        HomeNearYouCard(
-                            car: car,
-                            isFavorite: favoriteIDs.contains(car.id),
-                            onOpen: { onOpen(car) },
-                            onToggle: { onToggleFavorite(car.id) }
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
+                        ZStack(alignment: .topTrailing) {
+                            NavigationLink {
+                                CarDetailScreen(car: car)
+                            } label: {
+                                ListingCard(
+                                    car: car,
+                                    isFavorite: favoriteIDs.contains(car.id),
+                                    layout: .tile(width: 236, imageHeight: 150),
+                                    showsFavoriteButton: false
+                                )
+                            }
+                            .buttonStyle(HayamePressableStyle(scale: 0.97))
 
-private struct HomeNearYouCard: View {
-    let car: Car
-    let isFavorite: Bool
-    let onOpen: () -> Void
-    let onToggle: () -> Void
-
-    var body: some View {
-        NavigationLink {
-            CarDetailScreen(car: car)
-        } label: {
-            VStack(alignment: .leading, spacing: 0) {
-                ZStack(alignment: .topTrailing) {
-                    NetworkOrFallbackImage(urlString: car.imageNames.first, targetSize: CGSize(width: 520, height: 320))
-                        .frame(width: 260, height: 160)
-                        .clipped()
-                    Button(action: onToggle) {
-                        Image(systemName: isFavorite ? "heart.fill" : "heart")
-                            .font(.system(size: 13, weight: .bold))
-                            .foregroundStyle(isFavorite ? .red : HayameTheme.brandNavy)
+                            ListingHeartButton(isFavorite: favoriteIDs.contains(car.id)) {
+                                onToggleFavorite(car.id)
+                            }
                             .padding(8)
-                            .background(HayameTheme.floatingControlBackground)
-                            .clipShape(Circle())
-                    }
-                    .buttonStyle(.plain)
-                    .padding(10)
-                    if car.instantBook {
-                        HStack(spacing: 4) {
-                            Image(systemName: "bolt.fill")
-                                .font(.system(size: 10, weight: .bold))
-                            Text("Instant")
-                                .font(.system(size: 11, weight: .semibold, design: .rounded))
-                        }
-                        .foregroundStyle(HayameTheme.success)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(HayameTheme.floatingControlBackground)
-                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                        .padding([.leading, .top], 10)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                    }
-                }
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(car.displayTitle)
-                        .font(.system(size: 15, weight: .semibold, design: .rounded))
-                        .foregroundStyle(HayameTheme.brandNavy)
-                        .lineLimit(1)
-                    HStack {
-                        Text("📍 \(car.city)")
-                            .font(.system(size: 12, design: .rounded))
-                            .foregroundStyle(HayameTheme.mutedText)
-                        Spacer()
-                        if car.reviewsCount > 0 || car.isNewListing {
-                            Label(car.reviewsCount > 0 ? String(format: "%.1f", car.rating) : "New", systemImage: "star.fill")
-                                .font(.system(size: 12, weight: .semibold, design: .rounded))
-                                .foregroundStyle(.orange)
                         }
                     }
-                    Text("GHS \(car.dailyPrice)/day")
-                        .font(.system(size: 15, weight: .semibold, design: .rounded))
-                        .foregroundStyle(HayameTheme.brandBlue)
                 }
-                .padding(12)
-            }
-            .frame(width: 260)
-            .background(HayameTheme.cardBackground)
-            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 20).stroke(HayameTheme.cardStroke, lineWidth: 1))
-        }
-        .buttonStyle(.plain)
-    }
-}
-
-private struct HomeFeaturedCarRow: View {
-    let car: Car
-    let isFavorite: Bool
-    var showsFavoriteButton: Bool = true
-    var imageFrame: CGSize = CGSize(width: 94, height: 72)
-    var targetImageSize: CGSize = CGSize(width: 188, height: 144)
-    let favoriteAction: () -> Void
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 14) {
-            NetworkOrFallbackImage(
-                urlString: car.imageNames.first,
-                targetSize: targetImageSize
-            )
-                .frame(width: imageFrame.width, height: imageFrame.height)
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-
-            VStack(alignment: .leading, spacing: 6) {
-                Text(car.displayTitle)
-                    .font(.system(size: 16, weight: .bold, design: .rounded))
-                    .foregroundStyle(HayameTheme.brandNavy)
-                    .lineLimit(2)
-                Text("\(car.city), \(car.region)")
-                    .hayameCaptionStyle()
-                    .lineLimit(1)
-
-                HStack(spacing: 8) {
-                    if car.reviewsCount > 0 || car.isNewListing {
-                        Label(car.reviewsCount > 0 ? String(format: "%.1f", car.rating) : "New", systemImage: "star.fill")
-                            .font(.system(size: 11, weight: .semibold, design: .rounded))
-                            .foregroundStyle(.orange)
-                    }
-
-                    if car.instantBook {
-                        Text("Instant")
-                            .font(.system(size: 10, weight: .bold, design: .rounded))
-                            .foregroundStyle(HayameTheme.success)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(HayameTheme.success.opacity(0.14))
-                            .clipShape(Capsule())
-                    }
-                }
-
-                Text("GHS\(car.dailyPrice)/day")
-                    .font(.system(size: 15, weight: .bold, design: .rounded))
-                    .foregroundStyle(HayameTheme.brandBlue)
-            }
-
-            Spacer()
-
-            if showsFavoriteButton {
-                Button(action: favoriteAction) {
-                    Image(systemName: isFavorite ? "heart.fill" : "heart")
-                        .foregroundStyle(isFavorite ? .red : HayameTheme.brandNavy)
-                }
-                .buttonStyle(.plain)
             }
         }
-        .padding(12)
-        .background(HayameTheme.cardBackground)
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 16).stroke(HayameTheme.cardStroke, lineWidth: 1))
     }
 }
 
@@ -1214,7 +1422,7 @@ private struct FavoriteBadgeButton: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: isFavorite ? "heart.fill" : "heart")
-                .font(.system(size: 14, weight: .bold))
+                .font(.hayame(size: 14, weight: .bold))
                 .foregroundStyle(isFavorite ? Color.red : HayameTheme.brandNavy)
                 .padding(8)
                 .background(HayameTheme.floatingControlBackground)
@@ -1238,7 +1446,7 @@ private struct HomeQuickFiltersCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Search with filters")
-                .font(.system(size: 14, weight: .bold, design: .rounded))
+                .font(.hayame(size: 14, weight: .bold))
                 .foregroundStyle(HayameTheme.brandNavy)
 
             HStack(spacing: 8) {
@@ -1301,7 +1509,7 @@ private struct HomeQuickFiltersCard: View {
 
             HStack(spacing: 10) {
                 Text("Max GHS \(appState.exploreFilters.maxPrice)")
-                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .font(.hayame(size: 12, weight: .semibold))
                     .foregroundStyle(HayameTheme.mutedText)
                 Slider(
                     value: Binding(
@@ -1333,9 +1541,9 @@ private struct HomeQuickFiltersCard: View {
             Text(title)
                 .lineLimit(1)
             Image(systemName: "chevron.down")
-                .font(.system(size: 9, weight: .bold))
+                .font(.hayame(size: 9, weight: .bold))
         }
-        .font(.system(size: 11, weight: .semibold, design: .rounded))
+        .font(.hayame(size: 11, weight: .semibold))
         .foregroundStyle(HayameTheme.brandNavy)
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
@@ -1350,8 +1558,19 @@ struct ExploreScreen: View {
     @State private var showFilters = false
     @FocusState private var isSearchFieldFocused: Bool
 
-    private let columns = [GridItem(.flexible(), spacing: 14), GridItem(.flexible(), spacing: 14)]
+    private let pagePadding: CGFloat = 16
+    private let columnSpacing: CGFloat = 14
     private let popularVehicleBrands = ["Toyota", "Honda", "Kia", "Hyundai", "Range Rover", "Mercedes-Benz", "BMW", "Nissan", "Ford", "Mitsubishi"]
+
+    private var vehicleRows: [ExploreVehicleRow] {
+        let cars = appState.filteredCars
+        return stride(from: 0, to: cars.count, by: 2).map { index in
+            ExploreVehicleRow(
+                leading: cars[index],
+                trailing: cars.indices.contains(index + 1) ? cars[index + 1] : nil
+            )
+        }
+    }
 
     private var vehicleBrandOptions: [String] {
         let liveBrands = appState.cars
@@ -1368,9 +1587,13 @@ struct ExploreScreen: View {
     }
 
     var body: some View {
-        ScrollView(showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 14) {
+        GeometryReader { geometry in
+            let cardWidth = max(0, (geometry.size.width - (pagePadding * 2) - columnSpacing) / 2)
+
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: columnSpacing) {
                 PageTitle("Explore")
+                    .coachTour(.explore)
 
                 HStack(spacing: 8) {
                     Image(systemName: "magnifyingglass")
@@ -1386,7 +1609,7 @@ struct ExploreScreen: View {
                             appState.exploreSearchText = ""
                         } label: {
                             Image(systemName: "xmark.circle.fill")
-                                .font(.system(size: 14, weight: .bold))
+                                .font(.hayame(size: 14, weight: .bold))
                                 .foregroundStyle(HayameTheme.mutedText)
                         }
                         .buttonStyle(.plain)
@@ -1400,7 +1623,7 @@ struct ExploreScreen: View {
                         }
                     } label: {
                         Text("Sort")
-                            .font(.system(size: 12, weight: .bold, design: .rounded))
+                            .font(.hayame(size: 12, weight: .bold))
                             .foregroundStyle(HayameTheme.brandBlue)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 6)
@@ -1411,14 +1634,16 @@ struct ExploreScreen: View {
                     ExploreLayoutToggle(selectedLayout: appState.exploreLayoutMode) { layout in
                         appState.setExploreLayoutMode(layout)
                     }
+                    .coachMark("explore.layout")
 
                     Button {
                         showFilters = true
                     } label: {
                         Image(systemName: "line.3.horizontal.decrease.circle")
-                            .font(.system(size: 18, weight: .semibold))
+                            .font(.hayame(size: 18, weight: .semibold))
                             .foregroundStyle(HayameTheme.brandBlue)
                     }
+                    .coachMark("explore.filters")
                 }
                 .padding(12)
                 .background(HayameTheme.cardBackground)
@@ -1439,9 +1664,14 @@ struct ExploreScreen: View {
 
                 if case .loading = appState.publicCarsLoadState {
                     if appState.exploreLayoutMode == .grid {
-                        LazyVGrid(columns: columns, spacing: 14) {
-                            ForEach(0..<6, id: \.self) { _ in
-                                ListingGridPlaceholderCard()
+                        LazyVStack(spacing: columnSpacing) {
+                            ForEach(0..<3, id: \.self) { _ in
+                                HStack(alignment: .top, spacing: columnSpacing) {
+                                    ListingGridPlaceholderCard()
+                                        .frame(width: cardWidth, alignment: .topLeading)
+                                    ListingGridPlaceholderCard()
+                                        .frame(width: cardWidth, alignment: .topLeading)
+                                }
                             }
                         }
                     } else {
@@ -1461,25 +1691,20 @@ struct ExploreScreen: View {
                     }
                 } else {
                     if appState.exploreLayoutMode == .grid {
-                        LazyVGrid(columns: columns, spacing: 14) {
-                            ForEach(appState.filteredCars) { car in
-                                ZStack(alignment: .topTrailing) {
-                                    NavigationLink {
-                                        CarDetailScreen(car: car)
-                                    } label: {
-                                        CarCardView(
-                                            car: car,
-                                            isFavorite: appState.favoriteCarIDs.contains(car.id),
-                                            showsFavoriteButton: false,
-                                            favoriteAction: {}
-                                        )
-                                    }
-                                    .buttonStyle(.plain)
+                        LazyVStack(spacing: columnSpacing) {
+                            ForEach(vehicleRows) { row in
+                                HStack(alignment: .top, spacing: columnSpacing) {
+                                    exploreGridCard(row.leading)
+                                        .frame(width: cardWidth, alignment: .topLeading)
 
-                                    FavoriteBadgeButton(isFavorite: appState.favoriteCarIDs.contains(car.id)) {
-                                        appState.toggleFavorite(carID: car.id)
+                                    if let trailing = row.trailing {
+                                        exploreGridCard(trailing)
+                                            .frame(width: cardWidth, alignment: .topLeading)
+                                    } else {
+                                        Color.clear
+                                            .frame(width: cardWidth)
+                                            .accessibilityHidden(true)
                                     }
-                                    .padding(8)
                                 }
                             }
                         }
@@ -1487,17 +1712,23 @@ struct ExploreScreen: View {
                     } else {
                         LazyVStack(spacing: 12) {
                             ForEach(appState.filteredCars) { car in
-                                NavigationLink {
-                                    CarDetailScreen(car: car)
-                                } label: {
-                                    ExploreListRow(
-                                        car: car,
-                                        isFavorite: appState.favoriteCarIDs.contains(car.id)
-                                    ) {
+                                ZStack(alignment: .topTrailing) {
+                                    NavigationLink {
+                                        CarDetailScreen(car: car)
+                                    } label: {
+                                        ListingCard(
+                                            car: car,
+                                            isFavorite: appState.favoriteCarIDs.contains(car.id),
+                                            layout: .row,
+                                            showsFavoriteButton: false
+                                        )
+                                    }
+                                    .buttonStyle(HayamePressableStyle(scale: 0.98))
+
+                                    ListingHeartButton(isFavorite: appState.favoriteCarIDs.contains(car.id), onDark: false) {
                                         appState.toggleFavorite(carID: car.id)
                                     }
                                 }
-                                .buttonStyle(.plain)
                             }
                         }
                         .allowsHitTesting(!isSearchFieldFocused)
@@ -1511,14 +1742,15 @@ struct ExploreScreen: View {
                         )
                     }
                 }
+                }
+                .padding(pagePadding)
             }
-            .padding(16)
-        }
-        .background(HayameTheme.pageBackground)
-        .toolbar(.hidden, for: .navigationBar)
-        .scrollDismissesKeyboard(.interactively)
-        .refreshable {
-            await appState.refreshAllRemoteData()
+            .background(HayameTheme.pageBackground)
+            .toolbar(.hidden, for: .navigationBar)
+            .scrollDismissesKeyboard(.interactively)
+            .refreshable {
+                await appState.refreshAllRemoteData()
+            }
         }
         .sheet(isPresented: $showFilters) {
             NavigationStack {
@@ -1526,6 +1758,34 @@ struct ExploreScreen: View {
             }
         }
     }
+
+    private func exploreGridCard(_ car: Car) -> some View {
+        ZStack(alignment: .topTrailing) {
+            NavigationLink {
+                CarDetailScreen(car: car)
+            } label: {
+                ListingCard(
+                    car: car,
+                    isFavorite: appState.favoriteCarIDs.contains(car.id),
+                    layout: .tile(imageHeight: 140),
+                    showsFavoriteButton: false
+                )
+            }
+            .buttonStyle(HayamePressableStyle(scale: 0.97))
+
+            ListingHeartButton(isFavorite: appState.favoriteCarIDs.contains(car.id)) {
+                appState.toggleFavorite(carID: car.id)
+            }
+            .padding(8)
+        }
+    }
+}
+
+private struct ExploreVehicleRow: Identifiable {
+    let leading: Car
+    let trailing: Car?
+
+    var id: String { leading.id }
 }
 
 private struct PageTitle: View {
@@ -1537,7 +1797,7 @@ private struct PageTitle: View {
 
     var body: some View {
         Text(title)
-            .font(.system(size: 34, weight: .bold, design: .rounded))
+            .font(.hayame(size: 34, weight: .bold))
             .foregroundStyle(HayameTheme.brandNavy)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.top, 2)
@@ -1584,7 +1844,7 @@ private struct VehicleBrandPill: View {
                 VehicleBrandLogo(title: title, isSelected: isSelected)
                     .frame(width: 54, height: 38)
                 Text(title)
-                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .font(.hayame(size: 11, weight: .semibold))
                     .lineLimit(1)
                     .minimumScaleFactor(0.72)
                     .foregroundStyle(isSelected ? HayameTheme.brandBlue : HayameTheme.brandNavy)
@@ -1599,7 +1859,7 @@ private struct VehicleBrandPill: View {
     }
 }
 
-private struct VehicleBrandLogo: View {
+struct VehicleBrandLogo: View {
     let title: String
     let isSelected: Bool
 
@@ -1612,11 +1872,11 @@ private struct VehicleBrandLogo: View {
                     .accessibilityHidden(true)
             } else if title == "All" {
                 Image(systemName: "car.fill")
-                    .font(.system(size: 22, weight: .semibold))
+                    .font(.hayame(size: 22, weight: .semibold))
                     .foregroundStyle(isSelected ? HayameTheme.brandBlue : HayameTheme.mutedText)
             } else {
                 Text(monogram)
-                    .font(.system(size: 14, weight: .black, design: .rounded))
+                    .font(.hayame(size: 14, weight: .black))
                     .foregroundStyle(isSelected ? HayameTheme.brandBlue : HayameTheme.mutedText)
             }
         }
@@ -1706,7 +1966,7 @@ private func vehicleBrandParentheticalValues(_ value: String) -> [String] {
     return matches
 }
 
-private struct ExploreLayoutToggle: View {
+struct ExploreLayoutToggle: View {
     let selectedLayout: ExploreLayoutMode
     let onSelect: (ExploreLayoutMode) -> Void
 
@@ -1747,7 +2007,7 @@ private struct ExploreLayoutToggleButton: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: systemName)
-                .font(.system(size: 14, weight: .semibold))
+                .font(.hayame(size: 14, weight: .semibold))
                 .foregroundStyle(isSelected ? HayameTheme.brandBlue : HayameTheme.brandNavy)
                 .frame(width: 30, height: 30)
                 .background(isSelected ? HayameTheme.brandBlue.opacity(0.14) : Color.clear)
@@ -1755,66 +2015,6 @@ private struct ExploreLayoutToggleButton: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(accessibilityLabel)
-    }
-}
-
-private struct ExploreListRow: View {
-    let car: Car
-    let isFavorite: Bool
-    let favoriteAction: () -> Void
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 14) {
-            NetworkOrFallbackImage(
-                urlString: car.imageNames.first,
-                targetSize: CGSize(width: 320, height: 240)
-            )
-                .frame(width: 136, height: 104)
-                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-
-            VStack(alignment: .leading, spacing: 6) {
-                Text(car.displayTitle)
-                    .font(.system(size: 16, weight: .bold, design: .rounded))
-                    .foregroundStyle(HayameTheme.brandNavy)
-                    .lineLimit(2)
-
-                Text("\(car.city), \(car.region)")
-                    .hayameCaptionStyle()
-                    .lineLimit(1)
-
-                HStack(spacing: 8) {
-                    Label(String(format: "%.1f", car.rating), systemImage: "star.fill")
-                        .font(.system(size: 11, weight: .semibold, design: .rounded))
-                        .foregroundStyle(.orange)
-
-                    if car.instantBook {
-                        Text("Instant")
-                            .font(.system(size: 10, weight: .bold, design: .rounded))
-                            .foregroundStyle(HayameTheme.success)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(HayameTheme.success.opacity(0.14))
-                            .clipShape(Capsule())
-                    }
-                }
-
-                Text("GHS\(car.dailyPrice)/day")
-                    .font(.system(size: 15, weight: .bold, design: .rounded))
-                    .foregroundStyle(HayameTheme.brandBlue)
-                    .lineLimit(1)
-            }
-
-            Spacer()
-
-            FavoriteBadgeButton(isFavorite: isFavorite, action: favoriteAction)
-        }
-        .padding(12)
-        .background(HayameTheme.cardBackground)
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(HayameTheme.cardStroke, lineWidth: 1)
-        )
     }
 }
 
@@ -2012,7 +2212,7 @@ private struct ExploreFilterSheet: View {
                         .padding(.horizontal, 14)
                         .padding(.vertical, 12)
                 }
-                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                .font(.hayame(size: 14, weight: .semibold))
                 .foregroundStyle(HayameTheme.brandNavy)
             }
             .padding(16)
@@ -2151,7 +2351,7 @@ private struct ExploreFilterSection<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title.uppercased())
-                .font(.system(size: 12, weight: .bold, design: .rounded))
+                .font(.hayame(size: 12, weight: .bold))
                 .foregroundStyle(HayameTheme.mutedText)
                 .padding(.horizontal, 4)
 
@@ -2175,19 +2375,19 @@ private struct ExploreFilterNavigationRow: View {
     var body: some View {
         HStack(spacing: 12) {
             Text(title)
-                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                .font(.hayame(size: 14, weight: .semibold))
                 .foregroundStyle(HayameTheme.brandNavy)
 
             Spacer(minLength: 12)
 
             Text(value)
-                .font(.system(size: 13, weight: .medium, design: .rounded))
+                .font(.hayame(size: 13, weight: .medium))
                 .foregroundStyle(HayameTheme.mutedText)
                 .multilineTextAlignment(.trailing)
                 .lineLimit(2)
 
             Image(systemName: "chevron.right")
-                .font(.system(size: 11, weight: .bold))
+                .font(.hayame(size: 11, weight: .bold))
                 .foregroundStyle(HayameTheme.mutedText)
         }
         .padding(.horizontal, 14)
@@ -2207,10 +2407,10 @@ private struct ExploreFilterStepperRow: View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                    .font(.hayame(size: 14, weight: .semibold))
                     .foregroundStyle(HayameTheme.brandNavy)
                 Text(value)
-                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .font(.hayame(size: 12, weight: .medium))
                     .foregroundStyle(HayameTheme.mutedText)
             }
 
@@ -2232,7 +2432,7 @@ private struct ExploreFilterStepperRow: View {
     ) -> some View {
         Button(action: action) {
             Image(systemName: systemName)
-                .font(.system(size: 12, weight: .bold))
+                .font(.hayame(size: 12, weight: .bold))
                 .foregroundStyle(enabled ? HayameTheme.brandBlue : HayameTheme.mutedText)
                 .frame(width: 32, height: 32)
                 .background(HayameTheme.fieldBackground)
@@ -2290,10 +2490,10 @@ private struct ExploreFilterOptionList: View {
         VStack(spacing: 12) {
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.hayame(size: 13, weight: .semibold))
                     .foregroundStyle(HayameTheme.mutedText)
                 TextField("Search \(title.lowercased())", text: $query)
-                    .font(.system(size: 14, weight: .medium, design: .rounded))
+                    .font(.hayame(size: 14, weight: .medium))
                     .foregroundStyle(HayameTheme.brandNavy)
                     .autocorrectionDisabled()
                 if !query.isEmpty {
@@ -2327,7 +2527,7 @@ private struct ExploreFilterOptionList: View {
 
                     if filteredOptions.isEmpty {
                         Text("No matching options.")
-                            .font(.system(size: 13, weight: .medium, design: .rounded))
+                            .font(.hayame(size: 13, weight: .medium))
                             .foregroundStyle(HayameTheme.mutedText)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.vertical, 16)
@@ -2352,13 +2552,13 @@ private struct ExploreFilterOptionList: View {
         } label: {
             HStack(spacing: 12) {
                 Text(label)
-                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                    .font(.hayame(size: 14, weight: .semibold))
                     .foregroundStyle(selected ? HayameTheme.brandBlue : HayameTheme.brandNavy)
                     .multilineTextAlignment(.leading)
                 Spacer()
                 if selected {
                     Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(.hayame(size: 16, weight: .semibold))
                         .foregroundStyle(HayameTheme.brandBlue)
                 }
             }
@@ -2378,938 +2578,156 @@ private struct ExploreFilterOptionList: View {
     }
 }
 
-struct CarDetailScreen: View {
-    @EnvironmentObject private var appState: AppState
-    let seedCar: Car
-
-    @State private var selectedImageIndex = 0
-    @State private var startDate = Date()
-    @State private var endDate = Calendar.current.date(byAdding: .day, value: 1, to: Date()) ?? Date()
-    @State private var blockedBookingDates: Set<Date> = []
-    @State private var selectedQuickDuration: Int?
-    @State private var tripUseRegion: String
-    @State private var tripUseCity: String
-    @State private var tripUseAddress = ""
-    @State private var reviewRating = 5
-    @State private var reviewComment = ""
-    @State private var reviewStatusMessage: String?
-    @State private var showBookingSheet = false
-    @State private var showGallery = false
-    @State private var authGateMessage = ""
-    @State private var showAuthGateAlert = false
-    @State private var isCheckingAvailability = false
-    @State private var availabilityMessage: String?
-    @State private var showFloatingBookingBar = false
-    @State private var isLoadingBookingAvailability = false
-    @State private var activeDateField: BookingDateSelectionTarget?
-
-    init(car: Car) {
-        self.seedCar = car
-        _tripUseRegion = State(initialValue: MockDataService.normalizedRegion(car.region))
-        _tripUseCity = State(initialValue: car.city)
-    }
-
-    private var car: Car {
-        appState.cars.first(where: { $0.id == seedCar.id }) ??
-            appState.ownedCars.first(where: { $0.id == seedCar.id }) ??
-            seedCar
-    }
-
-    private var isFavorite: Bool {
-        appState.favoriteCarIDs.contains(car.id)
-    }
-
-    private var daysCount: Int {
-        max(1, Calendar.current.dateComponents([.day], from: startDate, to: endDate).day ?? 1)
-    }
-
-    private var minimumEndDate: Date {
-        Calendar.current.date(byAdding: .day, value: 1, to: startDate) ?? startDate
-    }
-
-    private var subtotal: Int {
-        car.dailyPrice * daysCount
-    }
-
-    private var platformFee: Int {
-        Int(Double(subtotal) * 0.10)
-    }
-
-    private var insuranceFee: Int {
-        max(car.insuranceFee, 0)
-    }
-
-    private var deliveryFee: Int {
-        car.deliveryAvailable ? max(car.deliveryFee, 0) : 0
-    }
-
-    private var tripOutsideAccra: Bool {
-        MockDataService.isLocationOutsideAccra(region: tripUseRegion, city: tripUseCity)
-    }
-
-    private var tripOutsideListingRegion: Bool {
-        MockDataService.isOutsideListingRegion(tripRegion: tripUseRegion, listingRegion: car.region)
-    }
-
-    private var outsideAccraSurcharge: Int {
-        tripOutsideListingRegion ? max(car.outsideAccraFee, 0) : 0
-    }
-
-    private var total: Int {
-        subtotal + platformFee + insuranceFee + deliveryFee + outsideAccraSurcharge + max(car.depositAmount, 0)
-    }
-
-    private var galleryImages: [String] {
-        car.imageNames.isEmpty ? [""] : car.imageNames
-    }
-
-    private var addedDateLabel: String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "MMM d, yyyy"
-        return formatter.string(from: car.createdAt)
-    }
-
-    private var carBrand: String {
-        let trimmed = car.brand.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmed.isEmpty {
-            return trimmed
-        }
-        return car.title.split(separator: " ").first.map(String.init) ?? "—"
-    }
-
-    private var carModel: String {
-        let trimmed = car.model.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmed.isEmpty {
-            return trimmed
-        }
-        let brandPart = carBrand
-        if car.title.hasPrefix(brandPart) {
-            return car.title.replacingOccurrences(of: brandPart, with: "").trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-        return "—"
-    }
-
-    private var normalizedFeatures: [String] {
-        var values = car.features.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-        if values.isEmpty {
-            if car.airConditioning {
-                values.append("Air Conditioning")
-            }
-            if car.instantBook {
-                values.append("Instant Book")
-            }
-            if car.deliveryAvailable {
-                values.append("Delivery Available")
-            }
-        }
-        return Array(Set(values)).sorted()
-    }
-
-    private var cityOptions: [String] {
-        MockDataService.cities(for: tripUseRegion, preferred: tripUseCity)
-    }
-
-    private var quickPrompts: [String] {
-        [
-            "Hi! Is this car available this week?",
-            "Can I pick up the car in the morning?",
-            "Do you offer delivery or pickup?",
-            "What documents do you require?"
-        ]
-    }
-
-    private var completedReviewBooking: Booking? {
-        appState.renterBookings.first { $0.carID == car.id && $0.status == .completed }
-    }
-
-    private var canSubmitReview: Bool {
-        appState.isAuthenticated && completedReviewBooking != nil
-    }
-
-    private var listingReviews: [Review] {
-        let local = appState.listingReviewsByCarID[car.id] ?? []
-        let hostScoped = appState.hostReviews.filter { $0.carID == car.id }
-        return Array(Set(local + hostScoped)).sorted { $0.createdAt > $1.createdAt }
-    }
-
-    private var hostCars: [Car] {
-        if !car.ownerID.isEmpty {
-            return appState.cars.filter { $0.ownerID == car.ownerID }
-        }
-        return appState.cars.filter { $0.hostName == car.hostName }
-    }
-
-    private func openBookingFlow() {
-        if appState.isAuthenticated {
-            showBookingSheet = true
-        } else {
-            authGateMessage = "Create an account or log in to book this car."
-            showAuthGateAlert = true
-        }
-    }
-
-    var body: some View {
-        ZStack(alignment: .bottom) {
-            ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 14) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack(spacing: 8) {
-                            Text("Car in \(car.city)")
-                                .font(.system(size: 12, weight: .bold, design: .rounded))
-                                .foregroundStyle(HayameTheme.brandBlue)
-
-                            Text(car.type)
-                                .font(.system(size: 10, weight: .bold, design: .rounded))
-                                .foregroundStyle(HayameTheme.brandNavy)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(HayameTheme.brandLight)
-                                .clipShape(Capsule())
-
-                            Text("Added \(addedDateLabel)")
-                                .font(.system(size: 10, weight: .bold, design: .rounded))
-                                .foregroundStyle(HayameTheme.mutedText)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(HayameTheme.subtleFill)
-                                .clipShape(Capsule())
-                        }
-
-                        HStack(alignment: .top, spacing: 10) {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(car.displayTitle)
-                                    .font(.system(size: 26, weight: .bold, design: .rounded))
-                                    .foregroundStyle(HayameTheme.brandNavy)
-                                Text("\(car.city), \(car.region)")
-                                    .hayameCaptionStyle()
-                                HStack(spacing: 8) {
-                                    Label(String(format: "%.1f", car.rating), systemImage: "star.fill")
-                                        .font(.system(size: 12, weight: .bold, design: .rounded))
-                                        .foregroundStyle(.orange)
-                                    Text("\(car.reviewsCount) reviews")
-                                        .hayameCaptionStyle()
-                                }
-                            }
-
-                            Spacer()
-
-                            Button {
-                                appState.toggleFavorite(carID: car.id)
-                            } label: {
-                                VStack(spacing: 4) {
-                                    Image(systemName: isFavorite ? "heart.fill" : "heart")
-                                        .font(.system(size: 18, weight: .bold))
-                                        .foregroundStyle(isFavorite ? .red : HayameTheme.brandNavy)
-                                    Text("Save to favorites")
-                                        .font(.system(size: 10, weight: .semibold, design: .rounded))
-                                        .foregroundStyle(HayameTheme.mutedText)
-                                }
-                                .padding(10)
-                                .background(HayameTheme.elevatedBackground)
-                                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                        .stroke(HayameTheme.controlStroke, lineWidth: 1)
-                                )
-                            }
-                        }
-                    }
-                    .hayameCard()
-
-                    SectionHeader(title: "Car photo")
-                    VStack(spacing: 8) {
-                        TabView(selection: $selectedImageIndex) {
-                            ForEach(Array(galleryImages.enumerated()), id: \.offset) { idx, image in
-                                NetworkOrFallbackImage(
-                                    urlString: image,
-                                    targetSize: CGSize(width: 900, height: 620)
-                                )
-                                    .frame(height: 250)
-                                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                                    .tag(idx)
-                            }
-                        }
-                        .tabViewStyle(.page(indexDisplayMode: .automatic))
-                        .frame(height: 250)
-                        .onTapGesture {
-                            showGallery = true
-                        }
-
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 10) {
-                                ForEach(Array(galleryImages.enumerated()), id: \.offset) { idx, image in
-                                    Button {
-                                        selectedImageIndex = idx
-                                    } label: {
-                                        NetworkOrFallbackImage(
-                                            urlString: image,
-                                            targetSize: CGSize(width: 156, height: 112)
-                                        )
-                                        .frame(width: 78, height: 56)
-                                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                                .stroke(
-                                                    selectedImageIndex == idx ? HayameTheme.brandBlue : HayameTheme.controlStroke,
-                                                    lineWidth: selectedImageIndex == idx ? 2 : 1
-                                                )
-                                        )
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                            }
-                        }
-                    }
-                    .hayameCard()
-
-                    SectionHeader(title: "Details")
-                    VStack(spacing: 8) {
-                        CarDetailLine(label: "LOCATION", value: "\(car.city), \(car.region)")
-                        CarDetailLine(label: "BRAND", value: carBrand)
-                        CarDetailLine(label: "MODEL", value: carModel.isEmpty ? "—" : carModel)
-                        CarDetailLine(label: "CAR TYPE", value: car.type)
-                        CarDetailLine(label: "SEATS", value: "\(car.seats) seats")
-                        CarDetailLine(label: "TRANSMISSION", value: car.transmission.lowercased())
-                        CarDetailLine(label: "FUEL", value: car.fuelType.lowercased())
-                        CarDetailLine(label: "REGION", value: car.region)
-                    }
-                    .hayameCard()
-
-                    SectionHeader(title: "Description")
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(car.description)
-                            .font(.system(size: 14, weight: .medium, design: .rounded))
-                            .foregroundStyle(HayameTheme.mutedText)
-                    }
-                    .hayameCard()
-
-                    SectionHeader(title: "Features")
-                    VStack(alignment: .leading, spacing: 8) {
-                        if normalizedFeatures.isEmpty {
-                            Text("No features listed.")
-                                .font(.system(size: 13, weight: .semibold, design: .rounded))
-                                .foregroundStyle(HayameTheme.mutedText)
-                        } else {
-                            LazyVGrid(columns: [GridItem(.adaptive(minimum: 130), spacing: 8)], spacing: 8) {
-                                ForEach(normalizedFeatures, id: \.self) { feature in
-                                    Text(feature)
-                                        .font(.system(size: 12, weight: .semibold, design: .rounded))
-                                        .foregroundStyle(HayameTheme.brandNavy)
-                                        .padding(.horizontal, 10)
-                                        .padding(.vertical, 8)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                        .background(HayameTheme.brandLight)
-                                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                                }
-                            }
-                        }
-                    }
-                    .hayameCard()
-
-                    SectionHeader(title: "Latest reviews")
-                    VStack(alignment: .leading, spacing: 10) {
-                        if listingReviews.isEmpty {
-                            Text("No reviews yet. Be the first to share your experience.")
-                                .font(.system(size: 13, weight: .medium, design: .rounded))
-                                .foregroundStyle(HayameTheme.mutedText)
-                        } else {
-                            ForEach(listingReviews.prefix(3)) { review in
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(review.guestName)
-                                        .font(.system(size: 13, weight: .bold, design: .rounded))
-                                        .foregroundStyle(HayameTheme.brandNavy)
-                                    Text(String(repeating: "★", count: max(1, min(5, review.rating))))
-                                        .font(.system(size: 12, weight: .bold, design: .rounded))
-                                        .foregroundStyle(.orange)
-                                    Text(review.comment.isEmpty ? "No comment provided." : review.comment)
-                                        .font(.system(size: 12, weight: .medium, design: .rounded))
-                                        .foregroundStyle(HayameTheme.mutedText)
-                                }
-                                .padding(10)
-                                .background(HayameTheme.elevatedBackground)
-                                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                        .stroke(HayameTheme.cardStroke, lineWidth: 1)
-                                )
-                            }
-                        }
-                    }
-                    .hayameCard()
-
-                    SectionHeader(title: "Leave a review")
-                    VStack(alignment: .leading, spacing: 10) {
-                        InfoLine(label: "Trip", value: completedReviewBooking?.id ?? "No eligible completed trip")
-                        HStack(spacing: 6) {
-                            Text("Rating")
-                                .font(.system(size: 13, weight: .bold, design: .rounded))
-                                .foregroundStyle(HayameTheme.brandNavy)
-                            Spacer()
-                            ForEach(1...5, id: \.self) { star in
-                                Button {
-                                    reviewRating = star
-                                } label: {
-                                    Image(systemName: star <= reviewRating ? "star.fill" : "star")
-                                        .font(.system(size: 16, weight: .bold))
-                                        .foregroundStyle(star <= reviewRating ? .orange : HayameTheme.mutedText)
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-
-                        TextEditor(text: $reviewComment)
-                            .scrollContentBackground(.hidden)
-                            .foregroundStyle(HayameTheme.brandNavy)
-                            .frame(minHeight: 90)
-                            .padding(6)
-                            .background(HayameTheme.fieldBackground)
-                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                    .stroke(HayameTheme.controlStroke, lineWidth: 1)
-                            )
-
-                        Text(canSubmitReview
-                            ? "Submit your review for a completed trip."
-                            : "Only guests with completed trips can review this listing.")
-                            .font(.system(size: 12, weight: .semibold, design: .rounded))
-                            .foregroundStyle(canSubmitReview ? HayameTheme.brandBlue : HayameTheme.mutedText)
-
-                        Button("Submit review") {
-                            Task {
-                                guard let booking = completedReviewBooking else { return }
-                                let ok = await appState.submitReview(
-                                    bookingID: booking.id,
-                                    rating: reviewRating,
-                                    comment: reviewComment
-                                )
-                                if ok {
-                                    reviewStatusMessage = "Review submitted."
-                                    reviewComment = ""
-                                    reviewRating = 5
-                                } else {
-                                    reviewStatusMessage = appState.syncErrorMessage
-                                }
-                            }
-                        }
-                        .buttonStyle(PrimaryPillButtonStyle())
-                        .disabled(!canSubmitReview || reviewComment.trimmingCharacters(in: .whitespacesAndNewlines).count < 3)
-
-                        if let reviewStatusMessage, !reviewStatusMessage.isEmpty {
-                            Text(reviewStatusMessage)
-                                .font(.system(size: 12, weight: .semibold, design: .rounded))
-                                .foregroundStyle(HayameTheme.mutedText)
-                        }
-                    }
-                    .hayameCard()
-
-                    SectionHeader(title: "Availability")
-                    VStack(alignment: .leading, spacing: 10) {
-                        InfoLine(label: "Status", value: car.isAvailable ? "Available" : "Unavailable")
-                        Text("AVAILABILITY PREVIEW")
-                            .font(.system(size: 11, weight: .bold, design: .rounded))
-                            .foregroundStyle(HayameTheme.mutedText)
-                        InfoLine(label: "Selected dates", value: "\(startDate.hayameDateLabel()) - \(endDate.hayameDateLabel())")
-
-                        Button(isCheckingAvailability ? "Checking..." : "Check availability") {
-                            Task { await checkAvailabilityNow() }
-                        }
-                        .disabled(isCheckingAvailability)
-                            .buttonStyle(SecondaryPillButtonStyle())
-
-                        if let availabilityMessage, !availabilityMessage.isEmpty {
-                            Text(availabilityMessage)
-                                .font(.system(size: 12, weight: .semibold, design: .rounded))
-                                .foregroundStyle(availabilityMessage.localizedCaseInsensitiveContains("available")
-                                    ? HayameTheme.success
-                                    : HayameTheme.warning)
-                        }
-                    }
-                    .hayameCard()
-
-                    SectionHeader(title: "Trip")
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("Pay now with Paystack; host approval required before pickup.")
-                            .font(.system(size: 12, weight: .semibold, design: .rounded))
-                            .foregroundStyle(HayameTheme.mutedText)
-                        Text("Refunded if host rejects")
-                            .font(.system(size: 11, weight: .semibold, design: .rounded))
-                            .foregroundStyle(HayameTheme.success)
-
-                        Text("HOST VERIFICATION")
-                            .font(.system(size: 11, weight: .bold, design: .rounded))
-                            .foregroundStyle(HayameTheme.mutedText)
-                        Label("ID Verified", systemImage: car.hostVerified ? "checkmark.seal.fill" : "xmark.seal")
-                        Label("Phone Verified", systemImage: car.hostPhoneVerified ? "phone.badge.checkmark" : "phone.badge.xmark")
-                        Label("Email Verified", systemImage: car.hostEmailVerified ? "envelope.badge.shield.half.filled" : "envelope.badge")
-
-                        InfoLine(label: "Cancellation", value: car.cancellationPolicy)
-
-                        Text("TRIP DATES")
-                            .font(.system(size: 11, weight: .bold, design: .rounded))
-                            .foregroundStyle(HayameTheme.mutedText)
-                        BookingDateField(
-                            title: "Start date",
-                            date: startDate,
-                            isLoadingAvailability: isLoadingBookingAvailability
-                        ) {
-                            activeDateField = .start
-                        }
-                        BookingDateField(
-                            title: "End date",
-                            date: endDate,
-                            isLoadingAvailability: isLoadingBookingAvailability
-                        ) {
-                            activeDateField = .end
-                        }
-                        Text("Unavailable dates are crossed out. The first available trip day is selected automatically.")
-                            .font(.system(size: 11, weight: .medium, design: .rounded))
-                            .foregroundStyle(HayameTheme.mutedText)
-
-                        Text("Quick select:")
-                            .font(.system(size: 12, weight: .semibold, design: .rounded))
-                            .foregroundStyle(HayameTheme.brandNavy)
-                        HStack(spacing: 8) {
-                            quickDateButton(title: "2 days", days: 2)
-                            quickDateButton(title: "5 days", days: 5)
-                            quickDateButton(title: "7 days", days: 7)
-                        }
-
-                        Text("TRIP USE LOCATION")
-                            .font(.system(size: 11, weight: .bold, design: .rounded))
-                            .foregroundStyle(HayameTheme.mutedText)
-                        Text("Listing region: \(car.region)")
-                            .font(.system(size: 12, weight: .medium, design: .rounded))
-                            .foregroundStyle(HayameTheme.mutedText)
-
-                        Picker("Region", selection: $tripUseRegion) {
-                            ForEach(MockDataService.regionsIncluding(tripUseRegion), id: \.self) { region in
-                                Text(region).tag(region)
-                            }
-                        }
-                        .pickerStyle(.menu)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 8)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(HayameTheme.fieldBackground)
-                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .stroke(HayameTheme.controlStroke, lineWidth: 1)
-                        )
-                        .onChange(of: tripUseRegion) { _, _ in
-                            if !cityOptions.contains(tripUseCity) {
-                                tripUseCity = cityOptions.first ?? car.city
-                            }
-                        }
-
-                        Picker("City / district", selection: $tripUseCity) {
-                            ForEach(cityOptions, id: \.self) { city in
-                                Text(city).tag(city)
-                            }
-                        }
-                        .pickerStyle(.menu)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 8)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(HayameTheme.fieldBackground)
-                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .stroke(HayameTheme.controlStroke, lineWidth: 1)
-                        )
-
-                        TextField("Exact area / destination", text: $tripUseAddress)
-                            .textFieldStyle(.plain)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 10)
-                            .background(HayameTheme.fieldBackground)
-                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                    .stroke(HayameTheme.controlStroke, lineWidth: 1)
-                            )
-                        Text("Minimum 3 characters.")
-                            .font(.system(size: 11, weight: .medium, design: .rounded))
-                            .foregroundStyle(HayameTheme.mutedText)
-
-                        Text(
-                            tripOutsideListingRegion
-                                ? (car.outsideAccraFee > 0
-                                    ? "Outside listing region trip (+GH₵\(max(car.outsideAccraFee, 0)))"
-                                    : "Outside listing region trip")
-                                : "Within listing region (no outside-region surcharge)"
-                        )
-                            .font(.system(size: 12, weight: .semibold, design: .rounded))
-                            .foregroundStyle(tripOutsideListingRegion ? HayameTheme.warning : HayameTheme.success)
-
-                        if tripOutsideListingRegion {
-                            Text("Trip use region differs from listing region (\(car.region)).")
-                                .font(.system(size: 11, weight: .medium, design: .rounded))
-                                .foregroundStyle(HayameTheme.mutedText)
-                        }
-                        if tripOutsideAccra {
-                            Text("Trip use location is also outside Accra.")
-                                .font(.system(size: 11, weight: .medium, design: .rounded))
-                                .foregroundStyle(HayameTheme.mutedText)
-                        }
-
-                        InfoLine(label: "Daily rate x \(daysCount) day(s)", value: "GH₵\(subtotal)")
-                        InfoLine(label: "Insurance fee", value: "GH₵\(insuranceFee)")
-                        InfoLine(label: "Delivery fee", value: "GH₵\(deliveryFee)")
-                        InfoLine(
-                            label: outsideAccraSurcharge == 0 ? "Outside listing region surcharge (not applied)" : "Outside listing region surcharge",
-                            value: "GH₵\(outsideAccraSurcharge)"
-                        )
-                        InfoLine(label: "Deposit", value: "GH₵\(car.depositAmount)")
-                        Text("Final payable total is calculated by the server at checkout.")
-                            .font(.system(size: 11, weight: .semibold, design: .rounded))
-                            .foregroundStyle(HayameTheme.mutedText)
-
-                        Button("View protection details") {
-                            appState.renterTab = .more
-                        }
-                        .buttonStyle(SecondaryPillButtonStyle())
-                    }
-                    .font(.system(size: 12, weight: .semibold, design: .rounded))
-                    .foregroundStyle(HayameTheme.brandNavy)
-                    .hayameCard()
-
-                    SectionHeader(title: "Host")
-                    VStack(alignment: .leading, spacing: 10) {
-                        HStack(spacing: 12) {
-                            hostAvatar
-
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(car.hostName)
-                                    .font(.system(size: 16, weight: .bold, design: .rounded))
-                                    .foregroundStyle(HayameTheme.brandNavy)
-                                Text(car.hostLevel.isEmpty ? "Verified Host" : car.hostLevel)
-                                    .font(.system(size: 12, weight: .bold, design: .rounded))
-                                    .foregroundStyle(HayameTheme.brandBlue)
-                                Text(car.hostCity ?? car.city)
-                                    .font(.system(size: 12, weight: .medium, design: .rounded))
-                                    .foregroundStyle(HayameTheme.mutedText)
-                            }
-                        }
-
-                        Label("ID Verified", systemImage: car.hostVerified ? "checkmark.seal.fill" : "xmark.seal")
-                        Label("Phone Verified", systemImage: car.hostPhoneVerified ? "phone.badge.checkmark" : "phone.badge.xmark")
-                        Label("Email Verified", systemImage: car.hostEmailVerified ? "envelope.badge.shield.half.filled" : "envelope.badge")
-                        Text("Host level updates as verification and trip performance grow.")
-                            .font(.system(size: 12, weight: .medium, design: .rounded))
-                            .foregroundStyle(HayameTheme.mutedText)
-
-                        NavigationLink("View host") {
-                            HostPublicProfileScreen(hostName: car.hostName, hostAvatar: car.hostAvatar, hostCars: hostCars)
-                        }
-                        .font(.system(size: 14, weight: .bold, design: .rounded))
-                        .foregroundStyle(HayameTheme.brandBlue)
-
-                        Button("Message \(car.hostName)") {
-                            openChatAndSend(message: quickPrompts.first)
-                        }
-                        .buttonStyle(SecondaryPillButtonStyle())
-
-                        Text("Use a quick prompt to start the chat.")
-                            .font(.system(size: 12, weight: .medium, design: .rounded))
-                            .foregroundStyle(HayameTheme.mutedText)
-
-                        ForEach(quickPrompts, id: \.self) { prompt in
-                            Button(prompt) {
-                                openChatAndSend(message: prompt)
-                            }
-                            .buttonStyle(SecondaryPillButtonStyle())
-                        }
-
-                        Button("Chat without message") {
-                            openChatAndSend(message: nil)
-                        }
-                        .buttonStyle(SecondaryPillButtonStyle())
-                    }
-                    .hayameCard()
-                }
-                .padding(16)
-            }
-        }
-        .background(HayameTheme.pageBackground)
-        .navigationTitle("Car Detail")
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            if showFloatingBookingBar {
-                FloatingBookingBar(pricePerDay: car.dailyPrice, action: openBookingFlow)
-                    .padding(.horizontal, 16)
-                    .padding(.top, 4)
-                    .padding(.bottom, 8)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-            }
-        }
-        .sheet(isPresented: $showBookingSheet) {
-            BookingSheet(
-                car: car,
-                startDate: startDate,
-                endDate: endDate,
-                region: tripUseRegion,
-                city: tripUseCity,
-                address: tripUseAddress,
-                blockedDates: blockedBookingDates
-            )
-                .environmentObject(appState)
-        }
-        .sheet(item: $activeDateField) { target in
-            BookingAvailabilityCalendarSheet(
-                title: target.calendarTitle,
-                selectedDate: target == .start ? startDate : endDate,
-                selectionRange: startDate...endDate,
-                blockedDates: blockedBookingDates,
-                minimumDate: target == .start ? bookingDay(Date()) : bookingDay(minimumEndDate),
-                canSelectDate: { date in
-                    switch target {
-                    case .start:
-                        return isBookableStartDate(date, blockedDates: blockedBookingDates)
-                    case .end:
-                        return isBookableEndDate(date, startDate: startDate, blockedDates: blockedBookingDates)
-                    }
-                },
-                onSelect: { selectedDate in
-                    applyDateSelection(selectedDate, target: target)
-                }
-            )
-        }
-        .fullScreenCover(isPresented: $showGallery) {
-            CarImageGalleryFullScreen(images: galleryImages, selectedIndex: $selectedImageIndex)
-        }
-        .task(id: seedCar.id) {
-            AnalyticsService.shared.track(AnalyticsEvent.carView, [
-                "car_id": seedCar.id,
-                "region": seedCar.region,
-                "price_bucket": AppState.analyticsPriceBucket(Double(seedCar.dailyPrice)),
-            ])
-            await appState.refreshCarDetail(carID: seedCar.id)
-            let latest = appState.cars.first(where: { $0.id == seedCar.id }) ??
-                appState.ownedCars.first(where: { $0.id == seedCar.id }) ??
-                seedCar
-            let urls = latest.imageNames.compactMap(RemoteImageURLResolver.resolve)
-            await RemoteImagePipeline.shared.prefetch(
-                urls: urls,
-                limit: 40,
-                targetPixelSize: CGSize(width: 1300, height: 900),
-                maxConcurrent: 8
-            )
-        }
-        .task(id: "availability-\(seedCar.id)") {
-            await loadBookingAvailabilityWindow()
-        }
-        .task(id: "floating-bar-\(seedCar.id)") {
-            showFloatingBookingBar = false
-            try? await Task.sleep(nanoseconds: 90_000_000)
-            withAnimation(.spring(response: 0.42, dampingFraction: 0.88)) {
-                showFloatingBookingBar = true
-            }
-        }
-        .alert("Log in required", isPresented: $showAuthGateAlert) {
-            Button("Cancel", role: .cancel) {}
-            Button("Log in") {
-                appState.returnToAuth()
-            }
-        } message: {
-            Text(authGateMessage)
-        }
-        .onChange(of: startDate) { _, newValue in
-            if let adjustedEnd = preferredBookingEndDate(
-                currentEnd: endDate,
-                startDate: newValue,
-                blockedDates: blockedBookingDates
-            ) {
-                endDate = adjustedEnd
-            }
-            if let selectedQuickDuration,
-               endDate != bookingAddingDays(selectedQuickDuration, to: newValue) {
-                self.selectedQuickDuration = nil
-            }
-        }
-        .onChange(of: endDate) { _, newValue in
-            if let selectedQuickDuration,
-               newValue != bookingAddingDays(selectedQuickDuration, to: startDate) {
-                self.selectedQuickDuration = nil
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var hostAvatar: some View {
-        if let url = RemoteImageURLResolver.resolve(car.hostAvatar) {
-            CachedRemoteImage(url: url, targetSize: CGSize(width: 54, height: 54)) {
-                Circle().fill(HayameTheme.brandLight)
-            } failure: {
-                fallbackHostAvatar
-            }
-            .frame(width: 54, height: 54)
-            .clipShape(Circle())
-            .overlay(Circle().stroke(HayameTheme.controlStroke, lineWidth: 1))
-        } else {
-            fallbackHostAvatar
-                .frame(width: 54, height: 54)
-                .overlay(Circle().stroke(HayameTheme.controlStroke, lineWidth: 1))
-        }
-    }
-
-    private var fallbackHostAvatar: some View {
-        let initials = car.hostName
-            .split(separator: " ")
-            .prefix(2)
-            .compactMap { $0.first.map(String.init) }
-            .joined()
-            .uppercased()
-        return Circle()
-            .fill(HayameTheme.brandLight)
-            .overlay(
-                Text(initials.isEmpty ? "H" : initials)
-                    .font(.system(size: 14, weight: .bold, design: .rounded))
-                    .foregroundStyle(HayameTheme.brandNavy)
-            )
-    }
-
-    private func quickDateButton(title: String, days: Int) -> some View {
-        Button(title) {
-            applyQuickTripDuration(days)
-        }
-        .font(.system(size: 15, weight: .semibold, design: .rounded))
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 10)
-        .background(
-            selectedQuickDuration == days ? HayameTheme.brandBlue : HayameTheme.brandLight,
-            in: Capsule()
+struct ListingSharePayload: Identifiable {
+    let id = UUID()
+    let title: String
+    let message: String
+    let url: URL
+    let thumbnail: UIImage
+}
+
+struct ListingShareSheet: UIViewControllerRepresentable {
+    let payload: ListingSharePayload
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(
+            activityItems: [ListingShareItemSource(payload: payload), payload.message],
+            applicationActivities: nil
         )
-        .foregroundStyle(selectedQuickDuration == days ? .white : HayameTheme.brandNavy)
-        .overlay(
-            Capsule()
-                .stroke(
-                    selectedQuickDuration == days ? HayameTheme.brandBlue : HayameTheme.brandBlue.opacity(0.25),
-                    lineWidth: 1
-                )
-        )
-        .buttonStyle(.plain)
     }
 
-    @MainActor
-    private func checkAvailabilityNow() async {
-        guard !isCheckingAvailability else { return }
-        isCheckingAvailability = true
-        defer { isCheckingAvailability = false }
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
+}
 
-        if endDate <= startDate {
-            availabilityMessage = "End date must be after start date."
-            return
-        }
+private final class ListingShareItemSource: NSObject, UIActivityItemSource {
+    private let payload: ListingSharePayload
 
-        if let snapshot = await appState.checkAvailability(carID: car.id, start: startDate, end: endDate) {
-            blockedBookingDates.formUnion(bookingDateSet(from: snapshot.blockedDates))
-            if snapshot.available {
-                availabilityMessage = "Dates are available."
+    init(payload: ListingSharePayload) {
+        self.payload = payload
+    }
+
+    func activityViewControllerPlaceholderItem(_ activityViewController: UIActivityViewController) -> Any {
+        payload.url
+    }
+
+    func activityViewController(
+        _ activityViewController: UIActivityViewController,
+        itemForActivityType activityType: UIActivity.ActivityType?
+    ) -> Any? {
+        payload.url
+    }
+
+    func activityViewController(
+        _ activityViewController: UIActivityViewController,
+        subjectForActivityType activityType: UIActivity.ActivityType?
+    ) -> String {
+        payload.title
+    }
+
+    func activityViewControllerLinkMetadata(_ activityViewController: UIActivityViewController) -> LPLinkMetadata? {
+        let metadata = LPLinkMetadata()
+        metadata.title = payload.title
+        metadata.originalURL = payload.url
+        metadata.url = payload.url
+        metadata.imageProvider = NSItemProvider(object: payload.thumbnail)
+        return metadata
+    }
+}
+
+@MainActor
+enum ListingShareThumbnailRenderer {
+    private static let canvasSize = CGSize(width: 1200, height: 630)
+
+    static func render(carImage: UIImage?, listingTitle: String) -> UIImage {
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        format.opaque = true
+
+        return UIGraphicsImageRenderer(size: canvasSize, format: format).image { context in
+            let canvas = CGRect(origin: .zero, size: canvasSize)
+            UIColor(red: 0.02, green: 0.18, blue: 0.34, alpha: 1).setFill()
+            context.fill(canvas)
+
+            if let carImage {
+                carImage.draw(in: aspectFillRect(for: carImage.size, inside: canvas))
             } else {
-                let reason = snapshot.reason?.trimmingCharacters(in: .whitespacesAndNewlines)
-                availabilityMessage = reason?.isEmpty == false ? reason : "Selected dates are unavailable."
+                drawFallbackCar(in: canvas)
             }
+
+            drawBottomShade(in: canvas)
+            drawLogo(in: canvas)
+            drawTitle(listingTitle, in: canvas)
         }
     }
 
-    @MainActor
-    private func loadBookingAvailabilityWindow() async {
-        guard !isLoadingBookingAvailability else { return }
-        isLoadingBookingAvailability = true
-        defer { isLoadingBookingAvailability = false }
-
-        let today = bookingDay(Date())
-        let searchEnd = bookingAddingDays(180, to: today)
-
-        guard let snapshot = await appState.checkAvailability(carID: car.id, start: today, end: searchEnd) else {
-            return
-        }
-
-        let blocked = bookingDateSet(from: snapshot.blockedDates)
-        blockedBookingDates = blocked
-        selectedQuickDuration = nil
-
-        guard let nextStart = nextBookableStartDate(from: today, duration: 1, blockedDates: blocked) else {
-            availabilityMessage = "No upcoming available dates in the next 6 months."
-            return
-        }
-
-        let normalizedStart = bookingDay(startDate)
-        let adjustedStart = isBookableStartDate(normalizedStart, blockedDates: blocked) ? normalizedStart : nextStart
-        startDate = adjustedStart
-
-        if let adjustedEnd = preferredBookingEndDate(
-            currentEnd: endDate,
-            startDate: adjustedStart,
-            blockedDates: blocked
-        ) {
-            endDate = adjustedEnd
-        }
+    private static func aspectFillRect(for imageSize: CGSize, inside bounds: CGRect) -> CGRect {
+        guard imageSize.width > 0, imageSize.height > 0 else { return bounds }
+        let scale = max(bounds.width / imageSize.width, bounds.height / imageSize.height)
+        let size = CGSize(width: imageSize.width * scale, height: imageSize.height * scale)
+        return CGRect(
+            x: bounds.midX - (size.width / 2),
+            y: bounds.midY - (size.height / 2),
+            width: size.width,
+            height: size.height
+        )
     }
 
-    private func applyQuickTripDuration(_ days: Int) {
-        if let adjustedStart = nextBookableStartDate(from: startDate, duration: days, blockedDates: blockedBookingDates) {
-            startDate = adjustedStart
-            endDate = bookingAddingDays(days, to: adjustedStart)
-            selectedQuickDuration = days
-            availabilityMessage = nil
-        } else {
-            selectedQuickDuration = nil
-            availabilityMessage = "No \(days)-day slot is available in the next 6 months."
-        }
+    private static func drawBottomShade(in canvas: CGRect) {
+        let colors = [
+            UIColor.clear.cgColor,
+            UIColor.black.withAlphaComponent(0.78).cgColor,
+        ] as CFArray
+        guard let gradient = CGGradient(
+            colorsSpace: CGColorSpaceCreateDeviceRGB(),
+            colors: colors,
+            locations: [0, 1]
+        ), let context = UIGraphicsGetCurrentContext() else { return }
+
+        context.drawLinearGradient(
+            gradient,
+            start: CGPoint(x: canvas.midX, y: canvas.height * 0.48),
+            end: CGPoint(x: canvas.midX, y: canvas.maxY),
+            options: []
+        )
     }
 
-    private func applyDateSelection(_ selectedDate: Date, target: BookingDateSelectionTarget) {
-        switch target {
-        case .start:
-            let normalized = bookingDay(selectedDate)
-            guard isBookableStartDate(normalized, blockedDates: blockedBookingDates) else { return }
-            startDate = normalized
-            if let adjustedEnd = preferredBookingEndDate(
-                currentEnd: endDate,
-                startDate: normalized,
-                blockedDates: blockedBookingDates
-            ) {
-                endDate = adjustedEnd
-            }
-        case .end:
-            let normalized = bookingDay(selectedDate)
-            guard isBookableEndDate(normalized, startDate: startDate, blockedDates: blockedBookingDates) else { return }
-            endDate = normalized
-        }
+    private static func drawLogo(in canvas: CGRect) {
+        guard let logo = UIImage(named: "hayame_logo_white") else { return }
+        // Keep the brand inside the centered square crop used by the compact
+        // iOS share-sheet preview, not at the landscape image's outer edge.
+        let badgeRect = CGRect(x: canvas.midX - 170, y: 28, width: 340, height: 132)
+        UIColor.black.withAlphaComponent(0.48).setFill()
+        UIBezierPath(roundedRect: badgeRect, cornerRadius: 32).fill()
 
-        selectedQuickDuration = nil
-        availabilityMessage = nil
+        let logoWidth: CGFloat = 250
+        let ratio = logo.size.height / max(logo.size.width, 1)
+        let logoRect = CGRect(
+            x: canvas.midX - (logoWidth / 2),
+            y: badgeRect.midY - ((logoWidth * ratio) / 2),
+            width: logoWidth,
+            height: logoWidth * ratio
+        )
+        logo.draw(in: logoRect)
     }
 
-    private func openChatAndSend(message: String?) {
-        Task {
-            guard appState.isAuthenticated else {
-                authGateMessage = "Log in to send messages."
-                showAuthGateAlert = true
-                return
-            }
+    private static func drawTitle(_ title: String, in canvas: CGRect) {
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineBreakMode = .byTruncatingTail
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: HayameFontFamily.uiFont(size: 48, weight: .bold),
+            .foregroundColor: UIColor.white,
+            .paragraphStyle: paragraph,
+        ]
+        let titleRect = CGRect(x: 42, y: canvas.maxY - 118, width: 820, height: 68)
+        title.draw(in: titleRect, withAttributes: attributes)
+    }
 
-            guard !car.ownerID.isEmpty else {
-                appState.syncErrorMessage = "Host details are not available for this listing."
-                return
-            }
-
-            guard let conversationID = await appState.ensureConversation(
-                hostID: car.ownerID,
-                carID: car.id,
-                participantName: car.hostName
-            ) else {
-                return
-            }
-
-            appState.openConversationInInbox(
-                conversationID: conversationID,
-                participantName: car.hostName,
-                draft: message
-            )
-        }
+    private static func drawFallbackCar(in canvas: CGRect) {
+        let configuration = UIImage.SymbolConfiguration(pointSize: 180, weight: .bold)
+        guard let carSymbol = UIImage(systemName: "car.fill", withConfiguration: configuration)?
+            .withTintColor(.white, renderingMode: .alwaysOriginal) else { return }
+        let rect = CGRect(x: canvas.midX - 150, y: canvas.midY - 100, width: 300, height: 200)
+        carSymbol.draw(in: rect, blendMode: .normal, alpha: 0.32)
     }
 }
 
@@ -3320,18 +2738,18 @@ private struct CarDetailLine: View {
     var body: some View {
         HStack(alignment: .top) {
             Text(label)
-                .font(.system(size: 10, weight: .bold, design: .rounded))
+                .font(.hayame(size: 10, weight: .bold))
                 .foregroundStyle(HayameTheme.mutedText)
             Spacer()
             Text(value)
-                .font(.system(size: 13, weight: .bold, design: .rounded))
+                .font(.hayame(size: 13, weight: .bold))
                 .foregroundStyle(HayameTheme.brandNavy)
                 .multilineTextAlignment(.trailing)
         }
     }
 }
 
-private struct CarImageGalleryFullScreen: View {
+struct CarImageGalleryFullScreen: View {
     let images: [String]
     @Binding var selectedIndex: Int
     @Environment(\.dismiss) private var dismiss
@@ -3358,12 +2776,12 @@ private struct CarImageGalleryFullScreen: View {
                                 ProgressView().tint(.white)
                             } failure: {
                                 Image(systemName: "photo")
-                                    .font(.system(size: 42, weight: .bold))
+                                    .font(.hayame(size: 42, weight: .bold))
                                     .foregroundStyle(.white.opacity(0.7))
                             }
                         } else {
                             Image(systemName: "photo")
-                                .font(.system(size: 42, weight: .bold))
+                                .font(.hayame(size: 42, weight: .bold))
                                 .foregroundStyle(.white.opacity(0.7))
                         }
                     }
@@ -3386,7 +2804,7 @@ private struct CarImageGalleryFullScreen: View {
                 dismiss()
             } label: {
                 Image(systemName: "xmark")
-                    .font(.system(size: 14, weight: .bold))
+                    .font(.hayame(size: 14, weight: .bold))
                     .foregroundStyle(.white)
                     .padding(10)
                     .background(Color.black.opacity(0.45))
@@ -3399,7 +2817,7 @@ private struct CarImageGalleryFullScreen: View {
             VStack {
                 Spacer()
                 Text("\(min(selectedIndex + 1, safeImages.count)) / \(safeImages.count)")
-                    .font(.system(size: 12, weight: .bold, design: .rounded))
+                    .font(.hayame(size: 12, weight: .bold))
                     .foregroundStyle(.white)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
@@ -3426,15 +2844,15 @@ private struct FloatingBookingBar: View {
         HStack(spacing: 14) {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Price per day")
-                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .font(.hayame(size: 11, weight: .semibold))
                     .foregroundStyle(secondaryTextColor)
 
                 HStack(alignment: .firstTextBaseline, spacing: 4) {
                     Text("GHS \(pricePerDay)")
-                        .font(.system(size: 24, weight: .bold, design: .rounded))
+                        .font(.hayame(size: 24, weight: .bold))
                         .foregroundStyle(primaryTextColor)
                     Text("/ day")
-                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+                        .font(.hayame(size: 13, weight: .semibold))
                         .foregroundStyle(secondaryTextColor)
                 }
             }
@@ -3443,7 +2861,7 @@ private struct FloatingBookingBar: View {
 
             Button(action: action) {
                 Text("Book now")
-                    .font(.system(size: 15, weight: .semibold, design: .rounded))
+                    .font(.hayame(size: 15, weight: .semibold))
                     .foregroundStyle(.white)
                     .padding(.horizontal, 22)
                     .padding(.vertical, 13)
@@ -3476,954 +2894,7 @@ private struct FloatingBookingBar: View {
     }
 }
 
-private struct BookingSheet: View {
-    @EnvironmentObject private var appState: AppState
-    @Environment(\.dismiss) private var dismiss
-
-    let car: Car
-    @State private var startDate: Date
-    @State private var endDate: Date
-    @State private var blockedDates: Set<Date>
-
-    @State private var region: String
-    @State private var city: String
-    @State private var address: String
-    @State private var tripMode: BookingTripMode?
-    @State private var deliveryDetails = BookingDeliveryDetails()
-    @State private var deliveryTimeSelection: Date
-    @State private var isProcessingPayment = false
-    @State private var paymentMessage: String?
-    @State private var currentStep: BookingCheckoutStep = .tripDetails
-    @State private var isMovingForward = true
-    @State private var isLoadingAvailability = false
-    @State private var activeDateField: BookingDateSelectionTarget?
-    @State private var selectedQuickDuration: Int?
-
-    init(car: Car, startDate: Date, endDate: Date, region: String, city: String, address: String, blockedDates: Set<Date> = []) {
-        self.car = car
-        _startDate = State(initialValue: startDate)
-        _endDate = State(initialValue: endDate > startDate ? endDate : (Calendar.current.date(byAdding: .day, value: 1, to: startDate) ?? startDate))
-        _blockedDates = State(initialValue: blockedDates)
-        _region = State(initialValue: MockDataService.normalizedRegion(region))
-        _city = State(initialValue: city)
-        _address = State(initialValue: address)
-        _tripMode = State(initialValue: car.deliveryAvailable ? nil : .pickup)
-        _deliveryTimeSelection = State(initialValue: Self.defaultDeliveryTime())
-    }
-
-    #if DEBUG
-    init(
-        car: Car,
-        startDate: Date,
-        endDate: Date,
-        region: String,
-        city: String,
-        address: String,
-        blockedDates: Set<Date> = [],
-        screenshotStep: BookingCheckoutStep,
-        screenshotTripMode: BookingTripMode? = .delivery,
-        screenshotProcessing: Bool = false
-    ) {
-        self.car = car
-        _startDate = State(initialValue: startDate)
-        _endDate = State(initialValue: endDate > startDate ? endDate : (Calendar.current.date(byAdding: .day, value: 1, to: startDate) ?? startDate))
-        _blockedDates = State(initialValue: blockedDates)
-        _region = State(initialValue: MockDataService.normalizedRegion(region))
-        _city = State(initialValue: city)
-        _address = State(initialValue: address)
-        _tripMode = State(initialValue: screenshotTripMode)
-        _deliveryDetails = State(initialValue: BookingDeliveryDetails(
-            address: "22 Airport Bypass, Accra",
-            time: "10:00",
-            contactPhone: "+233 24 555 0001",
-            notes: "Meet at the main gate."
-        ))
-        _deliveryTimeSelection = State(initialValue: Self.defaultDeliveryTime())
-        _isProcessingPayment = State(initialValue: screenshotProcessing)
-        _currentStep = State(initialValue: screenshotStep)
-        _selectedQuickDuration = State(initialValue: 2)
-    }
-    #endif
-
-    private static func defaultDeliveryTime() -> Date {
-        let calendar = Calendar.current
-        let roundedHour = calendar.dateInterval(of: .hour, for: Date())?.start ?? Date()
-        return calendar.date(byAdding: .hour, value: 1, to: roundedHour) ?? roundedHour
-    }
-
-    private static let deliveryTimeFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "HH:mm"
-        return formatter
-    }()
-
-    private static let deliveryTimeLabelFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "h:mm a"
-        return formatter
-    }()
-
-    private var minimumEndDate: Date {
-        Calendar.current.date(byAdding: .day, value: 1, to: startDate) ?? startDate
-    }
-
-    private var nights: Int {
-        max(1, Calendar.current.dateComponents([.day], from: startDate, to: endDate).day ?? 1)
-    }
-
-    private var subtotal: Int {
-        car.dailyPrice * nights
-    }
-
-    private var insuranceFee: Int {
-        max(car.insuranceFee, 0)
-    }
-
-    // 10% service fee — mirrors the server total (NEXT_PUBLIC_PLATFORM_FEE_PERCENT).
-    // The server is authoritative; this keeps the displayed total honest.
-    private var platformFee: Int {
-        Int(Double(subtotal) * 0.10)
-    }
-
-    private var selectedTripMode: BookingTripMode {
-        tripMode ?? .pickup
-    }
-
-    private var deliveryFee: Int {
-        selectedTripMode == .delivery ? max(car.deliveryFee, 0) : 0
-    }
-
-    private var depositAmount: Int {
-        max(car.depositAmount, 0)
-    }
-
-    private var outsideAccraFeeValue: Int {
-        max(car.outsideAccraFee, 0)
-    }
-
-    private var tripOutsideListingRegion: Bool {
-        MockDataService.isOutsideListingRegion(tripRegion: region, listingRegion: car.region)
-    }
-
-    private var outsideAccraSurcharge: Int {
-        tripOutsideListingRegion ? outsideAccraFeeValue : 0
-    }
-
-    private var totalAmount: Int {
-        subtotal + platformFee + insuranceFee + deliveryFee + outsideAccraSurcharge + depositAmount
-    }
-
-    private var deliveryDetailsPayload: BookingDeliveryDetails {
-        BookingDeliveryDetails(
-            address: deliveryDetails.address,
-            time: Self.deliveryTimeFormatter.string(from: deliveryTimeSelection),
-            contactPhone: deliveryDetails.contactPhone,
-            notes: deliveryDetails.notes
-        )
-    }
-
-    private var deliveryTimeLabel: String {
-        Self.deliveryTimeLabelFormatter.string(from: deliveryTimeSelection)
-    }
-
-    private var listingImageURL: URL? {
-        car.imageNames.compactMap(RemoteImageURLResolver.resolve).first
-    }
-
-    private var locationHelperText: String {
-        if tripOutsideListingRegion {
-            return outsideAccraFeeValue > 0
-                ? "Outside listing region (+GHS \(outsideAccraFeeValue))"
-                : "Outside listing region"
-        }
-        return "Within listing region (no extra charges)"
-    }
-
-    private var resolvedDestination: String {
-        let trimmedAddress = address.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmedAddress.isEmpty ? city : trimmedAddress
-    }
-
-    private var primaryButtonTitle: String {
-        currentStep == .payment
-            ? (isProcessingPayment ? "Processing..." : "Make payment")
-            : "Next"
-    }
-
-    private var stepTransition: AnyTransition {
-        let insertionEdge: Edge = isMovingForward ? .trailing : .leading
-        let removalEdge: Edge = isMovingForward ? .leading : .trailing
-        return .asymmetric(
-            insertion: .move(edge: insertionEdge).combined(with: .opacity),
-            removal: .move(edge: removalEdge).combined(with: .opacity)
-        )
-    }
-
-    var body: some View {
-        NavigationStack {
-            ZStack {
-                HayameTheme.pageBackground.ignoresSafeArea()
-
-                VStack(spacing: 0) {
-                    BookingProgressHeader(currentStep: currentStep)
-                        .padding(.horizontal, 16)
-                        .padding(.top, 8)
-                        .padding(.bottom, 10)
-
-                    ZStack {
-                        currentStepContent
-                            .id(currentStep)
-                            .transition(stepTransition)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                }
-            }
-            .navigationTitle(currentStep.navigationTitle)
-            .navigationBarTitleDisplayMode(.inline)
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                VStack(spacing: 10) {
-                    if let paymentMessage, !paymentMessage.isEmpty {
-                        Text(paymentMessage)
-                            .font(.system(size: 13, weight: .semibold, design: .rounded))
-                            .foregroundStyle(HayameTheme.danger)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-
-                    Button(action: handlePrimaryAction) {
-                        HStack(spacing: 10) {
-                            if isProcessingPayment && currentStep == .payment {
-                                ProgressView().tint(.white)
-                            }
-                            Text(primaryButtonTitle)
-                        }
-                        .font(.system(size: 16, weight: .semibold, design: .rounded))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                        .background(
-                            LinearGradient(
-                                colors: [HayameTheme.brandBlue, HayameTheme.primaryButtonEnd],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            ),
-                            in: RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        )
-                        .foregroundStyle(.white)
-                        .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                    }
-                    .buttonStyle(.plain)
-                    .shadow(color: HayameTheme.brandBlue.opacity(0.24), radius: 10, x: 0, y: 6)
-                    .disabled(isProcessingPayment)
-
-                    Text(currentStep.footerNote)
-                        .font(.system(size: 12, weight: .medium, design: .rounded))
-                        .foregroundStyle(HayameTheme.mutedText)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .padding(.horizontal, 16)
-                .padding(.top, 12)
-                .padding(.bottom, 8)
-                .background(.ultraThinMaterial)
-                .overlay(alignment: .top) {
-                    Rectangle()
-                        .fill(HayameTheme.bottomBarSeparator)
-                        .frame(height: 1)
-                }
-            }
-            .onChange(of: startDate) { _, newValue in
-                if let adjustedEnd = preferredBookingEndDate(
-                    currentEnd: endDate,
-                    startDate: newValue,
-                    blockedDates: blockedDates
-                ) {
-                    endDate = adjustedEnd
-                }
-                if let selectedQuickDuration,
-                   endDate != bookingAddingDays(selectedQuickDuration, to: newValue) {
-                    self.selectedQuickDuration = nil
-                }
-            }
-            .onChange(of: endDate) { _, newValue in
-                if let selectedQuickDuration,
-                   newValue != bookingAddingDays(selectedQuickDuration, to: startDate) {
-                    self.selectedQuickDuration = nil
-                }
-            }
-            .onChange(of: region) { _, newValue in
-                let options = MockDataService.cities(for: newValue, preferred: city)
-                if !options.contains(where: { $0.caseInsensitiveCompare(city) == .orderedSame }) {
-                    city = options.first ?? city
-                }
-            }
-            .onChange(of: tripMode) { _, newValue in
-                guard newValue == .delivery else { return }
-                if deliveryDetails.contactPhone.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    deliveryDetails.contactPhone = appState.currentUser.phone
-                }
-            }
-            .task(id: "booking-availability-\(car.id)") {
-                await loadBookingAvailabilityWindow()
-            }
-            .sheet(item: $activeDateField) { target in
-                BookingAvailabilityCalendarSheet(
-                    title: target.calendarTitle,
-                    selectedDate: target == .start ? startDate : endDate,
-                    selectionRange: startDate...endDate,
-                    blockedDates: blockedDates,
-                    minimumDate: target == .start ? bookingDay(Date()) : bookingDay(minimumEndDate),
-                    canSelectDate: { date in
-                        switch target {
-                        case .start:
-                            return isBookableStartDate(date, blockedDates: blockedDates)
-                        case .end:
-                            return isBookableEndDate(date, startDate: startDate, blockedDates: blockedDates)
-                        }
-                    },
-                    onSelect: { selectedDate in
-                        applyDateSelection(selectedDate, target: target)
-                    }
-                )
-            }
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button {
-                        if currentStep == .tripDetails {
-                            dismiss()
-                        } else {
-                            goBack()
-                        }
-                    } label: {
-                        Text(currentStep == .tripDetails ? "Cancel" : "Back")
-                    }
-                }
-            }
-            .overlay {
-                if isProcessingPayment {
-                    PaymentProcessingOverlay()
-                }
-            }
-            .animation(.easeInOut(duration: 0.2), value: isProcessingPayment)
-        }
-    }
-
-    private func quickDateButton(title: String, days: Int) -> some View {
-        Button {
-            applyQuickTripDuration(days)
-        } label: {
-            Text(title)
-                .font(.system(size: 15, weight: .semibold, design: .rounded))
-                .foregroundStyle(selectedQuickDuration == days ? .white : HayameTheme.brandNavy)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 14)
-                .background(
-                    selectedQuickDuration == days ? HayameTheme.brandBlue : HayameTheme.brandLight,
-                    in: RoundedRectangle(cornerRadius: 16, style: .continuous)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .stroke(
-                            selectedQuickDuration == days ? HayameTheme.brandBlue : HayameTheme.brandBlue.opacity(0.18),
-                            lineWidth: 1
-                        )
-                )
-        }
-        .buttonStyle(.plain)
-    }
-
-    @MainActor
-    private func loadBookingAvailabilityWindow() async {
-        guard !isLoadingAvailability else { return }
-        isLoadingAvailability = true
-        defer { isLoadingAvailability = false }
-
-        let today = bookingDay(Date())
-        let searchEnd = bookingAddingDays(180, to: today)
-
-        guard let snapshot = await appState.checkAvailability(carID: car.id, start: today, end: searchEnd) else {
-            return
-        }
-
-        let normalizedBlockedDates = bookingDateSet(from: snapshot.blockedDates)
-        blockedDates = normalizedBlockedDates
-        selectedQuickDuration = nil
-
-        guard let nextStart = nextBookableStartDate(from: today, duration: 1, blockedDates: normalizedBlockedDates) else {
-            paymentMessage = "No upcoming available dates in the next 6 months."
-            return
-        }
-
-        let normalizedStart = bookingDay(startDate)
-        let adjustedStart = isBookableStartDate(normalizedStart, blockedDates: normalizedBlockedDates) ? normalizedStart : nextStart
-        startDate = adjustedStart
-
-        if let adjustedEnd = preferredBookingEndDate(
-            currentEnd: endDate,
-            startDate: adjustedStart,
-            blockedDates: normalizedBlockedDates
-        ) {
-            endDate = adjustedEnd
-        }
-    }
-
-    private func applyQuickTripDuration(_ days: Int) {
-        if let adjustedStart = nextBookableStartDate(from: startDate, duration: days, blockedDates: blockedDates) {
-            startDate = adjustedStart
-            endDate = bookingAddingDays(days, to: adjustedStart)
-            selectedQuickDuration = days
-            paymentMessage = nil
-        } else {
-            selectedQuickDuration = nil
-            paymentMessage = "No \(days)-day slot is available in the next 6 months."
-        }
-    }
-
-    private func applyDateSelection(_ selectedDate: Date, target: BookingDateSelectionTarget) {
-        switch target {
-        case .start:
-            let normalized = bookingDay(selectedDate)
-            guard isBookableStartDate(normalized, blockedDates: blockedDates) else { return }
-            startDate = normalized
-            if let adjustedEnd = preferredBookingEndDate(
-                currentEnd: endDate,
-                startDate: normalized,
-                blockedDates: blockedDates
-            ) {
-                endDate = adjustedEnd
-            }
-        case .end:
-            let normalized = bookingDay(selectedDate)
-            guard isBookableEndDate(normalized, startDate: startDate, blockedDates: blockedDates) else { return }
-            endDate = normalized
-        }
-
-        selectedQuickDuration = nil
-        paymentMessage = nil
-    }
-
-    @ViewBuilder
-    private var currentStepContent: some View {
-        switch currentStep {
-	        case .tripDetails:
-	            ScrollView {
-	                VStack(alignment: .leading, spacing: 18) {
-	                    BookingSheetCard {
-	                        VStack(alignment: .leading, spacing: 8) {
-	                            Text("Your trip")
-	                                .font(.system(size: 14, weight: .bold, design: .rounded))
-	                                .foregroundStyle(HayameTheme.brandNavy)
-	                            Text("\(nights) day\(nights == 1 ? "" : "s")")
-	                                .font(.system(size: 26, weight: .bold, design: .rounded))
-	                                .foregroundStyle(HayameTheme.brandBlue)
-	                            Text("Choose dates below. Unavailable and booked days are blocked automatically.")
-	                                .font(.system(size: 13, weight: .medium, design: .rounded))
-	                                .foregroundStyle(HayameTheme.mutedText)
-	                        }
-	                    }
-
-	                    BookingSheetCard {
-	                        VStack(alignment: .leading, spacing: 18) {
-                            BookingDateField(
-                                title: "Start date",
-                                date: startDate,
-                                isLoadingAvailability: isLoadingAvailability
-                            ) {
-                                activeDateField = .start
-                            }
-                            BookingDateField(
-                                title: "End date",
-                                date: endDate,
-                                isLoadingAvailability: isLoadingAvailability
-                            ) {
-                                activeDateField = .end
-                            }
-
-                            Text("Unavailable dates are crossed out. The first bookable day is selected for you automatically.")
-                                .font(.system(size: 12, weight: .medium, design: .rounded))
-                                .foregroundStyle(HayameTheme.mutedText)
-
-                            VStack(alignment: .leading, spacing: 10) {
-                                Text("Quick select")
-                                    .font(.system(size: 14, weight: .bold, design: .rounded))
-                                    .foregroundStyle(HayameTheme.brandNavy)
-
-                                VStack(spacing: 10) {
-                                    quickDateButton(title: "2 days", days: 2)
-                                    quickDateButton(title: "5 days", days: 5)
-                                    quickDateButton(title: "7 days", days: 7)
-                                }
-                            }
-                        }
-                    }
-
-	                    Color.clear.frame(height: 24)
-                }
-                .padding(.horizontal, 16)
-                .padding(.top, 6)
-            }
-
-        case .location:
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    BookingSheetCard {
-                        VStack(alignment: .leading, spacing: 16) {
-                            BookingSectionHeader(
-                                title: "Trip mode",
-                                helpTitle: "Pickup or delivery",
-                                helpMessage: "Pickup means you meet at the listing area and avoid any delivery fee. Delivery means the host brings the car to your preferred handoff point."
-                            )
-
-                            if car.deliveryAvailable {
-                                VStack(spacing: 10) {
-                                    BookingTripModeButton(
-                                        title: BookingTripMode.pickup.label,
-                                        subtitle: BookingTripMode.pickup.subtitle,
-                                        trailingText: "No delivery fee",
-                                        isSelected: tripMode == .pickup
-                                    ) {
-                                        tripMode = .pickup
-                                        paymentMessage = nil
-                                    }
-
-                                    BookingTripModeButton(
-                                        title: BookingTripMode.delivery.label,
-                                        subtitle: BookingTripMode.delivery.subtitle,
-                                        trailingText: max(car.deliveryFee, 0) > 0 ? "GHS \(max(car.deliveryFee, 0))" : "Free",
-                                        isSelected: tripMode == .delivery
-                                    ) {
-                                        tripMode = .delivery
-                                        if deliveryDetails.contactPhone.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                            deliveryDetails.contactPhone = appState.currentUser.phone
-                                        }
-                                        paymentMessage = nil
-                                    }
-                                }
-
-                                if tripMode == nil {
-                                    Text("Choose pickup or delivery to continue.")
-                                        .font(.system(size: 12, weight: .semibold, design: .rounded))
-                                        .foregroundStyle(HayameTheme.warning)
-                                }
-                            } else {
-                                BookingModeSummaryRow(
-                                    title: BookingTripMode.pickup.label,
-                                    message: "This listing is pickup only."
-                                )
-                            }
-                        }
-                    }
-
-                    if tripMode == .delivery {
-                        BookingSheetCard {
-                            VStack(alignment: .leading, spacing: 16) {
-                                BookingSectionHeader(
-                                    title: "Delivery details",
-                                    helpTitle: "Delivery details",
-                                    helpMessage: "These details are shared with the host so they know where and when to bring the car."
-                                )
-
-                                BookingTextField(
-                                    title: "Delivery address",
-                                    text: $deliveryDetails.address,
-                                    placeholder: "House number, street, landmark"
-                                )
-
-                                VStack(alignment: .leading, spacing: 8) {
-                                    Text("Preferred delivery time")
-                                        .font(.system(size: 14, weight: .bold, design: .rounded))
-                                        .foregroundStyle(HayameTheme.brandNavy)
-
-                                    DatePicker(
-                                        "",
-                                        selection: $deliveryTimeSelection,
-                                        displayedComponents: .hourAndMinute
-                                    )
-                                    .labelsHidden()
-                                    .datePickerStyle(.wheel)
-                                    .frame(maxWidth: .infinity)
-                                    .frame(height: 120)
-                                    .clipped()
-                                    .background(
-                                        HayameTheme.brandLight,
-                                        in: RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                    )
-                                }
-
-                                BookingTextField(
-                                    title: "Contact phone",
-                                    text: $deliveryDetails.contactPhone,
-                                    placeholder: "+233 24 123 4567",
-                                    keyboardType: .phonePad,
-                                    capitalization: .never
-                                )
-
-                                BookingTextArea(
-                                    title: "Delivery notes (optional)",
-                                    text: $deliveryDetails.notes,
-                                    placeholder: "Gate code, landmark, or anything helpful for handoff."
-                                )
-
-                                Text(
-                                    deliveryFee > 0
-                                        ? "Delivery fee: GHS \(deliveryFee)"
-                                        : "This listing offers free delivery."
-                                )
-                                .font(.system(size: 12, weight: .semibold, design: .rounded))
-                                .foregroundStyle(HayameTheme.brandBlue)
-                            }
-                        }
-                    }
-
-                    BookingSheetCard {
-                        VStack(alignment: .leading, spacing: 16) {
-                            BookingSelectionField(
-                                title: "Region",
-                                selected: region,
-                                options: MockDataService.regionsIncluding(region)
-                            ) { region = $0 }
-
-                            BookingSelectionField(
-                                title: "City",
-                                selected: city,
-                                options: MockDataService.cities(for: region, preferred: city)
-                            ) { city = $0 }
-
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text("Exact destination (optional)")
-                                    .font(.system(size: 14, weight: .bold, design: .rounded))
-                                    .foregroundStyle(HayameTheme.brandNavy)
-
-                                TextField("Area, landmark, or pickup point", text: $address)
-                                    .textInputAutocapitalization(.words)
-                                    .padding(.horizontal, 14)
-                                    .padding(.vertical, 14)
-                                    .background(HayameTheme.brandLight, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                            .stroke(HayameTheme.cardStroke, lineWidth: 1)
-                                    )
-                            }
-
-                            Text(locationHelperText)
-                                .font(.system(size: 13, weight: .semibold, design: .rounded))
-                                .foregroundStyle(tripOutsideListingRegion ? HayameTheme.warning : HayameTheme.success)
-                        }
-                    }
-
-                    BookingSheetCard {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Smart defaults")
-                                .font(.system(size: 14, weight: .bold, design: .rounded))
-                                .foregroundStyle(HayameTheme.brandNavy)
-                            Text("Trip use location stays separate from pickup or delivery so pricing and host handoff stay accurate.")
-                                .font(.system(size: 13, weight: .medium, design: .rounded))
-                                .foregroundStyle(HayameTheme.mutedText)
-                        }
-                    }
-
-                    Color.clear.frame(height: 24)
-                }
-                .padding(.horizontal, 16)
-                .padding(.top, 6)
-            }
-
-        case .review:
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    BookingSheetCard {
-                        HStack(alignment: .top, spacing: 14) {
-                            Group {
-                                if let listingImageURL {
-                                    CachedRemoteImage(url: listingImageURL, targetSize: CGSize(width: 180, height: 140)) {
-                                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                            .fill(HayameTheme.brandLight)
-                                    } failure: {
-                                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                            .fill(HayameTheme.brandLight)
-                                            .overlay(
-                                                Image(systemName: "car.fill")
-                                                    .font(.system(size: 18, weight: .bold))
-                                                    .foregroundStyle(HayameTheme.brandBlue)
-                                            )
-                                    }
-                                } else {
-                                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                        .fill(HayameTheme.brandLight)
-                                        .overlay(
-                                            Image(systemName: "car.fill")
-                                                .font(.system(size: 18, weight: .bold))
-                                                .foregroundStyle(HayameTheme.brandBlue)
-                                        )
-                                }
-                            }
-                            .frame(width: 86, height: 72)
-                            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text(car.displayTitle)
-                                    .font(.system(size: 18, weight: .bold, design: .rounded))
-                                    .foregroundStyle(HayameTheme.brandNavy)
-                                    .lineLimit(2)
-                                Text("\(startDate.hayameDateLabel()) - \(endDate.hayameDateLabel())")
-                                    .font(.system(size: 13, weight: .semibold, design: .rounded))
-                                    .foregroundStyle(HayameTheme.brandBlue)
-                                Text("\(nights) day\(nights == 1 ? "" : "s") • \(selectedTripMode.label)")
-                                    .font(.system(size: 13, weight: .medium, design: .rounded))
-                                    .foregroundStyle(HayameTheme.mutedText)
-                                    .lineLimit(2)
-                                Text(resolvedDestination)
-                                    .font(.system(size: 13, weight: .medium, design: .rounded))
-                                    .foregroundStyle(HayameTheme.mutedText)
-                                    .lineLimit(2)
-                            }
-                        }
-                    }
-
-                    BookingSheetCard {
-                        VStack(alignment: .leading, spacing: 12) {
-                            Text("Trip summary")
-                                .font(.system(size: 15, weight: .bold, design: .rounded))
-                                .foregroundStyle(HayameTheme.brandNavy)
-
-                            InfoLine(label: "Trip mode", value: selectedTripMode.label)
-                            InfoLine(label: "Trip use area", value: resolvedDestination)
-
-                            if selectedTripMode == .delivery {
-                                InfoLine(
-                                    label: "Delivery address",
-                                    value: deliveryDetails.address.trimmingCharacters(in: .whitespacesAndNewlines)
-                                )
-                                InfoLine(label: "Delivery time", value: deliveryTimeLabel)
-                                InfoLine(
-                                    label: "Contact phone",
-                                    value: deliveryDetails.contactPhone.trimmingCharacters(in: .whitespacesAndNewlines)
-                                )
-                                let trimmedNotes = deliveryDetails.notes.trimmingCharacters(in: .whitespacesAndNewlines)
-                                if !trimmedNotes.isEmpty {
-                                    InfoLine(label: "Delivery notes", value: trimmedNotes)
-                                }
-                            }
-                        }
-                    }
-
-                    BookingSheetCard {
-                        VStack(alignment: .leading, spacing: 14) {
-                            Text("Price breakdown")
-                                .font(.system(size: 15, weight: .bold, design: .rounded))
-                                .foregroundStyle(HayameTheme.brandNavy)
-
-                            InfoLine(label: "Daily rate × \(nights)", value: "GHS \(subtotal)")
-                            InfoLine(label: "Insurance", value: "GHS \(insuranceFee)")
-                            InfoLine(label: "Service fee", value: "GHS \(platformFee)")
-                            if selectedTripMode == .delivery {
-                                InfoLine(label: "Delivery", value: "GHS \(deliveryFee)")
-                            }
-                            if tripOutsideListingRegion || outsideAccraSurcharge > 0 {
-                                InfoLine(label: "Outside region fee", value: "GHS \(outsideAccraSurcharge)")
-                            }
-                            InfoLine(label: "Deposit", value: "GHS \(depositAmount)")
-
-                            Divider()
-
-                            HStack(alignment: .firstTextBaseline) {
-                                Text("Total")
-                                    .font(.system(size: 16, weight: .bold, design: .rounded))
-                                    .foregroundStyle(HayameTheme.brandNavy)
-                                Spacer()
-                                Text("GHS \(totalAmount)")
-                                    .font(.system(size: 28, weight: .bold, design: .rounded))
-                                    .foregroundStyle(HayameTheme.brandBlue)
-                            }
-
-                            Text("No hidden fees. This is the amount shown before payment.")
-                                .font(.system(size: 12, weight: .medium, design: .rounded))
-                                .foregroundStyle(HayameTheme.mutedText)
-                        }
-                    }
-
-                    Color.clear.frame(height: 24)
-                }
-                .padding(.horizontal, 16)
-                .padding(.top, 6)
-            }
-
-        case .payment:
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    BookingSheetCard {
-                        VStack(alignment: .leading, spacing: 12) {
-                            Text("Total amount")
-                                .font(.system(size: 14, weight: .bold, design: .rounded))
-                                .foregroundStyle(HayameTheme.mutedText)
-                            Text("GHS \(totalAmount)")
-                                .font(.system(size: 34, weight: .bold, design: .rounded))
-                                .foregroundStyle(HayameTheme.brandNavy)
-                            Text("Secure payment with no hidden fees.")
-                                .font(.system(size: 13, weight: .medium, design: .rounded))
-                                .foregroundStyle(HayameTheme.mutedText)
-                        }
-                    }
-
-                    BookingSheetCard {
-                        VStack(alignment: .leading, spacing: 12) {
-                            Text("Payment methods")
-                                .font(.system(size: 15, weight: .bold, design: .rounded))
-                                .foregroundStyle(HayameTheme.brandNavy)
-
-                            BookingPaymentMethodRow(
-                                title: "Mobile Money",
-                                subtitle: "Fast checkout from your phone",
-                                systemImage: "iphone.gen3.radiowaves.left.and.right"
-                            )
-                            BookingPaymentMethodRow(
-                                title: "Card",
-                                subtitle: "Visa and Mastercard supported",
-                                systemImage: "creditcard.fill"
-                            )
-                            BookingPaymentMethodRow(
-                                title: "Bank transfer",
-                                subtitle: "Available in secure checkout",
-                                systemImage: "building.columns.fill"
-                            )
-                        }
-                    }
-
-                    BookingSheetCard {
-                        VStack(alignment: .leading, spacing: 10) {
-                            Text("What happens next")
-                                .font(.system(size: 14, weight: .bold, design: .rounded))
-                                .foregroundStyle(HayameTheme.brandNavy)
-                            Text("Tap Make payment and we'll open the secure checkout sheet to finish your booking.")
-                                .font(.system(size: 13, weight: .medium, design: .rounded))
-                                .foregroundStyle(HayameTheme.mutedText)
-                        }
-                    }
-
-                    Color.clear.frame(height: 24)
-                }
-                .padding(.horizontal, 16)
-                .padding(.top, 6)
-            }
-        }
-    }
-
-    private func goBack() {
-        guard let previousStep = currentStep.previous else { return }
-        isMovingForward = false
-        paymentMessage = nil
-        withAnimation(.spring(response: 0.42, dampingFraction: 0.88)) {
-            currentStep = previousStep
-        }
-    }
-
-    private func moveTo(_ step: BookingCheckoutStep) {
-        isMovingForward = step.rawValue > currentStep.rawValue
-        paymentMessage = nil
-        withAnimation(.spring(response: 0.42, dampingFraction: 0.88)) {
-            currentStep = step
-        }
-    }
-
-    private func handlePrimaryAction() {
-        switch currentStep {
-        case .tripDetails:
-            guard endDate > startDate else {
-                paymentMessage = "Choose an end date after your start date."
-                return
-            }
-            moveTo(.location)
-
-        case .location:
-            if car.deliveryAvailable, tripMode == nil {
-                paymentMessage = "Choose pickup or delivery to continue."
-                return
-            }
-            let normalizedRegion = region.trimmingCharacters(in: .whitespacesAndNewlines)
-            let normalizedCity = city.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !normalizedRegion.isEmpty else {
-                paymentMessage = "Select your trip region to continue."
-                return
-            }
-            guard !normalizedCity.isEmpty else {
-                paymentMessage = "Select your trip city to continue."
-                return
-            }
-            if tripMode == .delivery {
-                let trimmedAddress = deliveryDetails.address.trimmingCharacters(in: .whitespacesAndNewlines)
-                let trimmedPhone = deliveryDetails.contactPhone.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard trimmedAddress.count >= 6 else {
-                    paymentMessage = "Enter the exact delivery address."
-                    return
-                }
-                guard trimmedPhone.deliveryPhoneDigitsCount >= 7 else {
-                    paymentMessage = "Enter a valid contact phone number."
-                    return
-                }
-            }
-            moveTo(.review)
-
-        case .review:
-            moveTo(.payment)
-
-        case .payment:
-            Task { await payWithPaystack() }
-        }
-    }
-
-    @MainActor
-    private func payWithPaystack() async {
-        guard !isProcessingPayment else { return }
-        isProcessingPayment = true
-        paymentMessage = nil
-        defer { isProcessingPayment = false }
-
-        do {
-            let checkout = try await appState.beginBookingPayment(
-                for: car,
-                tripMode: tripMode ?? .pickup,
-                region: region,
-                city: city,
-                address: address,
-                deliveryDetails: tripMode == .delivery ? deliveryDetailsPayload : BookingDeliveryDetails(),
-                start: startDate,
-                end: endDate
-            )
-
-            guard let checkoutURL = URL(string: checkout.authorizationURL) else {
-                throw APIError(message: "Invalid Paystack checkout URL returned by server.")
-            }
-
-            do {
-                let callbackURL = try await InAppBrowserAuthenticator.shared.open(
-                    url: checkoutURL,
-                    callbackScheme: "hayame"
-                )
-                _ = try await appState.completeBookingPayment(checkout: checkout, callbackURL: callbackURL)
-                appState.renterTab = .trips
-                dismiss()
-                return
-            } catch {
-                if let browserError = error as? InAppBrowserAuthenticatorError,
-                   browserError.shouldAttemptPaymentVerificationFallback {
-                    do {
-                        _ = try await appState.completeBookingPayment(checkout: checkout)
-                        appState.renterTab = .trips
-                        dismiss()
-                        return
-                    } catch let verificationError {
-                        throw verificationError
-                    }
-                }
-                throw error
-            }
-        } catch {
-            let message = AppState.userFacingMessage(error, fallback: "Something went wrong. Please try again.")
-            paymentMessage = message.isEmpty ? "Unable to complete payment." : message
-            appState.paymentFlowNotice = paymentMessage
-            appState.paymentFlowNoticeIsError = true
-        }
-    }
-}
-
-private enum BookingCheckoutStep: Int, CaseIterable, Identifiable {
+enum BookingCheckoutStep: Int, CaseIterable, Identifiable {
     case tripDetails
     case location
     case review
@@ -4435,10 +2906,10 @@ private enum BookingCheckoutStep: Int, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .tripDetails: return "Trip details"
-        case .location: return "Location"
-        case .review: return "Review & price"
-        case .payment: return "Checkout"
+        case .tripDetails: return "Dates"
+        case .location: return "Handoff"
+        case .review: return "Review"
+        case .payment: return "Pay"
         }
     }
 
@@ -4478,74 +2949,7 @@ private enum BookingCheckoutStep: Int, CaseIterable, Identifiable {
     }
 }
 
-private struct BookingProgressHeader: View {
-    let currentStep: BookingCheckoutStep
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("Step \(currentStep.stepNumber) of \(BookingCheckoutStep.allCases.count)")
-                .font(.system(size: 12, weight: .bold, design: .rounded))
-                .foregroundStyle(HayameTheme.brandBlue)
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(currentStep.title)
-                    .font(.system(size: 28, weight: .bold, design: .rounded))
-                    .foregroundStyle(HayameTheme.brandNavy)
-                Text(currentStep.subtitle)
-                    .font(.system(size: 13, weight: .medium, design: .rounded))
-                    .foregroundStyle(HayameTheme.mutedText)
-            }
-
-            HStack(spacing: 8) {
-                ForEach(BookingCheckoutStep.allCases) { step in
-                    BookingProgressItem(
-                        step: step,
-                        isActive: step == currentStep,
-                        isCompleted: step.rawValue < currentStep.rawValue
-                    )
-                }
-            }
-        }
-    }
-}
-
-private struct BookingProgressItem: View {
-    let step: BookingCheckoutStep
-    let isActive: Bool
-    let isCompleted: Bool
-
-    var body: some View {
-        VStack(spacing: 8) {
-            ZStack {
-                Circle()
-                    .fill(isActive || isCompleted ? HayameTheme.brandBlue : HayameTheme.fieldBackground)
-                    .frame(width: 28, height: 28)
-                    .overlay(
-                        Circle()
-                            .stroke((isActive || isCompleted) ? HayameTheme.brandBlue : HayameTheme.controlStroke, lineWidth: 1)
-                    )
-
-                if isCompleted {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(.white)
-                } else {
-                    Text("\(step.stepNumber)")
-                        .font(.system(size: 12, weight: .bold, design: .rounded))
-                        .foregroundStyle(isActive ? .white : HayameTheme.mutedText)
-                }
-            }
-
-            Text(step.progressLabel)
-                .font(.system(size: 11, weight: .semibold, design: .rounded))
-                .foregroundStyle(isActive || isCompleted ? HayameTheme.brandNavy : HayameTheme.mutedText)
-                .lineLimit(1)
-        }
-        .frame(maxWidth: .infinity)
-    }
-}
-
-private struct BookingSheetCard<Content: View>: View {
+struct BookingSheetCard<Content: View>: View {
     private let content: Content
 
     init(@ViewBuilder content: () -> Content) {
@@ -4566,47 +2970,7 @@ private struct BookingSheetCard<Content: View>: View {
     }
 }
 
-private struct BookingDateField: View {
-    let title: String
-    let date: Date
-    let isLoadingAvailability: Bool
-    let action: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title)
-                .font(.system(size: 14, weight: .bold, design: .rounded))
-                .foregroundStyle(HayameTheme.brandNavy)
-
-            Button(action: action) {
-                HStack(spacing: 12) {
-                    Text(date.hayameDateLabel())
-                        .font(.system(size: 16, weight: .semibold, design: .rounded))
-                        .foregroundStyle(HayameTheme.brandNavy)
-                    Spacer()
-                    if isLoadingAvailability {
-                        ProgressView()
-                            .tint(HayameTheme.brandBlue)
-                    } else {
-                        Image(systemName: "calendar")
-                            .font(.system(size: 15, weight: .bold))
-                            .foregroundStyle(HayameTheme.brandBlue)
-                    }
-                }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 14)
-                .background(HayameTheme.brandLight, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .stroke(HayameTheme.cardStroke, lineWidth: 1)
-                )
-            }
-            .buttonStyle(.plain)
-        }
-    }
-}
-
-private enum BookingDateSelectionTarget: String, Identifiable {
+enum BookingDateSelectionTarget: String, Identifiable {
     case start
     case end
 
@@ -4620,7 +2984,7 @@ private enum BookingDateSelectionTarget: String, Identifiable {
     }
 }
 
-private struct BookingAvailabilityCalendarSheet: View {
+struct BookingAvailabilityCalendarSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     let title: String
@@ -4643,19 +3007,19 @@ private struct BookingAvailabilityCalendarSheet: View {
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 22) {
                     Text("Unavailable days are crossed out. Only bookable dates can be selected.")
-                        .font(.system(size: 13, weight: .medium, design: .rounded))
+                        .font(.hayame(size: 13, weight: .medium))
                         .foregroundStyle(HayameTheme.mutedText)
 
                     ForEach(months) { month in
                         VStack(alignment: .leading, spacing: 12) {
                             Text(month.title)
-                                .font(.system(size: 18, weight: .bold, design: .rounded))
+                                .font(.hayame(size: 18, weight: .bold))
                                 .foregroundStyle(HayameTheme.brandNavy)
 
                             LazyVGrid(columns: columns, spacing: 10) {
                                 ForEach(weekdayLabels, id: \.self) { label in
                                     Text(label)
-                                        .font(.system(size: 11, weight: .bold, design: .rounded))
+                                        .font(.hayame(size: 11, weight: .bold))
                                         .foregroundStyle(HayameTheme.mutedText)
                                         .frame(maxWidth: .infinity)
                                 }
@@ -4708,7 +3072,7 @@ private struct BookingAvailabilityCalendarSheet: View {
             dismiss()
         } label: {
             Text("\(Calendar.current.component(.day, from: normalizedDay))")
-                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                .font(.hayame(size: 14, weight: .semibold))
                 .foregroundStyle(dayTextColor(isSelectable: isSelectable, isSelected: isSelected, isBlocked: isBlocked))
                 .frame(maxWidth: .infinity)
                 .frame(height: 42)
@@ -4757,15 +3121,15 @@ private struct BookingCalendarMonth: Identifiable {
     let days: [Date?]
 }
 
-private func bookingDay(_ date: Date) -> Date {
+func bookingDay(_ date: Date) -> Date {
     Calendar.current.startOfDay(for: date)
 }
 
-private func bookingAddingDays(_ days: Int, to date: Date) -> Date {
+func bookingAddingDays(_ days: Int, to date: Date) -> Date {
     Calendar.current.date(byAdding: .day, value: days, to: bookingDay(date)) ?? bookingDay(date)
 }
 
-private func bookingDateSet(from rawValues: [String]) -> Set<Date> {
+func bookingDateSet(from rawValues: [String]) -> Set<Date> {
     let formatter = DateFormatter()
     formatter.calendar = Calendar(identifier: .gregorian)
     formatter.locale = Locale(identifier: "en_US_POSIX")
@@ -4788,19 +3152,22 @@ private func isContinuousBookingRangeAvailable(startDate: Date, endDate: Date, b
     return true
 }
 
-private func isBookableStartDate(_ date: Date, blockedDates: Set<Date>) -> Bool {
+/// `minimumNights` is the listing's shortest trip (`Car.minimumTripDays`):
+/// a start day only counts as bookable when that many nights after it are free.
+func isBookableStartDate(_ date: Date, blockedDates: Set<Date>, minimumNights: Int = 1) -> Bool {
     let normalizedDate = bookingDay(date)
     return normalizedDate >= bookingDay(Date()) &&
         isContinuousBookingRangeAvailable(
             startDate: normalizedDate,
-            endDate: bookingAddingDays(1, to: normalizedDate),
+            endDate: bookingAddingDays(max(minimumNights, 1), to: normalizedDate),
             blockedDates: blockedDates
         )
 }
 
-private func isBookableEndDate(_ date: Date, startDate: Date, blockedDates: Set<Date>) -> Bool {
+func isBookableEndDate(_ date: Date, startDate: Date, blockedDates: Set<Date>, minimumNights: Int = 1) -> Bool {
     let normalizedDate = bookingDay(date)
-    return normalizedDate > bookingDay(startDate) &&
+    let earliestEnd = bookingAddingDays(max(minimumNights, 1), to: startDate)
+    return normalizedDate >= earliestEnd &&
         isContinuousBookingRangeAvailable(
             startDate: startDate,
             endDate: normalizedDate,
@@ -4808,21 +3175,21 @@ private func isBookableEndDate(_ date: Date, startDate: Date, blockedDates: Set<
         )
 }
 
-private func preferredBookingEndDate(currentEnd: Date, startDate: Date, blockedDates: Set<Date>) -> Date? {
+func preferredBookingEndDate(currentEnd: Date, startDate: Date, blockedDates: Set<Date>, minimumNights: Int = 1) -> Date? {
     let normalizedStart = bookingDay(startDate)
     let normalizedEnd = bookingDay(currentEnd)
 
-    if isBookableEndDate(normalizedEnd, startDate: normalizedStart, blockedDates: blockedDates) {
+    if isBookableEndDate(normalizedEnd, startDate: normalizedStart, blockedDates: blockedDates, minimumNights: minimumNights) {
         return normalizedEnd
     }
 
-    let fallback = bookingAddingDays(1, to: normalizedStart)
+    let fallback = bookingAddingDays(max(minimumNights, 1), to: normalizedStart)
     return isContinuousBookingRangeAvailable(startDate: normalizedStart, endDate: fallback, blockedDates: blockedDates)
         ? fallback
         : nil
 }
 
-private func nextBookableStartDate(from earliestDate: Date, duration: Int, blockedDates: Set<Date>) -> Date? {
+func nextBookableStartDate(from earliestDate: Date, duration: Int, blockedDates: Set<Date>) -> Date? {
     var current = bookingDay(earliestDate)
     for _ in 0..<180 {
         let proposedEnd = bookingAddingDays(duration, to: current)
@@ -4865,7 +3232,7 @@ private func bookingCalendarMonths(from earliestDate: Date, count: Int) -> [Book
     }
 }
 
-private struct BookingSelectionField: View {
+struct BookingSelectionField: View {
     let title: String
     let selected: String
     let options: [String]
@@ -4874,7 +3241,7 @@ private struct BookingSelectionField: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title)
-                .font(.system(size: 14, weight: .bold, design: .rounded))
+                .font(.hayame(size: 14, weight: .bold))
                 .foregroundStyle(HayameTheme.brandNavy)
 
             Menu {
@@ -4886,11 +3253,11 @@ private struct BookingSelectionField: View {
             } label: {
                 HStack(spacing: 12) {
                     Text(selected)
-                        .font(.system(size: 16, weight: .semibold, design: .rounded))
+                        .font(.hayame(size: 16, weight: .semibold))
                         .foregroundStyle(HayameTheme.brandNavy)
                     Spacer()
                     Image(systemName: "chevron.down")
-                        .font(.system(size: 12, weight: .bold))
+                        .font(.hayame(size: 12, weight: .bold))
                         .foregroundStyle(HayameTheme.brandBlue)
                 }
                 .padding(.horizontal, 14)
@@ -4905,287 +3272,279 @@ private struct BookingSelectionField: View {
     }
 }
 
-private struct BookingSectionHeader: View {
-    let title: String
-    var helpTitle: String? = nil
-    var helpMessage: String? = nil
+// MARK: - Post-payment success stage
+
+/// Shown over the checkout once payment is verified: a celebration beat, then
+/// the booking sits on a live scene while the host is asked to confirm. The
+/// status pill follows the real booking so a quick host reply shows up here.
+struct BookingSuccessStage: View {
+    @EnvironmentObject private var appState: AppState
+
+    let car: Car
+    let bookingID: String
+    let startDate: Date
+    let endDate: Date
+    let onDone: () -> Void
+
+    private enum Phase { case celebrate, waiting }
+    private enum Outcome { case waiting, confirmed, declined }
+
+    @State private var phase: Phase = .celebrate
+    @State private var messageIndex = 0
+
+    private var liveBooking: Booking? {
+        appState.renterBookings.first { $0.id == bookingID }
+    }
+
+    private var hostName: String {
+        let name = car.hostName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return name.isEmpty ? "the host" : name
+    }
+
+    private var outcome: Outcome {
+        guard let liveBooking else { return .waiting }
+        switch liveBooking.status {
+        case .confirmed, .completed: return .confirmed
+        case .rejected, .cancelled, .refunded: return .declined
+        case .pending, .awaitingHost: return .waiting
+        }
+    }
+
+    private var waitingMessages: [String] {
+        ["Payment received", "Request sent to \(hostName)", "Waiting for \(hostName) to confirm"]
+    }
+
+    private var pillText: String {
+        switch outcome {
+        case .confirmed: return "\(hostName) confirmed your trip"
+        case .declined: return "Request declined"
+        case .waiting: return waitingMessages[min(messageIndex, waitingMessages.count - 1)]
+        }
+    }
+
+    private var pillTone: HayameStatusPill.Tone {
+        switch outcome {
+        case .confirmed: return .success
+        case .declined: return .danger
+        case .waiting: return .info
+        }
+    }
+
+    private var pillSymbol: String? {
+        switch outcome {
+        case .confirmed: return "checkmark"
+        case .declined: return "xmark"
+        case .waiting: return nil
+        }
+    }
+
+    private var title: String {
+        switch outcome {
+        case .confirmed: return "You're all set"
+        case .declined: return "This one didn't work out"
+        case .waiting: return "Request sent"
+        }
+    }
+
+    private var subtitle: String {
+        switch outcome {
+        case .confirmed: return "\(hostName) approved your booking. Pickup details are in Trips."
+        case .declined: return "\(hostName) couldn't take this booking. Your payment will be refunded."
+        case .waiting: return "We've let \(hostName) know. You'll get a notification the moment they respond."
+        }
+    }
+
+    private var timelineCompleted: Int {
+        outcome == .confirmed ? 2 : 1
+    }
 
     var body: some View {
-        HStack(spacing: 6) {
-            Text(title)
-                .font(.system(size: 14, weight: .bold, design: .rounded))
-                .foregroundStyle(HayameTheme.brandNavy)
+        ZStack {
+            BookingWaitingScene(car: car, isSearching: outcome == .waiting)
+                .ignoresSafeArea()
 
-            if let helpTitle, let helpMessage {
-                BookingInfoButton(title: helpTitle, message: helpMessage)
+            VStack(spacing: 0) {
+                HayameStatusPill(
+                    text: pillText,
+                    tone: pillTone,
+                    isLive: outcome == .waiting,
+                    systemImage: pillSymbol
+                )
+                .padding(.top, 14)
+                .opacity(phase == .waiting ? 1 : 0)
+                .offset(y: phase == .waiting ? 0 : -12)
+
+                Spacer()
+
+                if phase == .waiting {
+                    summaryCard
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 12)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+
+            if phase == .celebrate {
+                ZStack {
+                    Circle()
+                        .fill(HayameTheme.cardBackground.opacity(0.92))
+                        .frame(width: 200, height: 200)
+                        .blur(radius: 22)
+                    HayameSparkleBurst(radius: 96, delay: 0.25)
+                    HayameSuccessCheck(size: 116, delay: 0.1)
+                }
+                .transition(.scale(scale: 0.5).combined(with: .opacity))
+            }
+        }
+        .background(HayameTheme.pageBackground)
+        .task {
+            try? await Task.sleep(nanoseconds: 1_600_000_000)
+            guard !Task.isCancelled else { return }
+            withAnimation(HayameMotion.gentle) { phase = .waiting }
+            for index in 1..<waitingMessages.count {
+                try? await Task.sleep(nanoseconds: 1_900_000_000)
+                guard !Task.isCancelled else { return }
+                withAnimation(HayameMotion.settle) { messageIndex = index }
+            }
+        }
+        .onChange(of: outcome) { _, newValue in
+            switch newValue {
+            case .confirmed: HayameHaptics.success()
+            case .declined: HayameHaptics.warning()
+            case .waiting: break
             }
         }
     }
-}
 
-private struct BookingInfoButton: View {
-    let title: String
-    let message: String
-
-    @State private var isShowing = false
-
-    var body: some View {
-        Button {
-            isShowing = true
-        } label: {
-            Image(systemName: "info.circle")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(HayameTheme.brandBlue)
-        }
-        .buttonStyle(.plain)
-        .alert(title, isPresented: $isShowing) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(message)
-        }
-    }
-}
-
-private struct BookingTripModeButton: View {
-    let title: String
-    let subtitle: String
-    let trailingText: String
-    let isSelected: Bool
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            HStack(alignment: .top, spacing: 12) {
+    private var summaryCard: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .center, spacing: 14) {
+                HayameSuccessCheck(size: 48, color: outcome == .declined ? HayameTheme.danger : HayameTheme.success)
+                    .id(outcome == .declined)
                 VStack(alignment: .leading, spacing: 4) {
                     Text(title)
-                        .font(.system(size: 15, weight: .bold, design: .rounded))
+                        .font(.hayame(size: 20, weight: .bold))
                         .foregroundStyle(HayameTheme.brandNavy)
+                        .contentTransition(.opacity)
                     Text(subtitle)
-                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                        .font(.hayame(size: 13, weight: .medium))
                         .foregroundStyle(HayameTheme.mutedText)
-                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
+            }
+            .animation(HayameMotion.settle, value: title)
 
-                Spacer(minLength: 8)
+            HStack(spacing: 12) {
+                NetworkOrFallbackImage(urlString: car.imageNames.first, targetSize: CGSize(width: 160, height: 120))
+                    .frame(width: 72, height: 56)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(car.displayTitle)
+                        .font(.hayame(size: 15, weight: .bold))
+                        .foregroundStyle(HayameTheme.brandNavy)
+                        .lineLimit(1)
+                    Text("\(startDate.hayameDateLabel()) - \(endDate.hayameDateLabel())")
+                        .font(.hayame(size: 12, weight: .medium))
+                        .foregroundStyle(HayameTheme.mutedText)
+                    Text("\(car.city), \(car.region)")
+                        .font(.hayame(size: 12, weight: .medium))
+                        .foregroundStyle(HayameTheme.mutedText)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(12)
+            .background(HayameTheme.fieldBackground, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
 
-                VStack(alignment: .trailing, spacing: 8) {
-                    Text(trailingText)
-                        .font(.system(size: 12, weight: .bold, design: .rounded))
-                        .foregroundStyle(HayameTheme.brandBlue)
+            HayameTimelineStepper(
+                titles: ["Paid", "Host confirms", "Pickup", "Return"],
+                completedCount: timelineCompleted,
+                progress: outcome == .waiting ? 0.5 : 0.1,
+                caption: outcome == .waiting ? "Awaiting host" : nil,
+                accent: outcome == .declined ? HayameTheme.danger : HayameTheme.brandBlue,
+                showsMarker: outcome != .declined
+            )
 
-                    Circle()
-                        .fill(isSelected ? HayameTheme.brandBlue : Color.clear)
-                        .frame(width: 18, height: 18)
-                        .overlay(
-                            Circle()
-                                .stroke(
-                                    isSelected ? HayameTheme.brandBlue : HayameTheme.controlStroke,
-                                    lineWidth: 2
-                                )
+            Button(action: onDone) {
+                Text("View in Trips")
+            }
+            .buttonStyle(PrimaryPillButtonStyle())
+        }
+        .padding(18)
+        .background(HayameTheme.cardBackground, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 26, style: .continuous)
+                .stroke(HayameTheme.cardStroke, lineWidth: 1)
+        )
+        .shadow(color: HayameTheme.cardShadow, radius: 18, x: 0, y: 10)
+    }
+}
+
+/// Backdrop for the success stage: the car on a real map when the listing has
+/// coordinates, otherwise a soft radar grid. The marker pulses while the host
+/// is still being asked.
+private struct BookingWaitingScene: View {
+    let car: Car
+    let isSearching: Bool
+
+    private var coordinate: CLLocationCoordinate2D? {
+        guard let latitude = car.latitude, let longitude = car.longitude else { return nil }
+        let candidate = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+        guard CLLocationCoordinate2DIsValid(candidate),
+              abs(latitude) > 0.0001 || abs(longitude) > 0.0001 else { return nil }
+        return candidate
+    }
+
+    var body: some View {
+        ZStack {
+            if let coordinate {
+                Map(
+                    initialPosition: .region(
+                        MKCoordinateRegion(
+                            center: coordinate,
+                            span: MKCoordinateSpan(latitudeDelta: 0.014, longitudeDelta: 0.014)
                         )
-                }
-            }
-            .padding(14)
-            .background(
-                isSelected ? HayameTheme.brandBlue.opacity(0.1) : HayameTheme.brandLight,
-                in: RoundedRectangle(cornerRadius: 16, style: .continuous)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(
-                        isSelected ? HayameTheme.brandBlue : HayameTheme.cardStroke,
-                        lineWidth: 1
                     )
-            )
-        }
-        .buttonStyle(.plain)
-    }
-}
-
-private struct BookingModeSummaryRow: View {
-    let title: String
-    let message: String
-
-    var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 18, weight: .bold))
-                .foregroundStyle(HayameTheme.success)
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title)
-                    .font(.system(size: 15, weight: .bold, design: .rounded))
-                    .foregroundStyle(HayameTheme.brandNavy)
-                Text(message)
-                    .font(.system(size: 12, weight: .medium, design: .rounded))
-                    .foregroundStyle(HayameTheme.mutedText)
-            }
-
-            Spacer()
-        }
-        .padding(14)
-        .background(HayameTheme.brandLight, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-    }
-}
-
-private struct BookingTextField: View {
-    let title: String
-    @Binding var text: String
-    let placeholder: String
-    var keyboardType: UIKeyboardType = .default
-    var capitalization: TextInputAutocapitalization = .words
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title)
-                .font(.system(size: 14, weight: .bold, design: .rounded))
-                .foregroundStyle(HayameTheme.brandNavy)
-
-            TextField(placeholder, text: $text)
-                .keyboardType(keyboardType)
-                .textInputAutocapitalization(capitalization)
-                .disableAutocorrection(true)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 14)
-                .background(HayameTheme.brandLight, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .stroke(HayameTheme.cardStroke, lineWidth: 1)
-                )
-        }
-    }
-}
-
-private struct BookingTextArea: View {
-    let title: String
-    @Binding var text: String
-    let placeholder: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title)
-                .font(.system(size: 14, weight: .bold, design: .rounded))
-                .foregroundStyle(HayameTheme.brandNavy)
-
-            ZStack(alignment: .topLeading) {
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(HayameTheme.brandLight)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .stroke(HayameTheme.cardStroke, lineWidth: 1)
-                    )
-
-                if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    Text(placeholder)
-                        .font(.system(size: 15, weight: .medium, design: .rounded))
-                        .foregroundStyle(HayameTheme.mutedText)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 16)
+                ) {
+                    Annotation("", coordinate: coordinate, anchor: .center) {
+                        marker
+                    }
                 }
-
-                TextEditor(text: $text)
-                    .scrollContentBackground(.hidden)
-                    .foregroundStyle(HayameTheme.brandNavy)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 8)
-                    .frame(minHeight: 110)
-                    .background(Color.clear)
-            }
-        }
-    }
-}
-
-private extension String {
-    var deliveryPhoneDigitsCount: Int {
-        filter(\.isNumber).count
-    }
-}
-
-private struct BookingPaymentMethodRow: View {
-    let title: String
-    let subtitle: String
-    let systemImage: String
-
-    var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: systemImage)
-                .font(.system(size: 15, weight: .bold))
-                .foregroundStyle(HayameTheme.brandBlue)
-                .frame(width: 34, height: 34)
-                .background(HayameTheme.brandLight, in: Circle())
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title)
-                    .font(.system(size: 15, weight: .bold, design: .rounded))
-                    .foregroundStyle(HayameTheme.brandNavy)
-                Text(subtitle)
-                    .font(.system(size: 12, weight: .medium, design: .rounded))
-                    .foregroundStyle(HayameTheme.mutedText)
+                .mapStyle(.standard(elevation: .flat, pointsOfInterest: .excludingAll, showsTraffic: false))
+                .mapControlVisibility(.hidden)
+                .allowsHitTesting(false)
+            } else {
+                HayameRadarScene()
+                marker.offset(y: -70)
             }
 
-            Spacer()
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .background(HayameTheme.brandLight, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-    }
-}
-
-private struct PaymentProcessingOverlay: View {
-    var body: some View {
-        ZStack {
-            Color.black.opacity(0.2).ignoresSafeArea()
-            VStack(spacing: 12) {
-                SmilingWheelSpinner(size: 72)
-                Text("Processing payment")
-                    .font(.system(size: 16, weight: .bold, design: .rounded))
-                    .foregroundStyle(HayameTheme.brandNavy)
-                Text("Please wait while we confirm your payment.")
-                    .font(.system(size: 12, weight: .medium, design: .rounded))
-                    .foregroundStyle(HayameTheme.mutedText)
-                    .multilineTextAlignment(.center)
-            }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 18)
-            .frame(maxWidth: 280)
-            .background(HayameTheme.cardBackground)
-            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(HayameTheme.cardStroke, lineWidth: 1)
+            // Fade the scene into the card so text stays legible.
+            LinearGradient(
+                colors: [.clear, HayameTheme.pageBackground.opacity(0.85), HayameTheme.pageBackground],
+                startPoint: UnitPoint(x: 0.5, y: 0.35),
+                endPoint: .bottom
             )
-            .shadow(color: Color.black.opacity(0.12), radius: 14, x: 0, y: 6)
+            .allowsHitTesting(false)
         }
     }
-}
 
-private struct SmilingWheelSpinner: View {
-    let size: CGFloat
-    @State private var spinning = false
-
-    var body: some View {
+    private var marker: some View {
         ZStack {
-            Circle()
-                .stroke(HayameTheme.brandBlue.opacity(0.2), lineWidth: 6)
-            Circle()
-                .trim(from: 0.12, to: 0.9)
-                .stroke(
-                    AngularGradient(
-                        colors: [HayameTheme.brandBlue, HayameTheme.brandNavy, HayameTheme.brandBlue],
-                        center: .center
-                    ),
-                    style: StrokeStyle(lineWidth: 6, lineCap: .round)
-                )
-                .rotationEffect(.degrees(spinning ? 360 : 0))
-                .animation(.linear(duration: 1.0).repeatForever(autoreverses: false), value: spinning)
-            Image(systemName: "face.smiling")
-                .font(.system(size: size * 0.34, weight: .bold))
-                .foregroundStyle(HayameTheme.brandNavy)
+            if isSearching {
+                HayameRadarPulse(color: HayameTheme.brandBlue, rings: 3, maxScale: 3.2)
+                    .frame(width: 64, height: 64)
+            }
+            ZStack {
+                Circle().fill(HayameTheme.brandBlue)
+                Image(systemName: "car.fill")
+                    .font(.hayame(size: 16, weight: .bold))
+                    .foregroundStyle(.white)
+            }
+            .frame(width: 42, height: 42)
+            .overlay(Circle().stroke(.white, lineWidth: 3))
+            .shadow(color: HayameTheme.brandBlue.opacity(0.35), radius: 10, x: 0, y: 5)
         }
-        .frame(width: size, height: size)
-        .onAppear {
-            spinning = true
-        }
+        .animation(HayameMotion.fade, value: isSearching)
     }
 }
 
@@ -5211,13 +3570,13 @@ struct RenterDashboardScreen: View {
 
 	                VStack(alignment: .leading, spacing: 4) {
 	                    Text("Dashboard")
-                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .font(.hayame(size: 12, weight: .semibold))
                         .foregroundStyle(HayameTheme.brandBlue)
                     Text("Welcome back")
-                        .font(.system(size: 26, weight: .bold, design: .rounded))
+                        .font(.hayame(size: 26, weight: .bold))
                         .foregroundStyle(HayameTheme.brandNavy)
                     Text("Manage your bookings, favorites, and profile.")
-                        .font(.system(size: 13, weight: .medium, design: .rounded))
+                        .font(.hayame(size: 13, weight: .medium))
                         .foregroundStyle(HayameTheme.mutedText)
                 }
                 .hayameCard()
@@ -5286,7 +3645,7 @@ struct RenterDashboardScreen: View {
                     SectionHeader(title: "Host Mode")
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Host access is active. Open Host Mode to manage listings, bookings, approvals, earnings, reviews, and host profile tools.")
-                            .font(.system(size: 12, weight: .medium, design: .rounded))
+                            .font(.hayame(size: 12, weight: .medium))
                             .foregroundStyle(HayameTheme.mutedText)
                         Button("Open host dashboard") {
                             appState.switchToHostMode()
@@ -5298,12 +3657,12 @@ struct RenterDashboardScreen: View {
                     SectionHeader(title: "Host Application")
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Your host application is pending review. You can continue using renter features while we review your documents.")
-                            .font(.system(size: 12, weight: .medium, design: .rounded))
+                            .font(.hayame(size: 12, weight: .medium))
                             .foregroundStyle(HayameTheme.warning)
                         NavigationLink("View application") {
                             BecomeHostScreen()
                         }
-                        .font(.system(size: 14, weight: .bold, design: .rounded))
+                        .font(.hayame(size: 14, weight: .bold))
                         .foregroundStyle(HayameTheme.brandBlue)
                     }
                     .hayameCard()
@@ -5311,12 +3670,12 @@ struct RenterDashboardScreen: View {
                     SectionHeader(title: "Become a Host")
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Apply to list your cars. Applications are typically reviewed within 1-2 business days.")
-                            .font(.system(size: 12, weight: .medium, design: .rounded))
+                            .font(.hayame(size: 12, weight: .medium))
                             .foregroundStyle(HayameTheme.mutedText)
                         NavigationLink("Host application") {
                             BecomeHostScreen()
                         }
-                        .font(.system(size: 14, weight: .bold, design: .rounded))
+                        .font(.hayame(size: 14, weight: .bold))
                         .foregroundStyle(HayameTheme.brandBlue)
                     }
                     .hayameCard()
@@ -5324,14 +3683,18 @@ struct RenterDashboardScreen: View {
 
                 if let message = appState.syncErrorMessage, !message.isEmpty {
                     Text(message)
-                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .font(.hayame(size: 12, weight: .semibold))
                         .foregroundStyle(HayameTheme.danger)
                 }
             }
             .padding(16)
 	        }
 	        .background(HayameTheme.pageBackground)
-	        .toolbar(.hidden, for: .navigationBar)
+	        .navigationTitle("")
+	        .navigationBarTitleDisplayMode(.inline)
+	        .refreshable {
+	            await appState.refreshAllRemoteData()
+	        }
 	    }
 
     private func openHostVehicles() {
@@ -5360,7 +3723,7 @@ private struct DashboardNavRow: View {
         Button(action: action) {
             HStack(spacing: 10) {
                 Image(systemName: systemImage)
-                    .font(.system(size: 14, weight: .bold))
+                    .font(.hayame(size: 14, weight: .bold))
                     .foregroundStyle(HayameTheme.brandBlue)
                     .frame(width: 28, height: 28)
                     .background(HayameTheme.brandLight)
@@ -5368,15 +3731,15 @@ private struct DashboardNavRow: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
-                        .font(.system(size: 14, weight: .bold, design: .rounded))
+                        .font(.hayame(size: 14, weight: .bold))
                         .foregroundStyle(HayameTheme.brandNavy)
                     Text(subtitle)
-                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                        .font(.hayame(size: 12, weight: .medium))
                         .foregroundStyle(HayameTheme.mutedText)
                 }
                 Spacer()
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 12, weight: .bold))
+                    .font(.hayame(size: 12, weight: .bold))
                     .foregroundStyle(HayameTheme.mutedText)
             }
             .padding(12)
@@ -5391,438 +3754,160 @@ private struct DashboardNavRow: View {
     }
 }
 
-struct TripsScreen: View {
-    @EnvironmentObject private var appState: AppState
-    @State private var activeChatTarget: TripChatTarget?
-    @State private var activeVehicle: Car?
-    @State private var disputeBooking: Booking?
-    @State private var highlightedBookingID: String?
-
-    private var visibleBookings: [Booking] {
-        appState.renterBookings.filter { $0.paymentStatus == .paid }
-    }
-
-    private var upcoming: [Booking] {
-        visibleBookings
-            .filter { $0.endDate >= Date() }
-            .sorted { $0.createdAt > $1.createdAt }
-    }
-
-    private var past: [Booking] {
-        visibleBookings
-            .filter { $0.endDate < Date() }
-            .sorted { $0.createdAt > $1.createdAt }
-    }
-
-	    var body: some View {
-	        ScrollViewReader { proxy in
-	            ScrollView {
-	                VStack(alignment: .leading, spacing: 14) {
-	                    PageTitle("Trips")
-
-	                    if let paymentNotice = appState.paymentFlowNotice, !paymentNotice.isEmpty {
-                        PaymentNoticeCard(
-                            message: paymentNotice,
-                            isError: appState.paymentFlowNoticeIsError
-                        ) {
-                            appState.paymentFlowNotice = nil
-                            appState.paymentFlowNoticeIsError = false
-                        }
-                    }
-
-                    if !appState.isAuthenticated {
-                        EmptyStateView(
-                            title: "Guest mode",
-                            message: "Log in to view your actual trip history and active bookings.",
-                            systemImage: "person.crop.circle.badge.exclamationmark"
-                        )
-                    } else if case .loading = appState.bookingsLoadState {
-                        SectionHeader(title: "Upcoming bookings")
-                        ForEach(0..<2, id: \.self) { _ in
-                            BookingPlaceholderCard()
-                        }
-                        SectionHeader(title: "Past trips", actionTitle: "Vehicles") {
-                            openHostVehicles()
-                        }
-                        ForEach(0..<2, id: \.self) { _ in
-                            BookingPlaceholderCard()
-                        }
-                    } else if case .error(let message) = appState.bookingsLoadState {
-                        ErrorStateCard(
-                            title: "Bookings unavailable",
-                            message: message,
-                            actionTitle: "Refresh"
-                        ) {
-                            appState.retryBookings()
-                        }
-                    } else {
-                        SectionHeader(title: "Upcoming bookings")
-                        if upcoming.isEmpty {
-                            EmptyStateView(
-                                title: "No upcoming trips",
-                                message: "Book your next ride from Explore.",
-                                systemImage: "calendar.badge.exclamationmark"
-                            )
-                        } else {
-                            ForEach(upcoming) { booking in
-                                TripBookingCard(
-                                    booking: booking,
-                                    car: car(for: booking),
-                                    onOpenVehicle: { activeVehicle = $0 },
-                                    onMessage: { openBookingChat(for: booking) },
-                                    onDispute: { disputeBooking = booking },
-                                    isHighlighted: highlightedBookingID == booking.id
-                                )
-                                .id(booking.id)
-                            }
-                        }
-
-                        SectionHeader(title: "Past trips", actionTitle: "Vehicles") {
-                            openHostVehicles()
-                        }
-                        if past.isEmpty {
-                            EmptyStateView(
-                                title: "No past trips",
-                                message: "Completed trips appear here.",
-                                systemImage: "clock.arrow.circlepath"
-                            )
-                        } else {
-                            ForEach(past) { booking in
-                                TripBookingCard(
-                                    booking: booking,
-                                    car: car(for: booking),
-                                    onOpenVehicle: { activeVehicle = $0 },
-                                    onMessage: { openBookingChat(for: booking) },
-                                    onDispute: { disputeBooking = booking },
-                                    isHighlighted: highlightedBookingID == booking.id
-                                )
-                                .id(booking.id)
-                            }
-                        }
-                    }
-                }
-                .padding(16)
-	            }
-	            .background(HayameTheme.pageBackground)
-	            .toolbar(.hidden, for: .navigationBar)
-	            .refreshable {
-                await appState.refreshAllRemoteData()
-            }
-            .navigationDestination(item: $activeChatTarget) { target in
-                ChatThreadScreen(conversationID: target.id, participantName: target.participantName)
-                    .environmentObject(appState)
-            }
-            .navigationDestination(item: $activeVehicle) { car in
-                CarDetailScreen(car: car)
-            }
-            .sheet(item: $disputeBooking) { booking in
-                TripDisputeSheet(booking: booking) { reason in
-                    await appState.openDispute(bookingID: booking.id, reason: reason)
-                }
-                .environmentObject(appState)
-            }
-            .onAppear {
-                focusPendingBookingIfNeeded(proxy: proxy)
-            }
-            .onChange(of: appState.pendingBookingID) { _, _ in
-                focusPendingBookingIfNeeded(proxy: proxy)
-            }
-        }
-    }
-
-    private func openHostVehicles() {
-        guard appState.isAuthenticated else {
-            appState.syncErrorMessage = "Log in to access host vehicles."
-            return
-        }
-
-        guard appState.hostAccessState == .host else {
-            appState.syncErrorMessage = "Host access is required to open vehicles."
-            return
-        }
-
-        appState.hostTab = .cars
-        appState.hostModeEnabled = true
-    }
-
-    private func car(for booking: Booking) -> Car? {
-        appState.cars.first { $0.id == booking.carID }
-    }
-
-    private func openBookingChat(for booking: Booking) {
-        guard appState.isAuthenticated else {
-            appState.syncErrorMessage = "Log in to use messages."
-            return
-        }
-
-        Task {
-            let summary = tripMessageSummary(for: booking)
-            if let existingConversation = booking.conversationID, !existingConversation.isEmpty {
-                appState.markConversationRead(existingConversation)
-                await appState.addMessageIfMissing(conversationID: existingConversation, body: summary)
-                activeChatTarget = TripChatTarget(id: existingConversation, participantName: booking.hostName)
-                return
-            }
-
-            guard !booking.hostID.isEmpty else {
-                appState.syncErrorMessage = "Host details are not available for this booking."
-                return
-            }
-
-            guard let conversationID = await appState.ensureConversation(
-                hostID: booking.hostID,
-                carID: booking.carID,
-                participantName: booking.hostName
-            ) else {
-                return
-            }
-
-            appState.markConversationRead(conversationID)
-            await appState.addMessageIfMissing(conversationID: conversationID, body: summary)
-            activeChatTarget = TripChatTarget(id: conversationID, participantName: booking.hostName)
-        }
-    }
-
-    private func tripMessageSummary(for booking: Booking) -> String {
-        let location = [booking.tripUseAddress, booking.tripUseCity, booking.tripUseRegion]
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-            .joined(separator: ", ")
-        let deliveryAddress = booking.deliveryAddress.trimmingCharacters(in: .whitespacesAndNewlines)
-        let mode = !deliveryAddress.isEmpty || booking.deliveryFee > 0 ? "Delivery" : "Pickup"
-        let handoffLocation = deliveryAddress.isEmpty ? (location.isEmpty ? "Not provided" : location) : deliveryAddress
-        let deliveryTime = booking.deliveryTime.trimmingCharacters(in: .whitespacesAndNewlines)
-        let contactPhone = booking.contactPhone.trimmingCharacters(in: .whitespacesAndNewlines)
-        let deliveryNotes = booking.deliveryNotes.trimmingCharacters(in: .whitespacesAndNewlines)
-        let paymentReference = booking.paymentReference?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        var lines = [
-            "Trip details",
-            "Car: \(booking.carTitle)",
-            "Guest: \(appState.currentUser.fullName)",
-            "Dates: \(booking.startDate.hayameDateLabel()) - \(booking.endDate.hayameDateLabel())",
-            "Duration: \(booking.nights) day\(booking.nights == 1 ? "" : "s")",
-            "Time: \(deliveryTime.isEmpty ? "Not set" : deliveryTime)",
-            "\(mode) location: \(handoffLocation)",
-            "Trip use area: \(location.isEmpty ? "Not provided" : location)",
-            "Price: GHS \(booking.totalPrice)",
-            "Daily rate: GHS \(booking.dailyRate)",
-            "Subtotal: GHS \(booking.subtotal)",
-            "Insurance: GHS \(booking.insuranceFee)",
-            "Delivery fee: GHS \(booking.deliveryFee)",
-            "Outside region fee: GHS \(booking.outsideAccraSurcharge)",
-            "Deposit: GHS \(booking.depositAmount)",
-            "Payment ref: \(paymentReference.isEmpty ? "N/A" : paymentReference)",
-            "Booking ID: \(booking.id)"
-        ]
-        if !contactPhone.isEmpty {
-            lines.append("Contact phone: \(contactPhone)")
-        }
-        if !deliveryNotes.isEmpty {
-            lines.append("Notes: \(deliveryNotes)")
-        }
-        return lines.joined(separator: "\n")
-    }
-
-    private func focusPendingBookingIfNeeded(proxy: ScrollViewProxy) {
-        guard let pendingID = appState.pendingBookingID else { return }
-        guard visibleBookings.contains(where: { $0.id == pendingID }) else { return }
-        highlightedBookingID = pendingID
-        withAnimation(.easeInOut(duration: 0.25)) {
-            proxy.scrollTo(pendingID, anchor: .top)
-        }
-        appState.consumePendingBookingFocus(ifMatches: pendingID)
-    }
-}
-
-private struct TripChatTarget: Identifiable, Hashable {
+struct TripChatTarget: Identifiable, Hashable {
     let id: String
     let participantName: String
 }
 
-private struct PaymentNoticeCard: View {
+struct PaymentNoticeCard: View {
     let message: String
     let isError: Bool
     let dismiss: () -> Void
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
-            Image(systemName: isError ? "xmark.octagon.fill" : "checkmark.circle.fill")
-                .font(.system(size: 18, weight: .bold))
-                .foregroundStyle(isError ? HayameTheme.danger : HayameTheme.success)
+            if isError {
+                Image(systemName: "xmark.octagon.fill")
+                    .font(.hayame(size: 18, weight: .bold))
+                    .foregroundStyle(HayameTheme.danger)
+            } else {
+                HayameSuccessCheck(size: 24)
+            }
 
             Text(message)
-                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                .font(.hayame(size: 13, weight: .semibold))
                 .foregroundStyle(isError ? HayameTheme.danger : HayameTheme.success)
                 .multilineTextAlignment(.leading)
 
             Spacer(minLength: 8)
 
             Button("Dismiss", action: dismiss)
-                .font(.system(size: 12, weight: .bold, design: .rounded))
+                .font(.hayame(size: 12, weight: .bold))
                 .foregroundStyle(HayameTheme.brandBlue)
         }
         .padding(12)
         .hayameCard()
+        .hayameAppear(offsetY: -10)
     }
 }
 
-private struct TripBookingCard: View {
+/// The journey line on a trip card: Requested, Confirmed, Pickup, Return, with
+/// the car marker travelling toward the next milestone and a countdown.
+struct TripJourneyTimeline: View {
     let booking: Booking
-    let car: Car?
-    let onOpenVehicle: (Car) -> Void
-    let onMessage: () -> Void
-    let onDispute: () -> Void
-    var isHighlighted = false
+    /// Hide the "Pickup in..." caption and date footer when the surrounding
+    /// card already shows them (the next-trip hero).
+    var showsCaption = true
 
-    private var isPaid: Bool {
-        booking.paymentStatus == .paid
-    }
+    @State private var now = Date()
+    private let clock = Timer.publish(every: 60, on: .main, in: .common).autoconnect()
 
-    private var tripUseLocation: String {
-        [booking.tripUseAddress, booking.tripUseCity, booking.tripUseRegion]
-            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-            .joined(separator: ", ")
-    }
-
-    private var tripMode: String {
-        booking.deliveryFee > 0 ? "Delivery" : "Pickup"
-    }
-
-    private var headerSubtitle: String? {
-        let location = [booking.tripUseCity, booking.tripUseRegion]
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-            .joined(separator: ", ")
-        let host = booking.hostName.trimmingCharacters(in: .whitespacesAndNewlines)
-        let parts = [host, location].filter { !$0.isEmpty }
-        return parts.isEmpty ? nil : parts.joined(separator: " • ")
-    }
-
-    private var datesLabel: String {
-        "\(booking.startDate.hayameDateLabel()) - \(booking.endDate.hayameDateLabel())"
-    }
-
-    private var vehicleImageURL: URL? {
-        let imageNames = car?.imageNames.isEmpty == false ? car?.imageNames ?? [] : booking.carImageNames
-        return imageNames.compactMap(RemoteImageURLResolver.resolve).first
-    }
-
-    private var brandTitle: String {
-        let brand = car?.brand.trimmingCharacters(in: .whitespacesAndNewlines)
-            ?? booking.carBrand.trimmingCharacters(in: .whitespacesAndNewlines)
-        return brand.isEmpty ? booking.carTitle : brand
+    private struct JourneyState {
+        var completed: Int
+        var progress: Double
+        var caption: String?
+        var accent: Color
+        var showsMarker: Bool
+        var footer: String?
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top, spacing: 12) {
-                Group {
-                    if let vehicleImageURL {
-                        CachedRemoteImage(url: vehicleImageURL, targetSize: CGSize(width: 180, height: 140)) {
-                            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .fill(HayameTheme.brandLight)
-                        } failure: {
-                            vehicleImageFallback
-                        }
-                    } else {
-                        vehicleImageFallback
-                    }
-                }
-                .frame(width: 86, height: 70)
-                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        let state = journeyState(at: now)
+        VStack(alignment: .leading, spacing: 8) {
+            HayameTimelineStepper(
+                titles: ["Requested", "Confirmed", "Pickup", "Return"],
+                completedCount: state.completed,
+                progress: state.progress,
+                caption: showsCaption ? state.caption : nil,
+                accent: state.accent,
+                showsMarker: state.showsMarker
+            )
 
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack(alignment: .top, spacing: 8) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(booking.carTitle)
-                                .font(.system(size: 17, weight: .bold, design: .rounded))
-                                .foregroundStyle(HayameTheme.brandNavy)
-                                .lineLimit(2)
-                            if let headerSubtitle {
-                                Text(headerSubtitle)
-                                    .font(.system(size: 12, weight: .medium, design: .rounded))
-                                    .foregroundStyle(HayameTheme.mutedText)
-                                    .lineLimit(2)
-                            }
-                        }
-
-                        Spacer(minLength: 8)
-
-                        VehicleBrandLogo(title: brandTitle, isSelected: false)
-                            .frame(width: 38, height: 28)
-                    }
-
-                    HStack(spacing: 8) {
-                        BookingStatusBadge(status: booking.displayStatus)
-                        if booking.shouldShowCompletedPaidBadge {
-                            BookingPaymentBadge(label: "Paid")
-                        }
-                    }
-                }
-            }
-
-            VStack(alignment: .leading, spacing: 8) {
-                InfoLine(label: "Dates", value: datesLabel)
-                InfoLine(label: "Duration", value: "\(booking.nights) night(s)")
-                InfoLine(label: "Trip mode", value: tripMode)
-                InfoLine(label: "Use", value: tripUseLocation.isEmpty ? "N/A" : tripUseLocation)
-                InfoLine(label: "Total", value: "GHS\(booking.totalPrice)")
-            }
-
-            if let paymentReference = booking.paymentReference, !paymentReference.isEmpty {
-                Text("Payment ref: \(paymentReference)")
-                    .font(.system(size: 11, weight: .semibold, design: .rounded))
-                    .foregroundStyle(HayameTheme.mutedText)
-            }
-
-            if let rejectionReason = booking.rejectionReason, !rejectionReason.isEmpty {
-                Text("Rejection reason: \(rejectionReason)")
-                    .font(.system(size: 12, weight: .semibold, design: .rounded))
-                    .foregroundStyle(HayameTheme.danger)
-                    .padding(.top, 2)
-            }
-
-            HStack(spacing: 10) {
-                Button("Message host", action: onMessage)
-                    .buttonStyle(SecondaryPillButtonStyle())
-
-                if isPaid {
-                    Button("Open dispute", action: onDispute)
-                        .buttonStyle(SecondaryPillButtonStyle())
+            if showsCaption, let footer = state.footer {
+                HStack(spacing: 10) {
+                    HayameProgressBar(fraction: state.progress, tint: state.accent)
+                    Text(footer)
+                        .font(.hayame(size: 11, weight: .semibold))
+                        .foregroundStyle(HayameTheme.mutedText)
+                        .lineLimit(1)
+                        .fixedSize()
                 }
             }
         }
-        .hayameCard()
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(isHighlighted ? HayameTheme.brandBlue : .clear, lineWidth: 2)
-        )
-        .shadow(
-            color: isHighlighted ? HayameTheme.brandBlue.opacity(0.18) : .clear,
-            radius: 14,
-            x: 0,
-            y: 6
-        )
-        .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .onTapGesture {
-            if let car {
-                onOpenVehicle(car)
-            }
+        .padding(.vertical, 4)
+        .onReceive(clock) { now = $0 }
+    }
+
+    private func journeyState(at now: Date) -> JourneyState {
+        switch booking.displayStatus {
+        case .pending:
+            return JourneyState(
+                completed: 1,
+                progress: 0.5,
+                caption: "Awaiting host",
+                accent: HayameTheme.warning,
+                showsMarker: true,
+                footer: nil
+            )
+        case .confirmed:
+            let progress = fraction(from: booking.createdAt, to: booking.startDate, at: now)
+            return JourneyState(
+                completed: 2,
+                progress: progress,
+                caption: "Pickup in \(Self.remainingLabel(until: booking.startDate, from: now))",
+                accent: HayameTheme.brandBlue,
+                showsMarker: true,
+                footer: "Starts \(booking.startDate.hayameDateLabel())"
+            )
+        case .ongoing:
+            let progress = fraction(from: booking.startDate, to: booking.endDate, at: now)
+            return JourneyState(
+                completed: 3,
+                progress: progress,
+                caption: "Return in \(Self.remainingLabel(until: booking.endDate, from: now))",
+                accent: HayameTheme.success,
+                showsMarker: true,
+                footer: "Ends \(booking.endDate.hayameDateLabel())"
+            )
+        case .completed:
+            return JourneyState(
+                completed: 4,
+                progress: 1,
+                caption: nil,
+                accent: HayameTheme.brandBlue,
+                showsMarker: false,
+                footer: nil
+            )
+        case .cancelled, .rejected, .refunded:
+            return JourneyState(
+                completed: 1,
+                progress: 0,
+                caption: nil,
+                accent: HayameTheme.danger,
+                showsMarker: false,
+                footer: nil
+            )
         }
     }
 
-    private var vehicleImageFallback: some View {
-        RoundedRectangle(cornerRadius: 14, style: .continuous)
-            .fill(HayameTheme.brandLight)
-            .overlay(
-                Image(systemName: "car.fill")
-                    .font(.system(size: 20, weight: .bold))
-                    .foregroundStyle(HayameTheme.brandBlue)
-            )
+    private func fraction(from start: Date, to end: Date, at now: Date) -> Double {
+        let total = end.timeIntervalSince(start)
+        guard total > 0 else { return 1 }
+        return min(max(now.timeIntervalSince(start) / total, 0), 1)
+    }
+
+    static func remainingLabel(until date: Date, from now: Date) -> String {
+        let seconds = max(0, date.timeIntervalSince(now))
+        let days = Int(seconds / 86_400)
+        let hours = Int(seconds.truncatingRemainder(dividingBy: 86_400) / 3_600)
+        let minutes = Int(seconds.truncatingRemainder(dividingBy: 3_600) / 60)
+        if days > 0 { return hours > 0 ? "\(days)d \(hours)h" : "\(days)d" }
+        if hours > 0 { return minutes > 0 ? "\(hours)h \(minutes)m" : "\(hours)h" }
+        return "\(max(minutes, 1))m"
     }
 }
 
-private struct TripDisputeSheet: View {
+struct TripDisputeSheet: View {
     @EnvironmentObject private var appState: AppState
     @Environment(\.dismiss) private var dismiss
 
@@ -5848,7 +3933,7 @@ private struct TripDisputeSheet: View {
                 if let error = appState.syncErrorMessage, !error.isEmpty {
                     Section {
                         Text(error)
-                            .font(.system(size: 12, weight: .semibold, design: .rounded))
+                            .font(.hayame(size: 12, weight: .semibold))
                             .foregroundStyle(HayameTheme.danger)
                     }
                 }
@@ -5881,686 +3966,7 @@ private struct TripDisputeSheet: View {
     }
 }
 
-struct FavoritesScreen: View {
-    @EnvironmentObject private var appState: AppState
-
-	    var body: some View {
-	        ScrollView {
-	            VStack(alignment: .leading, spacing: 14) {
-	                PageTitle("Saved")
-
-	                if !appState.isAuthenticated {
-                    EmptyStateView(
-                        title: "Log in to save cars",
-                        message: "Favorites sync to your account and show here after sign in.",
-                        systemImage: "person.crop.circle.badge.exclamationmark"
-                    )
-                } else if case .loading = appState.favoritesLoadState {
-                    ForEach(0..<3, id: \.self) { _ in
-                        ListingRowPlaceholderCard()
-                    }
-                } else if case .error(let message) = appState.favoritesLoadState {
-                    ErrorStateCard(
-                        title: "Favorites unavailable",
-                        message: message,
-                        actionTitle: "Refresh"
-                    ) {
-                        appState.retryFavorites()
-                    }
-                } else if appState.favoriteCars.isEmpty {
-                    EmptyStateView(title: "No saved cars", message: "Tap the heart on any listing to save it.", systemImage: "heart.slash")
-                } else {
-                    ForEach(appState.favoriteCars) { car in
-                        ZStack(alignment: .topTrailing) {
-                            NavigationLink {
-                                CarDetailScreen(car: car)
-                            } label: {
-                                HomeFeaturedCarRow(car: car, isFavorite: true, showsFavoriteButton: false) {
-                                    appState.toggleFavorite(carID: car.id)
-                                }
-                            }
-                            .buttonStyle(.plain)
-
-                            FavoriteBadgeButton(isFavorite: true) {
-                                appState.toggleFavorite(carID: car.id)
-                            }
-                            .padding(8)
-                        }
-                    }
-                }
-
-                if appState.isAuthenticated {
-                    HStack(spacing: 10) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("TOTAL FAVORITES")
-                                .font(.system(size: 10, weight: .semibold, design: .rounded))
-                                .foregroundStyle(HayameTheme.mutedText)
-                            Text("\(appState.favoriteCars.count)")
-                                .font(.system(size: 24, weight: .bold, design: .rounded))
-                                .foregroundStyle(HayameTheme.brandNavy)
-                        }
-                        Spacer()
-                        Image(systemName: "heart.fill")
-                            .font(.system(size: 20, weight: .bold))
-                            .foregroundStyle(.red)
-                            .frame(width: 44, height: 44)
-                            .background(HayameTheme.brandLight)
-                            .clipShape(Circle())
-                    }
-                    .hayameCard()
-                }
-            }
-            .padding(16)
-	        }
-	        .background(HayameTheme.pageBackground)
-	        .toolbar(.hidden, for: .navigationBar)
-	        .refreshable {
-            await appState.refreshAllRemoteData()
-        }
-    }
-}
-
-struct InboxScreen: View {
-    @EnvironmentObject private var appState: AppState
-    @State private var search = ""
-    @State private var inboxTimer = Timer.publish(every: 10, on: .main, in: .common).autoconnect()
-    @State private var activeChatTarget: TripChatTarget?
-
-    private var filtered: [Conversation] {
-        if search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return appState.conversations
-        }
-        return appState.conversations.filter {
-            $0.participantName.localizedCaseInsensitiveContains(search) ||
-            $0.lastMessagePreview.localizedCaseInsensitiveContains(search)
-        }
-    }
-
-    var body: some View {
-        ScrollView {
-            VStack(spacing: 12) {
-                if !appState.isAuthenticated {
-                    EmptyStateView(
-                        title: "Log in to use messages",
-                        message: "Conversation history and live chat are available after sign in.",
-                        systemImage: "person.crop.circle.badge.exclamationmark"
-                    )
-                } else if case .loading = appState.conversationsLoadState {
-                    ForEach(0..<6, id: \.self) { _ in
-                        ConversationPlaceholderRow()
-                    }
-                } else if case .error(let message) = appState.conversationsLoadState {
-                    ErrorStateCard(
-                        title: "Messages unavailable",
-                        message: message,
-                        actionTitle: "Refresh"
-                    ) {
-                        appState.retryConversations()
-                    }
-                } else {
-                    HStack(spacing: 8) {
-                        Image(systemName: "magnifyingglass")
-                            .foregroundStyle(HayameTheme.mutedText)
-                        TextField("Search", text: $search)
-                    }
-                    .padding(12)
-                    .background(HayameTheme.cardBackground)
-                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 14).stroke(HayameTheme.cardStroke, lineWidth: 1))
-
-                    if filtered.isEmpty {
-                        EmptyStateView(
-                            title: "No conversations",
-                            message: "Start chatting from a car detail page.",
-                            systemImage: "bubble.left.and.bubble.right"
-                        )
-                    } else {
-                        VStack(spacing: 10) {
-                            ForEach(filtered) { conversation in
-                                Button {
-                                    openConversation(conversation)
-                                } label: {
-                                    ConversationRowView(conversation: conversation)
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-                    }
-                }
-            }
-            .padding(16)
-        }
-        .background(HayameTheme.pageBackground)
-        .navigationTitle("Messages")
-        .refreshable {
-            await appState.refreshAllRemoteData()
-        }
-        .navigationDestination(item: $activeChatTarget) { target in
-            ChatThreadScreen(conversationID: target.id, participantName: target.participantName)
-                .environmentObject(appState)
-        }
-        .onAppear {
-            appState.refreshConversationsNow()
-            openPendingConversationIfNeeded()
-        }
-        .onReceive(inboxTimer) { _ in
-            appState.refreshConversationsNow()
-        }
-        .onChange(of: appState.pendingConversationID) { _, _ in
-            openPendingConversationIfNeeded()
-        }
-        .onChange(of: appState.conversations.count) { _, _ in
-            openPendingConversationIfNeeded()
-        }
-    }
-
-    private func openConversation(_ conversation: Conversation) {
-        appState.markConversationRead(conversation.id)
-        activeChatTarget = TripChatTarget(id: conversation.id, participantName: conversation.participantName)
-    }
-
-    private func openPendingConversationIfNeeded() {
-        guard let pendingID = appState.pendingConversationID else { return }
-        let participantName = appState.conversations.first(where: { $0.id == pendingID })?.participantName ??
-            appState.pendingConversationParticipantName ??
-            "Chat"
-        activeChatTarget = TripChatTarget(id: pendingID, participantName: participantName)
-        appState.pendingConversationID = nil
-        appState.pendingConversationParticipantName = nil
-    }
-}
-
-struct ChatThreadScreen: View {
-    @EnvironmentObject private var appState: AppState
-    let conversationID: String
-    let participantName: String
-
-    @State private var draft = ""
-
-    private var messages: [ChatMessage] {
-        appState.messagesByConversation[conversationID] ?? []
-    }
-
-    private var messageIDs: [String] {
-        messages.map(\.id)
-    }
-
-    private var canSend: Bool {
-        appState.isAuthenticated &&
-            !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
-
-    var body: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(spacing: 8) {
-                    ForEach(messages) { message in
-                        ChatBubble(message: message)
-                            .id(message.id)
-                            .transition(.move(edge: .bottom).combined(with: .opacity))
-                    }
-                }
-                .animation(.spring(response: 0.3, dampingFraction: 0.85), value: messageIDs)
-                .padding(16)
-            }
-            .scrollDismissesKeyboard(.interactively)
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                chatInputBar
-            }
-            .onAppear {
-                appState.startRealtimeMessages(for: conversationID)
-                if draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-                   let queuedDraft = appState.consumePendingConversationDraft(for: conversationID) {
-                    draft = queuedDraft
-                }
-                if let last = messages.last {
-                    withAnimation(.easeOut(duration: 0.2)) {
-                        proxy.scrollTo(last.id, anchor: .bottom)
-                    }
-                }
-            }
-            .onDisappear {
-                appState.stopRealtimeMessages()
-            }
-            .onChange(of: messageIDs) { _, _ in
-                if let last = messages.last {
-                    withAnimation(.easeOut(duration: 0.2)) {
-                        proxy.scrollTo(last.id, anchor: .bottom)
-                    }
-                }
-            }
-        }
-        .background(HayameTheme.pageBackground)
-        .navigationTitle(participantName)
-        .navigationBarTitleDisplayMode(.inline)
-    }
-
-    private var chatInputBar: some View {
-        HStack(spacing: 10) {
-            TextField(appState.isAuthenticated ? "Type message" : "Log in to send a message", text: $draft)
-                .padding(12)
-                .background(HayameTheme.fieldBackground)
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 12).stroke(HayameTheme.cardStroke, lineWidth: 1))
-                .disabled(!appState.isAuthenticated)
-
-            Button {
-                let outgoing = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !outgoing.isEmpty else { return }
-                appState.addMessage(conversationID: conversationID, body: outgoing, mine: true)
-                draft = ""
-            } label: {
-                Image(systemName: "paperplane.fill")
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(.white)
-                    .frame(width: 42, height: 42)
-                    .background(HayameTheme.brandBlue)
-                    .clipShape(Circle())
-            }
-            .disabled(!canSend)
-            .opacity(canSend ? 1 : 0.5)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .background(HayameTheme.pageBackground.ignoresSafeArea(edges: .bottom))
-        .overlay(alignment: .top) {
-            Rectangle()
-                .fill(HayameTheme.cardStroke)
-                .frame(height: 1)
-        }
-    }
-}
-
-struct GuestProfileScreen: View {
-    @EnvironmentObject private var appState: AppState
-    @Binding var requestedRoute: MoreRoute?
-    @State private var showEditProfile = false
-    @State private var activeMoreRoute: MoreRoute?
-    @State private var glowAppearanceSettings = false
-    @State private var analyticsEnabled = AnalyticsService.shared.hasConsent
-
-    init(requestedRoute: Binding<MoreRoute?> = .constant(nil)) {
-        _requestedRoute = requestedRoute
-    }
-
-	    var body: some View {
-        ScrollViewReader { proxy in
-	        ScrollView(showsIndicators: false) {
-	            VStack(alignment: .leading, spacing: 14) {
-	                PageTitle("More")
-
-	                VStack(alignment: .leading, spacing: 12) {
-                    HStack(spacing: 12) {
-                        profileAvatar
-
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(appState.isAuthenticated ? appState.currentUser.fullName : "Guest User")
-                                .font(.system(size: 20, weight: .bold, design: .rounded))
-                                .foregroundStyle(HayameTheme.brandNavy)
-                            Text(
-                                appState.isAuthenticated
-                                    ? appState.currentUser.email
-                                    : "Browsing in guest mode"
-                            )
-                            .font(.system(size: 13, weight: .medium, design: .rounded))
-                            .foregroundStyle(HayameTheme.mutedText)
-                        }
-                        Spacer()
-                    }
-
-                    let profileCity = appState.currentUser.city.trimmingCharacters(in: .whitespacesAndNewlines)
-                    let profileRegion = appState.currentUser.region.trimmingCharacters(in: .whitespacesAndNewlines)
-                    if !profileCity.isEmpty || !profileRegion.isEmpty {
-                        let location = [profileCity, profileRegion].filter { !$0.isEmpty }.joined(separator: ", ")
-                        InfoLine(label: "Location", value: location)
-                    }
-                    if appState.isAuthenticated && !appState.currentUser.phone.isEmpty {
-                        InfoLine(label: "Phone", value: appState.currentUser.phone)
-                    }
-
-                    if appState.isAuthenticated {
-                        Button("Edit profile") {
-                            showEditProfile = true
-                        }
-                        .buttonStyle(SecondaryPillButtonStyle())
-                    }
-                }
-                .hayameCard()
-
-                SectionHeader(title: "Profile settings")
-                VStack(spacing: 10) {
-                    profileActionButton(title: "Edit profile", systemImage: "pencil") {
-                        showEditProfile = true
-                    }
-                    profileActionButton(title: "Trips", systemImage: "calendar") {
-                        appState.renterTab = .trips
-                    }
-                    profileActionButton(title: "Messages", systemImage: "message") {
-                        activeMoreRoute = .messages
-                    }
-                    profileActionButton(title: "Dashboard", systemImage: "rectangle.grid.2x2.fill") {
-                        activeMoreRoute = .dashboard
-                    }
-                }
-                .hayameCard()
-
-                SectionHeader(title: "Appearance")
-                VStack(alignment: .leading, spacing: 10) {
-                    Toggle(
-                        isOn: Binding(
-                            get: { appState.darkModeEnabled },
-                            set: { appState.setDarkMode($0) }
-                        )
-                    ) {
-                        Label(
-                            appState.darkModeEnabled ? "Dark mode" : "Light mode",
-                            systemImage: appState.darkModeEnabled ? "moon.stars.fill" : "sun.max.fill"
-                        )
-                        .font(.system(size: 14, weight: .semibold, design: .rounded))
-                        .foregroundStyle(HayameTheme.brandNavy)
-                    }
-                    .toggleStyle(HayameSwitchToggleStyle())
-
-                    Text("Switch between light and dark appearance.")
-                        .font(.system(size: 12, weight: .medium, design: .rounded))
-                        .foregroundStyle(HayameTheme.mutedText)
-                }
-                .hayameCard()
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .stroke(HayameTheme.brandBlue.opacity(glowAppearanceSettings ? 0.95 : 0), lineWidth: 2)
-                )
-                .shadow(
-                    color: HayameTheme.brandBlue.opacity(glowAppearanceSettings ? 0.34 : 0),
-                    radius: glowAppearanceSettings ? 18 : 0,
-                    x: 0,
-                    y: 0
-                )
-                .id("appearance-settings")
-
-                // Apple App Review Guideline 5.1.1(ii) requires an "easily
-                // accessible and understandable way to withdraw consent" for
-                // usage-data collection. This toggle is that mechanism — turning
-                // it off stops collection and deletes the stored session key.
-                SectionHeader(title: "Privacy")
-                VStack(alignment: .leading, spacing: 10) {
-                    Toggle(
-                        isOn: Binding(
-                            get: { analyticsEnabled },
-                            set: { enabled in
-                                AnalyticsService.shared.setConsent(enabled ? .granted : .denied)
-                                analyticsEnabled = enabled
-                            }
-                        )
-                    ) {
-                        Label("Share usage analytics", systemImage: "chart.bar.xaxis")
-                            .font(.system(size: 14, weight: .semibold, design: .rounded))
-                            .foregroundStyle(HayameTheme.brandNavy)
-                    }
-                    .toggleStyle(HayameSwitchToggleStyle())
-
-                    Text("Helps us see which cars people look for and where booking gets stuck. We never track you across other apps or sell your data. Turning this off deletes the analytics id stored on this device.")
-                        .font(.system(size: 12, weight: .medium, design: .rounded))
-                        .foregroundStyle(HayameTheme.mutedText)
-                }
-                .hayameCard()
-
-                SectionHeader(title: "Hosting")
-                VStack(alignment: .leading, spacing: 10) {
-                    if appState.hostAccessState == .host {
-                        Toggle(
-                            isOn: Binding(
-                                get: { appState.hostModeEnabled },
-                                set: { enabled in
-                                    if enabled {
-                                        withAnimation(.easeInOut(duration: 0.18)) {
-                                            appState.hostModeEnabled = true
-                                        }
-                                        appState.switchToHostMode()
-                                    } else {
-                                        withAnimation(.easeInOut(duration: 0.18)) {
-                                            appState.hostModeEnabled = false
-                                        }
-                                        appState.switchToGuestMode()
-                                    }
-                                }
-                            )
-                        ) {
-                            Text("Host mode")
-                                .font(.system(size: 14, weight: .semibold, design: .rounded))
-                        }
-                        .toggleStyle(SwitchToggleStyle(tint: HayameTheme.brandBlue))
-
-                        Text("Turn on Host mode to access host dashboard, listings, bookings, and earnings. Turn it off anytime.")
-                            .font(.system(size: 12, weight: .medium, design: .rounded))
-                            .foregroundStyle(HayameTheme.mutedText)
-                    } else if appState.hostAccessState == .pending {
-                        if let hostApplication = appState.hostApplication {
-                            InfoLine(label: "Application", value: hostApplication.status.rawValue.capitalized)
-                        }
-                        Text("Your host application is pending review.")
-                            .font(.system(size: 12, weight: .semibold, design: .rounded))
-                            .foregroundStyle(HayameTheme.warning)
-                        NavigationLink("Review application", destination: BecomeHostScreen())
-                            .font(.system(size: 14, weight: .semibold, design: .rounded))
-                    } else {
-                        NavigationLink("Become a Host", destination: BecomeHostScreen())
-                            .font(.system(size: 14, weight: .semibold, design: .rounded))
-                    }
-                }
-                .hayameCard()
-
-                if appState.isAuthenticated {
-                    SectionHeader(title: "Notifications")
-                    VStack(alignment: .leading, spacing: 12) {
-                        notificationPreferenceToggle(
-                            title: "Trips & bookings",
-                            subtitle: "Booking approvals, changes, and trip reminders.",
-                            isOn: Binding(
-                                get: { appState.notificationPreferences.bookingUpdates },
-                                set: { appState.updateNotificationPreference(bookingUpdates: $0) }
-                            )
-                        )
-                        notificationPreferenceToggle(
-                            title: "Messages",
-                            subtitle: "New chats and replies from renters or hosts.",
-                            isOn: Binding(
-                                get: { appState.notificationPreferences.messages },
-                                set: { appState.updateNotificationPreference(messages: $0) }
-                            )
-                        )
-                        notificationPreferenceToggle(
-                            title: "Account & security",
-                            subtitle: "Verification, login, and account notices.",
-                            isOn: Binding(
-                                get: { appState.notificationPreferences.accountSecurity },
-                                set: { appState.updateNotificationPreference(accountSecurity: $0) }
-                            )
-                        )
-                        notificationPreferenceToggle(
-                            title: "News & announcements",
-                            subtitle: "Optional product updates, releases, and notices.",
-                            isOn: Binding(
-                                get: { appState.notificationPreferences.newsAnnouncements },
-                                set: { appState.updateNotificationPreference(newsAnnouncements: $0) }
-                            )
-                        )
-
-                        Text("Operational alerts stay on by default. News & announcements are optional.")
-                            .font(.system(size: 12, weight: .medium, design: .rounded))
-                            .foregroundStyle(HayameTheme.mutedText)
-                    }
-                    .hayameCard()
-                }
-
-                SectionHeader(title: "Support")
-                VStack(alignment: .leading, spacing: 10) {
-                    NavigationLink("Contact", destination: ContactScreen())
-                    NavigationLink("Protection", destination: ProtectionScreen())
-                    NavigationLink("Cancellation Policy", destination: CancellationPolicyScreen())
-                    NavigationLink("Privacy", destination: PrivacyScreen())
-                }
-                .font(.system(size: 14, weight: .semibold, design: .rounded))
-                .foregroundStyle(HayameTheme.brandNavy)
-                .hayameCard()
-
-                if let message = appState.syncErrorMessage, !message.isEmpty {
-                    Text(message)
-                        .font(.system(size: 12, weight: .semibold, design: .rounded))
-                        .foregroundStyle(HayameTheme.danger)
-                }
-
-                if appState.isAuthenticated {
-                    Button("Sign out", role: .destructive) {
-                        appState.signOut()
-                    }
-                    .buttonStyle(SecondaryPillButtonStyle())
-                } else {
-                    Button("Log in / Sign up") {
-                        appState.returnToAuth()
-                    }
-                    .buttonStyle(PrimaryPillButtonStyle())
-                }
-            }
-            .padding(16)
-	        }
-	        .background(HayameTheme.pageBackground)
-	        .toolbar(.hidden, for: .navigationBar)
-	        .navigationDestination(item: $activeMoreRoute) { route in
-            switch route {
-            case .messages:
-                InboxScreen()
-                    .environmentObject(appState)
-            case .dashboard:
-                RenterDashboardScreen()
-                    .environmentObject(appState)
-            }
-        }
-        .sheet(isPresented: $showEditProfile) {
-            ProfileEditSheet()
-                .environmentObject(appState)
-        }
-        .onAppear {
-            consumeRequestedRouteIfNeeded()
-        }
-        .onChange(of: requestedRoute) { _, _ in
-            consumeRequestedRouteIfNeeded()
-        }
-        .onChange(of: appState.appearanceSettingsHighlightToken) { _, token in
-            guard token > 0 else { return }
-            withAnimation(.spring(response: 0.48, dampingFraction: 0.84)) {
-                proxy.scrollTo("appearance-settings", anchor: .center)
-                glowAppearanceSettings = true
-            }
-            Task { @MainActor in
-                try? await Task.sleep(nanoseconds: 2_800_000_000)
-                withAnimation(.easeOut(duration: 0.45)) {
-                    glowAppearanceSettings = false
-                }
-            }
-        }
-        }
-    }
-
-    @ViewBuilder
-    private func notificationPreferenceToggle(
-        title: String,
-        subtitle: String,
-        isOn: Binding<Bool>
-    ) -> some View {
-        Toggle(isOn: isOn) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title)
-                    .font(.system(size: 14, weight: .semibold, design: .rounded))
-                    .foregroundStyle(HayameTheme.brandNavy)
-                Text(subtitle)
-                    .font(.system(size: 12, weight: .medium, design: .rounded))
-                    .foregroundStyle(HayameTheme.mutedText)
-            }
-        }
-        .toggleStyle(SwitchToggleStyle(tint: HayameTheme.brandBlue))
-    }
-
-    @ViewBuilder
-    private var profileAvatar: some View {
-        if let url = RemoteImageURLResolver.resolve(appState.currentUser.avatar) {
-            CachedRemoteImage(url: url, targetSize: CGSize(width: 58, height: 58)) {
-                Circle().fill(HayameTheme.brandLight)
-            } failure: {
-                fallbackAvatar
-            }
-            .frame(width: 58, height: 58)
-            .clipShape(Circle())
-        } else {
-            fallbackAvatar
-                .frame(width: 58, height: 58)
-        }
-    }
-
-    private var fallbackAvatar: some View {
-        let initials = appState.currentUser.fullName
-            .split(separator: " ")
-            .prefix(2)
-            .compactMap { $0.first.map(String.init) }
-            .joined()
-            .uppercased()
-
-        return Circle()
-            .fill(HayameTheme.brandLight)
-            .overlay(
-                Text(initials.isEmpty ? "U" : initials)
-                    .font(.system(size: 18, weight: .bold, design: .rounded))
-                    .foregroundStyle(HayameTheme.brandNavy)
-            )
-    }
-
-    private func profileActionButton(title: String, systemImage: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack {
-                Label(title, systemImage: systemImage)
-                Spacer()
-                Image(systemName: "chevron.right")
-            }
-            .font(.system(size: 14, weight: .semibold, design: .rounded))
-            .foregroundStyle(HayameTheme.brandNavy)
-        }
-        .buttonStyle(.plain)
-    }
-
-    private func consumeRequestedRouteIfNeeded() {
-        guard let requestedRoute else { return }
-        activeMoreRoute = requestedRoute
-        self.requestedRoute = nil
-    }
-}
-
-private struct HayameSwitchToggleStyle: ToggleStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        Button {
-            configuration.isOn.toggle()
-        } label: {
-            HStack(spacing: 12) {
-                configuration.label
-                Spacer()
-                Capsule()
-                    .fill(configuration.isOn ? HayameTheme.brandBlue : HayameTheme.controlStroke)
-                    .frame(width: 50, height: 30)
-                    .overlay {
-                        Circle()
-                            .fill(Color.white)
-                            .frame(width: 24, height: 24)
-                            .shadow(color: Color.black.opacity(0.16), radius: 2, x: 0, y: 1)
-                            .offset(x: configuration.isOn ? 10 : -10)
-                    }
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityValue(configuration.isOn ? "On" : "Off")
-    }
-}
-
-private struct ProfileEditSheet: View {
+struct ProfileEditSheet: View {
     @EnvironmentObject private var appState: AppState
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
@@ -6583,10 +3989,10 @@ private struct ProfileEditSheet: View {
 
                         VStack(alignment: .leading, spacing: 6) {
                             Text("Current profile photo")
-                                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                                .font(.hayame(size: 13, weight: .semibold))
                                 .foregroundStyle(HayameTheme.brandNavy)
                             Text("Upload a clear headshot (JPG/PNG).")
-                                .font(.system(size: 12, weight: .medium, design: .rounded))
+                                .font(.hayame(size: 12, weight: .medium))
                                 .foregroundStyle(HayameTheme.mutedText)
                         }
                     }
@@ -6599,7 +4005,7 @@ private struct ProfileEditSheet: View {
 
                     if let avatarUploadError, !avatarUploadError.isEmpty {
                         Text(avatarUploadError)
-                            .font(.system(size: 12, weight: .semibold, design: .rounded))
+                            .font(.hayame(size: 12, weight: .semibold))
                             .foregroundStyle(HayameTheme.danger)
                     }
                 }
@@ -6707,7 +4113,7 @@ private struct ProfileEditSheet: View {
             .fill(HayameTheme.brandLight)
             .overlay(
                 Text(initials.isEmpty ? "U" : initials)
-                    .font(.system(size: 16, weight: .bold, design: .rounded))
+                    .font(.hayame(size: 16, weight: .bold))
                     .foregroundStyle(HayameTheme.brandNavy)
             )
     }

@@ -50,7 +50,7 @@ Can:
 
 - Do everything a renter can do.
 - Access host dashboard pages.
-- Create, edit, and delete own listings.
+- Create, edit, and delete own listings. New listings wait for admin review. Editing an already-approved listing keeps it live: admins get an activity email and an audit-log entry listing what changed instead of a new review.
 - Upload/replace/remove listing photos.
 - Set listing availability blocks.
 - Approve or reject booking requests on own cars.
