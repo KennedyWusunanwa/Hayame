@@ -181,9 +181,13 @@ export function CarForm({
         throw new Error(message);
       }
       const payload = (await res.json().catch(() => ({}))) as {
-        data?: { id?: string };
+        data?: { id?: string; approval_status?: string | null };
       };
       const newCarId = targetCarId ?? payload?.data?.id;
+      // An approved listing stays live after an edit (admins are notified);
+      // anything else waits in the review queue.
+      const stayedLive =
+        !createMode && payload?.data?.approval_status === "approved";
       if (!carId && newCarId) {
         setDraftCarId(newCarId);
       }
@@ -210,7 +214,7 @@ export function CarForm({
 
       const postSubmitRedirectPath = buildPostSubmitRedirectPath(
         postSubmitBasePath,
-        createMode ? "submitted" : "updated",
+        createMode ? "submitted" : stayedLive ? "updated-live" : "updated",
       );
       navigateAfterSubmit(router, postSubmitRedirectPath);
     } catch (err: unknown) {
@@ -1113,7 +1117,7 @@ function normalizeOptionalFeeDefault(value: unknown) {
 
 function buildPostSubmitRedirectPath(
   basePath: string,
-  notice: "submitted" | "updated",
+  notice: "submitted" | "updated" | "updated-live",
 ) {
   if (!basePath.startsWith("/host/cars")) return basePath;
 

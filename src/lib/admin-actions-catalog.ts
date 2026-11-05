@@ -16,6 +16,7 @@ export const ACTION_CATALOG: Record<string, { label: string; severity: AdminSeve
   "admin.reactivated": { label: "Reactivated an admin", severity: "critical" },
   host_id_viewed: { label: "Opened a host ID document", severity: "info" },
   listing_edited_by_admin: { label: "Edited a listing as admin", severity: "important" },
+  listing_edited_by_host: { label: "Host edited a live listing", severity: "important" },
   "errors.cleared": { label: "Cleared resolved error reports", severity: "important" },
   "audit.exported": { label: "Exported the audit log", severity: "important" },
   "maintenance.enabled": { label: "Turned maintenance mode on", severity: "critical" },

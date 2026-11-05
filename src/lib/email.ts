@@ -1405,6 +1405,52 @@ export function buildAdminListingSubmittedEmail(params: {
   });
 }
 
+/**
+ * A host changed a listing that is already approved. The edit is live right
+ * away (no re-review), so this is an activity notice, not a review request.
+ */
+export function buildAdminListingEditedEmail(params: {
+  carId: string;
+  carTitle?: string | null;
+  hostName?: string | null;
+  hostEmail?: string | null;
+  changes: Array<{ label: string; from: string; to: string }>;
+  editedAt?: string | null;
+}) {
+  const carTitle = params.carTitle?.trim() || "Listing";
+  const hostName = params.hostName?.trim() || "A host";
+  const changeRows = params.changes.slice(0, 12).map((change) => ({
+    label: change.label,
+    value: `${change.from} to ${change.to}`,
+  }));
+  const hiddenCount = Math.max(params.changes.length - changeRows.length, 0);
+  return renderAdminNotice({
+    subject: `[${appName} Admin] Live listing edited: ${carTitle}`,
+    eyebrow: "Listing activity",
+    heading: `${hostName} edited ${carTitle}`,
+    intro:
+      "This listing is already approved, so the changes are live for guests now. Nothing to approve; open the listing if anything looks off.",
+    rows: [
+      { label: "Listing ID", value: params.carId },
+      { label: "Vehicle", value: carTitle },
+      { label: "Host", value: hostName },
+      { label: "Host email", value: params.hostEmail ?? "Not available" },
+      ...(changeRows.length > 0
+        ? changeRows
+        : [{ label: "Changes", value: "Saved without any field changes" }]),
+      ...(hiddenCount > 0
+        ? [{ label: "More", value: `${hiddenCount} other field(s) changed` }]
+        : []),
+      { label: "Edited at", value: formatDateTime(params.editedAt ?? new Date()) },
+    ],
+    cta: {
+      label: "Open listing",
+      url: `${siteUrl}/admin/cars/${params.carId}/preview`,
+    },
+    links: [{ label: "Audit log", url: `${siteUrl}/admin/audit` }],
+  });
+}
+
 export function buildAdminBookingNoticeEmail(params: {
   bookingId: string;
   status: string;
