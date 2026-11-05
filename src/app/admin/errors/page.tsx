@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { AdminNotice } from "@/components/admin/admin-notice";
+import { AdminSearchForm } from "@/components/admin/admin-search";
+import { matchesQuery } from "@/lib/admin-search";
 import { PendingSubmitButton } from "@/components/admin/pending-submit-button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { requireAdmin } from "@/lib/admin-auth";
@@ -91,11 +93,12 @@ async function clearResolvedAction() {
 export default async function AdminErrorsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ filter?: string }>;
+  searchParams: Promise<{ filter?: string; q?: string }>;
 }) {
   await requireAdmin("errors.view");
   const params = await searchParams;
   const filter = resolveFilter(params.filter);
+  const searchTerm = (params.q ?? "").trim();
 
   const admin = createSupabaseAdminClient() as any;
 
@@ -110,7 +113,23 @@ export default async function AdminErrorsPage({
   if (filter === "resolved") query = query.eq("resolved", true);
 
   const { data, error } = await query;
-  const reports = (data ?? []) as ErrorReport[];
+  const allReports = (data ?? []) as ErrorReport[];
+  const reports = searchTerm
+    ? allReports.filter((report) =>
+        matchesQuery(
+          searchTerm,
+          report.message,
+          report.route,
+          report.code,
+          report.source,
+          report.platform,
+          report.method,
+          report.status,
+          report.user_id,
+          report.app_version,
+        ),
+      )
+    : allReports;
   const tableMissing = isMissingTableError(error);
 
   const tabs: { key: Filter; label: string }[] = [
@@ -162,7 +181,7 @@ export default async function AdminErrorsPage({
                 {tabs.map((tab) => (
                   <Link
                     key={tab.key}
-                    href={`/admin/errors?filter=${tab.key}`}
+                    href={`/admin/errors?filter=${tab.key}${searchTerm ? `&q=${encodeURIComponent(searchTerm)}` : ""}`}
                     className={
                       filter === tab.key
                         ? "rounded-md bg-primary px-3 py-1.5 text-sm font-semibold text-white"
@@ -173,6 +192,13 @@ export default async function AdminErrorsPage({
                   </Link>
                 ))}
               </div>
+              <AdminSearchForm
+                action="/admin/errors"
+                placeholder="Search errors by message, route or code"
+                query={searchTerm}
+                keep={{ filter }}
+                className="sm:w-72"
+              />
               {filter !== "unresolved" ? (
                 <form action={clearResolvedAction}>
                   <PendingSubmitButton
@@ -188,7 +214,9 @@ export default async function AdminErrorsPage({
             {reports.length === 0 ? (
               <Card>
                 <CardContent className="py-10 text-center text-sm text-muted-foreground">
-                  No {filter === "all" ? "" : filter} error reports. 🎉
+                  {searchTerm
+                    ? `No error reports match “${searchTerm}”.`
+                    : `No ${filter === "all" ? "" : filter} error reports.`}
                 </CardContent>
               </Card>
             ) : (

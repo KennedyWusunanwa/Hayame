@@ -13,6 +13,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { PageHeader } from "@/components/admin/admin-ui";
+import { AdminSearchForm } from "@/components/admin/admin-search";
+import { matchesQuery } from "@/lib/admin-search";
 import { requireAdmin } from "@/lib/admin-auth";
 import { logAdminAction } from "@/lib/admin-audit";
 import { can } from "@/lib/admin-permissions";
@@ -840,12 +842,14 @@ export default async function AdminPlatformPage({
     attempted?: string;
     delivered?: string;
     reason?: string;
+    q?: string;
   }>;
 }) {
   const me = await requireAdmin();
   const resolvedSearchParams = await searchParams;
   const admin = createSupabaseAdminClient() as any;
   const notice = getPlatformNotice(resolvedSearchParams);
+  const query = (resolvedSearchParams.q ?? "").trim();
 
   const [
     pendingListings,
@@ -944,6 +948,54 @@ export default async function AdminPlatformPage({
     listingPhotosByCar.get(row.car_id)!.push(row.url);
   });
 
+  // One search box filters every moderation list on this page. The lists are
+  // already in memory (newest 50 each), so matching happens here.
+  const visibleListings = (pendingListings.data ?? []).filter((car: any) =>
+    matchesQuery(
+      query,
+      car.title,
+      car.city,
+      car.daily_price,
+      car.owner?.full_name,
+      car.owner?.phone,
+      car.id,
+    ),
+  );
+  const visibleBookings = (refundableBookings.data ?? []).filter(
+    (booking: any) =>
+      matchesQuery(
+        query,
+        booking.cars?.title,
+        booking.payment_reference,
+        booking.payment_provider,
+        booking.start_date,
+        booking.end_date,
+        booking.total_price,
+        booking.id,
+      ),
+  );
+  const visibleReviews = (reviews.data ?? []).filter((review: any) =>
+    matchesQuery(
+      query,
+      review.cars?.title,
+      review.profiles?.full_name,
+      review.comment,
+      review.rating,
+      review.moderation_reason,
+    ),
+  );
+  const visibleDisputes = (disputes.data ?? []).filter((dispute: any) =>
+    matchesQuery(
+      query,
+      dispute.cars?.title,
+      dispute.reason,
+      dispute.status,
+      dispute.resolution_note,
+      dispute.booking_id,
+      dispute.id,
+    ),
+  );
+
   const registeredPushUsers = new Set(
     (pushTokenRows.data ?? [])
       .map((row: any) => String(row?.user_id ?? "").trim())
@@ -961,7 +1013,25 @@ export default async function AdminPlatformPage({
         eyebrow="Admin"
         title="Moderation & finance"
         description="Approve listings, handle refunds and disputes, moderate reviews and talk to the app audience. You only see the tools your role allows."
+        actions={
+          <AdminSearchForm
+            action="/admin/platform"
+            placeholder="Search listings, bookings, reviews, disputes"
+            query={query}
+          />
+        }
       />
+
+      {query ? (
+        <p className="text-sm text-gray-600">
+          Matches for “{query}”: {visibleListings.length} listings,{" "}
+          {visibleBookings.length} bookings, {visibleReviews.length} reviews,{" "}
+          {visibleDisputes.length} disputes.{" "}
+          <Link href="/admin/platform" className="font-semibold text-brand">
+            Clear search
+          </Link>
+        </p>
+      ) : null}
 
       {notice ? (
         <AdminNotice
@@ -1029,162 +1099,144 @@ export default async function AdminPlatformPage({
         <CardHeader>
           <CardTitle>Listing approvals</CardTitle>
         </CardHeader>
-        <CardContent className="px-3 sm:px-6">
-          <div className="overflow-x-auto rounded-xl border border-border">
-            <Table className="min-w-[760px]">
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Listing</TableHead>
-                  <TableHead>Owner</TableHead>
-                  <TableHead>Price</TableHead>
-                  <TableHead>Preview</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {(pendingListings.data ?? []).map((car: any) => {
-                  const listingPhotos = listingPhotosByCar.get(car.id) ?? [];
-                  const previewImage = resolveCarImage(listingPhotos[0], {
-                    id: car.id,
-                    title: car.title,
-                    city: car.city,
-                    region: car.region,
-                    carType: car.car_type,
-                  });
+        <CardContent>
+          <p className="mb-4 text-xs text-gray-600">
+            {visibleListings.length}{" "}
+            {visibleListings.length === 1 ? "listing" : "listings"} waiting for
+            review{query ? ` matching “${query}”` : ""}.
+          </p>
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {visibleListings.map((car: any) => {
+              const listingPhotos = listingPhotosByCar.get(car.id) ?? [];
+              const previewImage = resolveCarImage(listingPhotos[0], {
+                id: car.id,
+                title: car.title,
+                city: car.city,
+                region: car.region,
+                carType: car.car_type,
+              });
 
-                  return (
-                    <TableRow key={car.id}>
-                      <TableCell>
-                        <div className="flex min-w-0 items-start gap-3">
-                          <div className="relative h-14 w-20 shrink-0 overflow-hidden rounded-md border border-border">
+              return (
+                <article
+                  key={car.id}
+                  className="flex flex-col overflow-hidden rounded-2xl border border-border/80 bg-white shadow-sm"
+                >
+                  <div className="relative aspect-[4/3] bg-gray-100">
+                    <Image
+                      src={previewImage}
+                      alt={car.title ?? "Listing"}
+                      fill
+                      className="object-cover"
+                      sizes="(max-width: 640px) 100vw, (max-width: 1280px) 50vw, 33vw"
+                    />
+                    <span className="absolute right-3 top-3 rounded-full bg-amber-500/95 px-2 py-1 text-[11px] font-semibold text-white">
+                      Pending review
+                    </span>
+                    <span className="absolute bottom-3 left-3 rounded-full bg-black/55 px-2 py-1 text-[11px] font-semibold text-white">
+                      {listingPhotos.length}{" "}
+                      {listingPhotos.length === 1 ? "photo" : "photos"}
+                    </span>
+                  </div>
+                  <div className="flex flex-1 flex-col gap-3 p-4">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-foreground">
+                        {car.title}
+                      </p>
+                      <p className="mt-0.5 text-xs text-gray-600">
+                        {car.city ?? "Ghana"} · GHS{" "}
+                        {Number(car.daily_price ?? 0).toFixed(0)}/day
+                      </p>
+                    </div>
+                    <div className="flex min-w-0 items-center gap-2 text-xs text-gray-600">
+                      <ProfileAvatar
+                        src={car.owner?.avatar_url}
+                        name={car.owner?.full_name ?? "Host"}
+                        className="h-6 w-6"
+                      />
+                      <span className="truncate">
+                        {car.owner?.full_name ?? "Host"}
+                        {car.owner?.phone ? ` · ${car.owner.phone}` : ""}
+                      </span>
+                    </div>
+                    {listingPhotos.length > 1 ? (
+                      <div className="flex gap-1.5 overflow-x-auto pb-1">
+                        {listingPhotos.slice(1, 6).map((url: string, idx: number) => (
+                          <div
+                            key={`${car.id}-thumb-${idx}`}
+                            className="relative h-10 w-14 shrink-0 overflow-hidden rounded-md border border-border"
+                          >
                             <Image
-                              src={previewImage}
-                              alt={car.title ?? "Listing"}
+                              src={url}
+                              alt={`${car.title ?? "Listing"} image ${idx + 2}`}
                               fill
                               className="object-cover"
-                              sizes="80px"
+                              sizes="56px"
                             />
                           </div>
-                          <div className="min-w-0">
-                            <p className="truncate font-semibold">
-                              {car.title}
-                            </p>
-                            <p className="text-xs text-gray-600">
-                              {car.city ?? "Ghana"}
-                            </p>
-                            <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
-                              {listingPhotos.length > 0 ? (
-                                listingPhotos.map(
-                                  (url: string, idx: number) => (
-                                    <div
-                                      key={`${car.id}-thumb-${idx}`}
-                                      className="relative h-10 w-12 shrink-0 overflow-hidden rounded border border-border"
-                                    >
-                                      <Image
-                                        src={url}
-                                        alt={`${car.title ?? "Listing"} image ${idx + 1}`}
-                                        fill
-                                        className="object-cover"
-                                        sizes="48px"
-                                      />
-                                    </div>
-                                  ),
-                                )
-                              ) : (
-                                <span className="text-[11px] text-gray-500">
-                                  No photos uploaded.
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <ProfileAvatar
-                            src={car.owner?.avatar_url}
-                            name={car.owner?.full_name ?? "Host"}
-                            className="h-8 w-8"
-                          />
-                          <div className="text-sm">
-                            {car.owner?.full_name ?? "Host"}
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        GHS {Number(car.daily_price ?? 0).toFixed(0)}
-                      </TableCell>
-                      <TableCell>
+                        ))}
+                      </div>
+                    ) : null}
+                    <div className="mt-auto space-y-2 border-t border-border/70 pt-3">
+                      <div className="flex items-center gap-2">
                         <Link
                           href={`/admin/cars/${car.id}/preview`}
                           target="_blank"
                           rel="noreferrer"
-                          className="inline-flex rounded-md border border-border px-3 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+                          className="rounded-lg border border-border px-2.5 py-1.5 text-[11px] font-semibold text-gray-700 hover:bg-gray-50"
                         >
-                          Demo preview
+                          Preview
                         </Link>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          <form action={listingReviewAction}>
-                            <input type="hidden" name="carId" value={car.id} />
-                            <input
-                              type="hidden"
-                              name="action"
-                              value="approve"
-                            />
-                            <PendingSubmitButton
-                              pendingLabel="Approving..."
-                              className="rounded-md bg-brand px-3 py-1 text-xs font-semibold text-white"
-                            >
-                              Approve
-                            </PendingSubmitButton>
-                          </form>
-                          <form
-                            action={listingReviewAction}
-                            className="flex items-center gap-2"
+                        <form action={listingReviewAction} className="ml-auto">
+                          <input type="hidden" name="carId" value={car.id} />
+                          <input type="hidden" name="action" value="approve" />
+                          <PendingSubmitButton
+                            pendingLabel="Approving..."
+                            className="rounded-lg bg-brand px-3 py-1.5 text-[11px] font-semibold text-white"
                           >
-                            <input type="hidden" name="carId" value={car.id} />
-                            <input type="hidden" name="action" value="reject" />
-                            <input
-                              name="reason"
-                              placeholder="Reason"
-                              className="hidden rounded-md border border-border px-2 py-1 text-xs sm:block"
-                            />
-                            <PendingSubmitButton
-                              pendingLabel="Rejecting..."
-                              className="rounded-md bg-red-600 px-3 py-1 text-xs font-semibold text-white"
-                            >
-                              Reject
-                            </PendingSubmitButton>
-                          </form>
-                          <form action={deleteListingAction}>
-                            <input type="hidden" name="carId" value={car.id} />
-                            <PendingSubmitButton
-                              pendingLabel="Deleting..."
-                              className="rounded-md border border-red-200 px-3 py-1 text-xs font-semibold text-red-700 hover:bg-red-50"
-                            >
-                              Delete
-                            </PendingSubmitButton>
-                          </form>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-                {(pendingListings.data ?? []).length === 0 ? (
-                  <TableRow>
-                    <TableCell
-                      colSpan={5}
-                      className="text-center text-sm text-gray-600"
-                    >
-                      No pending listings.
-                    </TableCell>
-                  </TableRow>
-                ) : null}
-              </TableBody>
-            </Table>
+                            Approve
+                          </PendingSubmitButton>
+                        </form>
+                        <form action={deleteListingAction}>
+                          <input type="hidden" name="carId" value={car.id} />
+                          <PendingSubmitButton
+                            pendingLabel="Deleting..."
+                            className="rounded-lg border border-red-200 px-2.5 py-1.5 text-[11px] font-semibold text-red-700 hover:bg-red-50"
+                          >
+                            Delete
+                          </PendingSubmitButton>
+                        </form>
+                      </div>
+                      <form
+                        action={listingReviewAction}
+                        className="flex items-center gap-2"
+                      >
+                        <input type="hidden" name="carId" value={car.id} />
+                        <input type="hidden" name="action" value="reject" />
+                        <input
+                          name="reason"
+                          placeholder="Reason for rejection"
+                          className="min-w-0 flex-1 rounded-lg border border-border px-2.5 py-1.5 text-xs"
+                        />
+                        <PendingSubmitButton
+                          pendingLabel="Rejecting..."
+                          className="rounded-lg bg-red-600 px-3 py-1.5 text-[11px] font-semibold text-white"
+                        >
+                          Reject
+                        </PendingSubmitButton>
+                      </form>
+                    </div>
+                  </div>
+                </article>
+              );
+            })}
           </div>
+          {visibleListings.length === 0 ? (
+            <p className="rounded-xl border border-border bg-white p-6 text-center text-sm text-gray-600">
+              {query
+                ? "No pending listings match your search."
+                : "No pending listings."}
+            </p>
+          ) : null}
         </CardContent>
       </Card>
       ) : null}
@@ -1206,7 +1258,7 @@ export default async function AdminPlatformPage({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {(refundableBookings.data ?? []).map((booking: any) => (
+                {visibleBookings.map((booking: any) => (
                   <TableRow key={booking.id}>
                     <TableCell>
                       <p className="font-mono text-xs">
@@ -1245,7 +1297,7 @@ export default async function AdminPlatformPage({
                     </TableCell>
                   </TableRow>
                 ))}
-                {(refundableBookings.data ?? []).length === 0 ? (
+                {visibleBookings.length === 0 ? (
                   <TableRow>
                     <TableCell
                       colSpan={4}
@@ -1279,7 +1331,7 @@ export default async function AdminPlatformPage({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {(reviews.data ?? []).map((review: any) => (
+                {visibleReviews.map((review: any) => (
                   <TableRow key={review.id}>
                     <TableCell>
                       <p className="font-semibold">
@@ -1328,7 +1380,7 @@ export default async function AdminPlatformPage({
                     </TableCell>
                   </TableRow>
                 ))}
-                {(reviews.data ?? []).length === 0 ? (
+                {visibleReviews.length === 0 ? (
                   <TableRow>
                     <TableCell
                       colSpan={4}
@@ -1363,7 +1415,7 @@ export default async function AdminPlatformPage({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {(disputes.data ?? []).map((dispute: any) => (
+                {visibleDisputes.map((dispute: any) => (
                   <TableRow key={dispute.id}>
                     <TableCell className="font-mono text-xs">
                       {dispute.booking_id.slice(0, 8)}
@@ -1407,7 +1459,7 @@ export default async function AdminPlatformPage({
                     </TableCell>
                   </TableRow>
                 ))}
-                {(disputes.data ?? []).length === 0 ? (
+                {visibleDisputes.length === 0 ? (
                   <TableRow>
                     <TableCell
                       colSpan={5}
