@@ -1568,19 +1568,43 @@ class AppViewModel(
         }
     }
 
-    fun saveAvailabilityWindow(carId: String, startDate: String, endDate: String, available: Boolean) {
+    fun saveAvailabilityWindow(
+        carId: String,
+        startDate: String,
+        endDate: String,
+        available: Boolean,
+        onDone: (Boolean) -> Unit = {},
+    ) {
         viewModelScope.launch {
             runCatching { carsRepository.saveAvailabilityWindow(carId, startDate, endDate, available) }
-                .onSuccess { _snackbar.value = "Availability window saved." }
-                .onFailure { _snackbar.value = it.readableMessage("Unable to save availability window") }
+                .onSuccess {
+                    _snackbar.value = if (available) "Those days are open for bookings again." else "Dates blocked."
+                    onDone(true)
+                }
+                .onFailure {
+                    _snackbar.value = it.readableMessage("Unable to save availability window")
+                    onDone(false)
+                }
         }
     }
 
-    fun saveAvailabilityRecurring(carId: String, startDate: String, endDate: String, repeatDays: List<String>) {
+    fun saveAvailabilityRecurring(
+        carId: String,
+        startDate: String,
+        endDate: String,
+        repeatDays: List<String>,
+        onDone: (Boolean) -> Unit = {},
+    ) {
         viewModelScope.launch {
             runCatching { carsRepository.saveAvailabilityRecurring(carId, startDate, endDate, repeatDays) }
-                .onSuccess { _snackbar.value = "Recurring availability saved." }
-                .onFailure { _snackbar.value = it.readableMessage("Unable to save recurring availability") }
+                .onSuccess {
+                    _snackbar.value = "Weekly days off saved."
+                    onDone(true)
+                }
+                .onFailure {
+                    _snackbar.value = it.readableMessage("Unable to save recurring availability")
+                    onDone(false)
+                }
         }
     }
 

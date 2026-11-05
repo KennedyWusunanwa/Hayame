@@ -98,6 +98,24 @@ export const fuelTypes = ["petrol", "diesel", "electric", "lpg", "hybrid"];
 
 export const fallbackCities = ghanaLocationOptions;
 
+/**
+ * Maps free-form feature labels onto the canonical `featureOptions` entries
+ * (case- and whitespace-insensitive), dropping anything unknown and any
+ * duplicates. Used by the listing schema so clients can send labels loosely.
+ */
+export function normalizeFeatures(values: unknown[]): string[] {
+  const byKey = new Map(
+    featureOptions.map((option) => [option.trim().toLowerCase(), option]),
+  );
+  const result: string[] = [];
+  for (const value of values) {
+    if (typeof value !== "string") continue;
+    const match = byKey.get(value.trim().toLowerCase());
+    if (match && !result.includes(match)) result.push(match);
+  }
+  return result;
+}
+
 export const featureOptions = [
   "Air Conditioning",
   "Airbags",
