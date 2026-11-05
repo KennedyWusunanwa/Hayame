@@ -177,6 +177,7 @@ fun BookingScreen(
     val bookingDraft by viewModel.bookingDraft.collectAsState()
     val isAuthenticated by viewModel.isAuthenticated.collectAsState()
     val me by viewModel.me.collectAsState()
+    val platformFeePercent by viewModel.platformFeePercent.collectAsState()
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
 
@@ -415,9 +416,9 @@ fun BookingScreen(
             val outsideSurcharge = if (outsideListingRegion) outsideRegionFee else 0
             val nights = max(1, ChronoUnit.DAYS.between(startDate, endDate).toInt())
             val subtotal = pricePerDay * nights
-            // 10% service fee — mirrors the server total (NEXT_PUBLIC_PLATFORM_FEE_PERCENT).
+            // Service fee at the platform fee the admin set (sent with every car list).
             // The server is authoritative; this keeps the displayed total honest.
-            val platformFee = (subtotal * 0.10).roundToInt()
+            val platformFee = (subtotal * platformFeePercent / 100).roundToInt()
             val totalAmount = subtotal + platformFee + insuranceFee + deliveryFee + outsideSurcharge + depositAmount
             val locationHelperText = if (outsideListingRegion) {
                 if (outsideRegionFee > 0) "Outside listing region (+GHS $outsideRegionFee)" else "Outside listing region"

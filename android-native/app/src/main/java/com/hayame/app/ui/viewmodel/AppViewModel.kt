@@ -7,6 +7,7 @@ import com.hayame.app.core.network.AvailabilityEnvelope
 import com.hayame.app.core.network.AppAnnouncementDto
 import com.hayame.app.core.network.BookingDto
 import com.hayame.app.core.network.CarDto
+import com.hayame.app.core.network.CarsMetaDto
 import com.hayame.app.core.network.CarPhotoItemDto
 import com.hayame.app.core.network.ConversationDto
 import com.hayame.app.core.network.HostApplicationRequest
@@ -163,6 +164,12 @@ class AppViewModel(
 
     private val _myCarsState = MutableStateFlow<UiState<List<CarDto>>>(UiState.Idle)
     val myCarsState: StateFlow<UiState<List<CarDto>>> = _myCarsState.asStateFlow()
+
+    // Platform fee the server charges on top of the daily rate (percent). Set
+    // in the admin and sent with every car list, so price previews match the
+    // amount the server will actually charge.
+    private val _platformFeePercent = MutableStateFlow(10.0)
+    val platformFeePercent: StateFlow<Double> = _platformFeePercent.asStateFlow()
 
     private val _carPhotosState = MutableStateFlow<UiState<List<CarPhotoItemDto>>>(UiState.Idle)
     val carPhotosState: StateFlow<UiState<List<CarPhotoItemDto>>> = _carPhotosState.asStateFlow()
@@ -568,6 +575,7 @@ class AppViewModel(
             }
             runCatching { carsRepository.getCars(params) }
                 .onSuccess { envelope ->
+                    applyPlatformFee(envelope.meta)
                     if (requestVersion == carsRequestVersion) {
                         _carsState.value = if (envelope.data.isEmpty()) UiState.Empty else UiState.Success(envelope.data)
                     }
@@ -1439,13 +1447,22 @@ class AppViewModel(
         }
     }
 
+    private fun applyPlatformFee(meta: CarsMetaDto?) {
+        val value = meta?.platform_fee_percent ?: return
+        if (value.isFinite() && value >= 0.0 && value <= 100.0) {
+            _platformFeePercent.value = value
+        }
+    }
+
     fun loadMyCars() {
         viewModelScope.launch {
             if (_myCarsState.value !is UiState.Success && _myCarsState.value !is UiState.Empty) {
                 _myCarsState.value = UiState.Loading
             }
-            runCatching { carsRepository.getMyCars().data }
-                .onSuccess { list ->
+            runCatching { carsRepository.getMyCars() }
+                .onSuccess { envelope ->
+                    applyPlatformFee(envelope.meta)
+                    val list = envelope.data
                     _myCarsState.value = if (list.isEmpty()) UiState.Empty else UiState.Success(list)
                 }
                 .onFailure { _myCarsState.value = UiState.Error(it.readableMessage("Unable to load your listings")) }

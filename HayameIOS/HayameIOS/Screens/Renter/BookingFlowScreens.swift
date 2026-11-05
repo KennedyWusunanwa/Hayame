@@ -195,10 +195,10 @@ struct BookingSheet: View {
         max(car.insuranceFee, 0)
     }
 
-    // 10% service fee — mirrors the server total (NEXT_PUBLIC_PLATFORM_FEE_PERCENT).
+    // Service fee at the platform fee the admin set (sent with every car list).
     // The server is authoritative; this keeps the displayed total honest.
     private var platformFee: Int {
-        Int(Double(subtotal) * 0.10)
+        appState.platformFee(forSubtotal: subtotal)
     }
 
     /// The mode that will actually be booked: a pickup-only listing is always
