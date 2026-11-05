@@ -178,6 +178,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
@@ -368,6 +369,51 @@ private fun HostFlatButton(
             Spacer(modifier = Modifier.width(8.dp))
         }
         Text(text, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+/** Search field for the host's own listings, in the inbox field's style. */
+@Composable
+private fun HostSearchField(query: String, onQueryChange: (String) -> Unit, placeholder: String, modifier: Modifier = Modifier) {
+    val colors = LocalHayameColors.current
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(colors.fieldBackground)
+            .border(1.dp, colors.border, RoundedCornerShape(16.dp))
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Icon(Icons.Outlined.Search, contentDescription = null, tint = colors.mutedText, modifier = Modifier.size(18.dp))
+        BasicTextField(
+            value = query,
+            onValueChange = onQueryChange,
+            modifier = Modifier.weight(1f),
+            singleLine = true,
+            textStyle = MaterialTheme.typography.bodyLarge.copy(color = colors.brandNavy),
+            cursorBrush = SolidColor(colors.brandBlue),
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+            decorationBox = { innerField ->
+                Box {
+                    if (query.isEmpty()) {
+                        Text(placeholder, style = MaterialTheme.typography.bodyLarge, color = colors.mutedText)
+                    }
+                    innerField()
+                }
+            },
+        )
+        AnimatedVisibility(visible = query.isNotEmpty(), enter = fadeIn(), exit = fadeOut()) {
+            Icon(
+                Icons.Outlined.Close,
+                contentDescription = "Clear search",
+                tint = colors.mutedText,
+                modifier = Modifier
+                    .size(18.dp)
+                    .clickable { onQueryChange("") },
+            )
+        }
     }
 }
 
@@ -573,10 +619,36 @@ fun HostCarsScreen(
     val state by viewModel.myCarsState.collectAsState()
     val colors = LocalHayameColors.current
     var deleteTarget by remember { mutableStateOf<CarDto?>(null) }
+    var search by rememberSaveable { mutableStateOf("") }
 
     LaunchedEffect(Unit) { viewModel.loadMyCars() }
 
     val cars = (state as? UiState.Success<List<CarDto>>)?.data.orEmpty()
+    val query = search.trim().lowercase()
+    // Every word of the search has to match somewhere: title, make, model,
+    // year, place or live/pending status.
+    val filteredCars = remember(cars, query) {
+        if (query.isBlank()) {
+            cars
+        } else {
+            val tokens = query.split(" ").filter { it.isNotBlank() }
+            cars.filter { car ->
+                val status = if (car.approval_status.equals("approved", ignoreCase = true)) "live approved" else "pending in review"
+                val haystack = listOfNotNull(
+                    hostListingTitle(car),
+                    car.brand,
+                    car.model,
+                    car.car_year?.roundToInt()?.toString(),
+                    car.year?.roundToInt()?.toString(),
+                    car.city,
+                    car.region,
+                    car.car_type,
+                    status,
+                ).joinToString(" ").lowercase()
+                tokens.all { haystack.contains(it) }
+            }
+        }
+    }
     val liveCount = cars.count { it.approval_status.equals("approved", ignoreCase = true) }
     val isLoading = state is UiState.Loading || state is UiState.Idle
     val subtitle = when {
@@ -605,6 +677,13 @@ fun HostCarsScreen(
                 item(key = "cars-add") {
                     StaggeredAppear(index = 1) {
                         HostFlatButton(text = "Add listing", icon = Icons.Outlined.Add, modifier = Modifier.fillMaxWidth().coachTarget("hostCars.add"), onClick = onCreate)
+                    }
+                }
+                if (!isLoading && cars.isNotEmpty()) {
+                    item(key = "cars-search") {
+                        StaggeredAppear(index = 2) {
+                            HostSearchField(query = search, onQueryChange = { search = it }, placeholder = "Search your cars")
+                        }
                     }
                 }
                 when (val s = state) {
@@ -638,16 +717,28 @@ fun HostCarsScreen(
                                     )
                                 }
                             }
+                        } else if (filteredCars.isEmpty()) {
+                            item(key = "cars-no-match") {
+                                StaggeredAppear(index = 3) {
+                                    HostEmptyState(
+                                        icon = Icons.Outlined.Search,
+                                        title = "No cars match",
+                                        message = "Nothing in your listings matches “${search.trim()}”. Try the make, model or city.",
+                                        actionTitle = "Clear search",
+                                        onAction = { search = "" },
+                                    )
+                                }
+                            }
                         } else {
                             item(key = "cars-title") {
-                                StaggeredAppear(index = 2) {
+                                StaggeredAppear(index = 3) {
                                     Text("Your listings", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = colors.brandNavy, modifier = Modifier.padding(top = 4.dp))
                                 }
                             }
-                            items(cars, key = { it.id }) { car ->
+                            items(filteredCars, key = { it.id }) { car ->
                                 StaggeredAppear(
-                                    index = cars.indexOf(car) + 3,
-                                    modifier = if (car.id == cars.first().id) Modifier.coachTarget("hostCars.row") else Modifier,
+                                    index = filteredCars.indexOf(car) + 4,
+                                    modifier = if (car.id == filteredCars.first().id) Modifier.coachTarget("hostCars.row") else Modifier,
                                 ) {
                                     HostListingRow(
                                         car = car,

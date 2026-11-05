@@ -1,5 +1,42 @@
 package com.hayame.app.ui.screens
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Autorenew
+import androidx.compose.material.icons.outlined.Block
+import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.DeleteOutline
+import androidx.compose.material.icons.outlined.DirectionsCar
+import androidx.compose.material.icons.outlined.EventBusy
+import androidx.compose.material.icons.outlined.ExpandMore
+import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.LockOpen
+import androidx.compose.material.icons.outlined.PhotoLibrary
+import androidx.compose.material.icons.outlined.Speed
+import androidx.compose.material.icons.outlined.VisibilityOff
+import androidx.compose.material.icons.outlined.Weekend
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.sp
+import com.hayame.app.ui.components.HayameShimmerBlock
+import java.time.LocalDate
+import java.time.YearMonth
+import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
+import java.util.Locale
 import com.hayame.app.ui.components.HayameRefreshBox
 import android.content.Context
 import android.content.Intent
@@ -565,9 +602,33 @@ fun HostFavoritesScreen(viewModel: AppViewModel, onBack: () -> Unit) {
 fun HostListingPhotosScreen(viewModel: AppViewModel, carId: String, onBack: () -> Unit) {
     val photosState by viewModel.carPhotosState.collectAsState()
     val photosLimit by viewModel.carPhotosLimit.collectAsState()
+    val myCarsState by viewModel.myCarsState.collectAsState()
     val context = LocalContext.current
+    val colors = LocalHayameColors.current
 
     var replacePhotoId by remember { mutableStateOf<String?>(null) }
+    var deleteTarget by remember { mutableStateOf<CarPhotoItemDto?>(null) }
+    // The last loaded list stays on screen while the server reloads after an
+    // upload or delete, so the grid never flashes back to a skeleton.
+    var photos by remember { mutableStateOf<List<CarPhotoItemDto>>(emptyList()) }
+
+    LaunchedEffect(photosState) {
+        when (val state = photosState) {
+            is UiState.Success -> photos = state.data
+            UiState.Empty -> photos = emptyList()
+            else -> Unit
+        }
+    }
+
+    val carTitle = remember(myCarsState, carId) {
+        (myCarsState as? UiState.Success<List<CarDto>>)?.data
+            ?.firstOrNull { it.id == carId }
+            ?.let(::parityListingTitle)
+            ?: "Listing"
+    }
+    val isLoading = photos.isEmpty() && (photosState is UiState.Loading || photosState is UiState.Idle)
+    val isBusy = photosState is UiState.Loading && photos.isNotEmpty()
+    val remainingSlots = (photosLimit - photos.size).coerceAtLeast(0)
 
     val pickImage = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         val pickedUri = uri ?: return@rememberLauncherForActivityResult
@@ -575,94 +636,512 @@ fun HostListingPhotosScreen(viewModel: AppViewModel, carId: String, onBack: () -
         viewModel.uploadCarPhoto(carId = carId, file = file, replacePhotoId = replacePhotoId)
         replacePhotoId = null
     }
+    val pickImages = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
+        uris.take(remainingSlots).forEach { uri ->
+            val file = copyUriToTempFileCompat(context, uri, "car-photo") ?: return@forEach
+            viewModel.uploadCarPhoto(carId = carId, file = file, replacePhotoId = null)
+        }
+    }
 
     LaunchedEffect(carId) {
         viewModel.loadCarPhotos(carId)
     }
 
-    val photos = (photosState as? UiState.Success<List<CarPhotoItemDto>>)?.data.orEmpty()
-
     Scaffold(
-        containerColor = LocalHayameColors.current.pageBackground,
-        topBar = { ParityTopBar(title = "Listing Photos", onBack = onBack) },
+        containerColor = colors.pageBackground,
+        topBar = {
+            HostToolHeader(
+                title = "Photos",
+                subtitle = if (isLoading) "Loading photos..." else "$carTitle · ${photos.size} of $photosLimit",
+                isBusy = isBusy,
+                busyText = "Updating",
+                onBack = onBack,
+            )
+        },
     ) { inner ->
         HayameRefreshBox(
             onRefresh = { viewModel.loadCarPhotos(carId) },
             modifier = Modifier.fillMaxSize(),
             indicatorTopPadding = inner.calculateTopPadding(),
         ) {
-        LazyColumn(
+            LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(inner)
                     .padding(horizontal = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                contentPadding = PaddingValues(vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                contentPadding = PaddingValues(top = 8.dp, bottom = 32.dp),
             ) {
-                item {
-                    Card(shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = LocalHayameColors.current.cardBackground)) {
-                        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text("Photos", color = LocalHayameColors.current.mutedText)
-                            Text("${photos.size} / $photosLimit", color = LocalHayameColors.current.brandNavy, fontWeight = FontWeight.Bold)
-                            Text("Maximum $photosLimit photos, up to 4MB each.", color = LocalHayameColors.current.mutedText)
+                item(key = "photos-grid") {
+                    StaggeredAppear(index = 0) {
+                        val state = photosState
+                        when {
+                            isLoading -> HostPhotoSkeletonGrid()
+                            state is UiState.Error -> ErrorBlock(state.message, onRetry = { viewModel.loadCarPhotos(carId) })
+                            photos.isEmpty() -> HostToolEmptyState(
+                                icon = Icons.Outlined.PhotoLibrary,
+                                title = "No photos yet",
+                                message = "Listings with five or more clear photos get approved faster and booked more often.",
+                            )
+                            else -> HostPhotoGrid(
+                                photos = photos,
+                                enabled = !isBusy,
+                                onReplace = { photo ->
+                                    replacePhotoId = photo.id
+                                    pickImage.launch("image/*")
+                                },
+                                onDelete = { photo -> deleteTarget = photo },
+                            )
                         }
                     }
                 }
+                item(key = "photos-add") {
+                    StaggeredAppear(index = 1) {
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            HostToolPrimaryButton(
+                                text = if (remainingSlots == 0) "Photo limit reached" else "Add photos",
+                                icon = Icons.Outlined.Add,
+                                trailingIcon = Icons.Outlined.PhotoLibrary,
+                                enabled = remainingSlots > 0 && !isBusy,
+                                onClick = {
+                                    replacePhotoId = null
+                                    pickImages.launch("image/*")
+                                },
+                            )
+                            Text(
+                                "Up to $photosLimit photos, 4MB each. The first photo is the cover.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = colors.mutedText,
+                            )
+                        }
+                    }
+                }
+                item(key = "photos-tips") {
+                    StaggeredAppear(index = 2) {
+                        HostToolCard {
+                            Text("Photos that get booked", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = colors.brandNavy)
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                HostTipLine(Icons.Outlined.DirectionsCar, "A front three-quarter view in daylight as the cover.")
+                                HostTipLine(Icons.Outlined.Weekend, "A clean interior: front seats, back seats and boot.")
+                                HostTipLine(Icons.Outlined.Speed, "The dashboard with the mileage showing.")
+                                HostTipLine(Icons.Outlined.VisibilityOff, "Keep number plates and people out of frame.")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 
-                when (val state = photosState) {
-                    UiState.Loading -> item { LoadingBlock("Loading photos...") }
-                    is UiState.Error -> item { ErrorBlock(state.message, onRetry = { viewModel.loadCarPhotos(carId) }) }
-                    UiState.Empty -> item { EmptyBlock("No photos uploaded", "Upload high-quality exterior and interior angles.") }
-                    is UiState.Success -> {
-                        items(photos, key = { it.id }) { photo ->
-                            Card(shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = LocalHayameColors.current.cardBackground)) {
-                                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                    val resolved = resolveParityImage(photo.url)
-                                    if (!resolved.isNullOrBlank()) {
-                                        AsyncImage(
-                                            model = resolved,
-                                            contentDescription = null,
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .height(180.dp)
-                                                .clip(RoundedCornerShape(12.dp)),
-                                            contentScale = ContentScale.Crop,
+    deleteTarget?.let { photo ->
+        AlertDialog(
+            onDismissRequest = { deleteTarget = null },
+            containerColor = colors.cardBackground,
+            title = { Text("Delete this photo?", color = colors.brandNavy, fontWeight = FontWeight.Bold) },
+            text = { Text("Guests will no longer see it on the listing.", color = colors.mutedText) },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.deleteCarPhoto(carId = carId, photoId = photo.id)
+                    deleteTarget = null
+                }) {
+                    Text("Delete", color = colors.danger, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { deleteTarget = null }) {
+                    Text("Keep it", color = colors.brandBlue, fontWeight = FontWeight.Bold)
+                }
+            },
+        )
+    }
+}
+
+@Composable
+private fun HostPhotoGrid(
+    photos: List<CarPhotoItemDto>,
+    enabled: Boolean,
+    onReplace: (CarPhotoItemDto) -> Unit,
+    onDelete: (CarPhotoItemDto) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        photos.chunked(2).forEachIndexed { rowIndex, row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                row.forEachIndexed { columnIndex, photo ->
+                    HostPhotoTile(
+                        photo = photo,
+                        isCover = rowIndex == 0 && columnIndex == 0,
+                        enabled = enabled,
+                        onReplace = { onReplace(photo) },
+                        onDelete = { onDelete(photo) },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                if (row.size == 1) {
+                    Spacer(modifier = Modifier.weight(1f))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HostPhotoSkeletonGrid() {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        repeat(2) {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                repeat(2) {
+                    HayameShimmerBlock(modifier = Modifier.weight(1f).aspectRatio(4f / 3f), cornerRadius = 18.dp)
+                }
+            }
+        }
+    }
+}
+
+/** One listing photo: cover pill, replace and delete discs over the picture. */
+@Composable
+private fun HostPhotoTile(
+    photo: CarPhotoItemDto,
+    isCover: Boolean,
+    enabled: Boolean,
+    onReplace: () -> Unit,
+    onDelete: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = LocalHayameColors.current
+    Box(
+        modifier = modifier
+            .aspectRatio(4f / 3f)
+            .clip(RoundedCornerShape(18.dp))
+            .background(colors.brandLight)
+            .border(1.dp, colors.border, RoundedCornerShape(18.dp)),
+    ) {
+        val resolved = resolveParityImage(photo.url)
+        if (!resolved.isNullOrBlank()) {
+            AsyncImage(
+                model = resolved,
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop,
+            )
+        } else {
+            Icon(
+                Icons.Outlined.DirectionsCar,
+                contentDescription = null,
+                tint = colors.brandBlue,
+                modifier = Modifier.align(Alignment.Center).size(28.dp),
+            )
+        }
+        if (isCover) {
+            Surface(shape = CircleShape, color = colors.brandBlue, modifier = Modifier.align(Alignment.TopStart).padding(8.dp)) {
+                Text(
+                    "Cover",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                )
+            }
+        }
+        Row(
+            modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            HostPhotoDisc(icon = Icons.Outlined.Autorenew, contentDescription = "Replace photo", enabled = enabled, onClick = onReplace)
+            HostPhotoDisc(icon = Icons.Outlined.DeleteOutline, contentDescription = "Delete photo", enabled = enabled, onClick = onDelete, tint = colors.danger)
+        }
+    }
+}
+
+@Composable
+private fun HostPhotoDisc(
+    icon: ImageVector,
+    contentDescription: String,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    tint: Color = Color.White,
+) {
+    Surface(
+        onClick = onClick,
+        enabled = enabled,
+        shape = CircleShape,
+        color = Color.Black.copy(alpha = 0.5f),
+        modifier = Modifier.size(30.dp),
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Icon(icon, contentDescription = contentDescription, tint = tint, modifier = Modifier.size(15.dp))
+        }
+    }
+}
+
+@Composable
+fun HostAvailabilityEditorScreen(viewModel: AppViewModel, carId: String, onBack: () -> Unit) {
+    val colors = LocalHayameColors.current
+    val myCarsState by viewModel.myCarsState.collectAsState()
+    val carTitle = remember(myCarsState, carId) {
+        (myCarsState as? UiState.Success<List<CarDto>>)?.data
+            ?.firstOrNull { it.id == carId }
+            ?.let(::parityListingTitle)
+            ?: "Listing"
+    }
+
+    val today = remember { LocalDate.now() }
+    val maxMonths = 6
+    val recurringHorizonDays = 90
+    val weekdays = remember {
+        listOf("mon" to "Mon", "tue" to "Tue", "wed" to "Wed", "thu" to "Thu", "fri" to "Fri", "sat" to "Sat", "sun" to "Sun")
+    }
+    val dayFormatter = remember { DateTimeFormatter.ofPattern("EEE d MMM", Locale.US) }
+
+    // Days guests cannot book: manual blocks plus confirmed trips.
+    var unavailableDays by remember { mutableStateOf<Set<LocalDate>>(emptySet()) }
+    var isLoadingCalendar by remember { mutableStateOf(false) }
+    var loadError by remember { mutableStateOf<String?>(null) }
+    var rangeStart by remember { mutableStateOf<LocalDate?>(null) }
+    var rangeEnd by remember { mutableStateOf<LocalDate?>(null) }
+    var markAvailable by rememberSaveable { mutableStateOf(false) }
+    var repeatDays by remember { mutableStateOf(setOf<String>()) }
+    var isSaving by remember { mutableStateOf(false) }
+    var visibleMonths by rememberSaveable { mutableIntStateOf(2) }
+
+    fun loadCalendar() {
+        if (isLoadingCalendar) return
+        isLoadingCalendar = true
+        loadError = null
+        viewModel.loadAvailabilitySnapshot(
+            carId = carId,
+            startDate = today.toString(),
+            endDate = today.plusDays((maxMonths * 31).toLong()).toString(),
+        ) { envelope, error ->
+            isLoadingCalendar = false
+            if (error != null) {
+                loadError = error
+                return@loadAvailabilitySnapshot
+            }
+            unavailableDays = envelope?.blockedDates.orEmpty()
+                .mapNotNull { raw -> runCatching { LocalDate.parse(raw.take(10)) }.getOrNull() }
+                .toSet()
+        }
+    }
+
+    fun selectDay(day: LocalDate) {
+        if (day.isBefore(today)) return
+        val start = rangeStart
+        if (start != null && rangeEnd == null) {
+            if (day.isBefore(start)) rangeStart = day else rangeEnd = day
+        } else {
+            rangeStart = day
+            rangeEnd = null
+        }
+    }
+
+    fun saveRange() {
+        val start = rangeStart ?: return
+        if (isSaving) return
+        val end = rangeEnd ?: start
+        isSaving = true
+        viewModel.saveAvailabilityWindow(
+            carId = carId,
+            startDate = start.toString(),
+            // The server treats the end date as exclusive, so the last tapped
+            // day is pushed one day out to include it.
+            endDate = end.plusDays(1).toString(),
+            available = markAvailable,
+        ) { saved ->
+            isSaving = false
+            if (saved) {
+                rangeStart = null
+                rangeEnd = null
+                loadCalendar()
+            }
+        }
+    }
+
+    fun saveRecurring() {
+        if (isSaving || repeatDays.isEmpty()) return
+        isSaving = true
+        viewModel.saveAvailabilityRecurring(
+            carId = carId,
+            startDate = today.toString(),
+            endDate = today.plusDays(recurringHorizonDays.toLong()).toString(),
+            repeatDays = repeatDays.toList(),
+        ) { saved ->
+            isSaving = false
+            if (saved) loadCalendar()
+        }
+    }
+
+    LaunchedEffect(carId) { loadCalendar() }
+
+    val start = rangeStart
+    val end = rangeEnd
+    val selectedDayCount = if (start == null) 0 else ChronoUnit.DAYS.between(start, end ?: start).toInt() + 1
+    val unavailableSoon = unavailableDays.count { !it.isBefore(today) && it.isBefore(today.plusDays(90)) }
+    val selectionLabel = when {
+        start == null -> "Tap a day on the calendar to start"
+        end == null -> "${start.format(dayFormatter)} · now tap the last day"
+        start == end -> "${start.format(dayFormatter)} · 1 day"
+        else -> "${start.format(dayFormatter)} to ${end.format(dayFormatter)} · $selectedDayCount days"
+    }
+
+    Scaffold(
+        containerColor = colors.pageBackground,
+        topBar = {
+            HostToolHeader(
+                title = "Availability",
+                subtitle = if (isLoadingCalendar && unavailableDays.isEmpty()) "Loading calendar..." else carTitle,
+                isBusy = isSaving,
+                onBack = onBack,
+            )
+        },
+    ) { inner ->
+        HayameRefreshBox(
+            onRefresh = { loadCalendar() },
+            modifier = Modifier.fillMaxSize(),
+            indicatorTopPadding = inner.calculateTopPadding(),
+        ) {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(inner)
+                    .padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                contentPadding = PaddingValues(top = 8.dp, bottom = 32.dp),
+            ) {
+                item(key = "availability-stats") {
+                    StaggeredAppear(index = 0) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            HostToolStat(
+                                value = "$unavailableSoon",
+                                label = if (unavailableSoon == 1) "day unavailable" else "days unavailable",
+                                hint = "Next 90 days, incl. trips",
+                                tint = colors.warning,
+                                modifier = Modifier.weight(1f),
+                            )
+                            HostToolStat(
+                                value = "${(90 - unavailableSoon).coerceAtLeast(0)}",
+                                label = "days open",
+                                hint = "Next 90 days",
+                                tint = colors.success,
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                    }
+                }
+                item(key = "availability-calendar") {
+                    StaggeredAppear(index = 1) {
+                        HostToolCard {
+                            Text("Block or open dates", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = colors.brandNavy)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text("Tap the first and last day. Booked or blocked days are shaded.", style = MaterialTheme.typography.bodyMedium, color = colors.mutedText)
+                            Spacer(modifier = Modifier.height(16.dp))
+
+                            val error = loadError
+                            when {
+                                isLoadingCalendar && unavailableDays.isEmpty() -> {
+                                    HayameShimmerBlock(modifier = Modifier.size(width = 140.dp, height = 16.dp), cornerRadius = 6.dp)
+                                    Spacer(modifier = Modifier.height(10.dp))
+                                    HayameShimmerBlock(modifier = Modifier.fillMaxWidth().height(220.dp), cornerRadius = 16.dp)
+                                }
+                                error != null && unavailableDays.isEmpty() -> ErrorBlock(error, onRetry = { loadCalendar() })
+                                else -> {
+                                    repeat(visibleMonths) { offset ->
+                                        HostCalendarMonthView(
+                                            month = YearMonth.from(today).plusMonths(offset.toLong()),
+                                            today = today,
+                                            unavailableDays = unavailableDays,
+                                            rangeStart = rangeStart,
+                                            rangeEnd = rangeEnd,
+                                            onSelect = { selectDay(it) },
                                         )
+                                        Spacer(modifier = Modifier.height(14.dp))
                                     }
-                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                                        OutlinedButton(
-                                            onClick = {
-                                                replacePhotoId = photo.id
-                                                pickImage.launch("image/*")
-                                            },
-                                            modifier = Modifier.weight(1f),
-                                        ) {
-                                            Text("Replace")
-                                        }
-                                        OutlinedButton(
-                                            onClick = { viewModel.deleteCarPhoto(carId = carId, photoId = photo.id) },
-                                            modifier = Modifier.weight(1f),
-                                        ) {
-                                            Text("Delete", color = Color(0xFFB42334))
+                                    if (visibleMonths < maxMonths) {
+                                        HostToolChip(text = "Show more months", icon = Icons.Outlined.ExpandMore) {
+                                            visibleMonths = minOf(maxMonths, visibleMonths + 2)
                                         }
                                     }
                                 }
                             }
+
+                            HorizontalDivider(color = colors.border, modifier = Modifier.padding(vertical = 14.dp))
+
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    selectionLabel,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (start == null) colors.mutedText else colors.brandNavy,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                if (start != null) {
+                                    Text(
+                                        "Clear",
+                                        style = MaterialTheme.typography.labelLarge,
+                                        fontWeight = FontWeight.Bold,
+                                        color = colors.brandBlue,
+                                        modifier = Modifier.clickable {
+                                            rangeStart = null
+                                            rangeEnd = null
+                                        },
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                HostModeChip(text = "Block", icon = Icons.Outlined.Block, selected = !markAvailable, modifier = Modifier.weight(1f)) { markAvailable = false }
+                                HostModeChip(text = "Open up", icon = Icons.Outlined.CheckCircle, selected = markAvailable, modifier = Modifier.weight(1f)) { markAvailable = true }
+                            }
+                            Spacer(modifier = Modifier.height(12.dp))
+                            HostToolPrimaryButton(
+                                text = if (markAvailable) "Open these days" else "Block these days",
+                                icon = if (markAvailable) Icons.Outlined.LockOpen else Icons.Outlined.Lock,
+                                enabled = start != null && !isSaving,
+                                loading = isSaving,
+                                onClick = { saveRange() },
+                            )
                         }
                     }
-                    UiState.Idle -> item { LoadingBlock("Loading photos...") }
                 }
-
-                item {
-                    Button(
-                        onClick = {
-                            replacePhotoId = null
-                            pickImage.launch("image/*")
-                        },
-                        enabled = photos.size < photosLimit,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text(if (photos.size >= photosLimit) "Photo limit reached" else "Add photo")
+                item(key = "availability-weekly") {
+                    StaggeredAppear(index = 2) {
+                        HostToolCard {
+                            Text("Weekly days off", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = colors.brandNavy)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                "Blocks the chosen weekdays for the next $recurringHorizonDays days, for example every Sunday.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = colors.mutedText,
+                            )
+                            Spacer(modifier = Modifier.height(14.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                weekdays.forEach { (key, label) ->
+                                    val selected = key in repeatDays
+                                    Surface(
+                                        onClick = { repeatDays = if (selected) repeatDays - key else repeatDays + key },
+                                        shape = RoundedCornerShape(12.dp),
+                                        color = if (selected) colors.brandBlue else colors.fieldBackground,
+                                        modifier = Modifier.weight(1f).height(38.dp),
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Text(
+                                                label,
+                                                style = MaterialTheme.typography.labelMedium,
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (selected) Color.White else colors.brandNavy,
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(14.dp))
+                            HostToolSecondaryButton(
+                                text = "Save weekly days off",
+                                icon = Icons.Outlined.EventBusy,
+                                enabled = repeatDays.isNotEmpty() && !isSaving,
+                                onClick = { saveRecurring() },
+                            )
+                        }
                     }
                 }
             }
@@ -670,86 +1149,334 @@ fun HostListingPhotosScreen(viewModel: AppViewModel, carId: String, onBack: () -
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+/** One month of the host calendar: unavailable days shaded amber, the picked range blue, today ringed. */
 @Composable
-fun HostAvailabilityEditorScreen(viewModel: AppViewModel, carId: String, onBack: () -> Unit) {
-    var startDate by rememberSaveable { mutableStateOf(java.time.LocalDate.now().toString()) }
-    var endDate by rememberSaveable { mutableStateOf(java.time.LocalDate.now().plusDays(1).toString()) }
-    var markAvailable by rememberSaveable { mutableStateOf(false) }
-    var selectedDays by remember { mutableStateOf(setOf<String>()) }
+private fun HostCalendarMonthView(
+    month: YearMonth,
+    today: LocalDate,
+    unavailableDays: Set<LocalDate>,
+    rangeStart: LocalDate?,
+    rangeEnd: LocalDate?,
+    onSelect: (LocalDate) -> Unit,
+) {
+    val colors = LocalHayameColors.current
+    val title = remember(month) { month.format(DateTimeFormatter.ofPattern("MMMM yyyy", Locale.US)) }
+    val cells: List<LocalDate?> = remember(month) {
+        val leading = month.atDay(1).dayOfWeek.value % 7 // Sunday-first grid
+        List(leading) { null } + (1..month.lengthOfMonth()).map { month.atDay(it) }
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = colors.brandNavy)
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            listOf("Su", "Mo", "Tu", "We", "Th", "Fr", "Sa").forEach { label ->
+                Text(
+                    label,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = colors.mutedText,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+        cells.chunked(7).forEach { week ->
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                week.forEach { day ->
+                    if (day == null) {
+                        Spacer(modifier = Modifier.weight(1f).height(40.dp))
+                    } else {
+                        HostCalendarDay(
+                            day = day,
+                            today = today,
+                            isUnavailable = day in unavailableDays,
+                            rangeStart = rangeStart,
+                            rangeEnd = rangeEnd,
+                            onSelect = onSelect,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
+                repeat(7 - week.size) {
+                    Spacer(modifier = Modifier.weight(1f).height(40.dp))
+                }
+            }
+        }
+    }
+}
 
-    val weekdays = remember {
-        listOf(
-            "mon" to "Mon",
-            "tue" to "Tue",
-            "wed" to "Wed",
-            "thu" to "Thu",
-            "fri" to "Fri",
-            "sat" to "Sat",
-            "sun" to "Sun",
+@Composable
+private fun HostCalendarDay(
+    day: LocalDate,
+    today: LocalDate,
+    isUnavailable: Boolean,
+    rangeStart: LocalDate?,
+    rangeEnd: LocalDate?,
+    onSelect: (LocalDate) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = LocalHayameColors.current
+    val isPast = day.isBefore(today)
+    val isToday = day == today
+    val isEndpoint = day == rangeStart || day == rangeEnd
+    val inRange = rangeStart != null && !day.isBefore(rangeStart) && !day.isAfter(rangeEnd ?: rangeStart)
+    val background = when {
+        isEndpoint -> colors.brandBlue
+        inRange -> colors.brandBlue.copy(alpha = 0.14f)
+        isUnavailable && !isPast -> colors.warning.copy(alpha = 0.14f)
+        else -> Color.Transparent
+    }
+    val textColor = when {
+        isEndpoint -> Color.White
+        isPast -> colors.mutedText.copy(alpha = 0.45f)
+        isUnavailable -> colors.warning
+        else -> colors.brandNavy
+    }
+    Box(
+        modifier = modifier
+            .height(40.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(background)
+            .then(if (isToday && !isEndpoint) Modifier.border(1.5.dp, colors.brandBlue, RoundedCornerShape(12.dp)) else Modifier)
+            .clickable(enabled = !isPast) { onSelect(day) },
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            "${day.dayOfMonth}",
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = if (isToday || isEndpoint) FontWeight.Bold else FontWeight.SemiBold,
+            color = textColor,
         )
     }
+}
 
-    Scaffold(
-        containerColor = LocalHayameColors.current.pageBackground,
-        topBar = { ParityTopBar(title = "Availability", onBack = onBack) },
-    ) { inner ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(inner)
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            contentPadding = PaddingValues(vertical = 12.dp),
-        ) {
-            item {
-                Card(shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = LocalHayameColors.current.cardBackground)) {
-                    Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        OutlinedTextField(value = startDate, onValueChange = { startDate = it }, label = { Text("Start date (YYYY-MM-DD)") }, modifier = Modifier.fillMaxWidth())
-                        OutlinedTextField(value = endDate, onValueChange = { endDate = it }, label = { Text("End date (YYYY-MM-DD)") }, modifier = Modifier.fillMaxWidth())
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("Mark as available", modifier = Modifier.weight(1f), color = LocalHayameColors.current.brandNavy)
-                            Switch(checked = markAvailable, onCheckedChange = { markAvailable = it })
-                        }
-                        Button(
-                            onClick = { viewModel.saveAvailabilityWindow(carId, startDate, endDate, markAvailable) },
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Text("Save date range")
-                        }
-                    }
-                }
+// MARK: Host tool pieces ----------------------------------------------------------------------
+//
+// Shared by the photos and availability screens so they read like the rest of
+// the host area: flat buttons, 16dp corners, a custom header instead of the
+// Material app bar.
+
+@Composable
+private fun HostToolHeader(
+    title: String,
+    subtitle: String,
+    isBusy: Boolean = false,
+    busyText: String = "Saving",
+    onBack: () -> Unit,
+) {
+    val colors = LocalHayameColors.current
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(colors.pageBackground)
+            .statusBarsPadding()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Surface(onClick = onBack, shape = CircleShape, color = colors.fieldBackground, modifier = Modifier.size(40.dp)) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = colors.brandNavy, modifier = Modifier.size(18.dp))
             }
-
-            item {
-                Card(shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = LocalHayameColors.current.cardBackground)) {
-                    Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text("Recurring weekday blocks", color = LocalHayameColors.current.brandNavy, fontWeight = FontWeight.Bold)
-                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            weekdays.forEach { day ->
-                                val selected = selectedDays.contains(day.first)
-                                FilterChip(
-                                    selected = selected,
-                                    onClick = {
-                                        selectedDays = if (selected) selectedDays - day.first else selectedDays + day.first
-                                    },
-                                    label = { Text(day.second) },
-                                )
-                            }
-                        }
-                        OutlinedButton(
-                            onClick = { viewModel.saveAvailabilityRecurring(carId, startDate, endDate, selectedDays.toList()) },
-                            enabled = selectedDays.isNotEmpty(),
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Text("Save recurring blocks")
-                        }
-                    }
+        }
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(title, fontSize = 24.sp, fontWeight = FontWeight.Bold, color = colors.brandNavy)
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = colors.mutedText,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        AnimatedVisibility(visible = isBusy, enter = fadeIn(), exit = fadeOut()) {
+            Surface(shape = CircleShape, color = colors.brandBlue.copy(alpha = 0.12f)) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    CircularProgressIndicator(modifier = Modifier.size(12.dp), strokeWidth = 2.dp, color = colors.brandBlue)
+                    Text(busyText, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = colors.brandBlue)
                 }
             }
         }
     }
 }
+
+@Composable
+private fun HostToolCard(content: @Composable ColumnScope.() -> Unit) {
+    val colors = LocalHayameColors.current
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(22.dp))
+            .background(colors.cardBackground)
+            .border(1.dp, colors.border, RoundedCornerShape(22.dp))
+            .padding(18.dp),
+        content = content,
+    )
+}
+
+@Composable
+private fun HostToolPrimaryButton(
+    text: String,
+    icon: ImageVector? = null,
+    trailingIcon: ImageVector? = null,
+    enabled: Boolean = true,
+    loading: Boolean = false,
+    onClick: () -> Unit,
+) {
+    val colors = LocalHayameColors.current
+    Button(
+        onClick = onClick,
+        enabled = enabled && !loading,
+        modifier = Modifier.fillMaxWidth().height(50.dp),
+        shape = RoundedCornerShape(16.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = colors.brandBlue,
+            contentColor = Color.White,
+            disabledContainerColor = colors.brandBlue.copy(alpha = 0.55f),
+            disabledContentColor = Color.White,
+        ),
+        elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp, pressedElevation = 0.dp),
+    ) {
+        if (loading) {
+            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = Color.White)
+            Spacer(modifier = Modifier.width(8.dp))
+        } else if (icon != null) {
+            Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(modifier = Modifier.width(8.dp))
+        }
+        Text(text, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+        if (trailingIcon != null && !loading) {
+            Spacer(modifier = Modifier.weight(1f))
+            Icon(trailingIcon, contentDescription = null, modifier = Modifier.size(16.dp))
+        }
+    }
+}
+
+@Composable
+private fun HostToolSecondaryButton(
+    text: String,
+    icon: ImageVector? = null,
+    enabled: Boolean = true,
+    onClick: () -> Unit,
+) {
+    val colors = LocalHayameColors.current
+    Surface(
+        onClick = onClick,
+        enabled = enabled,
+        shape = RoundedCornerShape(16.dp),
+        color = colors.fieldBackground,
+        modifier = Modifier.fillMaxWidth().height(48.dp).alpha(if (enabled) 1f else 0.55f),
+    ) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxSize(),
+        ) {
+            if (icon != null) {
+                Icon(icon, contentDescription = null, tint = colors.brandNavy, modifier = Modifier.size(18.dp))
+            }
+            Text(text, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold, color = colors.brandNavy)
+        }
+    }
+}
+
+@Composable
+private fun HostToolChip(text: String, icon: ImageVector, onClick: () -> Unit) {
+    val colors = LocalHayameColors.current
+    Surface(onClick = onClick, shape = RoundedCornerShape(12.dp), color = colors.fieldBackground) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(icon, contentDescription = null, tint = colors.brandNavy, modifier = Modifier.size(15.dp))
+            Text(text, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = colors.brandNavy)
+        }
+    }
+}
+
+@Composable
+private fun HostModeChip(text: String, icon: ImageVector, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    val colors = LocalHayameColors.current
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(12.dp),
+        color = if (selected) colors.brandNavy else colors.fieldBackground,
+        modifier = modifier.height(40.dp),
+    ) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxSize(),
+        ) {
+            Icon(icon, contentDescription = null, tint = if (selected) Color.White else colors.brandNavy, modifier = Modifier.size(15.dp))
+            Text(text, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = if (selected) Color.White else colors.brandNavy)
+        }
+    }
+}
+
+@Composable
+private fun HostToolStat(value: String, label: String, hint: String, tint: Color, modifier: Modifier = Modifier) {
+    val colors = LocalHayameColors.current
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(18.dp))
+            .background(colors.cardBackground)
+            .border(1.dp, colors.border, RoundedCornerShape(18.dp))
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(3.dp),
+    ) {
+        Text(value, fontSize = 24.sp, fontWeight = FontWeight.Bold, color = tint)
+        Text(label, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = colors.brandNavy)
+        Text(hint, style = MaterialTheme.typography.labelSmall, color = colors.mutedText)
+    }
+}
+
+@Composable
+private fun HostToolEmptyState(icon: ImageVector, title: String, message: String) {
+    val colors = LocalHayameColors.current
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(24.dp))
+            .background(colors.cardBackground)
+            .border(1.dp, colors.border, RoundedCornerShape(24.dp))
+            .padding(22.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Box(
+            modifier = Modifier.size(92.dp).clip(CircleShape).background(colors.brandLight),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(icon, contentDescription = null, tint = colors.brandBlue, modifier = Modifier.size(32.dp))
+        }
+        Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = colors.brandNavy)
+        Text(message, style = MaterialTheme.typography.bodyMedium, color = colors.mutedText, textAlign = TextAlign.Center)
+    }
+}
+
+@Composable
+private fun HostTipLine(icon: ImageVector, text: String) {
+    val colors = LocalHayameColors.current
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Top) {
+        Box(
+            modifier = Modifier.size(28.dp).clip(RoundedCornerShape(9.dp)).background(colors.brandLight),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(icon, contentDescription = null, tint = colors.brandBlue, modifier = Modifier.size(14.dp))
+        }
+        Text(text, style = MaterialTheme.typography.bodyMedium, color = colors.mutedText, modifier = Modifier.weight(1f))
+    }
+}
+
+private fun parityListingTitle(car: CarDto): String =
+    car.title?.trim()?.takeIf { it.isNotBlank() }
+        ?: listOfNotNull(car.brand?.trim(), car.model?.trim()).filter { it.isNotBlank() }.joinToString(" ").ifBlank { "Listing" }
 
 @Composable
 private fun ParityTopBar(title: String, onBack: () -> Unit) {

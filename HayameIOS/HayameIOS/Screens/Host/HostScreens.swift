@@ -139,8 +139,28 @@ struct HostCarsScreen: View {
     @State private var showCreateEditor = false
     @State private var editTarget: Car?
     @State private var toolTarget: HostCarTool?
+    @State private var search = ""
 
     private var listings: [Car] { appState.hostCars }
+
+    private var trimmedSearch: String {
+        search.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Listings matching every word of the search, across title, make,
+    /// model, year, place and live/pending status.
+    private var filteredListings: [Car] {
+        let query = trimmedSearch.lowercased()
+        guard !query.isEmpty else { return listings }
+        let tokens = query.split(separator: " ").map(String.init)
+        return listings.filter { car in
+            let status = car.approvalStatus.lowercased() == "approved" ? "live approved" : "pending review"
+            let haystack = [car.displayTitle, car.title, car.brand, car.model, String(car.year), car.city, car.region, car.type, status]
+                .joined(separator: " ")
+                .lowercased()
+            return tokens.allSatisfy { haystack.contains($0) }
+        }
+    }
 
     private var liveCount: Int {
         listings.filter { $0.approvalStatus.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "approved" }.count
@@ -169,6 +189,11 @@ struct HostCarsScreen: View {
                     .coachTour(.hostCars)
                     .hayameAppear(index: 1)
 
+                if !isLoading, !listings.isEmpty {
+                    HostSearchField(placeholder: "Search your cars", text: $search)
+                        .hayameAppear(index: 2)
+                }
+
                 if isLoading {
                     VStack(spacing: 0) {
                         ForEach(0..<3, id: \.self) { index in
@@ -196,9 +221,20 @@ struct HostCarsScreen: View {
                         openCreateEditor()
                     }
                     .hayameAppear(index: 2)
+                } else if filteredListings.isEmpty {
+                    HostEmptyState(
+                        title: "No cars match",
+                        message: "Nothing in your listings matches “\(trimmedSearch)”. Try the make, model or city.",
+                        systemImage: "magnifyingglass",
+                        actionTitle: "Clear search"
+                    ) {
+                        HayameHaptics.light()
+                        withAnimation(HayameMotion.snappy) { search = "" }
+                    }
+                    .hayameAppear(index: 3)
                 } else {
                     VStack(spacing: 0) {
-                        ForEach(Array(listings.enumerated()), id: \.element.id) { index, car in
+                        ForEach(Array(filteredListings.enumerated()), id: \.element.id) { index, car in
                             HostCarRow(
                                 car: car,
                                 isDeleting: isDeleting && deleteTarget?.id == car.id,
@@ -208,11 +244,11 @@ struct HostCarsScreen: View {
                                 onDelete: { deleteTarget = car }
                             )
                             .coachMark(index == 0 ? "hostCars.row" : "hostCars.row-\(car.id)")
-                            .hayameAppear(index: index + 2)
-                            if index < listings.count - 1 { HostThinDivider() }
+                            .hayameAppear(index: index + 3)
+                            if index < filteredListings.count - 1 { HostThinDivider() }
                         }
                     }
-                    .animation(HayameMotion.settle, value: listings.map(\.id))
+                    .animation(HayameMotion.settle, value: filteredListings.map(\.id))
                 }
 
                 Color.clear.frame(height: 8)
@@ -618,8 +654,8 @@ struct ListingEditorScreen: View {
 
     private var modeTitle: String {
         switch mode {
-        case .create: return "Create Listing"
-        case .edit: return "Edit Listing"
+        case .create: return "New listing"
+        case .edit: return "Edit listing"
         }
     }
 
@@ -632,7 +668,7 @@ struct ListingEditorScreen: View {
 
     private var primaryButtonTitle: String {
         if currentStep == .review {
-            return isSaving ? "Publishing..." : (isCreate ? "Publish Listing" : "Save Listing")
+            return isSaving ? (isCreate ? "Publishing" : "Saving") : (isCreate ? "Publish listing" : "Save changes")
         }
         return "Next"
     }
@@ -723,8 +759,6 @@ struct ListingEditorScreen: View {
     var body: some View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 18) {
-                ListingEditorProgressHeader(currentStep: currentStep)
-
                 if let editorNotice, !editorNotice.isEmpty {
                     ListingEditorStatusBanner(text: editorNotice, color: HayameTheme.success)
                 }
@@ -739,24 +773,17 @@ struct ListingEditorScreen: View {
                         .transition(stepTransition)
                 }
 
-                if currentStep != .review, !isCreate {
-                    ListingEditorSectionCard {
-                        VStack(alignment: .leading, spacing: 10) {
-                            Text("Availability")
-                                .font(.hayame(size: 18, weight: .bold))
-                                .foregroundStyle(HayameTheme.brandNavy)
-                            Text("Blocked dates stay in the existing availability editor after you save changes.")
-                                .font(.hayame(size: 13, weight: .medium))
-                                .foregroundStyle(HayameTheme.mutedText)
-
-                            if case .edit(let car) = mode {
-                                NavigationLink("Edit blocked dates and weekly blocks") {
-                                    HostAvailabilityEditorScreen(carID: car.id, carTitle: car.displayTitle)
-                                }
-                                .buttonStyle(SecondaryPillButtonStyle())
-                            }
-                        }
+                if currentStep != .review, case .edit(let car) = mode {
+                    NavigationLink {
+                        HostAvailabilityEditorScreen(carID: car.id, carTitle: car.displayTitle)
+                    } label: {
+                        HostLinkRow(
+                            systemImage: "calendar",
+                            title: "Availability",
+                            subtitle: "Block dates or set weekly days off. Saved on its own, separate from these details."
+                        )
                     }
+                    .buttonStyle(HayamePressableStyle(scale: 0.985))
                 }
 
                 Color.clear.frame(height: 140)
@@ -764,30 +791,22 @@ struct ListingEditorScreen: View {
             .padding(16)
         }
         .background(HayameTheme.pageBackground.ignoresSafeArea())
-        .navigationTitle(modeTitle)
-        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.hidden, for: .navigationBar)
+        .navigationBarBackButtonHidden(true)
+        .safeAreaInset(edge: .top, spacing: 0) {
+            editorHeader
+        }
         .scrollDismissesKeyboard(.interactively)
         .dismissKeyboardOnNonInputTap()
         .safeAreaInset(edge: .bottom, spacing: 0) {
             ListingEditorBottomBar(
                 backTitle: currentStep == .basicInfo ? "Cancel" : "Back",
                 primaryTitle: primaryButtonTitle,
-                isPrimaryDisabled: isSaving,
+                isFinal: currentStep == .review,
+                isLoading: isSaving,
                 onBack: handleBackAction,
                 onPrimary: handlePrimaryAction
             )
-        }
-        .toolbar {
-            if isCreate {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("Save Draft") {
-                        persistCreateDraftIfNeeded()
-                        editorNotice = "Draft saved on this device."
-                        editorError = nil
-                    }
-                    .disabled(isSaving)
-                }
-            }
         }
         .onChange(of: draft.region) { _, newValue in
             draft.region = MockDataService.normalizedRegion(newValue)
@@ -873,6 +892,76 @@ struct ListingEditorScreen: View {
             appState.listingEditorActive = false
         }
         .animation(.easeInOut(duration: 0.2), value: currentStep)
+    }
+
+    // MARK: Header
+
+    /// Replaces the system bar: close or back, the mode title, a step counter,
+    /// a thin segmented progress and, while creating, a "Save draft" link.
+    private var editorHeader: some View {
+        VStack(spacing: 12) {
+            ZStack {
+                HStack {
+                    Button(action: handleBackAction) {
+                        Image(systemName: currentStep == .basicInfo ? "xmark" : "chevron.left")
+                            .font(.hayame(size: 15, weight: .bold))
+                            .foregroundStyle(HayameTheme.brandNavy)
+                            .contentTransition(.symbolEffect(.replace))
+                            .frame(width: 40, height: 40)
+                            .background(HayameTheme.fieldBackground, in: Circle())
+                    }
+                    .buttonStyle(HayamePressableStyle(scale: 0.9))
+                    .accessibilityLabel(currentStep == .basicInfo ? "Close" : "Back")
+
+                    Spacer()
+
+                    Text("\(currentStep.number) of \(ListingEditorStep.allCases.count)")
+                        .font(.hayame(size: 12, weight: .bold))
+                        .foregroundStyle(HayameTheme.brandBlue)
+                        .contentTransition(.numericText())
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(HayameTheme.brandBlue.opacity(0.12), in: Capsule())
+                }
+
+                Text(modeTitle)
+                    .font(.hayame(size: 17, weight: .bold))
+                    .foregroundStyle(HayameTheme.brandNavy)
+            }
+
+            HostSegmentedProgress(currentIndex: currentStep.rawValue, count: ListingEditorStep.allCases.count)
+
+            HStack {
+                Text(currentStep.title)
+                    .font(.hayame(size: 13, weight: .bold))
+                    .foregroundStyle(HayameTheme.mutedText)
+                    .contentTransition(.opacity)
+                Spacer()
+                if isCreate {
+                    Button {
+                        persistCreateDraftIfNeeded()
+                        editorNotice = "Draft saved on this device."
+                        editorError = nil
+                        HayameHaptics.success()
+                    } label: {
+                        HStack(spacing: 5) {
+                            Image(systemName: "tray.and.arrow.down")
+                                .font(.hayame(size: 11, weight: .bold))
+                            Text("Save draft")
+                                .font(.hayame(size: 12, weight: .bold))
+                        }
+                        .foregroundStyle(HayameTheme.brandBlue)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isSaving)
+                }
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 12)
+        .padding(.bottom, 10)
+        .background(HayameTheme.pageBackground)
+        .animation(HayameMotion.settle, value: currentStep)
     }
 
     @ViewBuilder
@@ -1009,11 +1098,13 @@ struct ListingEditorScreen: View {
                                     step: 10,
                                     zeroRendersAsEmpty: true
                                 )
-                                Button("Remove insurance") {
+                                Button {
                                     showInsuranceField = false
                                     draft.insuranceFee = 0
+                                } label: {
+                                    HostChipLabel(title: "Remove insurance", systemImage: "minus", tint: HayameTheme.danger, background: HayameTheme.danger.opacity(0.1))
                                 }
-                                .buttonStyle(SecondaryPillButtonStyle())
+                                .buttonStyle(HayamePressableStyle(scale: 0.95))
                             } else {
                                 ListingEditorAddFieldButton(title: "Add insurance") {
                                     showInsuranceField = true
@@ -1028,11 +1119,13 @@ struct ListingEditorScreen: View {
                                     step: 50,
                                     zeroRendersAsEmpty: true
                                 )
-                                Button("Remove security deposit") {
+                                Button {
                                     showDepositField = false
                                     draft.depositAmount = 0
+                                } label: {
+                                    HostChipLabel(title: "Remove security deposit", systemImage: "minus", tint: HayameTheme.danger, background: HayameTheme.danger.opacity(0.1))
                                 }
-                                .buttonStyle(SecondaryPillButtonStyle())
+                                .buttonStyle(HayamePressableStyle(scale: 0.95))
                             } else {
                                 ListingEditorAddFieldButton(title: "Add security deposit") {
                                     showDepositField = true
@@ -1151,11 +1244,13 @@ struct ListingEditorScreen: View {
                                 step: 20,
                                 zeroRendersAsEmpty: true
                             )
-                            Button("Remove outside-region fee") {
+                            Button {
                                 showOutsideRegionFeeField = false
                                 draft.outsideAccraFee = 0
+                            } label: {
+                                HostChipLabel(title: "Remove outside-region fee", systemImage: "minus", tint: HayameTheme.danger, background: HayameTheme.danger.opacity(0.1))
                             }
-                            .buttonStyle(SecondaryPillButtonStyle())
+                            .buttonStyle(HayamePressableStyle(scale: 0.95))
                         } else {
                             ListingEditorAddFieldButton(title: "Add outside listing region fee") {
                                 showOutsideRegionFeeField = true
@@ -1223,21 +1318,31 @@ struct ListingEditorScreen: View {
                                     .foregroundStyle(HayameTheme.mutedText)
                             }
 
-                            PhotosPicker(
-                                selection: $pendingPickerItems,
-                                maxSelectionCount: max(0, maxPhotos - pendingUploads.count),
-                                matching: .images
-                            ) {
-                                Text(pendingUploads.count >= maxPhotos ? "Photo limit reached" : "Add from Photos")
-                            }
-                            .buttonStyle(SecondaryPillButtonStyle())
-                            .disabled(isSaving || pendingUploads.count >= maxPhotos)
+                            HStack(spacing: 8) {
+                                PhotosPicker(
+                                    selection: $pendingPickerItems,
+                                    maxSelectionCount: max(1, maxPhotos - pendingUploads.count),
+                                    matching: .images
+                                ) {
+                                    HostChipLabel(
+                                        title: pendingUploads.count >= maxPhotos ? "Photo limit reached" : "Add from Photos",
+                                        systemImage: "photo.on.rectangle",
+                                        tint: .white,
+                                        background: HayameTheme.brandBlue
+                                    )
+                                }
+                                .buttonStyle(HayamePressableStyle(scale: 0.95))
+                                .disabled(isSaving || pendingUploads.count >= maxPhotos)
 
-                            Button("Add from Files") {
-                                showFileImporter = true
+                                Button {
+                                    showFileImporter = true
+                                } label: {
+                                    HostChipLabel(title: "Add from Files", systemImage: "folder")
+                                }
+                                .buttonStyle(HayamePressableStyle(scale: 0.95))
+                                .disabled(isSaving || pendingUploads.count >= maxPhotos)
                             }
-                            .buttonStyle(SecondaryPillButtonStyle())
-                            .disabled(isSaving || pendingUploads.count >= maxPhotos)
+                            .opacity(isSaving || pendingUploads.count >= maxPhotos ? 0.6 : 1)
                         } else {
                             if let existingCoverURL {
                                 CachedRemoteImage(url: existingCoverURL, targetSize: CGSize(width: 760, height: 540)) {
@@ -1262,10 +1367,12 @@ struct ListingEditorScreen: View {
                             }
 
                             if case .edit(let car) = mode {
-                                NavigationLink("Manage listing photos") {
+                                NavigationLink {
                                     HostListingPhotosScreen(carID: car.id, carTitle: car.displayTitle)
+                                } label: {
+                                    HostLinkRow(systemImage: "photo.on.rectangle", title: "Manage photos", subtitle: selectedPhotosSummary)
                                 }
-                                .buttonStyle(SecondaryPillButtonStyle())
+                                .buttonStyle(HayamePressableStyle(scale: 0.985))
                             }
                         }
                     }
@@ -1747,54 +1854,6 @@ private enum ListingEditorStep: Int, CaseIterable, Identifiable {
     }
 }
 
-private struct ListingEditorProgressHeader: View {
-    let currentStep: ListingEditorStep
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("Step \(currentStep.number) of \(ListingEditorStep.allCases.count)")
-                .font(.hayame(size: 12, weight: .bold))
-                .foregroundStyle(HayameTheme.brandBlue)
-
-            Text(currentStep.title)
-                .font(.hayame(size: 30, weight: .bold))
-                .foregroundStyle(HayameTheme.brandNavy)
-
-            HStack(spacing: 8) {
-                ForEach(ListingEditorStep.allCases) { step in
-                    VStack(spacing: 6) {
-                        Capsule()
-                            .fill(step.rawValue <= currentStep.rawValue ? HayameTheme.brandBlue : HayameTheme.fieldBackground)
-                            .frame(height: 8)
-                            .overlay(
-                                Capsule()
-                                    .stroke(
-                                        step.rawValue <= currentStep.rawValue ? HayameTheme.brandBlue : HayameTheme.controlStroke,
-                                        lineWidth: 1
-                                    )
-                            )
-                        Text(step.shortTitle)
-                            .font(.hayame(size: 10, weight: .bold))
-                            .foregroundStyle(step == currentStep ? HayameTheme.brandBlue : HayameTheme.mutedText)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.72)
-                            .multilineTextAlignment(.center)
-                            .frame(maxWidth: .infinity)
-                    }
-                    .frame(maxWidth: .infinity)
-                }
-            }
-        }
-        .padding(18)
-        .background(HayameTheme.cardBackground, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(HayameTheme.cardStroke, lineWidth: 1)
-        )
-        .shadow(color: HayameTheme.cardShadow, radius: 12, x: 0, y: 6)
-    }
-}
-
 private struct ListingEditorStepIntro: View {
     let title: String
     let subtitle: String
@@ -2081,12 +2140,9 @@ private struct ListingEditorAddFieldButton: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 8) {
-                Image(systemName: "plus.circle.fill")
-                Text(title)
-            }
+            HostChipLabel(title: title, systemImage: "plus", tint: HayameTheme.brandBlue, background: HayameTheme.brandBlue.opacity(0.1))
         }
-        .buttonStyle(SecondaryPillButtonStyle())
+        .buttonStyle(HayamePressableStyle(scale: 0.95))
     }
 }
 
@@ -2239,26 +2295,48 @@ private struct ListingEditorPendingPhotoTile: View {
 private struct ListingEditorBottomBar: View {
     let backTitle: String
     let primaryTitle: String
-    let isPrimaryDisabled: Bool
+    var isFinal = false
+    var isLoading = false
     let onBack: () -> Void
     let onPrimary: () -> Void
 
     var body: some View {
         HStack(spacing: 12) {
-            Button(backTitle, action: onBack)
-                .buttonStyle(SecondaryPillButtonStyle())
+            Button(action: onBack) {
+                Text(backTitle)
+                    .font(.hayame(size: 15, weight: .bold))
+                    .foregroundStyle(HayameTheme.brandNavy)
+                    .padding(.horizontal, 18)
+                    .frame(height: 52)
+                    .background(HayameTheme.fieldBackground, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            }
+            .buttonStyle(HayamePressableStyle(scale: 0.96))
+            .disabled(isLoading)
 
             Button(action: onPrimary) {
-                Text(primaryTitle)
-                    .font(.hayame(size: 16, weight: .bold))
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
-                    .background(HayameTheme.brandBlue, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                HStack(spacing: 8) {
+                    if isLoading {
+                        ProgressView()
+                            .tint(.white)
+                            .controlSize(.small)
+                    }
+                    Text(primaryTitle)
+                        .contentTransition(.opacity)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                    if !isLoading {
+                        Image(systemName: isFinal ? "checkmark" : "arrow.right")
+                            .font(.hayame(size: 14, weight: .bold))
+                    }
+                }
+                .font(.hayame(size: 16, weight: .bold))
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .frame(height: 52)
+                .background(HayameTheme.brandBlue, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
-            .buttonStyle(.plain)
-            .disabled(isPrimaryDisabled)
-            .opacity(isPrimaryDisabled ? 0.7 : 1)
+            .buttonStyle(HayamePressableStyle(scale: 0.96))
+            .disabled(isLoading)
         }
         .padding(.horizontal, 16)
         .padding(.top, 12)
@@ -3859,6 +3937,7 @@ private struct HostStarRow: View {
 
 struct HostListingPhotosScreen: View {
     @EnvironmentObject private var appState: AppState
+    @Environment(\.dismiss) private var dismiss
 
     let carID: String
     let carTitle: String
@@ -3867,109 +3946,81 @@ struct HostListingPhotosScreen: View {
     @State private var maxPhotos = 7
     @State private var isLoading = false
     @State private var isMutating = false
+    @State private var busyPhotoID: String?
     @State private var errorMessage: String?
     @State private var successMessage: String?
-    @State private var addPhotoItem: PhotosPickerItem?
+    @State private var addPhotoItems: [PhotosPickerItem] = []
     @State private var showFileImporter = false
+    @State private var deleteTarget: CarListingPhoto?
+
+    private let columns = [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
+
+    private var remainingSlots: Int { max(0, maxPhotos - photos.count) }
+
+    private var subtitle: String {
+        if isLoading && photos.isEmpty { return "Loading photos..." }
+        return "\(carTitle) · \(photos.count) of \(maxPhotos)"
+    }
 
     var body: some View {
-        List {
-            Section("Listing") {
-                InfoLine(label: "Car", value: carTitle)
-                InfoLine(label: "Photos", value: "\(photos.count) / \(maxPhotos)")
-            }
-
-            Section("Manage photos") {
-                if isLoading {
-                    LoadingStateCard(title: "Loading photos", message: "Fetching current listing photos.")
-                } else if photos.isEmpty {
-                    EmptyStateView(
-                        title: "No photos uploaded",
-                        message: "Upload high-quality exterior and interior angles.",
-                        systemImage: "photo.on.rectangle"
-                    )
-                } else {
-                    ForEach(photos) { photo in
-                        VStack(alignment: .leading, spacing: 8) {
-                            if let url = RemoteImageURLResolver.resolve(photo.url) {
-                                CachedRemoteImage(url: url, targetSize: CGSize(width: 860, height: 520)) {
-                                    RoundedRectangle(cornerRadius: 10, style: .continuous).fill(HayameTheme.brandLight)
-                                } failure: {
-                                    RoundedRectangle(cornerRadius: 10, style: .continuous).fill(HayameTheme.brandLight)
-                                }
-                                .frame(height: 170)
-                                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                            }
-
-                            HStack(spacing: 10) {
-                                PhotosPicker(
-                                    selection: Binding(
-                                        get: { nil },
-                                        set: { newValue in
-                                            guard let newValue else { return }
-                                            Task { await replacePhoto(photoID: photo.id, item: newValue) }
-                                        }
-                                    ),
-                                    matching: .images
-                                ) {
-                                    Text("Replace")
-                                }
-                                .buttonStyle(SecondaryPillButtonStyle())
-                                .disabled(isMutating)
-
-                                Button("Delete", role: .destructive) {
-                                    Task { await deletePhoto(photoID: photo.id) }
-                                }
-                                .buttonStyle(SecondaryPillButtonStyle())
-                                .disabled(isMutating)
-                            }
-                        }
-                        .padding(.vertical, 4)
-                    }
-                }
-
-                PhotosPicker(selection: $addPhotoItem, matching: .images) {
-                    Text(isMutating ? "Uploading..." : "Add photo")
-                }
-                .buttonStyle(PrimaryPillButtonStyle())
-                .disabled(isMutating || photos.count >= maxPhotos)
-
-                Button("Add from Files") {
-                    showFileImporter = true
-                }
-                .buttonStyle(SecondaryPillButtonStyle())
-                .disabled(isMutating || photos.count >= maxPhotos)
-
-                Text("Maximum \(maxPhotos) photos, 4MB each. iOS will request photo-library permission when needed.")
-                    .font(.hayame(size: 11, weight: .semibold))
-                    .foregroundStyle(HayameTheme.mutedText)
-
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 16) {
                 if let errorMessage, !errorMessage.isEmpty {
-                    Text(errorMessage)
-                        .font(.hayame(size: 12, weight: .semibold))
-                        .foregroundStyle(HayameTheme.danger)
+                    ListingEditorStatusBanner(text: errorMessage, color: HayameTheme.danger)
+                        .transition(.move(edge: .top).combined(with: .opacity))
                 }
                 if let successMessage, !successMessage.isEmpty {
-                    Text(successMessage)
-                        .font(.hayame(size: 12, weight: .semibold))
-                        .foregroundStyle(HayameTheme.success)
+                    ListingEditorStatusBanner(text: successMessage, color: HayameTheme.success)
+                        .transition(.move(edge: .top).combined(with: .opacity))
                 }
+
+                if isLoading && photos.isEmpty {
+                    photoGridSkeleton
+                        .hayameAppear(index: 0)
+                } else if photos.isEmpty {
+                    HostEmptyState(
+                        title: "No photos yet",
+                        message: "Listings with five or more clear photos get approved faster and booked more often.",
+                        systemImage: "photo.on.rectangle.angled"
+                    )
+                    .hayameAppear(index: 0)
+                } else {
+                    photoGrid
+                        .hayameAppear(index: 0)
+                }
+
+                addSection
+                    .hayameAppear(index: 1)
+
+                tipsCard
+                    .hayameAppear(index: 2)
+
+                Color.clear.frame(height: 8)
+            }
+            .padding(16)
+        }
+        .background(HayameTheme.pageBackground.ignoresSafeArea())
+        .safeAreaInset(edge: .top, spacing: 0) {
+            HostToolHeader(title: "Photos", subtitle: subtitle, isBusy: isMutating, busyText: "Uploading") {
+                dismiss()
             }
         }
-        .scrollContentBackground(.hidden)
-        .background(HayameTheme.pageBackground)
+        .toolbar(.hidden, for: .navigationBar)
+        .navigationBarBackButtonHidden(true)
         .refreshable {
             await loadPhotos()
         }
-        .navigationTitle("Listing Photos")
-        .onAppear {
-            Task { await loadPhotos() }
+        .task {
+            await loadPhotos()
         }
-        .onChange(of: addPhotoItem) { _, newValue in
-            guard let newValue else { return }
+        .animation(HayameMotion.settle, value: photos.map(\.id))
+        .animation(HayameMotion.snappy, value: errorMessage)
+        .animation(HayameMotion.snappy, value: successMessage)
+        .onChange(of: addPhotoItems) { _, newItems in
+            guard !newItems.isEmpty else { return }
             Task {
-                await uploadPhoto(item: newValue, replacePhotoID: nil)
-                addPhotoItem = nil
+                await uploadPickedPhotos(newItems)
+                addPhotoItems = []
             }
         }
         .fileImporter(
@@ -3979,7 +4030,114 @@ struct HostListingPhotosScreen: View {
         ) { result in
             Task { await handleFileImport(result) }
         }
+        .confirmationDialog(
+            "Delete this photo?",
+            isPresented: Binding(
+                get: { deleteTarget != nil },
+                set: { presented in
+                    if !presented { deleteTarget = nil }
+                }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Delete photo", role: .destructive) {
+                guard let target = deleteTarget else { return }
+                deleteTarget = nil
+                Task { await deletePhoto(photoID: target.id) }
+            }
+            Button("Cancel", role: .cancel) {
+                deleteTarget = nil
+            }
+        } message: {
+            Text("Guests will no longer see it on the listing.")
+        }
     }
+
+    // MARK: Sections
+
+    private var photoGrid: some View {
+        LazyVGrid(columns: columns, spacing: 12) {
+            ForEach(Array(photos.enumerated()), id: \.element.id) { index, photo in
+                HostPhotoTile(
+                    photo: photo,
+                    isCover: index == 0,
+                    isBusy: busyPhotoID == photo.id,
+                    isDisabled: isMutating,
+                    onReplace: { item in
+                        Task { await replacePhoto(photoID: photo.id, item: item) }
+                    },
+                    onDelete: {
+                        HayameHaptics.light()
+                        deleteTarget = photo
+                    }
+                )
+            }
+        }
+    }
+
+    private var photoGridSkeleton: some View {
+        LazyVGrid(columns: columns, spacing: 12) {
+            ForEach(0..<4, id: \.self) { _ in
+                SkeletonBlock(height: 132, cornerRadius: 18)
+            }
+        }
+    }
+
+    private var addSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            PhotosPicker(
+                selection: $addPhotoItems,
+                maxSelectionCount: max(remainingSlots, 1),
+                matching: .images
+            ) {
+                HStack(spacing: 10) {
+                    Image(systemName: "plus")
+                        .font(.hayame(size: 15, weight: .bold))
+                    Text(remainingSlots == 0 ? "Photo limit reached" : "Add photos")
+                        .font(.hayame(size: 16, weight: .semibold))
+                    Spacer()
+                    Image(systemName: "photo.on.rectangle")
+                        .font(.hayame(size: 13, weight: .bold))
+                        .opacity(0.85)
+                }
+                .foregroundStyle(.white)
+                .padding(.horizontal, 18)
+                .padding(.vertical, 15)
+                .background(HayameTheme.brandBlue, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            }
+            .buttonStyle(HayamePressableStyle(scale: 0.98))
+            .disabled(isMutating || remainingSlots == 0)
+            .opacity(isMutating || remainingSlots == 0 ? 0.6 : 1)
+
+            HStack(spacing: 8) {
+                HostActionChip(title: "Add from Files", systemImage: "folder") {
+                    showFileImporter = true
+                }
+                .disabled(isMutating || remainingSlots == 0)
+                .opacity(isMutating || remainingSlots == 0 ? 0.6 : 1)
+                Spacer(minLength: 8)
+                Text("Up to \(maxPhotos) photos, 4MB each")
+                    .font(.hayame(size: 12, weight: .medium))
+                    .foregroundStyle(HayameTheme.mutedText)
+            }
+        }
+    }
+
+    private var tipsCard: some View {
+        ListingEditorSectionCard {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Photos that get booked")
+                    .font(.hayame(size: 16, weight: .bold))
+                    .foregroundStyle(HayameTheme.brandNavy)
+                HostTipLine(systemImage: "car.side", text: "A front three-quarter view in daylight as the cover.")
+                HostTipLine(systemImage: "chair.lounge", text: "A clean interior: front seats, back seats and boot.")
+                HostTipLine(systemImage: "speedometer", text: "The dashboard with the mileage showing.")
+                HostTipLine(systemImage: "eye.slash", text: "Keep number plates and people out of frame.")
+            }
+        }
+    }
+
+    // MARK: Data
 
     @MainActor
     private func loadPhotos() async {
@@ -3998,25 +4156,32 @@ struct HostListingPhotosScreen: View {
     }
 
     @MainActor
-    private func uploadPhoto(item: PhotosPickerItem, replacePhotoID: String?) async {
+    private func uploadPickedPhotos(_ items: [PhotosPickerItem]) async {
         guard !isMutating else { return }
         isMutating = true
         errorMessage = nil
         successMessage = nil
         defer { isMutating = false }
 
-        if replacePhotoID == nil, photos.count >= maxPhotos {
-            errorMessage = "You already have the maximum number of photos."
-            return
-        }
-
-        do {
-            guard let data = try await item.loadTransferable(type: Data.self) else {
-                throw APIError(message: "Unable to read selected image.")
+        var uploadedCount = 0
+        for item in items {
+            guard photos.count < maxPhotos else {
+                errorMessage = "You already have the maximum number of photos."
+                break
             }
-            try await uploadPhotoData(data: data, fileName: "car-photo-\(UUID().uuidString).jpg", replacePhotoID: replacePhotoID)
-        } catch {
-            errorMessage = AppState.userFacingMessage(error, fallback: "Something went wrong. Please try again.")
+            do {
+                guard let data = try await item.loadTransferable(type: Data.self) else {
+                    throw APIError(message: "Unable to read selected image.")
+                }
+                try await uploadPhotoData(data: data, fileName: "car-photo-\(UUID().uuidString).jpg", replacePhotoID: nil)
+                uploadedCount += 1
+            } catch {
+                errorMessage = AppState.userFacingMessage(error, fallback: "Something went wrong. Please try again.")
+            }
+        }
+        if uploadedCount > 0 {
+            successMessage = uploadedCount == 1 ? "Photo added." : "\(uploadedCount) photos added."
+            HayameHaptics.success()
         }
     }
 
@@ -4056,7 +4221,8 @@ struct HostListingPhotosScreen: View {
                 }
             }
             if uploadedCount > 0 {
-                successMessage = uploadedCount == 1 ? "Photo uploaded." : "\(uploadedCount) photos uploaded."
+                successMessage = uploadedCount == 1 ? "Photo added." : "\(uploadedCount) photos added."
+                HayameHaptics.success()
             }
         }
     }
@@ -4076,22 +4242,44 @@ struct HostListingPhotosScreen: View {
             successMessage = "Photo replaced."
         } else {
             photos.append(uploaded)
-            successMessage = "Photo uploaded."
+            successMessage = "Photo added."
         }
     }
 
     @MainActor
     private func replacePhoto(photoID: String, item: PhotosPickerItem) async {
-        await uploadPhoto(item: item, replacePhotoID: photoID)
+        guard !isMutating else { return }
+        isMutating = true
+        busyPhotoID = photoID
+        errorMessage = nil
+        successMessage = nil
+        defer {
+            isMutating = false
+            busyPhotoID = nil
+        }
+
+        do {
+            guard let data = try await item.loadTransferable(type: Data.self) else {
+                throw APIError(message: "Unable to read selected image.")
+            }
+            try await uploadPhotoData(data: data, fileName: "car-photo-\(UUID().uuidString).jpg", replacePhotoID: photoID)
+            HayameHaptics.success()
+        } catch {
+            errorMessage = AppState.userFacingMessage(error, fallback: "Something went wrong. Please try again.")
+        }
     }
 
     @MainActor
     private func deletePhoto(photoID: String) async {
         guard !isMutating else { return }
         isMutating = true
+        busyPhotoID = photoID
         errorMessage = nil
         successMessage = nil
-        defer { isMutating = false }
+        defer {
+            isMutating = false
+            busyPhotoID = nil
+        }
 
         do {
             try await appState.deleteListingPhoto(carID: carID, photoID: photoID)
@@ -4100,6 +4288,104 @@ struct HostListingPhotosScreen: View {
         } catch {
             errorMessage = AppState.userFacingMessage(error, fallback: "Something went wrong. Please try again.")
         }
+    }
+}
+
+/// One listing photo in the grid: cover pill, replace and delete discs, and a
+/// dim overlay while the server works on it.
+private struct HostPhotoTile: View {
+    let photo: CarListingPhoto
+    let isCover: Bool
+    let isBusy: Bool
+    let isDisabled: Bool
+    let onReplace: (PhotosPickerItem) -> Void
+    let onDelete: () -> Void
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            Group {
+                if let url = RemoteImageURLResolver.resolve(photo.url) {
+                    CachedRemoteImage(url: url, targetSize: CGSize(width: 640, height: 480)) {
+                        placeholder
+                    } failure: {
+                        placeholder
+                    }
+                } else {
+                    placeholder
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 132)
+            .clipped()
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(HayameTheme.cardStroke, lineWidth: 1))
+
+            if isCover {
+                Text("Cover")
+                    .font(.hayame(size: 10, weight: .bold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(HayameTheme.brandBlue, in: Capsule())
+                    .padding(8)
+            }
+
+            if isBusy {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(Color.black.opacity(0.35))
+                    .frame(height: 132)
+                    .overlay(ProgressView().tint(.white))
+            }
+        }
+        .overlay(alignment: .bottomTrailing) {
+            HStack(spacing: 6) {
+                PhotosPicker(
+                    selection: Binding<PhotosPickerItem?>(
+                        get: { nil },
+                        set: { item in
+                            if let item { onReplace(item) }
+                        }
+                    ),
+                    matching: .images
+                ) {
+                    HostPhotoDisc(systemImage: "arrow.triangle.2.circlepath")
+                }
+                .buttonStyle(HayamePressableStyle(scale: 0.9))
+                .disabled(isDisabled)
+                .accessibilityLabel("Replace photo")
+
+                Button(action: onDelete) {
+                    HostPhotoDisc(systemImage: "trash", tint: HayameTheme.danger)
+                }
+                .buttonStyle(HayamePressableStyle(scale: 0.9))
+                .disabled(isDisabled)
+                .accessibilityLabel("Delete photo")
+            }
+            .padding(8)
+        }
+    }
+
+    private var placeholder: some View {
+        RoundedRectangle(cornerRadius: 18, style: .continuous)
+            .fill(HayameTheme.brandLight)
+            .overlay(
+                Image(systemName: "car.fill")
+                    .font(.hayame(size: 22, weight: .bold))
+                    .foregroundStyle(HayameTheme.brandBlue)
+            )
+    }
+}
+
+private struct HostPhotoDisc: View {
+    let systemImage: String
+    var tint: Color = .white
+
+    var body: some View {
+        Image(systemName: systemImage)
+            .font(.hayame(size: 12, weight: .bold))
+            .foregroundStyle(tint)
+            .frame(width: 30, height: 30)
+            .background(Color.black.opacity(0.5), in: Circle())
     }
 }
 
@@ -4162,17 +4448,25 @@ private func prepareListingImageForUpload(data: Data, maxBytes: Int = 4 * 1024 *
 
 struct HostAvailabilityEditorScreen: View {
     @EnvironmentObject private var appState: AppState
+    @Environment(\.dismiss) private var dismiss
 
     let carID: String
     let carTitle: String
 
-    @State private var startDate = Date()
-    @State private var endDate = Calendar.current.date(byAdding: .day, value: 1, to: Date()) ?? Date()
+    /// Days guests cannot book: manual blocks plus confirmed trips.
+    @State private var unavailableDays: Set<Date> = []
+    @State private var isLoadingCalendar = false
+    @State private var rangeStart: Date?
+    @State private var rangeEnd: Date?
     @State private var markAvailable = false
     @State private var repeatDays: Set<String> = []
     @State private var isSaving = false
     @State private var message: String?
     @State private var errorMessage: String?
+    @State private var visibleMonths = 2
+
+    private let maxMonths = 6
+    private let recurringHorizonDays = 90
 
     private let weekdays: [(key: String, label: String)] = [
         ("mon", "Mon"),
@@ -4184,87 +4478,309 @@ struct HostAvailabilityEditorScreen: View {
         ("sun", "Sun"),
     ]
 
+    private static let dayFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "EEE d MMM"
+        return formatter
+    }()
+
+    private var today: Date { bookingDay(Date()) }
+
+    private var months: [HostCalendarMonth] {
+        hostCalendarMonths(from: today, count: visibleMonths)
+    }
+
+    private var selectedDayCount: Int {
+        guard let rangeStart else { return 0 }
+        let end = rangeEnd ?? rangeStart
+        return (Calendar.current.dateComponents([.day], from: rangeStart, to: end).day ?? 0) + 1
+    }
+
+    private var unavailableInNext90Days: Int {
+        let horizon = bookingAddingDays(90, to: today)
+        return unavailableDays.filter { $0 >= today && $0 < horizon }.count
+    }
+
+    private var subtitle: String {
+        if isLoadingCalendar && unavailableDays.isEmpty { return "Loading calendar..." }
+        return carTitle
+    }
+
+    private var selectionLabel: String {
+        guard let rangeStart else { return "Tap a day on the calendar to start" }
+        guard let rangeEnd else { return "\(Self.dayFormatter.string(from: rangeStart)) · now tap the last day" }
+        if Calendar.current.isDate(rangeStart, inSameDayAs: rangeEnd) {
+            return "\(Self.dayFormatter.string(from: rangeStart)) · 1 day"
+        }
+        return "\(Self.dayFormatter.string(from: rangeStart)) to \(Self.dayFormatter.string(from: rangeEnd)) · \(selectedDayCount) days"
+    }
+
     var body: some View {
-        Form {
-            Section("Listing") {
-                InfoLine(label: "Car", value: carTitle)
-            }
-
-            Section("Block date range") {
-                DatePicker("Start", selection: $startDate, displayedComponents: .date)
-                DatePicker("End", selection: $endDate, in: startDate..., displayedComponents: .date)
-                Toggle("Mark as available (uncheck to block)", isOn: $markAvailable)
-                Button(isSaving ? "Saving..." : "Save date range") {
-                    Task { await saveRange() }
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 16) {
+                if let errorMessage, !errorMessage.isEmpty {
+                    ListingEditorStatusBanner(text: errorMessage, color: HayameTheme.danger)
+                        .transition(.move(edge: .top).combined(with: .opacity))
                 }
-                .buttonStyle(PrimaryPillButtonStyle())
-                .disabled(isSaving)
-            }
+                if let message, !message.isEmpty {
+                    ListingEditorStatusBanner(text: message, color: HayameTheme.success)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
 
-            Section("Recurring weekday blocks") {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 72))], spacing: 8) {
+                summaryRow
+                    .hayameAppear(index: 0)
+
+                calendarCard
+                    .hayameAppear(index: 1)
+
+                weeklyCard
+                    .hayameAppear(index: 2)
+
+                Color.clear.frame(height: 8)
+            }
+            .padding(16)
+        }
+        .background(HayameTheme.pageBackground.ignoresSafeArea())
+        .safeAreaInset(edge: .top, spacing: 0) {
+            HostToolHeader(title: "Availability", subtitle: subtitle, isBusy: isSaving) {
+                dismiss()
+            }
+        }
+        .toolbar(.hidden, for: .navigationBar)
+        .navigationBarBackButtonHidden(true)
+        .refreshable {
+            await loadCalendar()
+        }
+        .task {
+            await loadCalendar()
+        }
+        .animation(HayameMotion.snappy, value: errorMessage)
+        .animation(HayameMotion.snappy, value: message)
+        .animation(HayameMotion.settle, value: visibleMonths)
+        .animation(HayameMotion.snappy, value: rangeStart)
+        .animation(HayameMotion.snappy, value: rangeEnd)
+        .animation(HayameMotion.snappy, value: markAvailable)
+    }
+
+    // MARK: Sections
+
+    private var summaryRow: some View {
+        HStack(spacing: 10) {
+            HostAvailabilityStat(
+                value: "\(unavailableInNext90Days)",
+                label: unavailableInNext90Days == 1 ? "day unavailable" : "days unavailable",
+                hint: "Next 90 days, incl. trips",
+                tint: HayameTheme.warning
+            )
+            HostAvailabilityStat(
+                value: "\(max(0, 90 - unavailableInNext90Days))",
+                label: "days open",
+                hint: "Next 90 days",
+                tint: HayameTheme.success
+            )
+        }
+    }
+
+    private var calendarCard: some View {
+        ListingEditorSectionCard {
+            VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Block or open dates")
+                        .font(.hayame(size: 18, weight: .bold))
+                        .foregroundStyle(HayameTheme.brandNavy)
+                    Text("Tap the first and last day. Booked or blocked days are shaded.")
+                        .font(.hayame(size: 13, weight: .medium))
+                        .foregroundStyle(HayameTheme.mutedText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                if isLoadingCalendar && unavailableDays.isEmpty {
+                    VStack(alignment: .leading, spacing: 10) {
+                        SkeletonBlock(width: 140, height: 16, cornerRadius: 6)
+                        SkeletonBlock(height: 220, cornerRadius: 16)
+                    }
+                } else {
+                    ForEach(months) { month in
+                        HostAvailabilityMonthView(
+                            month: month,
+                            today: today,
+                            unavailableDays: unavailableDays,
+                            rangeStart: rangeStart,
+                            rangeEnd: rangeEnd,
+                            onSelect: select(day:)
+                        )
+                    }
+
+                    if visibleMonths < maxMonths {
+                        Button {
+                            HayameHaptics.light()
+                            visibleMonths = min(maxMonths, visibleMonths + 2)
+                        } label: {
+                            HostChipLabel(title: "Show more months", systemImage: "chevron.down")
+                        }
+                        .buttonStyle(HayamePressableStyle(scale: 0.95))
+                    }
+                }
+
+                Rectangle()
+                    .fill(HayameTheme.cardStroke)
+                    .frame(height: 1)
+
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text(selectionLabel)
+                            .font(.hayame(size: 14, weight: .bold))
+                            .foregroundStyle(rangeStart == nil ? HayameTheme.mutedText : HayameTheme.brandNavy)
+                            .contentTransition(.opacity)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Spacer(minLength: 8)
+                        if rangeStart != nil {
+                            Button {
+                                HayameHaptics.light()
+                                rangeStart = nil
+                                rangeEnd = nil
+                            } label: {
+                                Text("Clear")
+                                    .font(.hayame(size: 13, weight: .bold))
+                                    .foregroundStyle(HayameTheme.brandBlue)
+                            }
+                            .buttonStyle(.plain)
+                            .transition(.opacity)
+                        }
+                    }
+
+                    HStack(spacing: 8) {
+                        HostModeChip(title: "Block", systemImage: "nosign", isSelected: !markAvailable) {
+                            HayameHaptics.select()
+                            markAvailable = false
+                        }
+                        HostModeChip(title: "Open up", systemImage: "checkmark.circle", isSelected: markAvailable) {
+                            HayameHaptics.select()
+                            markAvailable = true
+                        }
+                    }
+
+                    HostPrimaryButton(
+                        title: markAvailable ? "Open these days" : "Block these days",
+                        systemImage: markAvailable ? "lock.open" : "lock",
+                        isLoading: isSaving,
+                        isDisabled: rangeStart == nil
+                    ) {
+                        Task { await saveRange() }
+                    }
+                }
+            }
+        }
+    }
+
+    private var weeklyCard: some View {
+        ListingEditorSectionCard {
+            VStack(alignment: .leading, spacing: 14) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Weekly days off")
+                        .font(.hayame(size: 18, weight: .bold))
+                        .foregroundStyle(HayameTheme.brandNavy)
+                    Text("Blocks the chosen weekdays for the next \(recurringHorizonDays) days, for example every Sunday.")
+                        .font(.hayame(size: 13, weight: .medium))
+                        .foregroundStyle(HayameTheme.mutedText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                HStack(spacing: 6) {
                     ForEach(weekdays, id: \.key) { day in
-                        Button(day.label) {
-                            if repeatDays.contains(day.key) {
+                        let selected = repeatDays.contains(day.key)
+                        Button {
+                            HayameHaptics.select()
+                            if selected {
                                 repeatDays.remove(day.key)
                             } else {
                                 repeatDays.insert(day.key)
                             }
+                        } label: {
+                            Text(day.label)
+                                .font(.hayame(size: 12, weight: .bold))
+                                .foregroundStyle(selected ? .white : HayameTheme.brandNavy)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 38)
+                                .background(
+                                    selected ? HayameTheme.brandBlue : HayameTheme.fieldBackground,
+                                    in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                )
                         }
-                        .buttonStyle(SecondaryPillButtonStyle())
-                        .tint(repeatDays.contains(day.key) ? HayameTheme.brandBlue : HayameTheme.mutedText)
+                        .buttonStyle(HayamePressableStyle(scale: 0.94, haptic: false))
                     }
                 }
+                .animation(HayameMotion.snappy, value: repeatDays)
 
-                Button(isSaving ? "Saving..." : "Save recurring blocks") {
+                HostSecondaryButton(
+                    title: "Save weekly days off",
+                    systemImage: "calendar.badge.minus",
+                    isDisabled: isSaving || repeatDays.isEmpty
+                ) {
                     Task { await saveRecurring() }
-                }
-                .buttonStyle(SecondaryPillButtonStyle())
-                .disabled(isSaving || repeatDays.isEmpty)
-            }
-
-            if let message, !message.isEmpty {
-                Section {
-                    Text(message)
-                        .font(.hayame(size: 12, weight: .semibold))
-                        .foregroundStyle(HayameTheme.success)
-                }
-            }
-
-            if let errorMessage, !errorMessage.isEmpty {
-                Section {
-                    Text(errorMessage)
-                        .font(.hayame(size: 12, weight: .semibold))
-                        .foregroundStyle(HayameTheme.danger)
                 }
             }
         }
-        .scrollContentBackground(.hidden)
-        .background(HayameTheme.pageBackground)
-        .navigationTitle("Availability")
+    }
+
+    // MARK: Actions
+
+    private func select(day: Date) {
+        let normalized = bookingDay(day)
+        guard normalized >= today else { return }
+        HayameHaptics.select()
+        errorMessage = nil
+        message = nil
+        if let start = rangeStart, rangeEnd == nil {
+            if normalized < start {
+                rangeStart = normalized
+            } else {
+                rangeEnd = normalized
+            }
+        } else {
+            rangeStart = normalized
+            rangeEnd = nil
+        }
+    }
+
+    @MainActor
+    private func loadCalendar() async {
+        guard !isLoadingCalendar else { return }
+        isLoadingCalendar = true
+        defer { isLoadingCalendar = false }
+
+        let end = bookingAddingDays(maxMonths * 31, to: today)
+        if let snapshot = await appState.checkAvailability(carID: carID, start: today, end: end) {
+            unavailableDays = bookingDateSet(from: snapshot.blockedDates)
+        }
     }
 
     @MainActor
     private func saveRange() async {
-        guard !isSaving else { return }
+        guard !isSaving, let start = rangeStart else { return }
+        let end = rangeEnd ?? start
+        let count = selectedDayCount
         isSaving = true
         errorMessage = nil
         message = nil
         defer { isSaving = false }
 
-        if endDate <= startDate {
-            errorMessage = "End date must be after start date."
-            return
-        }
-
         do {
+            // The server treats the end date as exclusive, so the last tapped
+            // day is pushed one day out to include it.
             try await appState.saveAvailabilityWindow(
                 carID: carID,
-                startDate: AppState.dateOnlyFormatter.string(from: startDate),
-                endDate: AppState.dateOnlyFormatter.string(from: endDate),
+                startDate: AppState.dateOnlyFormatter.string(from: start),
+                endDate: AppState.dateOnlyFormatter.string(from: bookingAddingDays(1, to: end)),
                 available: markAvailable
             )
-            message = markAvailable ? "Availability window saved." : "Blocked date range saved."
+            message = markAvailable
+                ? "\(count) day\(count == 1 ? "" : "s") opened for bookings."
+                : "\(count) day\(count == 1 ? "" : "s") blocked."
+            rangeStart = nil
+            rangeEnd = nil
+            HayameHaptics.success()
+            await loadCalendar()
         } catch {
             errorMessage = AppState.userFacingMessage(error, fallback: "Something went wrong. Please try again.")
         }
@@ -4272,7 +4788,7 @@ struct HostAvailabilityEditorScreen: View {
 
     @MainActor
     private func saveRecurring() async {
-        guard !isSaving else { return }
+        guard !isSaving, !repeatDays.isEmpty else { return }
         isSaving = true
         errorMessage = nil
         message = nil
@@ -4281,19 +4797,460 @@ struct HostAvailabilityEditorScreen: View {
         do {
             try await appState.saveRecurringAvailabilityBlocks(
                 carID: carID,
-                startDate: AppState.dateOnlyFormatter.string(from: Date()),
-                endDate: AppState.dateOnlyFormatter.string(from: Calendar.current.date(byAdding: .day, value: 90, to: Date()) ?? Date()),
+                startDate: AppState.dateOnlyFormatter.string(from: today),
+                endDate: AppState.dateOnlyFormatter.string(from: bookingAddingDays(recurringHorizonDays, to: today)),
                 repeatDays: Array(repeatDays)
             )
-            message = "Recurring weekday blocks saved."
+            let names = weekdays.filter { repeatDays.contains($0.key) }.map(\.label).joined(separator: ", ")
+            message = "Blocked every \(names) for the next \(recurringHorizonDays) days."
+            HayameHaptics.success()
+            await loadCalendar()
         } catch {
             errorMessage = AppState.userFacingMessage(error, fallback: "Something went wrong. Please try again.")
         }
     }
 }
 
+private struct HostAvailabilityStat: View {
+    let value: String
+    let label: String
+    let hint: String
+    let tint: Color
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(value)
+                .font(.hayame(size: 24, weight: .bold))
+                .foregroundStyle(tint)
+                .contentTransition(.numericText())
+            Text(label)
+                .font(.hayame(size: 12, weight: .bold))
+                .foregroundStyle(HayameTheme.brandNavy)
+            Text(hint)
+                .font(.hayame(size: 11, weight: .medium))
+                .foregroundStyle(HayameTheme.mutedText)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .background(HayameTheme.cardBackground, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(HayameTheme.cardStroke, lineWidth: 1))
+    }
+}
+
+/// Two-way choice under the calendar: block the picked days or open them up.
+private struct HostModeChip: View {
+    let title: String
+    let systemImage: String
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: systemImage)
+                    .font(.hayame(size: 12, weight: .bold))
+                Text(title)
+                    .font(.hayame(size: 13, weight: .bold))
+            }
+            .foregroundStyle(isSelected ? .white : HayameTheme.brandNavy)
+            .frame(maxWidth: .infinity)
+            .frame(height: 40)
+            .background(
+                isSelected ? HayameTheme.brandNavy : HayameTheme.fieldBackground,
+                in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+            )
+        }
+        .buttonStyle(HayamePressableStyle(scale: 0.96, haptic: false))
+    }
+}
+
+private struct HostCalendarMonth: Identifiable {
+    let id: String
+    let title: String
+    let days: [Date?]
+}
+
+private func hostCalendarMonths(from earliestDate: Date, count: Int) -> [HostCalendarMonth] {
+    let calendar = Calendar.current
+    let monthFormatter = DateFormatter()
+    monthFormatter.dateFormat = "LLLL yyyy"
+
+    guard let firstMonth = calendar.dateInterval(of: .month, for: bookingDay(earliestDate))?.start else {
+        return []
+    }
+
+    return (0..<count).compactMap { offset in
+        guard
+            let monthStart = calendar.date(byAdding: .month, value: offset, to: firstMonth),
+            let monthRange = calendar.range(of: .day, in: .month, for: monthStart)
+        else {
+            return nil
+        }
+
+        let firstWeekday = calendar.component(.weekday, from: monthStart)
+        let placeholders = Array(repeating: Optional<Date>.none, count: max(0, firstWeekday - 1))
+        let dates = monthRange.compactMap { day -> Date? in
+            calendar.date(byAdding: .day, value: day - 1, to: monthStart).map(bookingDay)
+        }
+
+        return HostCalendarMonth(
+            id: monthFormatter.string(from: monthStart),
+            title: monthFormatter.string(from: monthStart),
+            days: placeholders + dates
+        )
+    }
+}
+
+/// One month of the host calendar. Unavailable days are shaded amber, the
+/// picked range is blue, today has a thin ring.
+private struct HostAvailabilityMonthView: View {
+    let month: HostCalendarMonth
+    let today: Date
+    let unavailableDays: Set<Date>
+    let rangeStart: Date?
+    let rangeEnd: Date?
+    let onSelect: (Date) -> Void
+
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: 6), count: 7)
+    private let weekdayLabels = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(month.title)
+                .font(.hayame(size: 15, weight: .bold))
+                .foregroundStyle(HayameTheme.brandNavy)
+
+            LazyVGrid(columns: columns, spacing: 6) {
+                ForEach(weekdayLabels, id: \.self) { label in
+                    Text(label)
+                        .font(.hayame(size: 11, weight: .bold))
+                        .foregroundStyle(HayameTheme.mutedText)
+                        .frame(maxWidth: .infinity)
+                }
+
+                ForEach(Array(month.days.enumerated()), id: \.offset) { _, day in
+                    if let day {
+                        dayCell(day)
+                    } else {
+                        Color.clear.frame(height: 40)
+                    }
+                }
+            }
+        }
+    }
+
+    private func dayCell(_ day: Date) -> some View {
+        let calendar = Calendar.current
+        let isPast = day < today
+        let isToday = calendar.isDate(day, inSameDayAs: today)
+        let isUnavailable = unavailableDays.contains(day)
+        let isStart = rangeStart.map { calendar.isDate($0, inSameDayAs: day) } ?? false
+        let isEnd = rangeEnd.map { calendar.isDate($0, inSameDayAs: day) } ?? false
+        let isEndpoint = isStart || isEnd
+        let inRange: Bool = {
+            guard let start = rangeStart else { return false }
+            let end = rangeEnd ?? start
+            return day >= start && day <= end
+        }()
+
+        return Button {
+            onSelect(day)
+        } label: {
+            Text("\(calendar.component(.day, from: day))")
+                .font(.hayame(size: 14, weight: isToday || isEndpoint ? .bold : .semibold))
+                .foregroundStyle(textColor(isPast: isPast, isEndpoint: isEndpoint, isUnavailable: isUnavailable))
+                .frame(maxWidth: .infinity)
+                .frame(height: 40)
+                .background(
+                    background(isEndpoint: isEndpoint, inRange: inRange, isUnavailable: isUnavailable, isPast: isPast),
+                    in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                )
+                .overlay {
+                    if isToday && !isEndpoint {
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .strokeBorder(HayameTheme.brandBlue, lineWidth: 1.5)
+                    }
+                }
+                .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .disabled(isPast)
+        .accessibilityLabel(accessibilityLabel(for: day, isUnavailable: isUnavailable))
+    }
+
+    private func accessibilityLabel(for day: Date, isUnavailable: Bool) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "EEEE d MMMM"
+        return formatter.string(from: day) + (isUnavailable ? ", unavailable" : "")
+    }
+
+    private func textColor(isPast: Bool, isEndpoint: Bool, isUnavailable: Bool) -> Color {
+        if isEndpoint { return .white }
+        if isPast { return HayameTheme.mutedText.opacity(0.45) }
+        if isUnavailable { return HayameTheme.warning }
+        return HayameTheme.brandNavy
+    }
+
+    private func background(isEndpoint: Bool, inRange: Bool, isUnavailable: Bool, isPast: Bool) -> Color {
+        if isEndpoint { return HayameTheme.brandBlue }
+        if inRange { return HayameTheme.brandBlue.opacity(0.14) }
+        if isUnavailable && !isPast { return HayameTheme.warning.opacity(0.14) }
+        return .clear
+    }
+}
+
 private struct CancellationPolicyViewWrapper: View {
     var body: some View {
         CancellationPolicyScreen()
+    }
+}
+
+// MARK: - Host design pieces
+//
+// Shared by the host tool screens (photos, availability, listing editor) so
+// they read like the booking flow: flat buttons, 16pt continuous corners,
+// Manrope type and a custom header instead of the system bar.
+
+/// Header for the host tool screens pushed from "My cars". The system bar is
+/// hidden so the title and subtitle use the app's type; swipe-back still works.
+private struct HostToolHeader: View {
+    let title: String
+    let subtitle: String
+    var isBusy = false
+    var busyText = "Saving"
+    let onBack: () -> Void
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            Button(action: onBack) {
+                Image(systemName: "chevron.left")
+                    .font(.hayame(size: 16, weight: .bold))
+                    .foregroundStyle(HayameTheme.brandNavy)
+                    .frame(width: 40, height: 40)
+                    .background(HayameTheme.fieldBackground, in: Circle())
+            }
+            .buttonStyle(HayamePressableStyle(scale: 0.9))
+            .accessibilityLabel("Back")
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.hayame(size: 24, weight: .bold))
+                    .foregroundStyle(HayameTheme.brandNavy)
+                Text(subtitle)
+                    .font(.hayame(size: 13, weight: .semibold))
+                    .foregroundStyle(HayameTheme.mutedText)
+                    .lineLimit(1)
+                    .contentTransition(.numericText())
+            }
+
+            Spacer(minLength: 8)
+
+            if isBusy {
+                HayameStatusPill(text: busyText, tone: .info, isLive: true)
+                    .transition(.scale.combined(with: .opacity))
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 8)
+        .padding(.bottom, 10)
+        .background(HayameTheme.pageBackground)
+        .animation(HayameMotion.snappy, value: isBusy)
+    }
+}
+
+/// Search field for the host's own listings, in the inbox field's style.
+private struct HostSearchField: View {
+    let placeholder: String
+    @Binding var text: String
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "magnifyingglass")
+                .font(.hayame(size: 14, weight: .bold))
+                .foregroundStyle(focused ? HayameTheme.brandBlue : HayameTheme.mutedText)
+            TextField(placeholder, text: $text)
+                .font(.hayame(size: 15, weight: .medium))
+                .foregroundStyle(HayameTheme.brandNavy)
+                .focused($focused)
+                .submitLabel(.search)
+                .autocorrectionDisabled()
+            if !text.isEmpty {
+                Button {
+                    HayameHaptics.light()
+                    withAnimation(HayameMotion.snappy) { text = "" }
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.hayame(size: 15, weight: .bold))
+                        .foregroundStyle(HayameTheme.mutedText)
+                }
+                .buttonStyle(.plain)
+                .transition(.scale.combined(with: .opacity))
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .background(HayameTheme.fieldBackground, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(focused ? HayameTheme.brandBlue.opacity(0.5) : HayameTheme.cardStroke, lineWidth: 1)
+        )
+        .animation(HayameMotion.snappy, value: focused)
+        .animation(HayameMotion.snappy, value: text.isEmpty)
+    }
+}
+
+/// Full-width flat blue button.
+private struct HostPrimaryButton: View {
+    let title: String
+    var systemImage: String? = nil
+    var isLoading = false
+    var isDisabled = false
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                if isLoading {
+                    ProgressView()
+                        .tint(.white)
+                        .controlSize(.small)
+                } else if let systemImage {
+                    Image(systemName: systemImage)
+                        .font(.hayame(size: 14, weight: .bold))
+                }
+                Text(title)
+                    .font(.hayame(size: 16, weight: .semibold))
+                    .contentTransition(.opacity)
+            }
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity)
+            .frame(height: 50)
+            .background(HayameTheme.brandBlue, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        }
+        .buttonStyle(HayamePressableStyle(scale: 0.98))
+        .disabled(isDisabled || isLoading)
+        .opacity(isDisabled ? 0.55 : 1)
+    }
+}
+
+/// Full-width flat grey button for the secondary action next to a primary one.
+private struct HostSecondaryButton: View {
+    let title: String
+    var systemImage: String? = nil
+    var isDisabled = false
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                if let systemImage {
+                    Image(systemName: systemImage)
+                        .font(.hayame(size: 14, weight: .bold))
+                }
+                Text(title)
+                    .font(.hayame(size: 15, weight: .bold))
+            }
+            .foregroundStyle(HayameTheme.brandNavy)
+            .frame(maxWidth: .infinity)
+            .frame(height: 48)
+            .background(HayameTheme.fieldBackground, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        }
+        .buttonStyle(HayamePressableStyle(scale: 0.98))
+        .disabled(isDisabled)
+        .opacity(isDisabled ? 0.55 : 1)
+    }
+}
+
+/// Label for a small flat chip (used as the content of buttons and pickers).
+private struct HostChipLabel: View {
+    let title: String
+    let systemImage: String
+    var tint: Color = HayameTheme.brandNavy
+    var background: Color = HayameTheme.fieldBackground
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: systemImage)
+                .font(.hayame(size: 12, weight: .semibold))
+            Text(title)
+                .font(.hayame(size: 12, weight: .bold))
+        }
+        .foregroundStyle(tint)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .background(background, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+}
+
+/// Flat row that opens another screen: icon chip, title, subtitle, chevron.
+private struct HostLinkRow: View {
+    let systemImage: String
+    let title: String
+    var subtitle: String? = nil
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: systemImage)
+                .font(.hayame(size: 14, weight: .bold))
+                .foregroundStyle(HayameTheme.brandBlue)
+                .frame(width: 36, height: 36)
+                .background(HayameTheme.brandLight, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.hayame(size: 15, weight: .bold))
+                    .foregroundStyle(HayameTheme.brandNavy)
+                if let subtitle {
+                    Text(subtitle)
+                        .font(.hayame(size: 12, weight: .medium))
+                        .foregroundStyle(HayameTheme.mutedText)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                }
+            }
+            Spacer(minLength: 8)
+            Image(systemName: "chevron.right")
+                .font(.hayame(size: 12, weight: .bold))
+                .foregroundStyle(HayameTheme.mutedText.opacity(0.7))
+        }
+        .padding(12)
+        .background(HayameTheme.fieldBackground, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+}
+
+private struct HostTipLine: View {
+    let systemImage: String
+    let text: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: systemImage)
+                .font(.hayame(size: 13, weight: .bold))
+                .foregroundStyle(HayameTheme.brandBlue)
+                .frame(width: 28, height: 28)
+                .background(HayameTheme.brandLight, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+            Text(text)
+                .font(.hayame(size: 13, weight: .medium))
+                .foregroundStyle(HayameTheme.mutedText)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
+/// Thin step progress for the listing editor, one capsule per step.
+private struct HostSegmentedProgress: View {
+    let currentIndex: Int
+    let count: Int
+
+    var body: some View {
+        HStack(spacing: 6) {
+            ForEach(0..<count, id: \.self) { index in
+                Capsule()
+                    .fill(index <= currentIndex ? HayameTheme.brandBlue : HayameTheme.fieldBackground)
+                    .frame(height: 4)
+            }
+        }
+        .animation(HayameMotion.gentle, value: currentIndex)
     }
 }
