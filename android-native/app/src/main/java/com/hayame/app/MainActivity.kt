@@ -69,6 +69,7 @@ import com.hayame.app.core.analytics.AnalyticsService
 import com.hayame.app.ui.navigation.HayameNavApp
 import com.hayame.app.ui.theme.HayameTheme
 import com.hayame.app.ui.theme.LocalHayameColors
+import com.hayame.app.ui.navigation.HostMainTab
 import com.hayame.app.ui.viewmodel.AppViewModel
 import com.hayame.app.ui.viewmodel.AppViewModelFactory
 
@@ -267,9 +268,17 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         viewModel.refreshActiveAnnouncements()
+        viewModel.refreshOnForeground()
     }
 
     private fun ingestIntent(intent: Intent?) {
+        // A listing decision push: land the host on their cars with the new status.
+        if (intent?.getStringExtra("pushType") == "listing_status") {
+            viewModel.loadMyCars()
+            viewModel.requestHostTab(HostMainTab.CARS)
+            return
+        }
+
         val announcementFromExtra = intent?.getStringExtra("announcementId")
         val announcementFromData = intent?.data?.getQueryParameter("announcementId")
         val resolvedAnnouncement = if (!announcementFromExtra.isNullOrBlank()) announcementFromExtra else announcementFromData

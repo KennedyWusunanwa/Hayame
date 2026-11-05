@@ -561,6 +561,9 @@ struct CarDetailScreen: View {
                 if car.deliveryAvailable {
                     SpecChip(systemImage: "shippingbox", text: "Delivery")
                 }
+                if car.withDriver {
+                    SpecChip(systemImage: "person.fill", text: "With driver", tint: HayameTheme.brandNavy)
+                }
                 if car.allowOneDayBooking {
                     SpecChip(systemImage: "calendar", text: "1-day bookings", tint: HayameTheme.brandBlue)
                 }
@@ -1007,6 +1010,7 @@ struct CarDetailScreen: View {
             PolicyRow(systemImage: "creditcard", title: "Payment", value: "Paystack, card or mobile money")
             PolicyRow(systemImage: "checkmark.shield", title: "Host approval", value: car.instantBook ? "Instant book" : "Confirmed before pickup")
             PolicyRow(systemImage: "calendar", title: "Minimum trip", value: car.allowOneDayBooking ? "1 day" : "2 days")
+            PolicyRow(systemImage: "person.crop.circle", title: "Driver", value: car.withDriver ? "Comes with a driver" : "Self-drive")
             PolicyRow(systemImage: "calendar.badge.plus", title: "Listed", value: addedDateLabel)
         }
     }

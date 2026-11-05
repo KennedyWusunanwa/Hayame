@@ -361,6 +361,7 @@ const TRACKED_LISTING_FIELDS: TrackedField[] = [
   { key: "instant_book", label: "Instant Book", kind: "bool" },
   { key: "delivery_available", label: "Delivery", kind: "bool" },
   { key: "allow_one_day_booking", label: "1-day bookings", kind: "bool" },
+  { key: "with_driver", label: "Comes with a driver", kind: "bool" },
   { key: "air_conditioning", label: "Air conditioning", kind: "bool" },
   { key: "delivery_fee", label: "Delivery fee", kind: "money" },
   { key: "insurance_fee", label: "Insurance fee", kind: "money" },

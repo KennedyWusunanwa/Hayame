@@ -45,6 +45,7 @@ alter table public.cars add column if not exists fuel_type text;
 alter table public.cars add column if not exists car_year integer;
 alter table public.cars add column if not exists delivery_available boolean default false;
 alter table public.cars add column if not exists allow_one_day_booking boolean not null default false;
+alter table public.cars add column if not exists with_driver boolean not null default false;
 alter table public.cars add column if not exists air_conditioning boolean default false;
 alter table public.cars add column if not exists delivery_fee numeric default 0;
 alter table public.cars add column if not exists insurance_fee numeric default 0;
@@ -505,7 +506,8 @@ select
     else 'new'
   end as host_type,
   ph.image_url,
-  c.allow_one_day_booking
+  c.allow_one_day_booking,
+  c.with_driver
 from public.cars c
 left join public.profiles p on p.id = c.owner_id
 left join review_stats rs on rs.car_id = c.id

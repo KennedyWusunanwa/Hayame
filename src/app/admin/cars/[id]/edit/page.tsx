@@ -77,6 +77,7 @@ export default async function AdminEditCarPage({ params }: PageProps) {
               delivery_available: (car as any).delivery_available ?? false,
               allow_one_day_booking:
                 (car as any).allow_one_day_booking ?? false,
+              with_driver: (car as any).with_driver ?? false,
               air_conditioning: (car as any).air_conditioning ?? false,
               delivery_fee: Number((car as any).delivery_fee ?? 0),
               insurance_fee: Number((car as any).insurance_fee ?? 0),

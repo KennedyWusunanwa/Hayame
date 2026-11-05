@@ -173,6 +173,8 @@ data class CarDto(
     val delivery_available: Boolean? = null,
     /** Hosts opt in to single-day trips; off means a 2-day minimum. */
     val allow_one_day_booking: Boolean? = null,
+    /** The host or their chauffeur drives; guests do not self-drive. */
+    val with_driver: Boolean? = null,
     val air_conditioning: Boolean? = null,
     val approval_status: String? = null,
     val created_at: String? = null,

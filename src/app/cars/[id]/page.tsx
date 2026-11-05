@@ -107,6 +107,7 @@ type CarDetail = {
   instant_book?: boolean | null;
   delivery_available?: boolean | null;
   allow_one_day_booking?: boolean | null;
+  with_driver?: boolean | null;
   delivery_fee?: number | null;
   insurance_fee?: number | null;
   deposit_amount?: number | null;
@@ -228,6 +229,11 @@ export default async function CarDetailPage({ params }: PageProps) {
       value: car.allow_one_day_booking ? "1 day" : "2 days",
       icon: detailIcons.minimumTrip,
     },
+    {
+      label: "Driver",
+      value: car.with_driver ? "Comes with a driver" : "Self-drive",
+      icon: detailIcons.driver,
+    },
   ];
 
   return (
@@ -251,6 +257,9 @@ export default async function CarDetailPage({ params }: PageProps) {
             ) : null}
             {car.allow_one_day_booking ? (
               <Badge variant="outline">1-day bookings OK</Badge>
+            ) : null}
+            {car.with_driver ? (
+              <Badge variant="outline">With driver</Badge>
             ) : null}
           </div>
           <div className="flex items-start gap-3">
@@ -783,6 +792,7 @@ function mapCar(data: SupabaseCar): CarDetail {
     instant_book: data.instant_book,
     delivery_available: (data as any).delivery_available ?? false,
     allow_one_day_booking: (data as any).allow_one_day_booking ?? false,
+    with_driver: (data as any).with_driver ?? false,
     delivery_fee:
       typeof (data as any).delivery_fee === "number"
         ? Number((data as any).delivery_fee)

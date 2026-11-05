@@ -34,6 +34,7 @@ import {
   Waves,
   Wrench,
   CalendarDays,
+  UserRound,
 } from "lucide-react";
 
 type FeatureKey = string | null | undefined;
@@ -84,6 +85,7 @@ export const detailIcons = {
   fuel: Fuel,
   carType: CarFront,
   minimumTrip: CalendarDays,
+  driver: UserRound,
 } satisfies Record<string, LucideIcon>;
 
 export function getFeatureIcon(feature: FeatureKey) {

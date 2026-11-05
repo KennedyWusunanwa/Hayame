@@ -31,6 +31,7 @@ export const carFormSchema = z.object({
   instant_book: z.boolean().optional(),
   delivery_available: z.boolean().optional(),
   allow_one_day_booking: z.boolean().optional(),
+  with_driver: z.boolean().optional(),
   air_conditioning: z.boolean().optional(),
   delivery_fee: z.coerce.number().min(0).optional(),
   insurance_fee: z.coerce.number().min(0).optional(),

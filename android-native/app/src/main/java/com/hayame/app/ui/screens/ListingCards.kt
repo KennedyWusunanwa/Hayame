@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.Bolt
 import androidx.compose.material.icons.outlined.CalendarMonth
+import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.DirectionsCar
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.Icon
@@ -101,12 +102,13 @@ internal fun ListingCard(
                     ListingHeartButton(isFavorite = isFavorite, emphasizeSaved = emphasizeSaved, onClick = onFavoriteClick)
                 }
             }
-            if (car.instant_book == true || car.allow_one_day_booking == true) {
+            if (car.instant_book == true || car.allow_one_day_booking == true || car.with_driver == true) {
                 Row(
                     modifier = Modifier.align(Alignment.BottomStart).padding(8.dp),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
                     if (car.instant_book == true) ListingPhotoPill(Icons.Outlined.Bolt, "Instant")
+                    if (car.with_driver == true) ListingPhotoPill(Icons.Outlined.Person, "Driver")
                     if (car.allow_one_day_booking == true) ListingPhotoPill(Icons.Outlined.CalendarMonth, "1 day")
                 }
             }

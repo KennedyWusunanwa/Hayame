@@ -73,10 +73,13 @@ struct ListingCard: View {
                     .padding(8)
             }
 
-            if car.instantBook || car.allowOneDayBooking {
+            if car.instantBook || car.allowOneDayBooking || car.withDriver {
                 HStack(spacing: 6) {
                     if car.instantBook {
                         photoPill(systemImage: "bolt.fill", text: "Instant")
+                    }
+                    if car.withDriver {
+                        photoPill(systemImage: "person.fill", text: "Driver")
                     }
                     if car.allowOneDayBooking {
                         photoPill(systemImage: "calendar", text: "1 day")

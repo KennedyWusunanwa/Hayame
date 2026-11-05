@@ -61,6 +61,7 @@ function rowMatchesSearch(row: any, tokens: string[]) {
       row?.instant_book ? "instant book" : "",
       row?.delivery_available ? "delivery available" : "",
       row?.allow_one_day_booking ? "one day 1 day" : "",
+      row?.with_driver ? "with driver chauffeur chauffeured driven" : "",
       row?.air_conditioning ? "air conditioning ac" : "",
       Array.isArray(row?.features) ? row.features.join(" ") : "",
     ].join(" "),
@@ -98,6 +99,7 @@ const MOBILE_CAR_LIST_SELECT = [
   "instant_book",
   "delivery_available",
   "allow_one_day_booking",
+  "with_driver",
   "air_conditioning",
   "approval_status",
   "created_at",
@@ -186,6 +188,7 @@ export async function GET(req: Request) {
       searchParams.get("deliveryAvailable"),
     );
     const airConditioning = parseBoolean(searchParams.get("airConditioning"));
+    const withDriver = parseBoolean(searchParams.get("withDriver"));
 
     if (region) query = query.eq("region", region);
     if (city) query = query.eq("city", city);
@@ -214,6 +217,7 @@ export async function GET(req: Request) {
     if (deliveryAvailable === true)
       query = query.eq("delivery_available", true);
     if (airConditioning === true) query = query.eq("air_conditioning", true);
+    if (withDriver === true) query = query.eq("with_driver", true);
 
     if (seats) {
       if (seats === "8+") {

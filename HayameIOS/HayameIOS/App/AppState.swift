@@ -115,6 +115,9 @@ final class AppState: ObservableObject {
     private var pushTokenObserver: NSObjectProtocol?
     private var pushRegistrationFailureObserver: NSObjectProtocol?
     private var pushNotificationRouteObserver: NSObjectProtocol?
+    private var pushNotificationReceivedObserver: NSObjectProtocol?
+    /// Foreground refreshes are throttled so quick app switches do not hammer the API.
+    private var lastForegroundRefreshAt: Date?
     private var appDidBecomeActiveObserver: NSObjectProtocol?
     private var hasSyncedOwnedCarsOnce = false
     private var hasSyncedBookingsOnce = false
@@ -248,6 +251,17 @@ final class AppState: ObservableObject {
                 self.routePendingPushNotificationIfNeeded()
             }
         }
+        pushNotificationReceivedObserver = NotificationCenter.default.addObserver(
+            forName: .hayameDidReceivePushNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            guard let self else { return }
+            let userInfo = notification.userInfo ?? [:]
+            Task { @MainActor in
+                await self.refreshAfterPush(userInfo: userInfo)
+            }
+        }
         appDidBecomeActiveObserver = NotificationCenter.default.addObserver(
             forName: UIApplication.didBecomeActiveNotification,
             object: nil,
@@ -257,6 +271,7 @@ final class AppState: ObservableObject {
             Task { @MainActor in
                 await self.refreshActiveAnnouncements()
                 await self.refreshPendingCheckout()
+                await self.refreshOnForeground()
             }
         }
         routePendingPushNotificationIfNeeded()
@@ -1356,6 +1371,18 @@ final class AppState: ObservableObject {
                 participantName: route.participantName ?? "Chat",
                 preferHostInbox: route.recipientRole == "host"
             )
+            return
+        }
+
+        // A listing decision: show the host their cars with the new status.
+        if route.type == "listing_status" || (route.carID != nil && route.bookingID == nil) {
+            Task { @MainActor in
+                await self.syncOwnedCars()
+            }
+            if hostAccessState == .host {
+                hostModeEnabled = true
+                hostTab = .cars
+            }
             return
         }
 
@@ -2814,6 +2841,36 @@ final class AppState: ObservableObject {
 
     // MARK: - Sync
 
+    /// A push arrived while the app was open (or was just tapped): refresh the
+    /// data it talks about so the screen catches up without a relaunch.
+    func refreshAfterPush(userInfo: [AnyHashable: Any]) async {
+        guard isAuthenticated else { return }
+        let nested = userInfo["data"] as? [AnyHashable: Any]
+        let rawType = (userInfo["type"] as? String) ?? (nested?["type"] as? String) ?? ""
+        switch rawType.lowercased() {
+        case "listing_status":
+            await syncOwnedCars()
+            await syncPublicCars()
+        default:
+            await syncBookings()
+            await syncConversations()
+            await syncOwnedCars()
+        }
+    }
+
+    /// Returning to the foreground: pick up decisions and bookings that came
+    /// in while the app was away. Throttled, as iOS fires this on every switch.
+    func refreshOnForeground() async {
+        guard isAuthenticated else { return }
+        if let last = lastForegroundRefreshAt, Date().timeIntervalSince(last) < 15 { return }
+        lastForegroundRefreshAt = Date()
+        if hostAccessState == .host || !ownedCars.isEmpty {
+            await syncOwnedCars()
+        }
+        await syncBookings()
+        await syncConversations()
+    }
+
     func refreshAllRemoteData() async {
         #if DEBUG
         if Self.isScreenshotMode { return }
@@ -2955,7 +3012,11 @@ final class AppState: ObservableObject {
             let mapped = response.data.map(mapCar)
             ownedCars = mapped
             if hasSyncedOwnedCarsOnce {
-                await notifyOnOwnedListingApprovalChanges(previous: previousByID, current: mapped)
+                // The server already pushes listing decisions to this device;
+                // a local notice on top would be a duplicate.
+                if !NotificationManager.shared.shouldUseRemotePushDelivery {
+                    await notifyOnOwnedListingApprovalChanges(previous: previousByID, current: mapped)
+                }
             } else {
                 hasSyncedOwnedCarsOnce = true
             }
@@ -3551,6 +3612,7 @@ final class AppState: ObservableObject {
             instantBook: dto.instant_book ?? false,
             deliveryAvailable: deliveryAvailable,
             allowOneDayBooking: dto.allow_one_day_booking ?? false,
+            withDriver: dto.with_driver ?? false,
             airConditioning: dto.air_conditioning ?? false,
             deliveryFee: deliveryAvailable ? max(dto.delivery_fee?.intValue ?? 0, 0) : 0,
             insuranceFee: max(dto.insurance_fee?.intValue ?? 0, 0),
@@ -3800,6 +3862,7 @@ final class AppState: ObservableObject {
             "instant_book": draft.instantBook,
             "delivery_available": draft.deliveryAvailable,
             "allow_one_day_booking": draft.allowOneDayBooking,
+            "with_driver": draft.withDriver,
             "air_conditioning": draft.airConditioning,
             "delivery_fee": draft.deliveryAvailable ? draft.deliveryFee : 0,
             "insurance_fee": draft.insuranceFee,
@@ -3822,6 +3885,12 @@ final class AppState: ObservableObject {
                 await self.registerPushDeviceTokenIfAvailable()
                 await self.syncBookings()
                 await self.syncConversations()
+                // A host watching "My cars" sees a decision land within seconds,
+                // even if the push never arrives.
+                let hasPendingListing = self.ownedCars.contains { $0.approvalStatus.lowercased() != "approved" }
+                if self.hostModeEnabled || hasPendingListing {
+                    await self.syncOwnedCars()
+                }
             }
         }
     }
@@ -4084,6 +4153,9 @@ final class AppState: ObservableObject {
         }
         if let pushNotificationRouteObserver {
             NotificationCenter.default.removeObserver(pushNotificationRouteObserver)
+        }
+        if let pushNotificationReceivedObserver {
+            NotificationCenter.default.removeObserver(pushNotificationReceivedObserver)
         }
         if let appDidBecomeActiveObserver {
             NotificationCenter.default.removeObserver(appDidBecomeActiveObserver)

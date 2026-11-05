@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { BadgeCheck, CalendarDays } from "lucide-react";
+import { BadgeCheck, CalendarDays, UserRound } from "lucide-react";
 import { FavoriteButton } from "@/components/favorite-button";
 import { ProtectedVehicleImage } from "@/components/protected-vehicle-image";
 import { VehicleImageWatermark } from "@/components/vehicle-image-watermark";
@@ -95,6 +95,12 @@ export function CarCard({ car, isFavorite = false, onToggleFavorite }: Props) {
             <Badge className="inline-flex items-center gap-1.5 rounded-lg bg-brand/10 px-2.5 py-1 text-brand">
               <CalendarDays className="h-3.5 w-3.5" />
               1-day bookings
+            </Badge>
+          ) : null}
+          {car.with_driver ? (
+            <Badge className="inline-flex items-center gap-1.5 rounded-lg bg-[#06223a] px-2.5 py-1 text-white">
+              <UserRound className="h-3.5 w-3.5" />
+              With driver
             </Badge>
           ) : null}
         </div>

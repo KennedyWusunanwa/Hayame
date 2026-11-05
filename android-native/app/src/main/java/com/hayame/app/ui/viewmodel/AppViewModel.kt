@@ -32,6 +32,7 @@ import com.hayame.app.ui.navigation.HostMainTab
 import com.hayame.app.ui.navigation.MainTab
 import com.hayame.app.ui.reference.AndroidReferenceData
 import com.hayame.app.ui.state.UiState
+import com.hayame.app.push.PushEvents
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -247,6 +248,42 @@ class AppViewModel(
 
     init {
         bootstrap()
+        viewModelScope.launch {
+            PushEvents.events.collect { data -> handlePushData(data) }
+        }
+    }
+
+    /** A push arrived while the app is open: refresh what it talks about. */
+    private fun handlePushData(data: Map<String, String>) {
+        if (!_isAuthenticated.value) return
+        when (data["type"]) {
+            "listing_status" -> {
+                loadMyCars()
+                loadCars(mapOf("sort" to "new_listings", "limit" to "48"))
+            }
+            else -> {
+                loadBookings()
+                refreshConversations()
+                loadMyCars()
+            }
+        }
+    }
+
+    private var lastForegroundRefreshAt = 0L
+
+    /**
+     * Called from the activity's onResume: pick up decisions and bookings that
+     * came in while the app was away. Throttled, since onResume also fires on
+     * quick app switches.
+     */
+    fun refreshOnForeground() {
+        if (!_isAuthenticated.value) return
+        val now = System.currentTimeMillis()
+        if (now - lastForegroundRefreshAt < 15_000L) return
+        lastForegroundRefreshAt = now
+        loadMyCars()
+        loadBookings()
+        refreshConversations()
     }
 
     fun dismissSnackbar() {

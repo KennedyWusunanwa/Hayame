@@ -106,6 +106,7 @@ export function CarForm({
       instant_book: false,
       delivery_available: false,
       allow_one_day_booking: false,
+      with_driver: false,
       air_conditioning: false,
       cancellation_policy: "moderate",
       ...defaultValues,
@@ -448,6 +449,49 @@ export function CarForm({
           {errors.daily_price?.message ? (
             <p className="text-xs text-red-600">{errors.daily_price.message}</p>
           ) : null}
+        </div>
+        <div className="space-y-3 rounded-xl border border-brand/30 bg-brand/5 p-4 sm:col-span-2">
+          <div>
+            <p className="text-sm font-semibold text-foreground">
+              Booking options
+            </p>
+            <p className="text-xs text-gray-600">
+              Shown on the listing so guests know before they book.
+            </p>
+          </div>
+          <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-white p-3">
+            <input
+              type="checkbox"
+              className="mt-0.5 h-4 w-4 rounded border-border"
+              {...register("allow_one_day_booking")}
+            />
+            <span>
+              <span className="block text-sm font-semibold text-foreground">
+                Allow 1-day bookings
+              </span>
+              <span className="block text-xs text-gray-600">
+                Guests can book a single day: pick-up at the 10:00 hand-off and
+                return the next morning. When off, every trip must be at least
+                2 days.
+              </span>
+            </span>
+          </label>
+          <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-white p-3">
+            <input
+              type="checkbox"
+              className="mt-0.5 h-4 w-4 rounded border-border"
+              {...register("with_driver")}
+            />
+            <span>
+              <span className="block text-sm font-semibold text-foreground">
+                Comes with a driver
+              </span>
+              <span className="block text-xs text-gray-600">
+                You or your chauffeur drives; guests do not self-drive. The
+                listing is tagged &ldquo;With driver&rdquo;.
+              </span>
+            </span>
+          </label>
         </div>
         <div className="space-y-2">
           <label className="text-sm font-semibold text-gray-700">Region</label>
@@ -934,21 +978,6 @@ export function CarForm({
         </label>
       </div>
 
-      <div className="flex items-center justify-between rounded-lg border border-border bg-white p-4">
-        <div>
-          <p className="text-sm font-semibold text-foreground">
-            1-day bookings
-          </p>
-          <p className="text-xs text-gray-600">
-            Let guests book this car for a single day. When off, every trip
-            must be at least 2 days.
-          </p>
-        </div>
-        <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" {...register("allow_one_day_booking")} />
-          Allow
-        </label>
-      </div>
 
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
       {photoWarning ? (

@@ -874,6 +874,7 @@ struct ListingEditorScreen: View {
                     instantBook: car.instantBook,
                     deliveryAvailable: car.deliveryAvailable,
                     allowOneDayBooking: car.allowOneDayBooking,
+                    withDriver: car.withDriver,
                     airConditioning: car.airConditioning,
                     deliveryFee: car.deliveryAvailable ? car.deliveryFee : 0,
                     insuranceFee: car.insuranceFee,
@@ -1085,6 +1086,41 @@ struct ListingEditorScreen: View {
                     VStack(alignment: .leading, spacing: 16) {
                         ListingEditorHeroPriceField(value: $draft.price, suggestionText: pricingHintText)
 
+                        // Booking options sit next to the price so hosts cannot miss them.
+                        VStack(alignment: .leading, spacing: 14) {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text("Booking options")
+                                    .font(.hayame(size: 15, weight: .bold))
+                                    .foregroundStyle(HayameTheme.brandNavy)
+                                Text("Shown on the listing so guests know before they book.")
+                                    .font(.hayame(size: 12, weight: .medium))
+                                    .foregroundStyle(HayameTheme.mutedText)
+                            }
+                            ListingEditorToggleRow(
+                                title: "Allow 1-day bookings",
+                                subtitle: "Guests can book a single day. Off means a 2-day minimum.",
+                                helpTitle: "1-day bookings",
+                                helpMessage: "When this is on, guests can book this car for one day: pick-up at the 10:00 AM hand-off and return at the same time the next day. When it's off, every trip must be at least 2 days. The listing shows which one applies.",
+                                isOn: $draft.allowOneDayBooking
+                            )
+                            Rectangle()
+                                .fill(HayameTheme.cardStroke)
+                                .frame(height: 1)
+                            ListingEditorToggleRow(
+                                title: "Comes with a driver",
+                                subtitle: "You or your chauffeur drives. Tagged \"With driver\".",
+                                helpTitle: "With driver",
+                                helpMessage: "Turn this on if the car is only rented with a driver (chauffeur service). Guests see a \"With driver\" tag on the listing and will not expect to drive themselves.",
+                                isOn: $draft.withDriver
+                            )
+                        }
+                        .padding(14)
+                        .background(HayameTheme.brandBlue.opacity(0.06), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                .strokeBorder(HayameTheme.brandBlue.opacity(0.25), lineWidth: 1)
+                        )
+
                         VStack(alignment: .leading, spacing: 10) {
                             Text("Optional add-ons")
                                 .font(.hayame(size: 15, weight: .bold))
@@ -1195,13 +1231,6 @@ struct ListingEditorScreen: View {
                             helpTitle: "Delivery",
                             helpMessage: "Turn this on if you want guests to choose delivery during checkout. Add a delivery fee only if you charge for bringing the car to them.",
                             isOn: $draft.deliveryAvailable
-                        )
-                        ListingEditorToggleRow(
-                            title: "1-day bookings",
-                            subtitle: "Let guests book a single day.",
-                            helpTitle: "1-day bookings",
-                            helpMessage: "When this is on, guests can book this car for one day: pick-up at the 10:00 AM hand-off and return at the same time the next day. When it's off, every trip must be at least 2 days. The listing shows which one applies.",
-                            isOn: $draft.allowOneDayBooking
                         )
                         ListingEditorToggleRow(title: "Air conditioning", subtitle: "Highlight comfort as a visible feature.", isOn: $draft.airConditioning)
 
@@ -1431,6 +1460,7 @@ struct ListingEditorScreen: View {
                         draft.instantBook ? "Instant Book enabled" : "Instant Book off",
                         draft.deliveryAvailable ? "Delivery enabled" : "Delivery off",
                         draft.allowOneDayBooking ? "1-day bookings allowed" : "2-day minimum trip",
+                        draft.withDriver ? "Comes with a driver" : "Self-drive",
                         draft.airConditioning ? "Air conditioning included" : "Air conditioning off",
                         draft.cancellationPolicy
                     ]

@@ -252,6 +252,7 @@ export type Database = {
           instant_book: boolean | null;
           delivery_available: boolean | null;
           allow_one_day_booking: boolean | null;
+          with_driver: boolean | null;
           air_conditioning: boolean | null;
           delivery_fee: number | null;
           insurance_fee: number | null;
@@ -287,6 +288,7 @@ export type Database = {
           instant_book?: boolean | null;
           delivery_available?: boolean | null;
           allow_one_day_booking?: boolean | null;
+          with_driver?: boolean | null;
           air_conditioning?: boolean | null;
           delivery_fee?: number | null;
           insurance_fee?: number | null;
@@ -322,6 +324,7 @@ export type Database = {
           instant_book?: boolean | null;
           delivery_available?: boolean | null;
           allow_one_day_booking?: boolean | null;
+          with_driver?: boolean | null;
           air_conditioning?: boolean | null;
           delivery_fee?: number | null;
           insurance_fee?: number | null;
@@ -699,6 +702,7 @@ export type Database = {
           delivery_available: boolean | null;
           air_conditioning: boolean | null;
           allow_one_day_booking: boolean | null;
+          with_driver: boolean | null;
           year: number | null;
           car_year: number | null;
           delivery_fee: number | null;
