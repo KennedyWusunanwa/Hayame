@@ -70,7 +70,10 @@ export async function POST(req: Request) {
       user_id: userId,
       analytics: body.analytics,
       policy_version: CONSENT_POLICY_VERSION,
-      platform: body.platform === "ios" ? "ios" : "web",
+      platform:
+        body.platform === "ios" || body.platform === "android"
+          ? body.platform
+          : "web",
       user_agent_family: userAgentFamily(req),
     });
     if (error) throw error;

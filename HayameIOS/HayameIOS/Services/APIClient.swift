@@ -140,6 +140,7 @@ struct CarDTO: Decodable {
     let is_available: Bool?
     let instant_book: Bool?
     let delivery_available: Bool?
+    let allow_one_day_booking: Bool?
     let air_conditioning: Bool?
     let approval_status: String?
     let created_at: String?
@@ -192,6 +193,93 @@ struct PaystackInitDTO: Decodable {
 
 struct PaystackFinalizeEnvelopeDTO: Decodable {
     let data: BookingDTO?
+    let conversationId: String?
+}
+
+struct PendingCheckoutEnvelopeDTO: Decodable {
+    let data: PendingCheckoutDTO?
+    let completed: PendingCheckoutCompletedDTO?
+}
+
+struct PendingCheckoutCompletedDTO: Decodable {
+    let bookingId: String?
+    let status: String?
+    let conversationId: String?
+}
+
+struct PendingCheckoutDTO: Decodable {
+    let bookingId: String
+    let carId: String
+    let state: String?
+    let holdExpiresAt: String?
+    let createdAt: String?
+    let startDate: String
+    let endDate: String
+    let nights: DoubleOrIntOrString?
+    let tripMode: String?
+    let tripUseRegion: String?
+    let tripUseCity: String?
+    let tripUseAddress: String?
+    let deliveryAddress: String?
+    let deliveryTime: String?
+    let contactPhone: String?
+    let deliveryNotes: String?
+    let car: PendingCheckoutCarDTO?
+    let pricing: CheckoutPricingDTO?
+    let issues: [CheckoutIssueDTO]?
+    let canResume: Bool?
+    let paymentReference: String?
+    let paymentStatus: String?
+}
+
+struct PendingCheckoutCarDTO: Decodable {
+    let id: String?
+    let title: String?
+    let imageUrl: String?
+    let dailyPrice: DoubleOrIntOrString?
+    let city: String?
+    let region: String?
+    let instantBook: Bool?
+    let deliveryAvailable: Bool?
+    let hostName: String?
+}
+
+struct CheckoutPricingDTO: Decodable {
+    let nights: DoubleOrIntOrString?
+    let dailyRate: DoubleOrIntOrString?
+    let subtotal: DoubleOrIntOrString?
+    let platformFee: DoubleOrIntOrString?
+    let insuranceFee: DoubleOrIntOrString?
+    let deliveryFee: DoubleOrIntOrString?
+    let outsideAccraSurcharge: DoubleOrIntOrString?
+    let depositAmount: DoubleOrIntOrString?
+    let total: DoubleOrIntOrString?
+    let amountMinor: DoubleOrIntOrString?
+}
+
+struct CheckoutIssueDTO: Decodable {
+    let code: String?
+    let message: String?
+}
+
+struct CheckoutResumeEnvelopeDTO: Decodable {
+    let data: CheckoutResumeDTO
+}
+
+struct CheckoutResumeDTO: Decodable {
+    let outcome: String
+    let checkout: PendingCheckoutDTO?
+    let bookingId: String?
+    let conversationId: String?
+}
+
+struct CheckoutAbandonEnvelopeDTO: Decodable {
+    let data: CheckoutAbandonDTO?
+}
+
+struct CheckoutAbandonDTO: Decodable {
+    let outcome: String?
+    let bookingId: String?
     let conversationId: String?
 }
 
@@ -1018,6 +1106,46 @@ struct APIClient {
             baseURL: baseURL,
             token: token
         )
+    }
+
+    // MARK: - Resumable checkout
+
+    func getPendingCheckout(baseURL: String, token: String) async throws -> PendingCheckoutEnvelopeDTO {
+        try await request(
+            path: "/api/mobile/bookings/checkout",
+            method: .GET,
+            body: nil as EmptyResponse?,
+            baseURL: baseURL,
+            token: token
+        )
+    }
+
+    func resumeCheckout(baseURL: String, token: String, bookingID: String) async throws -> CheckoutResumeDTO {
+        struct Payload: Encodable {
+            let bookingId: String
+        }
+        let envelope: CheckoutResumeEnvelopeDTO = try await request(
+            path: "/api/mobile/bookings/checkout/resume",
+            method: .POST,
+            body: Payload(bookingId: bookingID),
+            baseURL: baseURL,
+            token: token
+        )
+        return envelope.data
+    }
+
+    func abandonCheckout(baseURL: String, token: String, bookingID: String) async throws -> CheckoutAbandonDTO? {
+        struct Payload: Encodable {
+            let bookingId: String
+        }
+        let envelope: CheckoutAbandonEnvelopeDTO = try await request(
+            path: "/api/mobile/bookings/checkout/abandon",
+            method: .POST,
+            body: Payload(bookingId: bookingID),
+            baseURL: baseURL,
+            token: token
+        )
+        return envelope.data
     }
 
     func updateBookingDecision(baseURL: String, token: String, bookingID: String, approve: Bool) async throws {

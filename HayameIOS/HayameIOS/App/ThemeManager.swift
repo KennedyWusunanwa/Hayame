@@ -1,6 +1,8 @@
 import SwiftUI
 import UIKit
 
+/// How the app picks light or dark: follow the phone, or force one. Owned by
+/// `AppState` (`appearanceMode` / `setAppearanceMode`).
 enum AppearanceMode: String, CaseIterable, Identifiable {
     case system
     case light
@@ -8,65 +10,49 @@ enum AppearanceMode: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
-    var label: String {
+    /// Short label for the segmented picker in Settings.
+    var title: String {
         switch self {
-        case .system:
-            return "System"
-        case .light:
-            return "Light"
-        case .dark:
-            return "Dark"
+        case .system: return "Auto"
+        case .light: return "Light"
+        case .dark: return "Dark"
         }
     }
 
-    var colorScheme: ColorScheme? {
+    var label: String { title }
+
+    var subtitle: String {
         switch self {
-        case .system:
-            return nil
-        case .light:
-            return .light
-        case .dark:
-            return .dark
+        case .system: return "Follows your phone's setting"
+        case .light: return "Always light"
+        case .dark: return "Always dark"
         }
     }
+
+    var systemImage: String {
+        switch self {
+        case .system: return "iphone"
+        case .light: return "sun.max.fill"
+        case .dark: return "moon.stars.fill"
+        }
+    }
+
+    /// `nil` lets the system decide.
+    var preferredColorScheme: ColorScheme? {
+        switch self {
+        case .system: return nil
+        case .light: return .light
+        case .dark: return .dark
+        }
+    }
+
+    var colorScheme: ColorScheme? { preferredColorScheme }
 
     var userInterfaceStyle: UIUserInterfaceStyle {
         switch self {
-        case .system:
-            return .unspecified
-        case .light:
-            return .light
-        case .dark:
-            return .dark
+        case .system: return .unspecified
+        case .light: return .light
+        case .dark: return .dark
         }
-    }
-}
-
-@MainActor
-final class ThemeManager: ObservableObject {
-    private static let storageKey = "hayame.appearance_mode"
-
-    @Published var appearanceMode: AppearanceMode {
-        didSet {
-            UserDefaults.standard.set(appearanceMode.rawValue, forKey: Self.storageKey)
-            applyAppearanceMode()
-        }
-    }
-
-    var preferredColorScheme: ColorScheme? {
-        appearanceMode.colorScheme
-    }
-
-    init() {
-        let storedMode = UserDefaults.standard.string(forKey: Self.storageKey)
-        appearanceMode = storedMode.flatMap(AppearanceMode.init(rawValue:)) ?? .system
-        applyAppearanceMode()
-    }
-
-    func setAppearanceMode(_ mode: AppearanceMode) {
-        appearanceMode = mode
-    }
-
-    func applyAppearanceMode() {
     }
 }

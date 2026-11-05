@@ -106,6 +106,7 @@ type CarDetail = {
   is_available?: boolean | null;
   instant_book?: boolean | null;
   delivery_available?: boolean | null;
+  allow_one_day_booking?: boolean | null;
   delivery_fee?: number | null;
   insurance_fee?: number | null;
   deposit_amount?: number | null;
@@ -222,6 +223,11 @@ export default async function CarDetailPage({ params }: PageProps) {
       value: car.region ?? car.city ?? "—",
       icon: detailIcons.location,
     },
+    {
+      label: "Minimum trip",
+      value: car.allow_one_day_booking ? "1 day" : "2 days",
+      icon: detailIcons.minimumTrip,
+    },
   ];
 
   return (
@@ -242,6 +248,9 @@ export default async function CarDetailPage({ params }: PageProps) {
             ) : null}
             {addedLabel ? (
               <Badge variant="outline">Added {addedLabel}</Badge>
+            ) : null}
+            {car.allow_one_day_booking ? (
+              <Badge variant="outline">1-day bookings OK</Badge>
             ) : null}
           </div>
           <div className="flex items-start gap-3">
@@ -407,6 +416,7 @@ export default async function CarDetailPage({ params }: PageProps) {
                 platformFeePercent={platformFeePercent}
                 instantBook={car.instant_book}
                 deliveryAvailable={car.delivery_available}
+                allowOneDayBooking={car.allow_one_day_booking}
                 deliveryFee={car.delivery_fee}
                 insuranceFee={car.insurance_fee}
                 depositAmount={car.deposit_amount}
@@ -772,6 +782,7 @@ function mapCar(data: SupabaseCar): CarDetail {
     is_available: data.is_available,
     instant_book: data.instant_book,
     delivery_available: (data as any).delivery_available ?? false,
+    allow_one_day_booking: (data as any).allow_one_day_booking ?? false,
     delivery_fee:
       typeof (data as any).delivery_fee === "number"
         ? Number((data as any).delivery_fee)

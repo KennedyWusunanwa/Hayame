@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- First frame of the Compose splash when the app is forced dark. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <gradient
+        android:angle="270"
+        android:startColor="@color/splash_dark_top"
+        android:centerColor="@color/splash_dark_mid"
+        android:endColor="@color/splash_dark_bottom"
+        android:type="linear" />
+</shape>

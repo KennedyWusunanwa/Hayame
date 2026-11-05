@@ -3,23 +3,43 @@ import UIKit
 
 struct RootView: View {
     @EnvironmentObject private var appState: AppState
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage("hayame.host_status.last_user_id") private var lastHostStatusUserID = ""
     @AppStorage("hayame.host_status.last_value") private var lastHostStatusValue = ""
     @State private var showHostApprovedAlert = false
     @State private var deepLinkedCar: Car?
+    // The shell actually on screen lags the host-mode flag so the branded
+    // interstitial can cover the swap between renter and host.
+    @State private var showHostShell = false
+    @State private var modeSwitchTargetsHost: Bool?
+    @State private var modeSwitchTask: Task<Void, Never>?
+
+    private var wantsHostShell: Bool {
+        appState.isAuthenticated && appState.hostAccessState == .host && appState.hostModeEnabled
+    }
 
     var body: some View {
         ZStack {
             Group {
                 if appState.hasAppAccess {
-                    if appState.isAuthenticated && appState.hostAccessState == .host && appState.hostModeEnabled {
+                    if showHostShell {
                         HostTabShell()
+                            .transition(.asymmetric(insertion: .scale(scale: 1.04).combined(with: .opacity), removal: .opacity))
                     } else {
                         RenterTabShell()
+                            .transition(.asymmetric(insertion: .scale(scale: 1.04).combined(with: .opacity), removal: .opacity))
                     }
                 } else {
                     AuthFlowScreen()
                 }
+            }
+            .animation(HayameMotion.settle, value: showHostShell)
+
+            if let targetsHost = modeSwitchTargetsHost {
+                HayameModeSwitchOverlay(targetsHost: targetsHost)
+                    .id(targetsHost)
+                    .transition(.opacity)
+                    .zIndex(30)
             }
 
             if let announcement = appState.activeAnnouncement, appState.canPresentActiveAnnouncement {
@@ -38,8 +58,21 @@ struct RootView: View {
         .background(HayameTheme.pageBackground.ignoresSafeArea())
         .simultaneousGesture(TapGesture().onEnded { dismissKeyboard() })
         .dismissKeyboardOnBackgroundTap()
+        .animation(.easeInOut(duration: 0.38), value: modeSwitchTargetsHost)
         .onAppear {
             syncHostStatusCache()
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) { showHostShell = wantsHostShell }
+        }
+        .onChange(of: wantsHostShell) { _, wantsHost in
+            handleModeChange(wantsHost)
+        }
+        .onChange(of: appState.hasAppAccess) { _, hasAccess in
+            guard !hasAccess else { return }
+            modeSwitchTask?.cancel()
+            modeSwitchTargetsHost = nil
+            showHostShell = false
         }
         .onChange(of: appState.hostApplicationStatus) { _, _ in
             syncHostStatusCache()
@@ -73,7 +106,7 @@ struct RootView: View {
                                 deepLinkedCar = nil
                             } label: {
                                 Image(systemName: "xmark")
-                                    .font(.system(size: 13, weight: .bold))
+                                    .font(.hayame(size: 13, weight: .bold))
                                     .foregroundStyle(HayameTheme.mutedText)
                                     .frame(width: 30, height: 30)
                                     .background(HayameTheme.subtleFill)
@@ -105,6 +138,29 @@ struct RootView: View {
             } else {
                 appState.pendingCarDeepLinkID = nil
             }
+        }
+    }
+
+    /// Plays the mode-switch interstitial, swaps the shell while it is covered,
+    /// then clears it. Reduce Motion gets a plain cross-fade instead.
+    private func handleModeChange(_ wantsHost: Bool) {
+        guard appState.hasAppAccess, showHostShell != wantsHost else { return }
+        modeSwitchTask?.cancel()
+        if reduceMotion {
+            withAnimation(HayameMotion.fade) { showHostShell = wantsHost }
+            return
+        }
+        HayameHaptics.medium()
+        modeSwitchTargetsHost = wantsHost
+        modeSwitchTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 480_000_000)
+            guard !Task.isCancelled else { return }
+            showHostShell = wantsHost
+            try? await Task.sleep(nanoseconds: 950_000_000)
+            guard !Task.isCancelled else { return }
+            HayameHaptics.success()
+            modeSwitchTargetsHost = nil
+            modeSwitchTask = nil
         }
     }
 
@@ -203,19 +259,19 @@ private struct AppAnnouncementOverlay: View {
                         .fill(HayameTheme.brandBlue.opacity(0.12))
                         .frame(width: 48, height: 48)
                     Image(systemName: announcement.category.lowercased() == "news" ? "megaphone.fill" : "bell.badge.fill")
-                        .font(.system(size: 19, weight: .semibold))
+                        .font(.hayame(size: 19, weight: .semibold))
                         .foregroundStyle(HayameTheme.brandBlue)
                 }
 
                 VStack(alignment: .leading, spacing: 7) {
                     Text(badgeTitle)
-                        .font(.system(size: 11, weight: .bold, design: .rounded))
+                        .font(.hayame(size: 11, weight: .bold))
                         .tracking(0.6)
                         .textCase(.uppercase)
                         .foregroundStyle(HayameTheme.brandBlue)
 
                     Text(announcement.title)
-                        .font(.system(size: 24, weight: .bold, design: .rounded))
+                        .font(.hayame(size: 24, weight: .bold))
                         .foregroundStyle(HayameTheme.brandNavy)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -224,7 +280,7 @@ private struct AppAnnouncementOverlay: View {
 
                 Button(action: onDismiss) {
                     Image(systemName: "xmark")
-                        .font(.system(size: 13, weight: .bold))
+                        .font(.hayame(size: 13, weight: .bold))
                         .foregroundStyle(HayameTheme.mutedText)
                         .frame(width: 38, height: 38)
                         .background(Circle().fill(HayameTheme.fieldBackground))
@@ -233,7 +289,7 @@ private struct AppAnnouncementOverlay: View {
             }
 
             Text(announcement.body)
-                .font(.system(size: 16, weight: .medium, design: .rounded))
+                .font(.hayame(size: 16, weight: .medium))
                 .lineSpacing(3)
                 .foregroundStyle(HayameTheme.brandNavy.opacity(0.88))
                 .fixedSize(horizontal: false, vertical: true)
@@ -241,7 +297,7 @@ private struct AppAnnouncementOverlay: View {
 
             if announcement.showOnce {
                 Text("This notice is shown once on this device.")
-                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .font(.hayame(size: 12, weight: .medium))
                     .foregroundStyle(HayameTheme.mutedText)
             }
 

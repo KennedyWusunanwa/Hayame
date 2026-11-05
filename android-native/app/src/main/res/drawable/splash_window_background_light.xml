@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- First frame of the Compose splash when the app is forced light. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <gradient
+        android:angle="270"
+        android:startColor="@color/splash_light_top"
+        android:centerColor="@color/splash_light_mid"
+        android:endColor="@color/splash_light_bottom"
+        android:type="linear" />
+</shape>

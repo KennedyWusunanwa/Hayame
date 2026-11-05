@@ -105,6 +105,7 @@ export function CarForm({
       is_available: true,
       instant_book: false,
       delivery_available: false,
+      allow_one_day_booking: false,
       air_conditioning: false,
       cancellation_policy: "moderate",
       ...defaultValues,
@@ -926,6 +927,22 @@ export function CarForm({
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" {...register("instant_book")} />
           Instant Book
+        </label>
+      </div>
+
+      <div className="flex items-center justify-between rounded-lg border border-border bg-white p-4">
+        <div>
+          <p className="text-sm font-semibold text-foreground">
+            1-day bookings
+          </p>
+          <p className="text-xs text-gray-600">
+            Let guests book this car for a single day. When off, every trip
+            must be at least 2 days.
+          </p>
+        </div>
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" {...register("allow_one_day_booking")} />
+          Allow
         </label>
       </div>
 

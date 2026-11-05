@@ -9,10 +9,14 @@ private enum AdminTab: Hashable {
 struct AdminShellScreen: View {
     @EnvironmentObject private var appState: AppState
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.dismiss) private var dismiss
     @State private var selectedTab: AdminTab = .home
 
     var body: some View {
         activeContent
+            // Each admin tab has its own stack, so the outer bar is hidden and
+            // every tab gets a button back to More.
+            .toolbar(.hidden, for: .navigationBar)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(HayameTheme.pageBackground.ignoresSafeArea())
             .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -36,10 +40,14 @@ struct AdminShellScreen: View {
         case .home:
             NavigationStack {
                 AdminHomeScreen()
+                    .toolbar { exitToolbarItem }
+                    .refreshable { await appState.refreshAllRemoteData() }
             }
         case .messages:
             NavigationStack {
                 AdminMessagesScreen()
+                    .toolbar { exitToolbarItem }
+                    .refreshable { await appState.refreshAllRemoteData() }
             }
         case .profile:
             NavigationStack {
@@ -59,7 +67,20 @@ struct AdminShellScreen: View {
                 .scrollContentBackground(.hidden)
                 .background(HayameTheme.pageBackground)
                 .navigationTitle("Admin Profile")
+                .toolbar { exitToolbarItem }
             }
+        }
+    }
+
+    private var exitToolbarItem: some ToolbarContent {
+        ToolbarItem(placement: .topBarLeading) {
+            Button {
+                dismiss()
+            } label: {
+                Image(systemName: "chevron.left")
+                    .font(.hayame(size: 16, weight: .bold))
+            }
+            .accessibilityLabel("Back to More")
         }
     }
 }
@@ -109,7 +130,7 @@ struct AdminPlatformScreen: View {
                     ForEach(pendingListings) { car in
                         VStack(alignment: .leading, spacing: 8) {
                             Text(car.displayTitle)
-                                .font(.system(size: 15, weight: .bold, design: .rounded))
+                                .font(.hayame(size: 15, weight: .bold))
                             Text("\(car.city), \(car.region)")
                                 .hayameCaptionStyle()
                             HStack(spacing: 8) {
@@ -220,7 +241,7 @@ struct AdminCarPreviewScreen: View {
                     .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
 
                 Text(car.displayTitle)
-                    .font(.system(size: 24, weight: .bold, design: .rounded))
+                    .font(.hayame(size: 24, weight: .bold))
                     .foregroundStyle(HayameTheme.brandNavy)
 
                 Text(car.description)

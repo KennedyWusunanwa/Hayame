@@ -4,6 +4,10 @@ import com.hayame.app.core.network.BookingDecisionRequest
 import com.hayame.app.core.network.BookingHoldRequest
 import com.hayame.app.core.network.BookingHoldResponse
 import com.hayame.app.core.network.BookingsEnvelope
+import com.hayame.app.core.network.CheckoutAbandonDto
+import com.hayame.app.core.network.CheckoutBookingIdRequest
+import com.hayame.app.core.network.CheckoutResumeDto
+import com.hayame.app.core.network.PendingCheckoutEnvelope
 import com.hayame.app.core.network.DisputeCreateRequest
 import com.hayame.app.core.network.DisputeMutationEnvelope
 import com.hayame.app.core.network.DisputesEnvelope
@@ -67,6 +71,18 @@ class BookingRepository(
         return authedCall { auth ->
             api.finalizePaystack(auth = auth, body = request)
         }
+    }
+
+    suspend fun pendingCheckout(): PendingCheckoutEnvelope {
+        return authedCall { auth -> api.pendingCheckout(auth) }
+    }
+
+    suspend fun resumeCheckout(bookingId: String): CheckoutResumeDto {
+        return authedCall { auth -> api.resumeCheckout(auth, CheckoutBookingIdRequest(bookingId)) }.data
+    }
+
+    suspend fun abandonCheckout(bookingId: String): CheckoutAbandonDto? {
+        return authedCall { auth -> api.abandonCheckout(auth, CheckoutBookingIdRequest(bookingId)) }.data
     }
 
     suspend fun approveBooking(bookingId: String) {

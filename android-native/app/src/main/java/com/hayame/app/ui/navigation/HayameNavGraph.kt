@@ -11,6 +11,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -23,6 +25,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -35,6 +38,9 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.Icon
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.Icons
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.draw.clip
@@ -42,11 +48,13 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -55,7 +63,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -77,19 +89,18 @@ import com.hayame.app.ui.screens.ConversationScreen
 import com.hayame.app.ui.screens.GuestProfileScreen
 import com.hayame.app.ui.screens.HostApplicationPendingScreen
 import com.hayame.app.ui.screens.HostAvailabilityEditorScreen
-import com.hayame.app.ui.screens.HostBookingsScreen
 import com.hayame.app.ui.screens.HostCarEditorScreen
-import com.hayame.app.ui.screens.HostCarsScreen
-import com.hayame.app.ui.screens.HostDashboardScreen
-import com.hayame.app.ui.screens.HostEarningsScreen
 import com.hayame.app.ui.screens.HostFavoritesScreen
 import com.hayame.app.ui.screens.HostListingPhotosScreen
-import com.hayame.app.ui.screens.HostProfileScreen
 import com.hayame.app.ui.screens.HostPublicProfileScreen
 import com.hayame.app.ui.screens.HostReviewsScreen
 import com.hayame.app.ui.screens.HostShell
 import com.hayame.app.ui.screens.LoginScreen
 import com.hayame.app.ui.screens.MainShell
+import com.hayame.app.ui.screens.ProfileOverviewScreen
+import com.hayame.app.ui.screens.ResumableCheckoutUi
+import com.hayame.app.ui.screens.ResumeCheckoutScreen
+import com.hayame.app.ui.screens.SettingsScreen
 import com.hayame.app.ui.screens.MarketingPagesScreen
 import com.hayame.app.ui.screens.MessagesScreen
 import com.hayame.app.ui.screens.PrivacyScreen
@@ -98,11 +109,14 @@ import com.hayame.app.ui.screens.RenterDashboardScreen
 import com.hayame.app.ui.screens.SignupScreen
 import com.hayame.app.ui.screens.SplashScreen
 import com.hayame.app.ui.screens.SupportLegalScreen
+import com.hayame.app.ui.components.HostModeSwitchOverlay
 import com.hayame.app.ui.viewmodel.AppViewModel
 import com.hayame.app.ui.theme.LocalHayameColors
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
-private const val SplashMinimumDurationMs = 5_000L
+// Long enough for the splash to draw the wordmark, slide the car in and show the loader dots.
+private const val SplashMinimumDurationMs = 1_400L
 
 @Composable
 fun HayameNavApp(
@@ -110,6 +124,7 @@ fun HayameNavApp(
     pendingConversationId: String?,
     pendingBookingId: String?,
     pendingBookingRecipientRole: String?,
+    pendingCarId: String?,
     pendingPaystackCallbackUri: String?,
     pendingAnnouncementId: String?,
     pendingAnnouncementTitle: String?,
@@ -118,6 +133,7 @@ fun HayameNavApp(
     pendingAnnouncementCtaUrl: String?,
     onConversationConsumed: () -> Unit,
     onBookingConsumed: () -> Unit,
+    onCarConsumed: () -> Unit,
     onPaystackCallbackConsumed: () -> Unit,
     onAnnouncementConsumed: () -> Unit,
 ) {
@@ -144,8 +160,58 @@ fun HayameNavApp(
     var pendingProtectedRoute by rememberSaveable { mutableStateOf<String?>(null) }
     var authRouteOverride by rememberSaveable { mutableStateOf<String?>(null) }
 
+    // Branded interstitial that covers the swap between the renter and host shells.
+    val modeSwitchScope = rememberCoroutineScope()
+    var modeSwitchTargetsHost by remember { mutableStateOf<Boolean?>(null) }
+    val enterHostMode: (HostMainTab?) -> Unit = { tab ->
+        if (tab != null) viewModel.requestHostTab(tab)
+        if (modeSwitchTargetsHost == null) {
+            modeSwitchTargetsHost = true
+            modeSwitchScope.launch {
+                delay(480)
+                navController.navigate(NavRoutes.HostShell) { launchSingleTop = true }
+                delay(950)
+                modeSwitchTargetsHost = null
+            }
+        }
+    }
+    val exitHostMode: () -> Unit = {
+        if (modeSwitchTargetsHost == null) {
+            modeSwitchTargetsHost = false
+            modeSwitchScope.launch {
+                delay(480)
+                val popped = navController.popBackStack()
+                if (!popped) {
+                    navController.navigate(NavRoutes.main()) { launchSingleTop = true }
+                }
+                delay(950)
+                modeSwitchTargetsHost = null
+            }
+        }
+    }
+
     val hasAppAccess = isAuthenticated || isGuestMode
     val latestHasAppAccess by rememberUpdatedState(hasAppAccess)
+
+    // Coming back to the app is when a dropped payment is most likely to have
+    // settled (or a hold to have expired): re-check the saved checkout.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) viewModel.refreshSavedCheckout()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    // A server-held checkout opens the verification screen; a local draft
+    // reopens the checkout pre-filled where the renter left it.
+    val openResumableCheckout: (ResumableCheckoutUi) -> Unit = { resumable ->
+        when (resumable) {
+            is ResumableCheckoutUi.Held -> navController.navigate(NavRoutes.ResumeCheckout) { launchSingleTop = true }
+            is ResumableCheckoutUi.Draft -> navController.navigate(NavRoutes.booking(resumable.draft.carId))
+        }
+    }
     val latestCurrentRoute by rememberUpdatedState(currentRoute)
     val hostStatus = (me?.host_application_status ?: me?.host_status ?: "").lowercase()
     val canShowAnnouncement = hasAppAccess && when (currentRoute) {
@@ -215,17 +281,6 @@ fun HayameNavApp(
         viewModel.dismissSnackbar()
     }
 
-    LaunchedEffect(Unit) {
-        viewModel.appearanceTransitionEvents.collect {
-            navController.navigate(NavRoutes.main(MainTab.HOME)) {
-                popUpTo(navController.graph.findStartDestination().id) {
-                    saveState = false
-                }
-                launchSingleTop = true
-            }
-        }
-    }
-
     LaunchedEffect(bootstrapping, hasAppAccess, currentRoute, isAuthenticated, pendingProtectedRoute, authRouteOverride) {
         val authRoutes = setOf(NavRoutes.Login, NavRoutes.Signup)
 
@@ -283,6 +338,15 @@ fun HayameNavApp(
             }
         }
         onBookingConsumed()
+    }
+
+    LaunchedEffect(pendingCarId, bootstrapping, hasAppAccess) {
+        val carId = pendingCarId
+        if (bootstrapping || !hasAppAccess || carId.isNullOrBlank()) return@LaunchedEffect
+        navController.navigate(NavRoutes.carDetail(carId)) {
+            launchSingleTop = true
+        }
+        onCarConsumed()
     }
 
     if (canShowAnnouncement) activeAnnouncement?.let { announcement ->
@@ -355,7 +419,7 @@ fun HayameNavApp(
                         TextButton(
                             onClick = { viewModel.dismissActiveAnnouncement() },
                         ) {
-                            Text("✕", color = colors.mutedText, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                            Icon(Icons.Outlined.Close, contentDescription = "Dismiss", tint = colors.mutedText, modifier = Modifier.size(18.dp))
                         }
                     }
 
@@ -418,406 +482,507 @@ fun HayameNavApp(
         }
     }
 
-    Scaffold(
-        modifier = Modifier.pointerInput(Unit) {
-            detectTapGestures(onTap = {
-                focusManager.clearFocus()
-                keyboardController?.hide()
-            })
-        },
-        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
-    ) { innerPadding ->
-        val isSplashRoute = currentRoute == NavRoutes.Splash || currentRoute == null
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .then(if (isSplashRoute) Modifier else Modifier.padding(innerPadding)),
-        ) {
-            NavHost(
-                navController = navController,
-                startDestination = NavRoutes.Splash,
-                enterTransition = {
-                    fadeIn(tween(260, easing = FastOutSlowInEasing)) +
-                        slideInHorizontally(tween(260, easing = FastOutSlowInEasing)) { it / 14 }
-                },
-                exitTransition = {
-                    fadeOut(tween(220, easing = FastOutSlowInEasing)) +
-                        slideOutHorizontally(tween(220, easing = FastOutSlowInEasing)) { -it / 18 }
-                },
-                popEnterTransition = {
-                    fadeIn(tween(260, easing = FastOutSlowInEasing)) +
-                        slideInHorizontally(tween(260, easing = FastOutSlowInEasing)) { -it / 14 }
-                },
-                popExitTransition = {
-                    fadeOut(tween(220, easing = FastOutSlowInEasing)) +
-                        slideOutHorizontally(tween(220, easing = FastOutSlowInEasing)) { it / 18 }
-                },
-            ) {
-                composable(NavRoutes.Splash) {
-                    SplashScreen()
-                }
-                composable(NavRoutes.Login) {
-                    LoginScreen(
-                        viewModel = viewModel,
-                        onSignup = { navController.navigate(NavRoutes.Signup) },
-                        onContinueAsGuest = {
-                            pendingProtectedRoute = null
-                            authRouteOverride = null
-                            viewModel.continueAsGuest()
-                            navController.navigate(NavRoutes.main()) {
-                                popUpTo(NavRoutes.Login) { inclusive = true }
-                            }
-                        },
-                    )
-                }
-                composable(NavRoutes.Signup) {
-                    SignupScreen(
-                        viewModel = viewModel,
-                        onBackToLogin = { navController.popBackStack() },
-                    )
-                }
-                composable(
-                    route = NavRoutes.MainRoute,
-                    arguments = listOf(
-                        navArgument("tab") {
-                            type = NavType.StringType
-                            nullable = true
-                            defaultValue = "home"
+    Box(modifier = Modifier.fillMaxSize()) {
+        Scaffold(
+            modifier = Modifier.pointerInput(Unit) {
+                detectTapGestures(onTap = {
+                    focusManager.clearFocus()
+                    keyboardController?.hide()
+                })
+            },
+            snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
+        ) { innerPadding ->
+            val isSplashRoute = currentRoute == NavRoutes.Splash || currentRoute == null
+            val layoutDirection = LocalLayoutDirection.current
+            val ownsBottomNavigation = currentRoute in setOf(
+                NavRoutes.MainRoute,
+                NavRoutes.HostShell,
+                NavRoutes.AdminShell,
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .then(
+                        if (isSplashRoute) {
+                            Modifier
+                        } else {
+                            Modifier.padding(
+                                start = innerPadding.calculateStartPadding(layoutDirection),
+                                top = innerPadding.calculateTopPadding(),
+                                end = innerPadding.calculateEndPadding(layoutDirection),
+                                bottom = if (ownsBottomNavigation) 0.dp else innerPadding.calculateBottomPadding(),
+                            )
                         },
                     ),
-                ) { backStack ->
-                    val initialTab = parseMainTab(backStack.arguments?.getString("tab"))
-                    MainShell(
-                        viewModel = viewModel,
-                        initialTab = initialTab,
-                        onSelectedTabChanged = {
-                            visibleMainTab = it
-                            visibleHostTab = null
+            ) {
+                NavHost(
+                    navController = navController,
+                    startDestination = NavRoutes.Splash,
+                    enterTransition = {
+                        if (initialState.destination.route == NavRoutes.Splash) {
+                            // Coming out of the splash: a plain fade under the zoom.
+                            fadeIn(tween(420, delayMillis = 80, easing = FastOutSlowInEasing))
+                        } else {
+                            fadeIn(tween(260, easing = FastOutSlowInEasing)) +
+                                slideInHorizontally(tween(260, easing = FastOutSlowInEasing)) { it / 14 }
+                        }
+                    },
+                    exitTransition = {
+                        fadeOut(tween(220, easing = FastOutSlowInEasing)) +
+                            slideOutHorizontally(tween(220, easing = FastOutSlowInEasing)) { -it / 18 }
+                    },
+                    popEnterTransition = {
+                        fadeIn(tween(260, easing = FastOutSlowInEasing)) +
+                            slideInHorizontally(tween(260, easing = FastOutSlowInEasing)) { -it / 14 }
+                    },
+                    popExitTransition = {
+                        fadeOut(tween(220, easing = FastOutSlowInEasing)) +
+                            slideOutHorizontally(tween(220, easing = FastOutSlowInEasing)) { it / 18 }
+                    },
+                ) {
+                    composable(
+                        NavRoutes.Splash,
+                        // The splash zooms toward the viewer and fades as the app takes over.
+                        exitTransition = {
+                            fadeOut(tween(360, delayMillis = 60, easing = FastOutSlowInEasing)) +
+                                scaleOut(targetScale = 1.7f, animationSpec = tween(440, easing = FastOutSlowInEasing))
                         },
-                        onOpenCarDetail = { navController.navigate(NavRoutes.carDetail(it)) },
-                        onOpenConversation = { navController.navigate(NavRoutes.conversation(it)) },
-                        // Land on the More tab when returning from Messages by
-                        // placing it beneath Messages on the back stack.
-                        onOpenMessages = {
-                            navController.navigate(NavRoutes.main(MainTab.MORE))
-                            navController.navigate(NavRoutes.Messages)
+                        popExitTransition = {
+                            fadeOut(tween(360, delayMillis = 60, easing = FastOutSlowInEasing)) +
+                                scaleOut(targetScale = 1.7f, animationSpec = tween(440, easing = FastOutSlowInEasing))
                         },
-                        onOpenDashboard = { navController.navigate(NavRoutes.Dashboard) },
-                        onOpenBecomeHost = { navController.navigate(NavRoutes.BecomeHost) },
-                        onOpenHostDashboard = { navController.navigate(NavRoutes.HostShell) },
-                        onOpenHostVehicles = {
-                            viewModel.requestHostTab(HostMainTab.CARS)
-                            navController.navigate(NavRoutes.HostShell)
-                        },
-                        onOpenTrips = { navController.navigate(NavRoutes.main(MainTab.TRIPS)) },
-                        onOpenProfile = { navController.navigate(NavRoutes.Profile) },
-                        onOpenContact = { navController.navigate(NavRoutes.Contact) },
-                        onOpenProtection = { navController.navigate(NavRoutes.Protection) },
-                        onOpenCancellation = { navController.navigate(NavRoutes.Cancellation) },
-                        onOpenPrivacy = { navController.navigate(NavRoutes.Privacy) },
-                        onOpenAuth = { navController.navigate(NavRoutes.Login) },
-                        onOpenAdmin = { navController.navigate(NavRoutes.AdminShell) },
-                        appearanceHighlightNonce = appearanceHighlightNonce,
-                    )
-                }
-                composable(NavRoutes.Dashboard) {
-                    RenterDashboardScreen(
-                        viewModel = viewModel,
-                        onBack = { navController.popBackStack() },
-                        onOpenTrips = { navController.navigate(NavRoutes.main(MainTab.TRIPS)) },
-                        onOpenSaved = { navController.navigate(NavRoutes.main(MainTab.SAVED)) },
-                        onOpenMessages = {
-                            navController.navigate(NavRoutes.main(MainTab.MORE))
-                            navController.navigate(NavRoutes.Messages)
-                        },
-                        onOpenBecomeHost = {
-                            if (hostStatus == "pending") {
-                                navController.navigate(NavRoutes.HostPending)
-                            } else {
-                                navController.navigate(NavRoutes.BecomeHost)
-                            }
-                        },
-                        onOpenHostDashboard = { navController.navigate(NavRoutes.HostShell) },
-                        onOpenHostVehicles = {
-                            viewModel.requestHostTab(HostMainTab.CARS)
-                            navController.navigate(NavRoutes.HostShell)
-                        },
-                    )
-                }
-                composable(NavRoutes.HostShell) {
-                    HostShell(
-                        viewModel = viewModel,
-                        onSelectedTabChanged = {
-                            visibleHostTab = it
-                            visibleMainTab = null
-                        },
-                        onExitHostMode = {
-                            val popped = navController.popBackStack()
-                            if (!popped) {
-                                navController.navigate(NavRoutes.main()) { launchSingleTop = true }
-                            }
-                        },
-                        onOpenConversation = { navController.navigate(NavRoutes.conversation(it)) },
-                        onOpenCarEditor = { carId -> navController.navigate(NavRoutes.hostCarEditor(carId)) },
-                        onOpenListingPhotos = { carId -> navController.navigate(NavRoutes.hostListingPhotos(carId)) },
-                        onOpenAvailability = { carId -> navController.navigate(NavRoutes.hostAvailability(carId)) },
-                        onOpenFavorites = { navController.navigate(NavRoutes.HostFavorites) },
-                        onOpenContact = { navController.navigate(NavRoutes.Contact) },
-                        onOpenProtection = { navController.navigate(NavRoutes.Protection) },
-                        onOpenCancellation = { navController.navigate(NavRoutes.Cancellation) },
-                        onOpenReviews = { navController.navigate(NavRoutes.HostReviews) },
-                    )
-                }
-                composable(
-                    route = NavRoutes.CarDetail + "/{carId}",
-                    arguments = listOf(navArgument("carId") { type = NavType.StringType }),
-                ) { backStack ->
-                    val carId = backStack.arguments?.getString("carId").orEmpty()
-                    CarDetailScreen(
-                        viewModel = viewModel,
-                        carId = carId,
-                        onBack = { navController.popBackStack() },
-                        onBook = { navController.navigate(NavRoutes.booking(it)) },
-                        onOpenConversation = { navController.navigate(NavRoutes.conversation(it)) },
-                        onOpenProtection = { navController.navigate(NavRoutes.Protection) },
-                        onOpenHostProfile = { ownerId ->
-                            if (ownerId.isNotBlank()) navController.navigate(NavRoutes.hostPublicProfile(ownerId))
-                        },
-                    )
-                }
-                composable(
-                    route = NavRoutes.Booking + "/{carId}",
-                    arguments = listOf(navArgument("carId") { type = NavType.StringType }),
-                ) { backStack ->
-                    val carId = backStack.arguments?.getString("carId").orEmpty()
-                    BookingScreen(
-                        viewModel = viewModel,
-                        carId = carId,
-                        pendingPaystackCallbackUri = pendingPaystackCallbackUri,
-                        onBack = { navController.popBackStack() },
-                        onOpenConversation = { navController.navigate(NavRoutes.conversation(it)) },
-                        onBookingCompleted = {
-                            navController.navigate(NavRoutes.main(MainTab.TRIPS)) {
-                                popUpTo(NavRoutes.MainRoute) { inclusive = true }
+                    ) {
+                        SplashScreen()
+                    }
+                    composable(NavRoutes.Login) {
+                        LoginScreen(
+                            viewModel = viewModel,
+                            onSignup = { navController.navigate(NavRoutes.Signup) },
+                            onContinueAsGuest = {
+                                pendingProtectedRoute = null
+                                authRouteOverride = null
+                                viewModel.continueAsGuest()
+                                navController.navigate(NavRoutes.main()) {
+                                    popUpTo(NavRoutes.Login) { inclusive = true }
+                                }
+                            },
+                        )
+                    }
+                    composable(NavRoutes.Signup) {
+                        SignupScreen(
+                            viewModel = viewModel,
+                            onBackToLogin = { navController.popBackStack() },
+                        )
+                    }
+                    composable(
+                        route = NavRoutes.MainRoute,
+                        arguments = listOf(
+                            navArgument("tab") {
+                                type = NavType.StringType
+                                nullable = true
+                                defaultValue = "home"
+                            },
+                        ),
+                    ) { backStack ->
+                        val initialTab = parseMainTab(backStack.arguments?.getString("tab"))
+                        MainShell(
+                            viewModel = viewModel,
+                            initialTab = initialTab,
+                            onSelectedTabChanged = {
+                                visibleMainTab = it
+                                visibleHostTab = null
+                            },
+                            onOpenCarDetail = { navController.navigate(NavRoutes.carDetail(it)) },
+                            onOpenConversation = { navController.navigate(NavRoutes.conversation(it)) },
+                            // Land on the More tab when returning from Messages by
+                            // placing it beneath Messages on the back stack.
+                            onOpenMessages = {
+                                navController.navigate(NavRoutes.main(MainTab.MORE))
+                                navController.navigate(NavRoutes.Messages)
+                            },
+                            onOpenDashboard = { navController.navigate(NavRoutes.Dashboard) },
+                            onOpenBecomeHost = { navController.navigate(NavRoutes.BecomeHost) },
+                            onOpenHostDashboard = { enterHostMode(null) },
+                            onOpenHostVehicles = { enterHostMode(HostMainTab.CARS) },
+                            onOpenTrips = { navController.navigate(NavRoutes.main(MainTab.TRIPS)) },
+                            onOpenProfile = { navController.navigate(NavRoutes.Profile) },
+                            onOpenContact = { navController.navigate(NavRoutes.Contact) },
+                            onOpenProtection = { navController.navigate(NavRoutes.Protection) },
+                            onOpenCancellation = { navController.navigate(NavRoutes.Cancellation) },
+                            onOpenPrivacy = { navController.navigate(NavRoutes.Privacy) },
+                            onOpenAuth = { navController.navigate(NavRoutes.Login) },
+                            onOpenAdmin = { navController.navigate(NavRoutes.AdminShell) },
+                            onOpenSettings = { highlight -> navController.navigate(NavRoutes.settings(highlight)) },
+                            onOpenProfileOverview = { navController.navigate(NavRoutes.ProfileOverview) },
+                            appearanceHighlightNonce = appearanceHighlightNonce,
+                            onResumeCheckout = openResumableCheckout,
+                        )
+                    }
+                    composable(NavRoutes.ResumeCheckout) {
+                        ResumeCheckoutScreen(
+                            viewModel = viewModel,
+                            pendingPaystackCallbackUri = pendingPaystackCallbackUri,
+                            onBack = { navController.popBackStack() },
+                            onEditDetails = { carId -> navController.navigate(NavRoutes.booking(carId)) },
+                            onBookingCompleted = {
+                                navController.navigate(NavRoutes.main(MainTab.TRIPS)) {
+                                    popUpTo(NavRoutes.MainRoute) { inclusive = true }
+                                    launchSingleTop = true
+                                }
+                            },
+                            onPaystackCallbackConsumed = onPaystackCallbackConsumed,
+                        )
+                    }
+                    composable(NavRoutes.ProfileOverview) {
+                        ProfileOverviewScreen(
+                            viewModel = viewModel,
+                            onBack = { navController.popBackStack() },
+                            onEditProfile = { navController.navigate(NavRoutes.Profile) },
+                            onOpenTrips = { navController.navigate(NavRoutes.main(MainTab.TRIPS)) },
+                            onOpenSaved = { navController.navigate(NavRoutes.main(MainTab.SAVED)) },
+                            onOpenMessages = { navController.navigate(NavRoutes.Messages) },
+                            onOpenBecomeHost = { navController.navigate(NavRoutes.BecomeHost) },
+                            onOpenHostDashboard = { enterHostMode(null) },
+                            onOpenAuth = { navController.navigate(NavRoutes.Login) },
+                        )
+                    }
+                    composable(
+                        route = NavRoutes.SettingsRoute,
+                        arguments = listOf(
+                            navArgument("highlight") {
+                                type = NavType.StringType
+                                nullable = true
+                                defaultValue = "0"
+                            },
+                        ),
+                    ) { backStack ->
+                        SettingsScreen(
+                            viewModel = viewModel,
+                            highlightAppearance = backStack.arguments?.getString("highlight") == "1",
+                            onBack = { navController.popBackStack() },
+                            onEditProfile = { navController.navigate(NavRoutes.Profile) },
+                            onOpenProfileOverview = { navController.navigate(NavRoutes.ProfileOverview) },
+                            onOpenBecomeHost = { navController.navigate(NavRoutes.BecomeHost) },
+                            onOpenHostDashboard = { enterHostMode(null) },
+                            onOpenProtection = { navController.navigate(NavRoutes.Protection) },
+                            onOpenCancellation = { navController.navigate(NavRoutes.Cancellation) },
+                            onOpenPrivacy = { navController.navigate(NavRoutes.Privacy) },
+                            onOpenAuth = { navController.navigate(NavRoutes.Login) },
+                        )
+                    }
+                    composable(NavRoutes.Dashboard) {
+                        RenterDashboardScreen(
+                            viewModel = viewModel,
+                            onBack = { navController.popBackStack() },
+                            onOpenTrips = { navController.navigate(NavRoutes.main(MainTab.TRIPS)) },
+                            onOpenSaved = { navController.navigate(NavRoutes.main(MainTab.SAVED)) },
+                            onOpenMessages = {
+                                navController.navigate(NavRoutes.main(MainTab.MORE))
+                                navController.navigate(NavRoutes.Messages)
+                            },
+                            onOpenBecomeHost = {
+                                if (hostStatus == "pending") {
+                                    navController.navigate(NavRoutes.HostPending)
+                                } else {
+                                    navController.navigate(NavRoutes.BecomeHost)
+                                }
+                            },
+                            onOpenHostDashboard = { enterHostMode(null) },
+                            onOpenHostVehicles = { enterHostMode(HostMainTab.CARS) },
+                        )
+                    }
+                    composable(NavRoutes.HostShell) {
+                        HostShell(
+                            viewModel = viewModel,
+                            onSelectedTabChanged = {
+                                visibleHostTab = it
+                                visibleMainTab = null
+                            },
+                            onExitHostMode = exitHostMode,
+                            onOpenConversation = { navController.navigate(NavRoutes.conversation(it)) },
+                            onOpenCarEditor = { carId -> navController.navigate(NavRoutes.hostCarEditor(carId)) },
+                            onOpenListingPhotos = { carId -> navController.navigate(NavRoutes.hostListingPhotos(carId)) },
+                            onOpenAvailability = { carId -> navController.navigate(NavRoutes.hostAvailability(carId)) },
+                            onOpenFavorites = { navController.navigate(NavRoutes.HostFavorites) },
+                            onOpenContact = { navController.navigate(NavRoutes.Contact) },
+                            onOpenProtection = { navController.navigate(NavRoutes.Protection) },
+                            onOpenCancellation = { navController.navigate(NavRoutes.Cancellation) },
+                            onOpenReviews = { navController.navigate(NavRoutes.HostReviews) },
+                            onOpenSettings = { navController.navigate(NavRoutes.settings(false)) },
+                            onEditProfile = { navController.navigate(NavRoutes.Profile) },
+                        )
+                    }
+                    composable(
+                        route = NavRoutes.CarDetail + "/{carId}",
+                        arguments = listOf(navArgument("carId") { type = NavType.StringType }),
+                    ) { backStack ->
+                        val carId = backStack.arguments?.getString("carId").orEmpty()
+                        CarDetailScreen(
+                            viewModel = viewModel,
+                            carId = carId,
+                            onBack = { navController.popBackStack() },
+                            onBook = { navController.navigate(NavRoutes.booking(it)) },
+                            onOpenConversation = { navController.navigate(NavRoutes.conversation(it)) },
+                            onOpenProtection = { navController.navigate(NavRoutes.Protection) },
+                            onOpenHostProfile = { ownerId ->
+                                if (ownerId.isNotBlank()) navController.navigate(NavRoutes.hostPublicProfile(ownerId))
+                            },
+                            onResumeCheckout = openResumableCheckout,
+                        )
+                    }
+                    composable(
+                        route = NavRoutes.Booking + "/{carId}",
+                        arguments = listOf(navArgument("carId") { type = NavType.StringType }),
+                    ) { backStack ->
+                        val carId = backStack.arguments?.getString("carId").orEmpty()
+                        BookingScreen(
+                            viewModel = viewModel,
+                            carId = carId,
+                            pendingPaystackCallbackUri = pendingPaystackCallbackUri,
+                            onBack = { navController.popBackStack() },
+                            onOpenConversation = { navController.navigate(NavRoutes.conversation(it)) },
+                            onBookingCompleted = {
+                                navController.navigate(NavRoutes.main(MainTab.TRIPS)) {
+                                    popUpTo(NavRoutes.MainRoute) { inclusive = true }
+                                    launchSingleTop = true
+                                }
+                            },
+                            onPaystackCallbackConsumed = onPaystackCallbackConsumed,
+                        )
+                    }
+                    composable(NavRoutes.Messages) {
+                        MessagesScreen(
+                            viewModel = viewModel,
+                            onBack = { navController.popBackStack() },
+                            onOpenConversation = { navController.navigate(NavRoutes.conversation(it)) },
+                        )
+                    }
+                    composable(
+                        route = NavRoutes.Conversation + "/{conversationId}",
+                        arguments = listOf(navArgument("conversationId") { type = NavType.StringType }),
+                    ) { backStack ->
+                        val conversationId = backStack.arguments?.getString("conversationId").orEmpty()
+                        ConversationScreen(
+                            viewModel = viewModel,
+                            conversationId = conversationId,
+                            onBack = { navController.popBackStack() },
+                        )
+                    }
+                    composable(NavRoutes.BecomeHost) {
+                        BecomeHostScreen(
+                            viewModel = viewModel,
+                            onBack = { navController.popBackStack() },
+                            onOpenAuth = { navController.navigate(NavRoutes.Login) },
+                            onOpenHostDashboard = { enterHostMode(null) },
+                            onSubmissionCompleted = {
+                                navController.navigate(NavRoutes.HostPending) {
+                                    popUpTo(NavRoutes.BecomeHost) { inclusive = true }
+                                }
+                            },
+                        )
+                    }
+                    composable(NavRoutes.HostPending) {
+                        HostApplicationPendingScreen(
+                            viewModel = viewModel,
+                            onBack = { navController.popBackStack() },
+                            onOpenBecomeHost = { navController.navigate(NavRoutes.BecomeHost) },
+                        )
+                    }
+                    composable(NavRoutes.HostDashboard) {
+                        // Old standalone host page: open it as a tab of the host shell so it has
+                        // the tab bar and the normal back behaviour.
+                        LaunchedEffect(Unit) {
+                            viewModel.requestHostTab(HostMainTab.DASHBOARD)
+                            navController.navigate(NavRoutes.HostShell) {
+                                popUpTo(NavRoutes.HostDashboard) { inclusive = true }
                                 launchSingleTop = true
                             }
-                        },
-                        onPaystackCallbackConsumed = onPaystackCallbackConsumed,
-                    )
-                }
-                composable(NavRoutes.Messages) {
-                    MessagesScreen(
-                        viewModel = viewModel,
-                        onBack = { navController.popBackStack() },
-                        onOpenConversation = { navController.navigate(NavRoutes.conversation(it)) },
-                    )
-                }
-                composable(
-                    route = NavRoutes.Conversation + "/{conversationId}",
-                    arguments = listOf(navArgument("conversationId") { type = NavType.StringType }),
-                ) { backStack ->
-                    val conversationId = backStack.arguments?.getString("conversationId").orEmpty()
-                    ConversationScreen(
-                        viewModel = viewModel,
-                        conversationId = conversationId,
-                        onBack = { navController.popBackStack() },
-                    )
-                }
-                composable(NavRoutes.BecomeHost) {
-                    BecomeHostScreen(
-                        viewModel = viewModel,
-                        onBack = { navController.popBackStack() },
-                    )
-                }
-                composable(NavRoutes.HostPending) {
-                    HostApplicationPendingScreen(
-                        viewModel = viewModel,
-                        onBack = { navController.popBackStack() },
-                        onOpenBecomeHost = { navController.navigate(NavRoutes.BecomeHost) },
-                    )
-                }
-                composable(NavRoutes.HostDashboard) {
-                    HostDashboardScreen(
-                        viewModel = viewModel,
-                        onBack = { navController.popBackStack() },
-                        onOpenCars = { navController.navigate(NavRoutes.HostCars) },
-                        onOpenCreateCar = { navController.navigate(NavRoutes.hostCarEditor(null)) },
-                        onOpenBookings = { navController.navigate(NavRoutes.HostBookings) },
-                        onOpenEarnings = { navController.navigate(NavRoutes.HostEarnings) },
-                        onOpenMessages = { navController.navigate(NavRoutes.Messages) },
-                        onOpenFavorites = { navController.navigate(NavRoutes.HostFavorites) },
-                        onOpenReviews = { navController.navigate(NavRoutes.HostReviews) },
-                        onOpenProfile = { navController.navigate(NavRoutes.HostProfile) },
-                    )
-                }
-                composable(NavRoutes.HostCars) {
-                    HostCarsScreen(
-                        viewModel = viewModel,
-                        onBack = { navController.popBackStack() },
-                        onCreate = { navController.navigate(NavRoutes.hostCarEditor(null)) },
-                        onEdit = { navController.navigate(NavRoutes.hostCarEditor(it)) },
-                        onOpenPhotos = { navController.navigate(NavRoutes.hostListingPhotos(it)) },
-                        onOpenAvailability = { navController.navigate(NavRoutes.hostAvailability(it)) },
-                    )
-                }
-                composable(
-                    route = NavRoutes.HostCarEditor + "/{carId}",
-                    arguments = listOf(navArgument("carId") { type = NavType.StringType }),
-                ) { backStack ->
-                    val carId = backStack.arguments?.getString("carId")
-                    HostCarEditorScreen(
-                        viewModel = viewModel,
-                        carId = carId,
-                        onBack = { navController.popBackStack() },
-                        onOpenPhotos = { navController.navigate(NavRoutes.hostListingPhotos(it)) },
-                        onOpenAvailability = { navController.navigate(NavRoutes.hostAvailability(it)) },
-                    )
-                }
-                composable(
-                    route = NavRoutes.HostListingPhotos + "/{carId}",
-                    arguments = listOf(navArgument("carId") { type = NavType.StringType }),
-                ) { backStack ->
-                    val carId = backStack.arguments?.getString("carId").orEmpty()
-                    HostListingPhotosScreen(
-                        viewModel = viewModel,
-                        carId = carId,
-                        onBack = { navController.popBackStack() },
-                    )
-                }
-                composable(
-                    route = NavRoutes.HostAvailability + "/{carId}",
-                    arguments = listOf(navArgument("carId") { type = NavType.StringType }),
-                ) { backStack ->
-                    val carId = backStack.arguments?.getString("carId").orEmpty()
-                    HostAvailabilityEditorScreen(
-                        viewModel = viewModel,
-                        carId = carId,
-                        onBack = { navController.popBackStack() },
-                    )
-                }
-                composable(NavRoutes.HostBookings) {
-                    HostBookingsScreen(
-                        viewModel = viewModel,
-                        onBack = { navController.popBackStack() },
-                        onOpenConversation = { navController.navigate(NavRoutes.conversation(it)) },
-                    )
-                }
-                composable(NavRoutes.HostEarnings) {
-                    HostEarningsScreen(
-                        viewModel = viewModel,
-                        onBack = { navController.popBackStack() },
-                    )
-                }
-                composable(NavRoutes.HostReviews) {
-                    HostReviewsScreen(
-                        viewModel = viewModel,
-                        onBack = { navController.popBackStack() },
-                    )
-                }
-                composable(NavRoutes.HostFavorites) {
-                    HostFavoritesScreen(
-                        viewModel = viewModel,
-                        onBack = { navController.popBackStack() },
-                    )
-                }
-                composable(NavRoutes.HostProfile) {
-                    HostProfileScreen(
-                        viewModel = viewModel,
-                        onBack = { navController.popBackStack() },
-                        onOpenReviews = { navController.navigate(NavRoutes.HostReviews) },
-                        onOpenFavorites = { navController.navigate(NavRoutes.HostFavorites) },
-                        onOpenContact = { navController.navigate(NavRoutes.Contact) },
-                        onOpenProtection = { navController.navigate(NavRoutes.Protection) },
-                        onOpenCancellation = { navController.navigate(NavRoutes.Cancellation) },
-                        onTurnOffHostMode = { navController.popBackStack() },
-                    )
-                }
-                composable(NavRoutes.Profile) {
-                    GuestProfileScreen(
-                        viewModel = viewModel,
-                        onBack = { navController.popBackStack() },
-                    )
-                }
-                composable(NavRoutes.SupportLegal) {
-                    SupportLegalScreen(
-                        onBack = { navController.popBackStack() },
-                        onOpenContact = { navController.navigate(NavRoutes.Contact) },
-                        onOpenPrivacy = { navController.navigate(NavRoutes.Privacy) },
-                        onOpenProtection = { navController.navigate(NavRoutes.Protection) },
-                        onOpenCancellation = { navController.navigate(NavRoutes.Cancellation) },
-                        onOpenMarketing = { navController.navigate(NavRoutes.Marketing) },
-                    )
-                }
-                composable(NavRoutes.Contact) {
-                    ContactScreen(onBack = { navController.popBackStack() })
-                }
-                composable(NavRoutes.Privacy) {
-                    PrivacyScreen(onBack = { navController.popBackStack() })
-                }
-                composable(NavRoutes.Protection) {
-                    ProtectionScreen(onBack = { navController.popBackStack() })
-                }
-                composable(NavRoutes.Cancellation) {
-                    CancellationPolicyScreen(onBack = { navController.popBackStack() })
-                }
-                composable(NavRoutes.Marketing) {
-                    MarketingPagesScreen(onBack = { navController.popBackStack() })
-                }
-                composable(
-                    route = NavRoutes.HostPublicProfile + "/{ownerId}",
-                    arguments = listOf(navArgument("ownerId") { type = NavType.StringType }),
-                ) { backStack ->
-                    val ownerId = backStack.arguments?.getString("ownerId").orEmpty()
-                    HostPublicProfileScreen(
-                        viewModel = viewModel,
-                        ownerId = ownerId,
-                        onBack = { navController.popBackStack() },
-                        onOpenCarDetail = { navController.navigate(NavRoutes.carDetail(it)) },
-                    )
-                }
-                composable(NavRoutes.AdminShell) {
-                    AdminShellScreen(
-                        viewModel = viewModel,
-                        onExitAdmin = {
-                            val popped = navController.popBackStack()
-                            if (!popped) navController.navigate(NavRoutes.HostShell) { launchSingleTop = true }
-                        },
-                        onOpenConversation = { navController.navigate(NavRoutes.conversation(it)) },
-                    )
-                }
-            }
-
-            authPrompt?.let { prompt ->
-                AlertDialog(
-                    onDismissRequest = { viewModel.dismissAuthPrompt() },
-                    title = { Text("Sign in required") },
-                    text = { Text(prompt.message) },
-                    confirmButton = {
-                        Button(
-                            onClick = {
-                                pendingProtectedRoute = prompt.destination ?: resolvedDestination(navBackStackEntry) ?: NavRoutes.main()
-                                authRouteOverride = NavRoutes.Login
-                                viewModel.returnToAuth()
-                            },
-                        ) {
-                            Text("Sign in")
                         }
-                    },
-                    dismissButton = {
-                        TextButton(
-                            onClick = {
-                                pendingProtectedRoute = prompt.destination ?: resolvedDestination(navBackStackEntry) ?: NavRoutes.main()
-                                authRouteOverride = NavRoutes.Signup
-                                viewModel.returnToAuth()
-                            },
-                        ) {
-                            Text("Sign up")
+                    }
+                    composable(NavRoutes.HostCars) {
+                        // Old standalone host page: open it as a tab of the host shell so it has
+                        // the tab bar and the normal back behaviour.
+                        LaunchedEffect(Unit) {
+                            viewModel.requestHostTab(HostMainTab.CARS)
+                            navController.navigate(NavRoutes.HostShell) {
+                                popUpTo(NavRoutes.HostCars) { inclusive = true }
+                                launchSingleTop = true
+                            }
                         }
-                    },
-                )
-            }
+                    }
+                    composable(
+                        route = NavRoutes.HostCarEditor + "/{carId}",
+                        arguments = listOf(navArgument("carId") { type = NavType.StringType }),
+                    ) { backStack ->
+                        val carId = backStack.arguments?.getString("carId")
+                        HostCarEditorScreen(
+                            viewModel = viewModel,
+                            carId = carId,
+                            onBack = { navController.popBackStack() },
+                            onOpenPhotos = { navController.navigate(NavRoutes.hostListingPhotos(it)) },
+                            onOpenAvailability = { navController.navigate(NavRoutes.hostAvailability(it)) },
+                        )
+                    }
+                    composable(
+                        route = NavRoutes.HostListingPhotos + "/{carId}",
+                        arguments = listOf(navArgument("carId") { type = NavType.StringType }),
+                    ) { backStack ->
+                        val carId = backStack.arguments?.getString("carId").orEmpty()
+                        HostListingPhotosScreen(
+                            viewModel = viewModel,
+                            carId = carId,
+                            onBack = { navController.popBackStack() },
+                        )
+                    }
+                    composable(
+                        route = NavRoutes.HostAvailability + "/{carId}",
+                        arguments = listOf(navArgument("carId") { type = NavType.StringType }),
+                    ) { backStack ->
+                        val carId = backStack.arguments?.getString("carId").orEmpty()
+                        HostAvailabilityEditorScreen(
+                            viewModel = viewModel,
+                            carId = carId,
+                            onBack = { navController.popBackStack() },
+                        )
+                    }
+                    composable(NavRoutes.HostBookings) {
+                        // Old standalone host page: open it as a tab of the host shell so it has
+                        // the tab bar and the normal back behaviour.
+                        LaunchedEffect(Unit) {
+                            viewModel.requestHostTab(HostMainTab.BOOKINGS)
+                            navController.navigate(NavRoutes.HostShell) {
+                                popUpTo(NavRoutes.HostBookings) { inclusive = true }
+                                launchSingleTop = true
+                            }
+                        }
+                    }
+                    composable(NavRoutes.HostEarnings) {
+                        // Old standalone host page: open it as a tab of the host shell so it has
+                        // the tab bar and the normal back behaviour.
+                        LaunchedEffect(Unit) {
+                            viewModel.requestHostTab(HostMainTab.EARNINGS)
+                            navController.navigate(NavRoutes.HostShell) {
+                                popUpTo(NavRoutes.HostEarnings) { inclusive = true }
+                                launchSingleTop = true
+                            }
+                        }
+                    }
+                    composable(NavRoutes.HostReviews) {
+                        HostReviewsScreen(
+                            viewModel = viewModel,
+                            onBack = { navController.popBackStack() },
+                        )
+                    }
+                    composable(NavRoutes.HostFavorites) {
+                        HostFavoritesScreen(
+                            viewModel = viewModel,
+                            onBack = { navController.popBackStack() },
+                        )
+                    }
+                    composable(NavRoutes.HostProfile) {
+                        // Old standalone host page: open it as a tab of the host shell so it has
+                        // the tab bar and the normal back behaviour.
+                        LaunchedEffect(Unit) {
+                            viewModel.requestHostTab(HostMainTab.PROFILE)
+                            navController.navigate(NavRoutes.HostShell) {
+                                popUpTo(NavRoutes.HostProfile) { inclusive = true }
+                                launchSingleTop = true
+                            }
+                        }
+                    }
+                    composable(NavRoutes.Profile) {
+                        GuestProfileScreen(
+                            viewModel = viewModel,
+                            onBack = { navController.popBackStack() },
+                        )
+                    }
+                    composable(NavRoutes.SupportLegal) {
+                        SupportLegalScreen(
+                            onBack = { navController.popBackStack() },
+                            onOpenContact = { navController.navigate(NavRoutes.Contact) },
+                            onOpenPrivacy = { navController.navigate(NavRoutes.Privacy) },
+                            onOpenProtection = { navController.navigate(NavRoutes.Protection) },
+                            onOpenCancellation = { navController.navigate(NavRoutes.Cancellation) },
+                            onOpenMarketing = { navController.navigate(NavRoutes.Marketing) },
+                        )
+                    }
+                    composable(NavRoutes.Contact) {
+                        ContactScreen(onBack = { navController.popBackStack() })
+                    }
+                    composable(NavRoutes.Privacy) {
+                        PrivacyScreen(onBack = { navController.popBackStack() })
+                    }
+                    composable(NavRoutes.Protection) {
+                        ProtectionScreen(onBack = { navController.popBackStack() })
+                    }
+                    composable(NavRoutes.Cancellation) {
+                        CancellationPolicyScreen(onBack = { navController.popBackStack() })
+                    }
+                    composable(NavRoutes.Marketing) {
+                        MarketingPagesScreen(onBack = { navController.popBackStack() })
+                    }
+                    composable(
+                        route = NavRoutes.HostPublicProfile + "/{ownerId}",
+                        arguments = listOf(navArgument("ownerId") { type = NavType.StringType }),
+                    ) { backStack ->
+                        val ownerId = backStack.arguments?.getString("ownerId").orEmpty()
+                        HostPublicProfileScreen(
+                            viewModel = viewModel,
+                            ownerId = ownerId,
+                            onBack = { navController.popBackStack() },
+                            onOpenCarDetail = { navController.navigate(NavRoutes.carDetail(it)) },
+                        )
+                    }
+                    composable(NavRoutes.AdminShell) {
+                        AdminShellScreen(
+                            viewModel = viewModel,
+                            onExitAdmin = {
+                                val popped = navController.popBackStack()
+                                if (!popped) navController.navigate(NavRoutes.HostShell) { launchSingleTop = true }
+                            },
+                            onOpenConversation = { navController.navigate(NavRoutes.conversation(it)) },
+                            onOpenCarEditor = { navController.navigate(NavRoutes.hostCarEditor(it)) },
+                        )
+                    }
+                }
 
+                authPrompt?.let { prompt ->
+                    AlertDialog(
+                        onDismissRequest = { viewModel.dismissAuthPrompt() },
+                        title = { Text("Sign in required") },
+                        text = { Text(prompt.message) },
+                        confirmButton = {
+                            Button(
+                                onClick = {
+                                    pendingProtectedRoute = prompt.destination ?: resolvedDestination(navBackStackEntry) ?: NavRoutes.main()
+                                    authRouteOverride = NavRoutes.Login
+                                    viewModel.returnToAuth()
+                                },
+                            ) {
+                                Text("Sign in")
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(
+                                onClick = {
+                                    pendingProtectedRoute = prompt.destination ?: resolvedDestination(navBackStackEntry) ?: NavRoutes.main()
+                                    authRouteOverride = NavRoutes.Signup
+                                    viewModel.returnToAuth()
+                                },
+                            ) {
+                                Text("Sign up")
+                            }
+                        },
+                    )
+                }
+
+            }
         }
+        HostModeSwitchOverlay(
+            visible = modeSwitchTargetsHost != null,
+            targetsHost = modeSwitchTargetsHost == true,
+            modifier = Modifier.fillMaxSize(),
+        )
     }
 }
 

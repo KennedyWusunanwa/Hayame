@@ -5,6 +5,7 @@ import coil.ImageLoader
 import coil.ImageLoaderFactory
 import coil.disk.DiskCache
 import coil.memory.MemoryCache
+import com.hayame.app.core.analytics.AnalyticsService
 import com.hayame.app.core.network.NetworkClient
 import com.hayame.app.core.repo.AuthRepository
 import com.hayame.app.core.repo.BookingRepository
@@ -24,6 +25,7 @@ class HayameApplication : Application(), ImageLoaderFactory {
         PushTokenStore.initialize(this)
         NetworkClient.initialize(this)
         container = AppContainer(this)
+        AnalyticsService.initialize(this, container.session)
     }
 
     override fun newImageLoader(): ImageLoader {

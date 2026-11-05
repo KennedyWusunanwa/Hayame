@@ -64,6 +64,8 @@ enum class AuthTab(val label: String) {
     LOGIN("Log in"), SIGNUP("Sign up")
 }
 
+private val AuthFieldHeight = 50.dp
+
 @Composable
 fun AuthScaffold(
     title: String,
@@ -204,22 +206,27 @@ fun AuthTextField(
             onValueChange = onValueChange,
             modifier = Modifier
                 .fillMaxWidth()
+                .height(AuthFieldHeight)
                 .onFocusChanged { focused = it.isFocused }
                 .background(if (focused) colors.cardBackground else colors.pageBackground, RoundedCornerShape(12.dp))
                 .border(
                     1.5.dp,
                     if (focused) colors.brandBlue else colors.border,
                     RoundedCornerShape(12.dp),
-                )
-                .padding(horizontal = 14.dp, vertical = 13.dp),
+                ),
             keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
             singleLine = true,
             textStyle = MaterialTheme.typography.bodyMedium.copy(color = colors.brandNavy),
             decorationBox = { inner ->
-                if (value.isEmpty()) {
-                    Text(label, color = colors.mutedText, style = MaterialTheme.typography.bodyMedium)
+                Box(
+                    modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp),
+                    contentAlignment = Alignment.CenterStart,
+                ) {
+                    if (value.isEmpty()) {
+                        Text(label, color = colors.mutedText, style = MaterialTheme.typography.bodyMedium)
+                    }
+                    inner()
                 }
-                inner()
             },
         )
     }
@@ -246,6 +253,7 @@ fun AuthPasswordField(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .height(AuthFieldHeight)
                 .onFocusChanged { focused = it.isFocused }
                 .background(if (focused) colors.cardBackground else colors.pageBackground, RoundedCornerShape(12.dp))
                 .border(
@@ -253,7 +261,7 @@ fun AuthPasswordField(
                     if (focused) colors.brandBlue else colors.border,
                     RoundedCornerShape(12.dp),
                 )
-                .padding(horizontal = 14.dp, vertical = 8.dp),
+                .padding(horizontal = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             BasicTextField(
@@ -302,10 +310,11 @@ fun AuthSelectField(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .height(AuthFieldHeight)
                     .background(colors.pageBackground, RoundedCornerShape(12.dp))
                     .border(1.5.dp, colors.border, RoundedCornerShape(12.dp))
                     .clickable { expanded = true }
-                    .padding(horizontal = 14.dp, vertical = 13.dp),
+                    .padding(horizontal = 14.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(

@@ -1,6 +1,13 @@
 package com.hayame.app.ui.screens
 
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.asPaddingValues
+import com.hayame.app.ui.components.HayameRefreshBox
+import com.hayame.app.ui.components.coachTarget
+import com.hayame.app.ui.components.CoachTour
+import com.hayame.app.ui.components.CoachStep
 import android.Manifest
+import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
@@ -9,6 +16,7 @@ import android.hardware.biometrics.BiometricPrompt
 import android.net.Uri
 import android.os.Build
 import android.os.CancellationSignal
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.DrawableRes
@@ -74,9 +82,29 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.outlined.AddCircleOutline
 import androidx.compose.material.icons.outlined.AccountBalance
 import androidx.compose.material.icons.outlined.AttachMoney
+import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.ChatBubble
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.People
+import androidx.compose.material.icons.outlined.LocalGasStation
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.AcUnit
+import androidx.compose.material.icons.outlined.LocalShipping
+import androidx.compose.material.icons.outlined.Verified
+import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.StarBorder
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.outlined.Bolt
+import androidx.compose.material.icons.outlined.Place
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.CreditCard
 import androidx.compose.material.icons.outlined.DarkMode
@@ -95,6 +123,7 @@ import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.PhoneIphone
 import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.Visibility
@@ -185,10 +214,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.hayame.app.core.analytics.AnalyticsService
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
@@ -216,7 +247,6 @@ import com.hayame.app.core.network.preferredRegion
 import com.hayame.app.core.network.preferredRole
 import com.hayame.app.core.network.isAdmin
 import com.hayame.app.ui.components.BookingPlaceholderCard
-import com.hayame.app.ui.components.CarCard
 import com.hayame.app.ui.components.ConversationPlaceholderRow
 import com.hayame.app.ui.components.EmptyBlock
 import com.hayame.app.ui.components.ErrorBlock
@@ -234,6 +264,7 @@ import com.hayame.app.ui.state.UiState
 import com.hayame.app.ui.theme.Danger
 import com.hayame.app.ui.theme.LocalDarkMode
 import com.hayame.app.ui.theme.LocalHayameColors
+import com.hayame.app.ui.theme.ManropeFamily
 import com.hayame.app.ui.theme.Success
 import com.hayame.app.ui.theme.Warning
 import com.hayame.app.ui.viewmodel.BookingDraft
@@ -263,286 +294,6 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.math.sin
-
-@Composable
-fun SplashScreen() {
-    val context = LocalContext.current
-    val splashBlue = Color(0xFF0F85E3)
-    val appColors = LocalHayameColors.current
-    val darkMode = LocalDarkMode.current
-
-    // Color used for the system status / navigation bars while the splash is on
-    // screen, so they blend into the adaptive splash background.
-    val splashBarColor = if (darkMode) Color(0xFF06141F) else splashBlue
-
-    val activity = context as? Activity
-    val window = activity?.window
-
-    SideEffect {
-        if (window != null) {
-            WindowCompat.setDecorFitsSystemWindows(window, false)
-            window.statusBarColor = splashBarColor.toArgb()
-            window.navigationBarColor = splashBarColor.toArgb()
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                window.navigationBarDividerColor = splashBarColor.toArgb()
-            }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                window.isNavigationBarContrastEnforced = false
-                window.isStatusBarContrastEnforced = false
-            }
-            WindowCompat.getInsetsController(window, window.decorView).apply {
-                isAppearanceLightStatusBars = false
-                isAppearanceLightNavigationBars = false
-            }
-        }
-    }
-
-    LaunchedEffect(window) {
-        while (window != null) {
-            WindowCompat.setDecorFitsSystemWindows(window, false)
-            window.statusBarColor = splashBarColor.toArgb()
-            window.navigationBarColor = splashBarColor.toArgb()
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                window.navigationBarDividerColor = splashBarColor.toArgb()
-            }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                window.isNavigationBarContrastEnforced = false
-                window.isStatusBarContrastEnforced = false
-            }
-            WindowCompat.getInsetsController(window, window.decorView).apply {
-                isAppearanceLightStatusBars = false
-                isAppearanceLightNavigationBars = false
-            }
-            delay(120)
-        }
-    }
-
-    DisposableEffect(window, appColors, darkMode) {
-        if (window != null) {
-            WindowCompat.setDecorFitsSystemWindows(window, false)
-            window.statusBarColor = splashBarColor.toArgb()
-            window.navigationBarColor = splashBarColor.toArgb()
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                window.navigationBarDividerColor = splashBarColor.toArgb()
-            }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                window.isNavigationBarContrastEnforced = false
-                window.isStatusBarContrastEnforced = false
-            }
-            WindowCompat.getInsetsController(window, window.decorView).apply {
-                isAppearanceLightStatusBars = false
-                isAppearanceLightNavigationBars = false
-            }
-        }
-
-        onDispose {
-            if (window != null) {
-                WindowCompat.setDecorFitsSystemWindows(window, true)
-                window.statusBarColor = appColors.pageBackground.toArgb()
-                val navigationBarColor = appColors.cardBackground.toArgb()
-                window.navigationBarColor = navigationBarColor
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                    window.navigationBarDividerColor = navigationBarColor
-                }
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    window.isNavigationBarContrastEnforced = false
-                    window.isStatusBarContrastEnforced = false
-                }
-                WindowCompat.getInsetsController(window, window.decorView).apply {
-                    isAppearanceLightStatusBars = !darkMode
-                    isAppearanceLightNavigationBars = !darkMode
-                }
-            }
-        }
-    }
-
-    // Deterministic decorative "bokeh" pattern (relative to canvas size) so the
-    // layout never jitters between launches.
-    val bokeh = remember {
-        listOf(
-            SplashBokeh(0.16f, 0.18f, 0.30f, 0.10f, 22f, 0.0f),
-            SplashBokeh(0.84f, 0.12f, 0.22f, 0.12f, 18f, 0.6f),
-            SplashBokeh(0.90f, 0.46f, 0.40f, 0.08f, 28f, 1.2f),
-            SplashBokeh(0.10f, 0.62f, 0.34f, 0.09f, 24f, 1.8f),
-            SplashBokeh(0.74f, 0.82f, 0.26f, 0.11f, 20f, 2.4f),
-            SplashBokeh(0.30f, 0.88f, 0.20f, 0.10f, 16f, 3.0f),
-            SplashBokeh(0.50f, 0.30f, 0.16f, 0.10f, 14f, 3.6f),
-        )
-    }
-
-    val transition = rememberInfiniteTransition(label = "splash")
-    val ripple by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(2800, easing = LinearEasing)),
-        label = "ripple",
-    )
-    val breathe by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(2400, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-        label = "breathe",
-    )
-    val drift by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = (2f * PI).toFloat(),
-        animationSpec = infiniteRepeatable(tween(7000, easing = LinearEasing)),
-        label = "drift",
-    )
-    val dotPulse by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 3f,
-        animationSpec = infiniteRepeatable(tween(1080, easing = LinearEasing)),
-        label = "dots",
-    )
-
-    var started by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { started = true }
-    val logoScale by animateFloatAsState(
-        targetValue = if (started) 1f else 0.6f,
-        animationSpec = spring(dampingRatio = 0.55f, stiffness = Spring.StiffnessLow),
-        label = "logoScale",
-    )
-    val logoAlpha by animateFloatAsState(
-        targetValue = if (started) 1f else 0f,
-        animationSpec = tween(700),
-        label = "logoAlpha",
-    )
-
-    // Adaptive palette so the splash matches the user's selected mode.
-    val backgroundBrush = if (darkMode) {
-        Brush.verticalGradient(
-            listOf(Color(0xFF0D2A49), Color(0xFF081A2E), Color(0xFF03101D)),
-        )
-    } else {
-        Brush.verticalGradient(
-            listOf(Color(0xFF29A3F5), Color(0xFF148AE6), Color(0xFF0D70CC)),
-        )
-    }
-    val accent = if (darkMode) Color(0xFF4DB3FF) else Color.White
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(backgroundBrush),
-    ) {
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            val minSide = size.minDimension
-            val center = Offset(size.width / 2f, size.height / 2f)
-
-            // Soft off-center light so the gradient feels smooth, not flat.
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colors = listOf(
-                        Color.White.copy(alpha = if (darkMode) 0.05f else 0.14f),
-                        Color.Transparent,
-                    ),
-                    center = Offset(size.width * 0.5f, size.height * 0.38f),
-                    radius = minSide * 0.95f,
-                ),
-                radius = minSide * 0.95f,
-                center = Offset(size.width * 0.5f, size.height * 0.38f),
-            )
-
-            // Gentle, diffuse glow that adds depth behind the logo without a hard
-            // bright disc or a heavy dark backing.
-            val glowRadius = minSide * (0.46f + breathe * 0.04f)
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colors = listOf(
-                        accent.copy(alpha = if (darkMode) 0.24f else 0.15f),
-                        Color.Transparent,
-                    ),
-                    center = center,
-                    radius = glowRadius,
-                ),
-                radius = glowRadius,
-                center = center,
-            )
-
-            // Floating bokeh pattern — soft-edged via radial gradients.
-            bokeh.forEach { dot ->
-                val phase = drift + dot.phase
-                val dy = sin(phase) * dot.drift
-                val pulse = 0.6f + 0.4f * ((sin(phase) + 1f) / 2f)
-                val r = dot.size * minSide * 0.6f
-                val c = Offset(dot.x * size.width, dot.y * size.height + dy)
-                drawCircle(
-                    brush = Brush.radialGradient(
-                        colors = listOf(
-                            Color.White.copy(alpha = dot.opacity * pulse),
-                            Color.Transparent,
-                        ),
-                        center = c,
-                        radius = r,
-                    ),
-                    radius = r,
-                    center = c,
-                )
-            }
-
-            // Subtle expanding rings — quiet rather than busy.
-            for (i in 0 until 2) {
-                val p = (ripple + i / 2f) % 1f
-                drawCircle(
-                    color = accent.copy(alpha = (1f - p) * if (darkMode) 0.22f else 0.18f),
-                    radius = minSide * (0.18f + p * 0.40f),
-                    center = center,
-                    style = Stroke(width = 1.5f),
-                )
-            }
-        }
-
-        Image(
-            painter = painterResource(id = R.drawable.splash_system_logo),
-            contentDescription = "Hayame",
-            modifier = Modifier
-                .align(Alignment.Center)
-                .size(216.dp)
-                .graphicsLayer {
-                    val pulse = 0.98f + breathe * 0.04f
-                    scaleX = logoScale * pulse
-                    scaleY = logoScale * pulse
-                    alpha = logoAlpha
-                },
-            contentScale = ContentScale.Fit,
-        )
-
-        Row(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 96.dp)
-                .alpha(logoAlpha),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            for (i in 0 until 3) {
-                // Triangle wave so each dot eases up then down, staggered by index.
-                val t = ((dotPulse - i * 0.2f) % 1f + 1f) % 1f
-                val wave = 1f - kotlin.math.abs(t - 0.5f) * 2f
-                Box(
-                    modifier = Modifier
-                        .size(7.dp)
-                        .graphicsLayer {
-                            val s = 0.82f + wave * 0.18f
-                            scaleX = s
-                            scaleY = s
-                            alpha = 0.32f + wave * 0.63f
-                        }
-                        .background(Color.White, shape = androidx.compose.foundation.shape.CircleShape),
-                )
-            }
-        }
-    }
-}
-
-private data class SplashBokeh(
-    val x: Float,
-    val y: Float,
-    val size: Float,
-    val opacity: Float,
-    val drift: Float,
-    val phase: Float,
-)
 
 @Composable
 fun LoginScreen(
@@ -826,6 +577,7 @@ private fun hasStoredBiometricCredentials(context: Context): Boolean {
     return loadBiometricCredentials(context) != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P
 }
 
+@SuppressLint("NewApi")
 private fun launchBiometricLogin(
     context: Context,
     onCredentials: (String, String) -> Unit,
@@ -884,8 +636,11 @@ fun MainShell(
     onOpenPrivacy: () -> Unit,
     onOpenAuth: () -> Unit,
     onOpenAdmin: () -> Unit = {},
+    onOpenSettings: (highlightAppearance: Boolean) -> Unit = {},
+    onOpenProfileOverview: () -> Unit = {},
+    onResumeCheckout: (ResumableCheckoutUi) -> Unit = {},
 ) {
-    var tab by rememberSaveable(initialTab) { mutableStateOf(initialTab) }
+    var tab by rememberSaveable { mutableStateOf(initialTab) }
     var homeSearchToken by rememberSaveable { mutableStateOf(0) }
     var homeSearchQuery by rememberSaveable { mutableStateOf("") }
     var homeSearchCarType by rememberSaveable { mutableStateOf("") }
@@ -910,12 +665,29 @@ fun MainShell(
         ?.sumOf { it.unread_count ?: 0 }
         ?: 0
 
+    // Only a new route tab moves the shell. Coming back from a pushed screen
+    // (Dashboard, Settings, a car) re-enters this composable, and must keep the
+    // tab the user was on instead of jumping to the route's start tab.
+    var appliedInitialTab by rememberSaveable { mutableStateOf(initialTab) }
     LaunchedEffect(initialTab) {
-        tab = initialTab
+        if (initialTab != appliedInitialTab) {
+            appliedInitialTab = initialTab
+            tab = initialTab
+        }
     }
 
     LaunchedEffect(tab) {
         onSelectedTabChanged(tab)
+    }
+
+    // Back (or the edge swipe) from another tab returns to Home before leaving the app.
+    BackHandler(enabled = tab != MainTab.HOME) { tab = MainTab.HOME }
+
+    val pendingMainTab by viewModel.pendingMainTab.collectAsState()
+    LaunchedEffect(pendingMainTab) {
+        val requested = pendingMainTab ?: return@LaunchedEffect
+        tab = requested
+        viewModel.consumePendingMainTab(requested)
     }
 
     Scaffold(
@@ -979,6 +751,7 @@ fun MainShell(
                     onOpenExplore = { tab = MainTab.EXPLORE },
                     onOpenMore = { tab = MainTab.MORE },
                     onOpenAuth = onOpenAuth,
+                    onResumeCheckout = onResumeCheckout,
                     onApplySearchToExplore = { search, carType, region, city, brand, model, minPrice, maxPrice, instantOnly, transmission, fuel, deliveryOnly, acOnly ->
                         homeSearchQuery = search
                         homeSearchCarType = carType
@@ -1022,6 +795,7 @@ fun MainShell(
                     onOpenHostVehicles = onOpenHostVehicles,
                     onOpenCarDetail = onOpenCarDetail,
                     onOpenConversation = onOpenConversation,
+                    onResumeCheckout = onResumeCheckout,
                 )
                 MainTab.SAVED -> SavedTab(
                     viewModel = viewModel,
@@ -1043,6 +817,10 @@ fun MainShell(
                     onOpenCancellation = onOpenCancellation,
                     onOpenPrivacy = onOpenPrivacy,
                     onOpenAdmin = onOpenAdmin,
+                    onOpenSaved = { tab = MainTab.SAVED },
+                    onOpenAuth = onOpenAuth,
+                    onOpenSettings = onOpenSettings,
+                    onOpenProfileOverview = onOpenProfileOverview,
                 )
             }
         }
@@ -1063,6 +841,8 @@ fun HostShell(
     onOpenProtection: () -> Unit,
     onOpenCancellation: () -> Unit,
     onOpenReviews: () -> Unit,
+    onOpenSettings: () -> Unit = {},
+    onEditProfile: () -> Unit = {},
 ) {
     var tab by rememberSaveable { mutableStateOf(HostMainTab.DASHBOARD) }
     val conversationsState by viewModel.conversationsState.collectAsState()
@@ -1091,6 +871,12 @@ fun HostShell(
 
     LaunchedEffect(tab) {
         onSelectedTabChanged(tab)
+    }
+
+    // Back returns to the host Home tab first, then leaves host mode the same
+    // way the host-mode switch does.
+    BackHandler {
+        if (tab != HostMainTab.DASHBOARD) tab = HostMainTab.DASHBOARD else onExitHostMode()
     }
 
     Scaffold(
@@ -1124,13 +910,15 @@ fun HostShell(
                         viewModel = viewModel,
                         onBack = onExitHostMode,
                         onOpenCars = { tab = HostMainTab.CARS },
-                        onOpenCreateCar = { tab = HostMainTab.CARS },
+                        onOpenCreateCar = { onOpenCarEditor(null) },
                         onOpenBookings = { tab = HostMainTab.BOOKINGS },
                         onOpenEarnings = { tab = HostMainTab.EARNINGS },
                         onOpenMessages = { tab = HostMainTab.INBOX },
-                        onOpenFavorites = { tab = HostMainTab.PROFILE },
-                        onOpenReviews = { tab = HostMainTab.PROFILE },
+                        onOpenFavorites = onOpenFavorites,
+                        onOpenReviews = onOpenReviews,
                         onOpenProfile = { tab = HostMainTab.PROFILE },
+                        onOpenContact = onOpenContact,
+                        onOpenSettings = onOpenSettings,
                     )
                     HostMainTab.CARS -> HostCarsScreen(
                         viewModel = viewModel,
@@ -1158,6 +946,10 @@ fun HostShell(
                         onOpenProtection = onOpenProtection,
                         onOpenCancellation = onOpenCancellation,
                         onTurnOffHostMode = onExitHostMode,
+                        onOpenCars = { tab = HostMainTab.CARS },
+                        onOpenBookings = { tab = HostMainTab.BOOKINGS },
+                        onEditProfile = onEditProfile,
+                        onOpenSettings = onOpenSettings,
                     )
                 }
             }
@@ -1252,7 +1044,20 @@ private fun HomeTab(
     onOpenMore: () -> Unit,
     onOpenAuth: () -> Unit,
     onApplySearchToExplore: (String, String, String, String, String, String, Int, Float, Boolean, String, String, Boolean, Boolean) -> Unit,
+    onResumeCheckout: (ResumableCheckoutUi) -> Unit = {},
 ) {
+    CoachTour(
+        id = "home",
+        steps = listOf(
+            CoachStep("home.search", "Search anything", "Look up a car, a city or a host, then tap the magnifier."),
+            CoachStep("home.filters", "Fine-tune results", "Set price, seats, delivery and more."),
+            CoachStep("home.categories", "Browse by body type", "Tap a type to filter instantly. The most popular types come first."),
+            CoachStep("home.location", "Change area", "Pick the city you're browsing in to see cars near you."),
+        ),
+    )
+    val resumableCheckout = rememberResumableCheckout(viewModel)
+    val isAuthenticatedForCheckout by viewModel.isAuthenticated.collectAsState()
+    LaunchedEffect(isAuthenticatedForCheckout) { viewModel.refreshSavedCheckout() }
     val carsState by viewModel.carsState.collectAsState()
     val favoritesState by viewModel.favoritesState.collectAsState()
     val isAuthenticated by viewModel.isAuthenticated.collectAsState()
@@ -1262,8 +1067,21 @@ private fun HomeTab(
     val conversationsState by viewModel.conversationsState.collectAsState()
     val favoriteIds = (favoritesState as? UiState.Success<Set<String>>)?.data ?: emptySet()
     val context = LocalContext.current
+    val homeLayoutPrefs = remember(context) {
+        context.getSharedPreferences(HomePopularLayoutPrefsName, Context.MODE_PRIVATE)
+    }
     val scope = rememberCoroutineScope()
     var selectedCat by rememberSaveable { mutableStateOf("All") }
+    var popularLayoutModeName by rememberSaveable {
+        mutableStateOf(
+            homeLayoutPrefs.getString(HomePopularLayoutPrefsKey, ExploreLayoutMode.LIST.name)
+                ?: ExploreLayoutMode.LIST.name,
+        )
+    }
+    val popularLayoutMode = remember(popularLayoutModeName) {
+        runCatching { ExploreLayoutMode.valueOf(popularLayoutModeName) }
+            .getOrElse { ExploreLayoutMode.LIST }
+    }
     var homeSearchText by rememberSaveable { mutableStateOf("") }
     var showHomeFilterSheet by rememberSaveable { mutableStateOf(false) }
     val homeFilterSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -1302,15 +1120,19 @@ private fun HomeTab(
     }
 
     val availableCategories = remember(carsState) {
-        val types = (carsState as? UiState.Success<List<CarDto>>)
-            ?.data
-            ?.mapNotNull { it.car_type?.trim()?.takeIf { type -> type.isNotBlank() } }
-            ?: emptyList()
-        listOf("All") + (AndroidReferenceData.carTypes + types)
-            .distinctBy { it.lowercase(Locale.US) }
+        val cars = (carsState as? UiState.Success<List<CarDto>>)?.data.orEmpty()
+        val types = cars.mapNotNull { it.car_type?.trim()?.takeIf { type -> type.isNotBlank() } }
+        val unique = (AndroidReferenceData.carTypes + types).distinctBy { it.lowercase(Locale.US) }
+        // Most populated body type first; ties keep the catalogue order, empty ones trail.
+        val counts = unique.associateWith { category -> cars.count { matchesHomeCategory(it.car_type, category) } }
+        listOf("All") + unique.sortedByDescending { counts[it] ?: 0 }
     }
-    val homeCars = remember(carsState) {
+    val allHomeCars = remember(carsState) {
         (carsState as? UiState.Success<List<CarDto>>)?.data ?: emptyList()
+    }
+    // The feed follows the category pill the moment it changes.
+    val homeCars = remember(allHomeCars, selectedCat) {
+        allHomeCars.filter { matchesHomeCategory(it.car_type, selectedCat) }
     }
     val homeMakeOptions = remember(carsState, catalog) {
         val liveBrands = (carsState as? UiState.Success<List<CarDto>>)
@@ -1361,11 +1183,6 @@ private fun HomeTab(
     val browseRegion = browseLocation.second
     val effectiveCity = browseCity.ifBlank { homeLocation?.cityName?.trim().orEmpty() }
     val effectiveRegion = browseRegion.ifBlank { homeLocation?.regionName?.trim().orEmpty() }
-    val isWaitingForInitialBrowseLocation =
-        browseCity.isBlank() &&
-            browseRegion.isBlank() &&
-            homeLocation == null &&
-            homeLocationResolving
     val nearYouCars = remember(homeCars, homeLocation, effectiveCity, effectiveRegion) {
         val loc = homeLocation
         // Cars carry no coordinates from the API today, so proximity is
@@ -1433,15 +1250,20 @@ private fun HomeTab(
     }
 
     LaunchedEffect(Unit) {
-        homeLocationResolving = true
-        locationPermission.launch(Manifest.permission.ACCESS_COARSE_LOCATION)
-        homeLocation = fetchHomeLocation(context)
-        detectedCityName = homeLocation?.cityName ?: homeLocation?.regionName
-        homeLocationResolving = false
         viewModel.loadReferenceData()
         viewModel.loadCars(mapOf("sort" to "new_listings", "limit" to "48"))
         viewModel.loadFavorites()
         viewModel.loadConversations()
+
+        if (hasHomeLocationPermission(context)) {
+            homeLocationResolving = true
+            homeLocation = fetchHomeLocation(context)
+            detectedCityName = homeLocation?.cityName ?: homeLocation?.regionName
+            homeLocationResolving = false
+        } else {
+            homeLocationResolving = true
+            locationPermission.launch(Manifest.permission.ACCESS_COARSE_LOCATION)
+        }
     }
 
     LaunchedEffect(availableCategories) {
@@ -1450,159 +1272,154 @@ private fun HomeTab(
         }
     }
 
+    HayameRefreshBox(
+        onRefresh = { viewModel.loadCars(mapOf("sort" to "new_listings", "limit" to "48")); viewModel.loadFavorites(); viewModel.loadConversations(); viewModel.refreshSavedCheckout(force = true) },
+        modifier = Modifier.fillMaxSize(),
+        indicatorTopPadding = paddingValues.calculateTopPadding(),
+    ) {
     Box(modifier = Modifier.fillMaxSize()) {
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-        item {
-            Spacer(modifier = Modifier.height(6.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically,
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+                    .padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-	                Row(
-	                    modifier = Modifier
-	                        .weight(1f)
-	                        .clickable {
-	                            if (isAuthenticated) {
-	                                onOpenMore()
-	                            } else {
-	                                onOpenAuth()
-	                            }
-	                        },
-	                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-	                    verticalAlignment = Alignment.CenterVertically,
-	                ) {
-	                    RemoteAvatar(
-	                        imageUrl = resolveAppImage(me.preferredAvatarRaw()),
-                        name = me.preferredFullName() ?: me?.user?.email,
-                        fallback = "U",
-                        size = 42.dp,
-                        textStyle = MaterialTheme.typography.labelLarge,
-	                    )
-	                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-	                        val displayName = if (isAuthenticated) {
-	                            me.preferredFullName()?.trim()
-	                                .takeUnless { it.isNullOrBlank() } ?: "Guest User"
-	                        } else {
-	                            "Sign in or sign up"
-	                        }
-	                        val locationText = listOfNotNull(
-	                            browseCity.takeIf { it.isNotBlank() }
-	                                ?.let(AndroidReferenceData::cityDisplayName),
-	                            browseRegion.takeIf { it.isNotBlank() },
-	                            detectedCityName?.trim()?.takeIf { it.isNotBlank() }
-	                                ?.let(AndroidReferenceData::cityDisplayName),
-	                            me?.profile?.city?.trim()?.takeIf { it.isNotBlank() },
-	                            me?.profile?.region?.trim()?.takeIf { it.isNotBlank() },
-                        ).firstOrNull() ?: "Ghana"
-	                        Text(
-                            text = displayName,
-                            style = MaterialTheme.typography.titleMedium.copy(fontSize = 16.sp),
-	                            color = colors.brandNavy,
-	                            fontWeight = FontWeight.Bold,
-	                        )
-	                        Row(
-	                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-	                            verticalAlignment = Alignment.CenterVertically,
-	                            modifier = Modifier.clickable { showLocationSheet = true },
-	                        ) {
-	                            Icon(
-	                                Icons.Outlined.LocationOn,
-	                                contentDescription = null,
-	                                tint = colors.mutedText,
-	                                modifier = Modifier.size(12.dp),
-	                            )
-	                            Text(
-	                                text = locationText,
-	                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
-	                                color = colors.mutedText,
-	                            )
-	                            Icon(
-	                                Icons.Outlined.ExpandMore,
-	                                contentDescription = "Change location",
-	                                tint = LocalHayameColors.current.brandBlue,
-	                                modifier = Modifier.size(12.dp),
-	                            )
-	                        }
-	                    }
-	                }
-                Surface(
-                    shape = CircleShape,
-                    color = colors.cardBackground,
-                    tonalElevation = 0.dp,
-                    shadowElevation = 0.dp,
-                    border = BorderStroke(1.dp, Color.Black.copy(alpha = 0.06f)),
-                    modifier = Modifier.size(42.dp).clickable {
-                        if (isAuthenticated) {
-                            onOpenMessages()
-                        } else {
-                            viewModel.requireAuthentication(
-                                message = "Sign in or sign up to view your messages.",
-                                destination = NavRoutes.Messages,
-                            )
-                        }
-                    },
+            item {
+                Spacer(modifier = Modifier.height(6.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(Icons.Outlined.ChatBubble, contentDescription = "Messages", tint = colors.brandNavy)
-                        if (unreadCount > 0) {
-                            Box(
-                                modifier = Modifier
-                                    .align(Alignment.TopEnd)
-                                    .padding(top = 6.dp, end = 6.dp)
-                                    .size(10.dp)
-                                    .background(LocalHayameColors.current.brandBlue, CircleShape)
-                            )
+    	                Row(
+    	                    modifier = Modifier
+    	                        .weight(1f)
+    	                        .clickable {
+    	                            if (isAuthenticated) {
+    	                                onOpenMore()
+    	                            } else {
+    	                                onOpenAuth()
+    	                            }
+    	                        },
+    	                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+    	                    verticalAlignment = Alignment.CenterVertically,
+    	                ) {
+    	                    RemoteAvatar(
+    	                        imageUrl = resolveAppImage(me.preferredAvatarRaw()),
+                            name = me.preferredFullName() ?: me?.user?.email,
+                            fallback = "U",
+                            size = 42.dp,
+                            textStyle = MaterialTheme.typography.labelLarge,
+    	                    )
+    	                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+    	                        val displayName = if (isAuthenticated) {
+    	                            me.preferredFullName()?.trim()
+    	                                .takeUnless { it.isNullOrBlank() } ?: "Guest User"
+    	                        } else {
+    	                            "Sign in or sign up"
+    	                        }
+    	                        val locationText = listOfNotNull(
+    	                            browseCity.takeIf { it.isNotBlank() }
+    	                                ?.let(AndroidReferenceData::cityDisplayName),
+    	                            browseRegion.takeIf { it.isNotBlank() },
+    	                            detectedCityName?.trim()?.takeIf { it.isNotBlank() }
+    	                                ?.let(AndroidReferenceData::cityDisplayName),
+    	                            me?.profile?.city?.trim()?.takeIf { it.isNotBlank() },
+    	                            me?.profile?.region?.trim()?.takeIf { it.isNotBlank() },
+                            ).firstOrNull() ?: "Ghana"
+    	                        Text(
+                                text = displayName,
+                                style = MaterialTheme.typography.titleMedium.copy(fontSize = 16.sp),
+    	                            color = colors.brandNavy,
+    	                            fontWeight = FontWeight.Bold,
+    	                        )
+    	                        Row(
+    	                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+    	                            verticalAlignment = Alignment.CenterVertically,
+    	                            modifier = Modifier.coachTarget("home.location").clickable { showLocationSheet = true },
+    	                        ) {
+    	                            Icon(
+    	                                Icons.Outlined.LocationOn,
+    	                                contentDescription = null,
+    	                                tint = colors.mutedText,
+    	                                modifier = Modifier.size(12.dp),
+    	                            )
+    	                            Text(
+    	                                text = locationText,
+    	                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
+    	                                color = colors.mutedText,
+    	                            )
+    	                            Icon(
+    	                                Icons.Outlined.ExpandMore,
+    	                                contentDescription = "Change location",
+    	                                tint = LocalHayameColors.current.brandBlue,
+    	                                modifier = Modifier.size(12.dp),
+    	                            )
+    	                        }
+    	                    }
+    	                }
+                    Surface(
+                        shape = CircleShape,
+                        color = colors.cardBackground,
+                        tonalElevation = 0.dp,
+                        shadowElevation = 0.dp,
+                        border = BorderStroke(1.dp, Color.Black.copy(alpha = 0.06f)),
+                        modifier = Modifier.size(42.dp).clickable {
+                            if (isAuthenticated) {
+                                onOpenMessages()
+                            } else {
+                                viewModel.requireAuthentication(
+                                    message = "Sign in or sign up to view your messages.",
+                                    destination = NavRoutes.Messages,
+                                )
+                            }
+                        },
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(Icons.Outlined.ChatBubble, contentDescription = "Messages", tint = colors.brandNavy)
+                            if (unreadCount > 0) {
+                                Box(
+                                    modifier = Modifier
+                                        .align(Alignment.TopEnd)
+                                        .padding(top = 6.dp, end = 6.dp)
+                                        .size(10.dp)
+                                        .background(LocalHayameColors.current.brandBlue, CircleShape)
+                                )
+                            }
                         }
                     }
                 }
             }
-        }
-        item {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
+            item {
                 OutlinedTextField(
                     value = homeSearchText,
                     onValueChange = { homeSearchText = it },
-                    modifier = Modifier.weight(1f),
-	                    singleLine = true,
-	                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-	                    keyboardActions = KeyboardActions(onSearch = { applyHomeSearchToExplore() }),
-	                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier.fillMaxWidth().coachTarget("home.search"),
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions = KeyboardActions(onSearch = { applyHomeSearchToExplore() }),
+                    shape = RoundedCornerShape(16.dp),
                     placeholder = { Text("Car, city, or host...", color = colors.mutedText) },
-                    leadingIcon = {
-                        Icon(Icons.Outlined.Search, contentDescription = null, tint = colors.mutedText)
-                    },
                     trailingIcon = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(end = 6.dp)) {
                             if (homeSearchText.isNotEmpty()) {
-                                    IconButton(onClick = { homeSearchText = "" }) {
-                                    Icon(Icons.Outlined.Close, contentDescription = "Clear", tint = colors.mutedText)
+                                IconButton(onClick = { homeSearchText = "" }, modifier = Modifier.size(36.dp)) {
+                                    Icon(Icons.Outlined.Close, contentDescription = "Clear search", tint = colors.mutedText, modifier = Modifier.size(18.dp))
                                 }
                             }
-                            IconButton(onClick = { showHomeFilterSheet = true }) {
-                                Box(
-                                    modifier = Modifier
-                                        .background(LocalHayameColors.current.brandBlue, RoundedCornerShape(10.dp))
-                                        .padding(8.dp),
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    Icon(
-                                        Icons.Outlined.Tune,
-                                        contentDescription = "Filters",
-                                        tint = Color.White,
-                                        modifier = Modifier.size(16.dp),
-                                    )
-                                }
+                            IconButton(onClick = { showHomeFilterSheet = true }, modifier = Modifier.size(38.dp).coachTarget("home.filters")) {
+                                Icon(Icons.Outlined.Tune, contentDescription = "Filters", tint = colors.brandNavy, modifier = Modifier.size(22.dp))
+                            }
+                            Spacer(modifier = Modifier.width(2.dp))
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .background(colors.brandBlue, RoundedCornerShape(12.dp))
+                                    .clickable { applyHomeSearchToExplore() },
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(Icons.Outlined.Search, contentDescription = "Search", tint = Color.White, modifier = Modifier.size(20.dp))
                             }
                         }
                     },
@@ -1615,54 +1432,64 @@ private fun HomeTab(
                         unfocusedTextColor = colors.brandNavy,
                     ),
                 )
-	                Button(
-	                    onClick = { applyHomeSearchToExplore() },
-	                    shape = RoundedCornerShape(14.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = LocalHayameColors.current.brandBlue),
-                    modifier = Modifier.height(56.dp),
-                ) {
-                    Text("Search", color = Color.White, fontWeight = FontWeight.SemiBold)
-                }
             }
-        }
-        item {
-            LazyRow(
-                contentPadding = PaddingValues(horizontal = 0.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                items(availableCategories) { cat ->
-                    Surface(
-                        onClick = { selectedCat = cat },
-                        shape = RoundedCornerShape(20.dp),
-                        color = if (selectedCat == cat) colors.brandBlue else colors.cardBackground,
-                        border = if (selectedCat == cat) null else BorderStroke(1.dp, colors.border),
-                    ) {
-                        Text(
-                            text = cat,
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-                            style = MaterialTheme.typography.labelLarge.copy(fontSize = 13.sp),
-                            color = if (selectedCat == cat) Color.White else colors.brandNavy,
-                            fontWeight = FontWeight.Medium,
-                        )
+            item {
+                LazyRow(
+                    modifier = Modifier.coachTarget("home.categories"),
+                    contentPadding = PaddingValues(horizontal = 0.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    items(availableCategories) { cat ->
+                        val isSelected = selectedCat == cat
+                        Surface(
+                            onClick = { selectedCat = cat },
+                            shape = RoundedCornerShape(20.dp),
+                            color = if (isSelected) colors.brandBlue else colors.cardBackground,
+                            border = if (isSelected) null else BorderStroke(1.dp, colors.border),
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 13.dp, vertical = 8.dp),
+                                horizontalArrangement = Arrangement.spacedBy(7.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Icon(
+                                    painter = painterResource(carTypeIconRes(cat)),
+                                    contentDescription = null,
+                                    tint = if (isSelected) Color.White else colors.brandNavy,
+                                    modifier = Modifier.size(width = 20.dp, height = 15.dp),
+                                )
+                                Text(
+                                    text = cat,
+                                    style = MaterialTheme.typography.labelLarge.copy(fontSize = 13.sp),
+                                    color = if (isSelected) Color.White else colors.brandNavy,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
+                                )
+                            }
+                        }
                     }
                 }
             }
-        }
-        when (val state = carsState) {
-            UiState.Loading,
-            UiState.Idle -> item { HomeLoadingPlaceholder() }
-            is UiState.Error -> item {
-                ErrorBlock(
-                    state.message,
-                    onRetry = { viewModel.loadCars(mapOf("sort" to "new_listings", "limit" to "48")) },
-                )
+            if (resumableCheckout != null) {
+                item(key = "resume-checkout") {
+                    ResumeCheckoutCard(
+                        resumable = resumableCheckout,
+                        viewModel = viewModel,
+                        onResume = { onResumeCheckout(resumableCheckout) },
+                    )
+                }
             }
-            UiState.Empty -> item { EmptyBlock("No cars yet", "No listings are available right now.") }
-            is UiState.Success -> {
-                item {
-                    if (isWaitingForInitialBrowseLocation) {
-                        HomeNearYouPlaceholderSection()
-                    } else {
+            when (val state = carsState) {
+                UiState.Loading,
+                UiState.Idle -> item { HomeLoadingPlaceholder() }
+                is UiState.Error -> item {
+                    ErrorBlock(
+                        state.message,
+                        onRetry = { viewModel.loadCars(mapOf("sort" to "new_listings", "limit" to "48")) },
+                    )
+                }
+                UiState.Empty -> item { EmptyBlock("No cars yet", "No listings are available right now.") }
+                is UiState.Success -> {
+                    item {
                         HomeNearYouSection(
                             cars = nearYouCars,
                             title = when {
@@ -1683,127 +1510,214 @@ private fun HomeTab(
                             onSeeAll = onOpenExplore,
                         )
                     }
-                }
-                item {
-                    HomeSectionTitlePlaceholderAware(title = "Popular picks", onSeeAll = onOpenExplore)
-                }
-                if (homeCars.isEmpty()) {
-                    item { EmptyBlock("No cars yet", "No listings are available right now.") }
-                } else {
-                    items(homeCars.take(3), key = { it.id }) { car ->
-                        HomeFeaturedCarRow(
-                            car = car,
-                            isFavorite = favoriteIds.contains(car.id),
-                            onOpen = { onOpenCarDetail(car.id) },
-                            onToggleFavorite = {
-                                viewModel.toggleFavorite(
-                                    carId = car.id,
-                                    currentlyFavorite = favoriteIds.contains(car.id),
-                                    authDestination = NavRoutes.main(MainTab.HOME),
-                                )
-                            },
-                        )
+                    item {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = "Popular picks",
+                                style = MaterialTheme.typography.titleLarge,
+                                color = colors.brandNavy,
+                                fontWeight = FontWeight.Bold,
+                            )
+                            Spacer(modifier = Modifier.weight(1f))
+                            ExploreLayoutToggle(
+                                selectedLayout = popularLayoutMode,
+                                onSelect = { selected ->
+                                    popularLayoutModeName = selected.name
+                                    homeLayoutPrefs.edit()
+                                        .putString(HomePopularLayoutPrefsKey, selected.name)
+                                        .apply()
+                                },
+                            )
+                            TextButton(onClick = onOpenExplore) {
+                                Text("See all", color = colors.brandBlue, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                    if (homeCars.isEmpty()) {
+                        item {
+                            if (allHomeCars.isEmpty()) {
+                                EmptyBlock("No cars yet", "No listings are available right now.")
+                            } else {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(16.dp))
+                                        .background(colors.cardBackground)
+                                        .border(1.dp, colors.border, RoundedCornerShape(16.dp))
+                                        .padding(22.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                                ) {
+                                    Icon(
+                                        painter = painterResource(carTypeIconRes(selectedCat)),
+                                        contentDescription = null,
+                                        tint = colors.brandBlue,
+                                        modifier = Modifier.size(width = 44.dp, height = 34.dp),
+                                    )
+                                    Text("No ${selectedCat.lowercase()} listings yet", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = colors.brandNavy)
+                                    Text(
+                                        "Try another type, or browse everything that's available right now.",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = colors.mutedText,
+                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                    )
+                                    TextButton(onClick = { selectedCat = "All" }) {
+                                        Text("Show all cars", color = colors.brandBlue, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+                        }
+                    } else if (popularLayoutMode == ExploreLayoutMode.GRID) {
+                        items(homeCars.take(6).chunked(2), key = { row -> row.first().id }) { row ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                                verticalAlignment = Alignment.Top,
+                            ) {
+                                row.forEach { car ->
+                                    Box(modifier = Modifier.weight(1f)) {
+                                        ListingCard(
+                                            car = car,
+                                            isFavorite = favoriteIds.contains(car.id),
+                                            imageHeight = 140.dp,
+                                            onClick = { onOpenCarDetail(car.id) },
+                                            onFavoriteClick = {
+                                                viewModel.toggleFavorite(
+                                                    carId = car.id,
+                                                    currentlyFavorite = favoriteIds.contains(car.id),
+                                                    authDestination = NavRoutes.main(MainTab.HOME),
+                                                )
+                                            },
+                                        )
+                                    }
+                                }
+                                if (row.size == 1) Spacer(modifier = Modifier.weight(1f))
+                            }
+                        }
+                    } else {
+                        items(homeCars.take(6), key = { it.id }) { car ->
+                            ListingCard(
+                                car = car,
+                                isFavorite = favoriteIds.contains(car.id),
+                                layout = ListingCardLayout.ROW,
+                                onClick = { onOpenCarDetail(car.id) },
+                                onFavoriteClick = {
+                                    viewModel.toggleFavorite(
+                                        carId = car.id,
+                                        currentlyFavorite = favoriteIds.contains(car.id),
+                                        authDestination = NavRoutes.main(MainTab.HOME),
+                                    )
+                                },
+                            )
+                        }
                     }
                 }
             }
-        }
-        item {
-            GradientPillButton(
-                text = "Explore More",
-                modifier = Modifier.fillMaxWidth(),
-                onClick = onOpenExplore,
-            )
-        }
-        item { Spacer(modifier = Modifier.height(24.dp)) }
-        }
-
-        if (showLocationSheet) {
-            ModalBottomSheet(
-                onDismissRequest = { showLocationSheet = false },
-                sheetState = locationSheetState,
-            ) {
-                HomeLocationPickerContent(
-                    locations = locations,
-                    selectedCity = browseCity,
-                    selectedRegion = browseRegion,
-                    detectedCity = detectedCityName,
-                    onUseCurrentLocation = {
-                        viewModel.setBrowseLocation("", "")
-                        locationPermission.launch(Manifest.permission.ACCESS_COARSE_LOCATION)
-                        scope.launch {
-                            homeLocationResolving = true
-                            homeLocation = fetchHomeLocation(context)
-                            detectedCityName = homeLocation?.cityName ?: homeLocation?.regionName
-                            homeLocationResolving = false
-                        }
-                        showLocationSheet = false
-                    },
-                    onSelect = { city, region ->
-                        viewModel.setBrowseLocation(city, region)
-                        showLocationSheet = false
-                    },
+            item {
+                SolidPillButton(
+                    text = "Explore More",
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = onOpenExplore,
                 )
             }
-        }
+            item { Spacer(modifier = Modifier.height(24.dp)) }
+            }
 
-        if (showHomeFilterSheet) {
-            ModalBottomSheet(
-                onDismissRequest = { showHomeFilterSheet = false },
-                sheetState = homeFilterSheetState,
-            ) {
-                ExploreFilterContent(
-                    locations = locations,
-                    selectedRegion = homeRegion,
-                    selectedCity = homeCity,
-                    selectedMake = homeMake,
-                    selectedModel = homeModel,
-                    selectedType = homeVehicleType,
-                    selectedTransmission = homeTransmission,
-                    selectedFuel = homeFuel,
-                    minPrice = homeMinPrice,
-                    maxPrice = homeMaxPrice,
-                    instantOnly = homeInstantOnly,
-                    deliveryOnly = homeDeliveryOnly,
-                    acOnly = homeAcOnly,
-                    makeOptions = homeMakeOptions,
-                    modelOptions = homeModelOptions,
-                    typeOptions = homeTypeOptions,
-                    transmissionOptions = homeTransmissionOptions,
-                    fuelOptions = homeFuelOptions,
-                    onRegionChange = {
-                        homeRegion = it
-                        homeCity = ""
-                    },
-                    onCityChange = { homeCity = it },
-                    onMakeChange = {
-                        homeMake = it
-                        homeModel = ""
-                    },
-                    onModelChange = { homeModel = it },
-                    onTypeChange = { homeVehicleType = it },
-                    onTransmissionChange = { homeTransmission = it },
-                    onFuelChange = { homeFuel = it },
-                    onMinPriceChange = { homeMinPrice = it },
-                    onMaxPriceChange = { homeMaxPrice = it },
-                    onInstantOnlyChange = { homeInstantOnly = it },
-                    onDeliveryOnlyChange = { homeDeliveryOnly = it },
-                    onAcOnlyChange = { homeAcOnly = it },
-                    onReset = {
-                        homeRegion = ""
-                        homeCity = ""
-                        homeMake = ""
-                        homeModel = ""
-                        homeVehicleType = ""
-                        homeTransmission = ""
-                        homeFuel = ""
-                        homeMinPrice = 50
-                        homeMaxPrice = 8000f
-                        homeInstantOnly = false
-                        homeDeliveryOnly = false
-                        homeAcOnly = false
-                    },
-                    onDismiss = { showHomeFilterSheet = false },
-                )
+            if (showLocationSheet) {
+                ModalBottomSheet(
+                    onDismissRequest = { showLocationSheet = false },
+                    sheetState = locationSheetState,
+                ) {
+                    HomeLocationPickerContent(
+                        locations = locations,
+                        selectedCity = browseCity,
+                        selectedRegion = browseRegion,
+                        detectedCity = detectedCityName,
+                        onUseCurrentLocation = {
+                            viewModel.setBrowseLocation("", "")
+                            if (hasHomeLocationPermission(context)) {
+                                scope.launch {
+                                    homeLocationResolving = true
+                                    homeLocation = fetchHomeLocation(context)
+                                    detectedCityName = homeLocation?.cityName ?: homeLocation?.regionName
+                                    homeLocationResolving = false
+                                }
+                            } else {
+                                homeLocationResolving = true
+                                locationPermission.launch(Manifest.permission.ACCESS_COARSE_LOCATION)
+                            }
+                            showLocationSheet = false
+                        },
+                        onSelect = { city, region ->
+                            viewModel.setBrowseLocation(city, region)
+                            showLocationSheet = false
+                        },
+                    )
+                }
+            }
+
+            if (showHomeFilterSheet) {
+                ModalBottomSheet(
+                    onDismissRequest = { showHomeFilterSheet = false },
+                    sheetState = homeFilterSheetState,
+                ) {
+                    ExploreFilterContent(
+                        locations = locations,
+                        selectedRegion = homeRegion,
+                        selectedCity = homeCity,
+                        selectedMake = homeMake,
+                        selectedModel = homeModel,
+                        selectedType = homeVehicleType,
+                        selectedTransmission = homeTransmission,
+                        selectedFuel = homeFuel,
+                        minPrice = homeMinPrice,
+                        maxPrice = homeMaxPrice,
+                        instantOnly = homeInstantOnly,
+                        deliveryOnly = homeDeliveryOnly,
+                        acOnly = homeAcOnly,
+                        makeOptions = homeMakeOptions,
+                        modelOptions = homeModelOptions,
+                        typeOptions = homeTypeOptions,
+                        transmissionOptions = homeTransmissionOptions,
+                        fuelOptions = homeFuelOptions,
+                        onRegionChange = {
+                            homeRegion = it
+                            homeCity = ""
+                        },
+                        onCityChange = { homeCity = it },
+                        onMakeChange = {
+                            homeMake = it
+                            homeModel = ""
+                        },
+                        onModelChange = { homeModel = it },
+                        onTypeChange = { homeVehicleType = it },
+                        onTransmissionChange = { homeTransmission = it },
+                        onFuelChange = { homeFuel = it },
+                        onMinPriceChange = { homeMinPrice = it },
+                        onMaxPriceChange = { homeMaxPrice = it },
+                        onInstantOnlyChange = { homeInstantOnly = it },
+                        onDeliveryOnlyChange = { homeDeliveryOnly = it },
+                        onAcOnlyChange = { homeAcOnly = it },
+                        onReset = {
+                            homeRegion = ""
+                            homeCity = ""
+                            homeMake = ""
+                            homeModel = ""
+                            homeVehicleType = ""
+                            homeTransmission = ""
+                            homeFuel = ""
+                            homeMinPrice = 50
+                            homeMaxPrice = 8000f
+                            homeInstantOnly = false
+                            homeDeliveryOnly = false
+                            homeAcOnly = false
+                        },
+                        onDismiss = { showHomeFilterSheet = false },
+                    )
+                }
             }
         }
     }
@@ -2555,118 +2469,13 @@ private fun HomeNearYouSection(
             horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             items(cars.take(5), key = { it.id }) { car ->
-                HomeNearYouCard(
+                ListingCard(
                     car = car,
                     isFavorite = favoriteIds.contains(car.id),
+                    modifier = Modifier.width(236.dp),
+                    imageHeight = 150.dp,
                     onClick = { onOpen(car.id) },
                     onFavoriteClick = { onFavorite(car) },
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun HomeNearYouCard(
-    car: CarDto,
-    isFavorite: Boolean,
-    onClick: () -> Unit,
-    onFavoriteClick: () -> Unit,
-) {
-    val colors = LocalHayameColors.current
-    val imageUrl = remember(car.id, car.image_url, car.car_photos) {
-        resolveAppImage(car.image_url) ?: car.car_photos.orEmpty()
-            .firstNotNullOfOrNull { resolveAppImage(it.url) }
-    }
-    Card(
-        modifier = Modifier.width(260.dp).clickable(onClick = onClick),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
-        border = BorderStroke(1.dp, colors.border),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-    ) {
-        Column {
-            Box(modifier = Modifier.fillMaxWidth().height(160.dp)) {
-                AsyncImage(
-                    model = imageUrl,
-                    contentDescription = null,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)),
-                    contentScale = ContentScale.Crop,
-                )
-                if (car.instant_book == true) {
-                    Surface(
-                        modifier = Modifier
-                            .padding(10.dp)
-                            .align(Alignment.TopStart),
-                        color = Color.White.copy(alpha = 0.92f),
-                        shape = RoundedCornerShape(8.dp),
-                    ) {
-                        Text(
-                            "⚡ Instant",
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Success,
-                        )
-                    }
-                }
-                Surface(
-                    modifier = Modifier
-                        .padding(10.dp)
-                        .size(30.dp)
-                        .align(Alignment.TopEnd)
-                        .clickable(onClick = onFavoriteClick),
-                    color = colors.cardBackground.copy(alpha = 0.92f),
-                    shape = CircleShape,
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-                            contentDescription = null,
-                            tint = if (isFavorite) Color.Red else colors.brandNavy,
-                            modifier = Modifier.size(14.dp),
-                        )
-                    }
-                }
-            }
-            Column(
-                modifier = Modifier.padding(12.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                Text(
-                    car.title.orEmpty(),
-                    style = MaterialTheme.typography.titleMedium.copy(fontSize = 15.sp),
-                    fontWeight = FontWeight.SemiBold,
-                    color = colors.brandNavy,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        "📍 ${car.city.orEmpty()}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = colors.mutedText,
-                    )
-                    car.listingBadgeText()?.let { badgeText ->
-                        Text(
-                            "★ $badgeText",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = Warning,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                    }
-                }
-                Text(
-                    "GHS ${(car.daily_price ?: 0.0).roundToInt()} / day",
-                    style = MaterialTheme.typography.titleMedium.copy(fontSize = 15.sp),
-                    fontWeight = FontWeight.SemiBold,
-                    color = LocalHayameColors.current.brandBlue,
                 )
             }
         }
@@ -2743,120 +2552,15 @@ private fun HomeLocationTag(
     }
 }
 
-@Composable
-private fun HomeFeaturedCarRow(
-    car: CarDto,
-    isFavorite: Boolean,
-    onOpen: () -> Unit,
-    onToggleFavorite: () -> Unit,
-) {
-    val colors = LocalHayameColors.current
-    val imageUrl = remember(car.id, car.image_url, car.car_photos) {
-        resolveAppImage(car.image_url) ?: car.car_photos.orEmpty().firstNotNullOfOrNull { resolveAppImage(it.url) }
-    }
-    Box {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(18.dp))
-                .background(colors.cardBackground)
-                .border(BorderStroke(1.dp, colors.border), RoundedCornerShape(18.dp))
-                .clickable(onClick = onOpen)
-                .padding(12.dp),
-            horizontalArrangement = Arrangement.spacedBy(14.dp),
-            verticalAlignment = Alignment.Top,
-        ) {
-            AsyncImage(
-                model = imageUrl,
-                contentDescription = null,
-                modifier = Modifier
-                    .size(width = 136.dp, height = 104.dp)
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(colors.brandLight),
-                contentScale = ContentScale.Crop,
-            )
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(
-                    car.title.orEmpty(),
-                    style = MaterialTheme.typography.titleMedium.copy(fontSize = 17.sp),
-                    color = colors.brandNavy,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    listOfNotNull(car.city, car.region).joinToString(", "),
-                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
-                    color = colors.mutedText,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    car.listingBadgeText()?.let { badgeText ->
-                        Text(
-                            text = "★ $badgeText",
-                            style = MaterialTheme.typography.labelLarge.copy(fontSize = 12.sp),
-                            color = Warning,
-                            fontWeight = FontWeight.Bold,
-                        )
-                    }
-                    if (car.instant_book == true) {
-                        Surface(
-                            shape = RoundedCornerShape(999.dp),
-                            color = Success.copy(alpha = 0.14f),
-                        ) {
-                            Text(
-                                text = "Instant",
-                                color = Success,
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                            )
-                        }
-                    }
-                }
-                Text(
-                    "GHS${(car.daily_price ?: 0.0).toInt()}/day",
-                    style = MaterialTheme.typography.bodyLarge.copy(fontSize = 15.sp),
-                    color = LocalHayameColors.current.brandBlue,
-                    fontWeight = FontWeight.Bold,
-                )
-            }
-            Spacer(modifier = Modifier.widthIn(min = 24.dp))
-        }
-
-        Surface(
-            shape = CircleShape,
-            color = colors.cardBackground.copy(alpha = 0.96f),
-            border = BorderStroke(1.dp, colors.border),
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(8.dp)
-                .size(32.dp)
-                .clickable(onClick = onToggleFavorite),
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-                    contentDescription = "Favorite",
-                    tint = if (isFavorite) Color.Red else colors.brandNavy,
-                    modifier = Modifier.size(16.dp),
-                )
-            }
-        }
-    }
-}
-
-private enum class ExploreLayoutMode {
+internal enum class ExploreLayoutMode {
     LIST,
     GRID,
 }
 
 private const val ExploreLayoutPrefsName = "hayame_explore_layout"
 private const val ExploreLayoutPrefsKey = "layout_mode"
+private const val HomePopularLayoutPrefsName = "hayame_home_popular_layout"
+private const val HomePopularLayoutPrefsKey = "layout_mode"
 
 @Composable
 private fun PageTitle(title: String) {
@@ -2929,6 +2633,13 @@ private fun ExploreTab(
     homeSearchDeliveryOnly: Boolean = false,
     homeSearchAcOnly: Boolean = false,
 ) {
+    CoachTour(
+        id = "explore",
+        steps = listOf(
+            CoachStep("explore.filters", "Filters", "Narrow the list by price, type, delivery and instant book."),
+            CoachStep("explore.layout", "Grid or list", "Switch how listings are shown."),
+        ),
+    )
     val carsState by viewModel.carsState.collectAsState()
     val favoritesState by viewModel.favoritesState.collectAsState()
     val locations by viewModel.locations.collectAsState()
@@ -3079,279 +2790,274 @@ private fun ExploreTab(
         }
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(paddingValues),
+    HayameRefreshBox(
+        onRefresh = { viewModel.loadCars(exploreParams()); viewModel.loadFavorites() },
+        modifier = Modifier.fillMaxSize(),
+        indicatorTopPadding = paddingValues.calculateTopPadding(),
     ) {
-        Column(
+    Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 16.dp),
+                .padding(paddingValues),
         ) {
-            Spacer(modifier = Modifier.height(16.dp))
-            PageTitle("Explore")
-            Spacer(modifier = Modifier.height(14.dp))
-
-            Surface(
-                shape = RoundedCornerShape(14.dp),
-                color = colors.cardBackground,
-                border = BorderStroke(1.dp, colors.border),
-                modifier = Modifier.fillMaxWidth(),
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp),
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
+                Spacer(modifier = Modifier.height(16.dp))
+                PageTitle("Explore")
+                Spacer(modifier = Modifier.height(14.dp))
+
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = colors.cardBackground,
+                    border = BorderStroke(1.dp, colors.border),
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Icon(Icons.Outlined.Search, contentDescription = null, tint = colors.mutedText, modifier = Modifier.size(20.dp))
-                    BasicTextField(
-                        value = query,
-                        onValueChange = { query = it },
-                        modifier = Modifier.weight(1f),
-                        singleLine = true,
-                        textStyle = TextStyle(
-                            color = colors.brandNavy,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Medium,
-                        ),
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                        keyboardActions = KeyboardActions(onSearch = { viewModel.loadCars(exploreParams()) }),
-                        decorationBox = { innerTextField ->
-                            if (query.isBlank()) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(Icons.Outlined.Search, contentDescription = null, tint = colors.mutedText, modifier = Modifier.size(20.dp))
+                        BasicTextField(
+                            value = query,
+                            onValueChange = { query = it },
+                            modifier = Modifier.weight(1f),
+                            singleLine = true,
+                            textStyle = TextStyle(
+                                color = colors.brandNavy,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Medium,
+                                fontFamily = ManropeFamily,
+                            ),
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                            keyboardActions = KeyboardActions(onSearch = { viewModel.loadCars(exploreParams()) }),
+                            decorationBox = { innerTextField ->
+                                if (query.isBlank()) {
+                                    Text(
+                                        text = "Search cars, cities, hosts",
+                                        color = colors.mutedText,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                    )
+                                }
+                                innerTextField()
+                            },
+                        )
+                        if (query.trim().isNotEmpty()) {
+                            IconButton(onClick = { query = "" }, modifier = Modifier.size(28.dp)) {
+                                Icon(Icons.Outlined.Close, contentDescription = "Clear", tint = colors.mutedText, modifier = Modifier.size(16.dp))
+                            }
+                        }
+                        Box {
+                            Surface(
+                                modifier = Modifier.clickable { sortMenuExpanded = true },
+                                shape = RoundedCornerShape(999.dp),
+                                color = colors.brandLight,
+                            ) {
                                 Text(
-                                    text = "Search cars, cities, hosts",
-                                    color = colors.mutedText,
-                                    style = MaterialTheme.typography.bodyMedium,
+                                    text = "Sort",
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                                    style = MaterialTheme.typography.labelLarge.copy(fontSize = 12.sp),
+                                    color = colors.brandBlue,
+                                    fontWeight = FontWeight.Bold,
                                 )
                             }
-                            innerTextField()
-                        },
-                    )
-                    if (query.trim().isNotEmpty()) {
-                        IconButton(onClick = { query = "" }, modifier = Modifier.size(28.dp)) {
-                            Icon(Icons.Outlined.Close, contentDescription = "Clear", tint = colors.mutedText, modifier = Modifier.size(16.dp))
+                            DropdownMenu(expanded = sortMenuExpanded, onDismissRequest = { sortMenuExpanded = false }) {
+                                listOf(
+                                    "Price Low" to "price_low",
+                                    "Price High" to "price_high",
+                                    "Top Rated" to "top_rated",
+                                    "Latest" to "new_listings",
+                                ).forEach { option ->
+                                    DropdownMenuItem(
+                                        text = { Text(option.first) },
+                                        onClick = {
+                                            sort = option.second
+                                            sortMenuExpanded = false
+                                            viewModel.loadCars(exploreParams() + ("sort" to option.second))
+                                        },
+                                    )
+                                }
+                            }
                         }
-                    }
-                    Box {
-                        Surface(
-                            modifier = Modifier.clickable { sortMenuExpanded = true },
-                            shape = RoundedCornerShape(999.dp),
-                            color = colors.brandLight,
-                        ) {
-                            Text(
-                                text = "Sort",
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
-                                style = MaterialTheme.typography.labelLarge.copy(fontSize = 12.sp),
-                                color = colors.brandBlue,
-                                fontWeight = FontWeight.Bold,
+                        Box(modifier = Modifier.coachTarget("explore.layout")) {
+                            ExploreLayoutToggle(
+                                selectedLayout = selectedLayout,
+                                onSelect = {
+                                    layoutMode = it.name
+                                    exploreLayoutPrefs.edit().putString(ExploreLayoutPrefsKey, it.name).apply()
+                                },
                             )
                         }
-                        DropdownMenu(expanded = sortMenuExpanded, onDismissRequest = { sortMenuExpanded = false }) {
-                            listOf(
-                                "Price Low" to "price_low",
-                                "Price High" to "price_high",
-                                "Top Rated" to "top_rated",
-                                "Latest" to "new_listings",
-                            ).forEach { option ->
-                                DropdownMenuItem(
-                                    text = { Text(option.first) },
-                                    onClick = {
-                                        sort = option.second
-                                        sortMenuExpanded = false
-                                        viewModel.loadCars(exploreParams() + ("sort" to option.second))
+                        IconButton(onClick = { showFilters = true }, modifier = Modifier.size(34.dp).coachTarget("explore.filters")) {
+                            Icon(
+                                Icons.Outlined.Tune,
+                                contentDescription = "Filters",
+                                tint = colors.brandBlue,
+                                modifier = Modifier.size(20.dp),
+                            )
+                        }
+                    }
+                }
+
+                VehicleBrandCarousel(
+                    brands = vehicleBrandOptions,
+                    selectedBrand = selectedBrand,
+                    onSelect = { brand ->
+                        selectedBrand = brand
+                        val params = exploreParams().toMutableMap()
+                        if (brand.isBlank()) {
+                            params.remove("brand")
+                        } else {
+                            params["brand"] = brand
+                        }
+                        viewModel.loadCars(params)
+                    },
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+
+            when (val state = carsState) {
+                UiState.Loading -> Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    repeat(4) { ExploreListRowPlaceholder() }
+                }
+                is UiState.Error -> ErrorBlock(state.message, onRetry = { viewModel.loadCars() })
+    	            UiState.Empty -> EmptyBlock("No matching listings", "Try changing filters or search terms.")
+    	            is UiState.Success -> {
+    	                val visibleCars = state.data.filter { car ->
+                            car.matchesExploreSearch(searchTokens) &&
+                                (selectedBrand.isBlank() || car.brand.orEmpty().equals(selectedBrand, ignoreCase = true)) &&
+                                (selectedModel.isBlank() || car.model.orEmpty().equals(selectedModel, ignoreCase = true)) &&
+                                (appliedCarType.isBlank() || car.car_type.orEmpty().equals(appliedCarType, ignoreCase = true)) &&
+                                (appliedTransmission.isBlank() || car.transmission.orEmpty().equals(appliedTransmission, ignoreCase = true)) &&
+                                (appliedFuel.isBlank() || car.fuel_type.orEmpty().equals(appliedFuel, ignoreCase = true)) &&
+                                ((car.daily_price ?: 0.0).roundToInt() >= appliedMinPrice) &&
+                                (!appliedDeliveryOnly || car.delivery_available == true) &&
+                                (!appliedAcOnly || car.air_conditioning == true)
+                        }
+    	                if (visibleCars.isEmpty()) {
+    	                    EmptyBlock("No matching listings", "Try another vehicle make or search term.")
+    	                } else if (selectedLayout == ExploreLayoutMode.GRID) {
+    	                    LazyVerticalGrid(
+                            columns = GridCells.Fixed(2),
+                            modifier = Modifier.weight(1f),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+    	                        verticalArrangement = Arrangement.spacedBy(16.dp),
+    	                        contentPadding = PaddingValues(bottom = 16.dp),
+    	                    ) {
+    	                        gridItems(visibleCars, key = { it.id }) { car ->
+    	                            ListingCard(
+                                    car = car,
+                                    isFavorite = favoriteIds.contains(car.id),
+                                    onClick = { onOpenCarDetail(car.id) },
+                                    onFavoriteClick = {
+                                        viewModel.toggleFavorite(
+                                            carId = car.id,
+                                            currentlyFavorite = favoriteIds.contains(car.id),
+                                            authDestination = NavRoutes.main(MainTab.EXPLORE),
+                                        )
+                                    },
+                                )
+                            }
+                        }
+                    } else {
+    	                    LazyColumn(
+                            modifier = Modifier.weight(1f),
+    	                        verticalArrangement = Arrangement.spacedBy(12.dp),
+    	                        contentPadding = PaddingValues(bottom = 16.dp)
+    	                    ) {
+    	                        items(visibleCars, key = { it.id }) { car ->
+    	                            ListingCard(
+                                    car = car,
+                                    isFavorite = favoriteIds.contains(car.id),
+                                    layout = ListingCardLayout.ROW,
+                                    onClick = { onOpenCarDetail(car.id) },
+                                    onFavoriteClick = {
+                                        viewModel.toggleFavorite(
+                                            carId = car.id,
+                                            currentlyFavorite = favoriteIds.contains(car.id),
+                                            authDestination = NavRoutes.main(MainTab.EXPLORE),
+                                        )
                                     },
                                 )
                             }
                         }
                     }
-                    ExploreLayoutToggle(
-                        selectedLayout = selectedLayout,
-                        onSelect = {
-                            layoutMode = it.name
-                            exploreLayoutPrefs.edit().putString(ExploreLayoutPrefsKey, it.name).apply()
+                }
+                UiState.Idle -> Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    repeat(4) { ExploreListRowPlaceholder() }
+                }
+            }
+            }
+
+            if (showFilters) {
+                ModalBottomSheet(
+                    onDismissRequest = { showFilters = false },
+                    sheetState = exploreFilterSheetState,
+                ) {
+                    ExploreFilterContent(
+                        locations = locations,
+                        selectedRegion = appliedRegion,
+                        selectedCity = appliedCity,
+                        selectedMake = selectedBrand,
+                        selectedModel = selectedModel,
+                        selectedType = appliedCarType,
+                        selectedTransmission = appliedTransmission,
+                        selectedFuel = appliedFuel,
+                        minPrice = appliedMinPrice,
+                        maxPrice = appliedMaxPrice,
+                        instantOnly = appliedInstantOnly,
+                        deliveryOnly = appliedDeliveryOnly,
+                        acOnly = appliedAcOnly,
+                        makeOptions = vehicleBrandOptions,
+                        modelOptions = modelOptions,
+                        typeOptions = typeOptions,
+                        transmissionOptions = transmissionOptions,
+                        fuelOptions = fuelOptions,
+                        onRegionChange = {
+                            appliedRegion = it
+                            appliedCity = ""
+                        },
+                        onCityChange = { appliedCity = it },
+                        onMakeChange = {
+                            selectedBrand = it
+                            selectedModel = ""
+                        },
+                        onModelChange = { selectedModel = it },
+                        onTypeChange = { appliedCarType = it },
+                        onTransmissionChange = { appliedTransmission = it },
+                        onFuelChange = { appliedFuel = it },
+                        onMinPriceChange = { appliedMinPrice = it },
+                        onMaxPriceChange = { appliedMaxPrice = it },
+                        onInstantOnlyChange = { appliedInstantOnly = it },
+                        onDeliveryOnlyChange = { appliedDeliveryOnly = it },
+                        onAcOnlyChange = { appliedAcOnly = it },
+                        onReset = {
+                            appliedRegion = ""
+                            appliedCity = ""
+                            selectedBrand = ""
+                            selectedModel = ""
+                            appliedCarType = ""
+                            appliedTransmission = ""
+                            appliedFuel = ""
+                            appliedMinPrice = 50
+                            appliedMaxPrice = 8000f
+                            appliedInstantOnly = false
+                            appliedDeliveryOnly = false
+                            appliedAcOnly = false
+                        },
+                        onDismiss = {
+                            showFilters = false
+                            viewModel.loadCars(exploreParams())
                         },
                     )
-                    IconButton(onClick = { showFilters = true }, modifier = Modifier.size(34.dp)) {
-                        Icon(
-                            Icons.Outlined.Tune,
-                            contentDescription = "Filters",
-                            tint = colors.brandBlue,
-                            modifier = Modifier.size(20.dp),
-                        )
-                    }
                 }
-            }
-
-            VehicleBrandCarousel(
-                brands = vehicleBrandOptions,
-                selectedBrand = selectedBrand,
-                onSelect = { brand ->
-                    selectedBrand = brand
-                    val params = exploreParams().toMutableMap()
-                    if (brand.isBlank()) {
-                        params.remove("brand")
-                    } else {
-                        params["brand"] = brand
-                    }
-                    viewModel.loadCars(params)
-                },
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-
-        when (val state = carsState) {
-            UiState.Loading -> Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                repeat(4) { ExploreListRowPlaceholder() }
-            }
-            is UiState.Error -> ErrorBlock(state.message, onRetry = { viewModel.loadCars() })
-	            UiState.Empty -> EmptyBlock("No matching listings", "Try changing filters or search terms.")
-	            is UiState.Success -> {
-	                val visibleCars = state.data.filter { car ->
-                        car.matchesExploreSearch(searchTokens) &&
-                            (selectedBrand.isBlank() || car.brand.orEmpty().equals(selectedBrand, ignoreCase = true)) &&
-                            (selectedModel.isBlank() || car.model.orEmpty().equals(selectedModel, ignoreCase = true)) &&
-                            (appliedCarType.isBlank() || car.car_type.orEmpty().equals(appliedCarType, ignoreCase = true)) &&
-                            (appliedTransmission.isBlank() || car.transmission.orEmpty().equals(appliedTransmission, ignoreCase = true)) &&
-                            (appliedFuel.isBlank() || car.fuel_type.orEmpty().equals(appliedFuel, ignoreCase = true)) &&
-                            ((car.daily_price ?: 0.0).roundToInt() >= appliedMinPrice) &&
-                            (!appliedDeliveryOnly || car.delivery_available == true) &&
-                            (!appliedAcOnly || car.air_conditioning == true)
-                    }
-	                if (visibleCars.isEmpty()) {
-	                    EmptyBlock("No matching listings", "Try another vehicle make or search term.")
-	                } else if (selectedLayout == ExploreLayoutMode.GRID) {
-	                    LazyVerticalGrid(
-                        columns = GridCells.Fixed(2),
-                        modifier = Modifier.weight(1f),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-	                        verticalArrangement = Arrangement.spacedBy(16.dp),
-	                        contentPadding = PaddingValues(bottom = 16.dp),
-	                    ) {
-	                        gridItems(visibleCars, key = { it.id }) { car ->
-	                            ExploreGridCard(
-                                car = car,
-                                isFavorite = favoriteIds.contains(car.id),
-                                onClick = { onOpenCarDetail(car.id) },
-                                onFavoriteClick = {
-                                    viewModel.toggleFavorite(
-                                        carId = car.id,
-                                        currentlyFavorite = favoriteIds.contains(car.id),
-                                        authDestination = NavRoutes.main(MainTab.EXPLORE),
-                                    )
-                                },
-                            )
-                        }
-                    }
-                } else {
-	                    LazyColumn(
-                        modifier = Modifier.weight(1f),
-	                        verticalArrangement = Arrangement.spacedBy(12.dp),
-	                        contentPadding = PaddingValues(bottom = 16.dp)
-	                    ) {
-	                        items(visibleCars, key = { it.id }) { car ->
-	                            ExploreListRow(
-                                car = car,
-                                isFavorite = favoriteIds.contains(car.id),
-                                onClick = { onOpenCarDetail(car.id) },
-                                onFavoriteClick = {
-                                    viewModel.toggleFavorite(
-                                        carId = car.id,
-                                        currentlyFavorite = favoriteIds.contains(car.id),
-                                        authDestination = NavRoutes.main(MainTab.EXPLORE),
-                                    )
-                                },
-                            )
-                        }
-                    }
-                }
-            }
-            UiState.Idle -> Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                repeat(4) { ExploreListRowPlaceholder() }
-            }
-        }
-        }
-
-        if (showFilters) {
-            ModalBottomSheet(
-                onDismissRequest = { showFilters = false },
-                sheetState = exploreFilterSheetState,
-            ) {
-                ExploreFilterContent(
-                    locations = locations,
-                    selectedRegion = appliedRegion,
-                    selectedCity = appliedCity,
-                    selectedMake = selectedBrand,
-                    selectedModel = selectedModel,
-                    selectedType = appliedCarType,
-                    selectedTransmission = appliedTransmission,
-                    selectedFuel = appliedFuel,
-                    minPrice = appliedMinPrice,
-                    maxPrice = appliedMaxPrice,
-                    instantOnly = appliedInstantOnly,
-                    deliveryOnly = appliedDeliveryOnly,
-                    acOnly = appliedAcOnly,
-                    makeOptions = vehicleBrandOptions,
-                    modelOptions = modelOptions,
-                    typeOptions = typeOptions,
-                    transmissionOptions = transmissionOptions,
-                    fuelOptions = fuelOptions,
-                    onRegionChange = {
-                        appliedRegion = it
-                        appliedCity = ""
-                    },
-                    onCityChange = { appliedCity = it },
-                    onMakeChange = {
-                        selectedBrand = it
-                        selectedModel = ""
-                    },
-                    onModelChange = { selectedModel = it },
-                    onTypeChange = { appliedCarType = it },
-                    onTransmissionChange = { appliedTransmission = it },
-                    onFuelChange = { appliedFuel = it },
-                    onMinPriceChange = { appliedMinPrice = it },
-                    onMaxPriceChange = { appliedMaxPrice = it },
-                    onInstantOnlyChange = { appliedInstantOnly = it },
-                    onDeliveryOnlyChange = { appliedDeliveryOnly = it },
-                    onAcOnlyChange = { appliedAcOnly = it },
-                    onReset = {
-                        appliedRegion = ""
-                        appliedCity = ""
-                        selectedBrand = ""
-                        selectedModel = ""
-                        appliedCarType = ""
-                        appliedTransmission = ""
-                        appliedFuel = ""
-                        appliedMinPrice = 50
-                        appliedMaxPrice = 8000f
-                        appliedInstantOnly = false
-                        appliedDeliveryOnly = false
-                        appliedAcOnly = false
-                    },
-                    onDismiss = {
-                        showFilters = false
-                        viewModel.loadCars(exploreParams())
-                    },
-                )
             }
         }
     }
-}
-
-@Composable
-private fun ExploreListRow(
-    car: CarDto,
-    isFavorite: Boolean,
-    onClick: () -> Unit,
-    onFavoriteClick: () -> Unit,
-) {
-    HomeFeaturedCarRow(
-        car = car,
-        isFavorite = isFavorite,
-        onOpen = onClick,
-        onToggleFavorite = onFavoriteClick,
-    )
 }
 
 @Composable
@@ -3424,7 +3130,7 @@ private fun VehicleBrandPill(
 }
 
 @Composable
-private fun VehicleBrandLogo(
+internal fun VehicleBrandLogo(
     title: String,
     selected: Boolean,
     modifier: Modifier = Modifier,
@@ -3537,7 +3243,7 @@ private fun brandMonogram(title: String): String {
 }
 
 @Composable
-private fun ExploreLayoutToggle(
+internal fun ExploreLayoutToggle(
     selectedLayout: ExploreLayoutMode,
     onSelect: (ExploreLayoutMode) -> Unit,
 ) {
@@ -3592,412 +3298,7 @@ private fun ExploreLayoutButton(
     }
 }
 
-@Composable
-private fun ExploreGridCard(
-    car: CarDto,
-    isFavorite: Boolean,
-    onClick: () -> Unit,
-    onFavoriteClick: () -> Unit,
-) {
-    val colors = LocalHayameColors.current
-    val imageUrl = remember(car.id, car.image_url, car.car_photos) {
-        resolveAppImage(car.image_url) ?: car.car_photos.orEmpty().firstNotNullOfOrNull { resolveAppImage(it.url) }
-    }
-    val title = car.title?.trim().takeUnless { it.isNullOrBlank() }
-        ?: listOfNotNull(car.brand?.trim(), car.model?.trim()).filter { it.isNotBlank() }.joinToString(" ").ifBlank { "Hayame listing" }
-    val location = listOfNotNull(car.city, car.region).joinToString(", ").ifBlank { "Ghana" }
-    val price = (car.daily_price ?: 0.0).roundToInt()
-    val rating = String.format("%.1f", car.avg_rating ?: 0.0)
-
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
-        border = BorderStroke(1.dp, colors.border),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-    ) {
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Box {
-                if (!imageUrl.isNullOrBlank()) {
-                    AsyncImage(
-                        model = imageUrl,
-                        contentDescription = null,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(184.dp)
-                            .clip(RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp)),
-                        contentScale = ContentScale.Crop,
-                    )
-                } else {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(184.dp)
-                            .background(colors.brandLight),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text("No image", color = colors.mutedText)
-                    }
-                }
-
-                Surface(
-                    shape = CircleShape,
-                    color = colors.cardBackground.copy(alpha = 0.96f),
-                    border = BorderStroke(1.dp, colors.border),
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(10.dp)
-                        .size(38.dp)
-                        .clickable(onClick = onFavoriteClick),
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-                            contentDescription = "Favorite",
-                            tint = if (isFavorite) Color.Red else colors.brandNavy,
-                            modifier = Modifier.size(18.dp),
-                        )
-                    }
-                }
-            }
-
-            Column(
-                modifier = Modifier.padding(start = 12.dp, end = 12.dp, bottom = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = LocalHayameColors.current.brandNavy,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    text = location,
-                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 12.sp),
-                    color = LocalHayameColors.current.mutedText,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = "★ $rating",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = Warning,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    if (car.instant_book == true) {
-                        Surface(
-                            shape = RoundedCornerShape(999.dp),
-                            color = Success.copy(alpha = 0.14f),
-                        ) {
-                            Text(
-                                text = "Instant",
-                                color = Success,
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                            )
-                        }
-                    }
-                }
-                Text(
-                    text = "GHS$price / day",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = LocalHayameColors.current.brandBlue,
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun TripsTab(
-    viewModel: AppViewModel,
-    paddingValues: PaddingValues,
-    onOpenHostVehicles: () -> Unit,
-    onOpenCarDetail: (String) -> Unit,
-    onOpenConversation: (String) -> Unit,
-) {
-    val bookingsState by viewModel.bookingsState.collectAsState()
-    val carsState by viewModel.carsState.collectAsState()
-    val pendingBookingFocus by viewModel.pendingBookingFocus.collectAsState()
-    val me by viewModel.me.collectAsState()
-    val listState = rememberLazyListState()
-    val knownCars = (carsState as? UiState.Success<List<CarDto>>)?.data.orEmpty()
-    val carsById = remember(knownCars) { knownCars.associateBy { it.id } }
-    val guestTrips = (bookingsState as? UiState.Success<List<BookingDto>>)
-        ?.data
-        .orEmpty()
-        .filter {
-            !it.role.orEmpty().contains("owner", ignoreCase = true) &&
-                it.payment_status.equals("paid", ignoreCase = true)
-        }
-    val today = LocalDate.now()
-    val upcomingTrips = guestTrips.filter { (parseApiDate(it.end_date) ?: today) >= today }
-    val pastTrips = guestTrips.filter { (parseApiDate(it.end_date) ?: today) < today }
-    val hostStatus = (me?.host_application_status ?: me?.host_status ?: "").trim().lowercase()
-    val isHost = me?.is_host == true || hostStatus == "approved"
-
-    LaunchedEffect(Unit) {
-        viewModel.loadBookings()
-        if (knownCars.isEmpty()) {
-            viewModel.loadCars(mapOf("limit" to "100"))
-        }
-    }
-
-    LaunchedEffect(pendingBookingFocus, guestTrips) {
-        val bookingId = pendingBookingFocus ?: return@LaunchedEffect
-        val index = guestTrips.indexOfFirst { it.id == bookingId }
-        if (index < 0) return@LaunchedEffect
-        listState.animateScrollToItem(index + 1)
-        viewModel.consumePendingBookingFocus(bookingId)
-    }
-
-    LazyColumn(
-        state = listState,
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(paddingValues)
-            .padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        item { Spacer(modifier = Modifier.height(16.dp)); SectionHeader("Your trips") }
-        when (val state = bookingsState) {
-            UiState.Loading -> items(3) { BookingPlaceholderCard() }
-            is UiState.Error -> item { ErrorBlock(state.message, onRetry = { viewModel.loadBookings() }) }
-            UiState.Empty -> item { EmptyBlock("No trips yet", "Your bookings will appear here after payment.") }
-            is UiState.Success -> {
-                if (guestTrips.isEmpty()) {
-                    item { EmptyBlock("No trips yet", "Your bookings will appear here after payment.") }
-                } else {
-                    item { SectionHeader("Upcoming bookings") }
-                    if (upcomingTrips.isEmpty()) {
-                        item { EmptyBlock("No upcoming trips", "Book your next ride from Explore.") }
-                    } else {
-                        items(upcomingTrips, key = { it.id }) { booking ->
-                            BookingCard(
-                                booking = booking,
-                                car = carsById[booking.car_id.orEmpty()],
-                                onOpenCarDetail = onOpenCarDetail,
-                                onMessageHost = { messageHostForTrip(viewModel, booking, me, onOpenConversation) },
-                                onApprove = { viewModel.approveBooking(it) },
-                                onReject = { id, r -> viewModel.rejectBooking(id, r) },
-                                onDispute = { id, r -> viewModel.createDispute(id, r) },
-                                isHighlighted = pendingBookingFocus == booking.id,
-                            )
-                        }
-                    }
-
-                    item {
-                        SectionHeader(
-                            title = "Past trips",
-                            action = "Vehicles",
-                            onAction = {
-                                if (isHost) {
-                                    onOpenHostVehicles()
-                                } else {
-                                    viewModel.showMessage("Host access is required to open vehicles.")
-                                }
-                            },
-                        )
-                    }
-                    if (pastTrips.isEmpty()) {
-                        item { EmptyBlock("No past trips", "Completed trips appear here.") }
-                    } else {
-                        items(pastTrips, key = { it.id }) { booking ->
-                        BookingCard(
-                            booking = booking,
-                            car = carsById[booking.car_id.orEmpty()],
-                            onOpenCarDetail = onOpenCarDetail,
-                            onMessageHost = { messageHostForTrip(viewModel, booking, me, onOpenConversation) },
-                            onApprove = { viewModel.approveBooking(it) },
-                            onReject = { id, r -> viewModel.rejectBooking(id, r) },
-                            onDispute = { id, r -> viewModel.createDispute(id, r) },
-                            isHighlighted = pendingBookingFocus == booking.id,
-                        )
-                        }
-                    }
-                }
-            }
-            UiState.Idle -> items(3) { BookingPlaceholderCard() }
-        }
-        item { Spacer(modifier = Modifier.height(24.dp)) }
-    }
-}
-
-@Composable
-private fun BookingCard(
-    booking: BookingDto,
-    car: CarDto? = null,
-    onOpenCarDetail: (String) -> Unit,
-    onMessageHost: () -> Unit,
-    onApprove: (String) -> Unit,
-    onReject: (String, String) -> Unit,
-    onDispute: (String, String) -> Unit,
-    isHighlighted: Boolean = false,
-) {
-    val colors = LocalHayameColors.current
-    var disputeReason by remember { mutableStateOf("") }
-    val displayStatus = resolveBookingDisplayStatus(
-        status = booking.status,
-        startDate = booking.start_date,
-        endDate = booking.end_date,
-    )
-    val helperText = bookingHelperText(
-        status = displayStatus,
-        role = BookingDisplayRole.Renter,
-        paymentStatus = booking.payment_status,
-    )
-    val showPaidBadge = shouldShowCompletedPaidBadge(displayStatus, booking.payment_status)
-    val carId = booking.car_id?.trim()?.takeIf { it.isNotBlank() } ?: car?.id.orEmpty()
-    val vehicleTitle = booking.cars?.title?.trim()?.takeIf { it.isNotBlank() }
-        ?: car?.title?.trim()?.takeIf { it.isNotBlank() }
-        ?: "Trip with Hayame"
-    val vehicleImageUrl = resolveAppImage(car?.image_url)
-        ?: car?.car_photos.orEmpty().firstNotNullOfOrNull { resolveAppImage(it.url) }
-        ?: resolveAppImage(booking.cars?.image_url)
-        ?: booking.cars?.car_photos.orEmpty().firstNotNullOfOrNull { resolveAppImage(it.url) }
-    val brandTitle = tripBrandLogoTitle(car, booking)
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(enabled = carId.isNotBlank()) { onOpenCarDetail(carId) },
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
-        elevation = CardDefaults.cardElevation(defaultElevation = if (isHighlighted) 6.dp else 2.dp),
-        border = BorderStroke(
-            width = if (isHighlighted) 2.dp else 1.dp,
-            color = if (isHighlighted) colors.brandBlue else colors.border,
-        ),
-    ) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-                if (!vehicleImageUrl.isNullOrBlank()) {
-                    AsyncImage(
-                        model = vehicleImageUrl,
-                        contentDescription = null,
-                        modifier = Modifier
-                            .size(width = 86.dp, height = 70.dp)
-                            .clip(RoundedCornerShape(14.dp)),
-                        contentScale = ContentScale.Crop,
-                    )
-                } else {
-                    Box(
-                        modifier = Modifier
-                            .size(width = 86.dp, height = 70.dp)
-                            .background(colors.brandLight, RoundedCornerShape(14.dp)),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(Icons.Outlined.DirectionsCar, contentDescription = null, tint = colors.brandBlue)
-                    }
-                }
-
-                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.Top,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = vehicleTitle,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = colors.brandNavy,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            Text(
-                                text = helperText,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = colors.mutedText,
-                                modifier = Modifier.padding(top = 4.dp),
-                            )
-                        }
-                        VehicleBrandLogo(
-                            title = brandTitle,
-                            selected = false,
-                            modifier = Modifier.size(width = 38.dp, height = 28.dp),
-                        )
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        BookingStatusBadge(status = displayStatus)
-                        if (showPaidBadge) {
-                            BookingPaidBadge()
-                        }
-                    }
-                }
-            }
-
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-                Column {
-                    Text("START", style = MaterialTheme.typography.labelSmall, color = colors.mutedText)
-                    Text(booking.start_date ?: "-", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = colors.brandNavy)
-                }
-                Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = colors.mutedText, modifier = Modifier.size(16.dp))
-                Column {
-                    Text("END", style = MaterialTheme.typography.labelSmall, color = colors.mutedText)
-                    Text(booking.end_date ?: "-", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = colors.brandNavy)
-                }
-            }
-
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(text = "Total Price", style = MaterialTheme.typography.bodyMedium, color = colors.mutedText)
-                Spacer(modifier = Modifier.weight(1f))
-                Text(text = "GH₵${(booking.total_price ?: 0.0).toInt()}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.ExtraBold, color = colors.brandBlue)
-            }
-
-            if ((booking.role ?: "").contains("owner") && booking.status == "awaiting_host") {
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = { onApprove(booking.id) }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(8.dp)) { Text("Approve") }
-                    OutlinedButton(onClick = { onReject(booking.id, "Rejected by host") }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(8.dp)) { Text("Reject") }
-                }
-            } else if (booking.status == "completed" || booking.status == "cancelled") {
-                OutlinedButton(
-                    onClick = onMessageHost,
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                ) {
-                    Icon(Icons.Outlined.ChatBubble, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Message host")
-                }
-            } else {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(
-                        onClick = onMessageHost,
-                        shape = RoundedCornerShape(8.dp),
-                        contentPadding = PaddingValues(horizontal = 12.dp),
-                    ) { Text("Message host", style = MaterialTheme.typography.labelLarge) }
-                    OutlinedTextField(
-                        value = disputeReason,
-                        onValueChange = { disputeReason = it },
-                        placeholder = { Text("Reason for dispute...", style = MaterialTheme.typography.bodySmall) },
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(8.dp),
-                        singleLine = true
-                    )
-                    Button(
-                        onClick = { if (disputeReason.isNotBlank()) onDispute(booking.id, disputeReason); disputeReason = "" },
-                        enabled = disputeReason.isNotBlank(),
-                        shape = RoundedCornerShape(8.dp),
-                        contentPadding = PaddingValues(horizontal = 12.dp)
-                    ) { Text("Dispute", style = MaterialTheme.typography.labelLarge) }
-                }
-            }
-        }
-    }
-}
-
-private fun tripBrandLogoTitle(car: CarDto?, booking: BookingDto): String {
+internal fun tripBrandLogoTitle(car: CarDto?, booking: BookingDto): String {
     val explicitBrand = listOfNotNull(car?.brand, booking.cars?.brand)
         .firstOrNull { it.trim().isNotBlank() }
         ?.trim()
@@ -4019,7 +3320,7 @@ private fun tripBrandLogoTitle(car: CarDto?, booking: BookingDto): String {
     } ?: title
 }
 
-private fun messageHostForTrip(
+internal fun messageHostForTrip(
     viewModel: AppViewModel,
     booking: BookingDto,
     me: MobileMeDto?,
@@ -4090,7 +3391,7 @@ private fun tripMessageSummary(booking: BookingDto, me: MobileMeDto?): String {
     return lines.joinToString("\n")
 }
 
-private fun parsedTripDays(startDate: String?, endDate: String?): Int {
+internal fun parsedTripDays(startDate: String?, endDate: String?): Int {
     val start = parseApiDate(startDate)
     val end = parseApiDate(endDate)
     return if (start != null && end != null && end.isAfter(start)) {
@@ -4101,7 +3402,7 @@ private fun parsedTripDays(startDate: String?, endDate: String?): Int {
 }
 
 @Composable
-private fun StatusBadge(status: String) {
+internal fun StatusBadge(status: String) {
     val color = when (status.lowercase()) {
         "confirmed", "approved" -> Color(0xFFE8F5E9) to Color(0xFF2E7D32)
         "awaiting_host", "pending" -> Color(0xFFFFF3E0) to Color(0xFFE65100)
@@ -4116,516 +3417,6 @@ private fun StatusBadge(status: String) {
             fontWeight = FontWeight.Bold,
             color = color.second
         )
-    }
-}
-
-@Composable
-private fun SavedTab(
-    viewModel: AppViewModel,
-    paddingValues: PaddingValues,
-    onOpenCarDetail: (String) -> Unit,
-) {
-    val favoritesState by viewModel.favoritesState.collectAsState()
-    val carsState by viewModel.carsState.collectAsState()
-
-    LaunchedEffect(Unit) {
-        viewModel.loadFavorites()
-        viewModel.loadCars()
-    }
-
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(paddingValues)
-            .padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        item { Spacer(modifier = Modifier.height(16.dp)); SectionHeader("Saved for later") }
-        when {
-            favoritesState is UiState.Loading || carsState is UiState.Loading -> items(3) { ExploreListRowPlaceholder() }
-            favoritesState is UiState.Error -> item {
-                ErrorBlock((favoritesState as UiState.Error).message, onRetry = { viewModel.loadFavorites() })
-            }
-            favoritesState is UiState.Empty -> item {
-                EmptyBlock("No saved listings", "Tap the heart icon on any car to save it here.")
-            }
-            favoritesState is UiState.Success && carsState is UiState.Success -> {
-                val favoriteIds = (favoritesState as UiState.Success<Set<String>>).data
-                val cars = (carsState as UiState.Success<List<CarDto>>).data.filter { favoriteIds.contains(it.id) }
-                if (cars.isEmpty()) {
-                    item { EmptyBlock("No saved listings", "Tap the heart icon on any car to save it here.") }
-                } else {
-                    items(cars, key = { it.id }) { car ->
-                        CarCard(
-                            car = car,
-                            isFavorite = true,
-                            onClick = { onOpenCarDetail(car.id) },
-                            onFavoriteClick = { viewModel.toggleFavorite(car.id, true) },
-                        )
-                    }
-                }
-            }
-            else -> item { EmptyBlock("No saved listings", "Tap the heart icon on any car to save it here.") }
-        }
-        item { Spacer(modifier = Modifier.height(24.dp)) }
-    }
-}
-
-@Composable
-private fun MoreTab(
-    viewModel: AppViewModel,
-    paddingValues: PaddingValues,
-    appearanceHighlightNonce: Int = 0,
-    onOpenMessages: () -> Unit,
-    onOpenDashboard: () -> Unit,
-    onOpenBecomeHost: () -> Unit,
-    onOpenHostDashboard: () -> Unit,
-    onOpenTrips: () -> Unit,
-    onOpenProfile: () -> Unit,
-    onOpenContact: () -> Unit,
-    onOpenProtection: () -> Unit,
-    onOpenCancellation: () -> Unit,
-    onOpenPrivacy: () -> Unit,
-    onOpenAdmin: () -> Unit = {},
-) {
-    val isAuthenticated by viewModel.isAuthenticated.collectAsState()
-    val me by viewModel.me.collectAsState()
-    val notificationPreferences by viewModel.notificationPreferences.collectAsState()
-    var hostModeEnabled by remember { mutableStateOf(false) }
-    var glowAppearanceSettings by remember { mutableStateOf(false) }
-    val listState = rememberLazyListState()
-
-    val displayName = me.preferredFullName() ?: "Guest User"
-    val displayEmail = when {
-        isAuthenticated -> me.preferredEmail() ?: "Email not set"
-        else -> "Browsing in guest mode"
-    }
-    val displayPhone = me.preferredPhone().orEmpty()
-    val displayCity = me.preferredCity().orEmpty()
-    val displayRegion = me.preferredRegion().orEmpty()
-    val displayLocation = listOf(displayCity, displayRegion).filter { it.isNotBlank() }.joinToString(", ")
-    val avatarUrl = resolveAppImage(me.preferredAvatarRaw())
-    val hostStatus = (me?.host_application_status ?: me?.host_status ?: "").trim().lowercase()
-    val isHost = me?.is_host == true || hostStatus == "approved"
-    val isPending = hostStatus == "pending"
-    val colors = LocalHayameColors.current
-
-    LaunchedEffect(appearanceHighlightNonce) {
-        if (appearanceHighlightNonce <= 0) return@LaunchedEffect
-        listState.animateScrollToItem(6)
-        glowAppearanceSettings = true
-        kotlinx.coroutines.delay(2_800)
-        glowAppearanceSettings = false
-    }
-
-    LazyColumn(
-        state = listState,
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(paddingValues)
-            .padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        item {
-            Spacer(modifier = Modifier.height(16.dp))
-            Card(
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-            ) {
-                Column(
-                    modifier = Modifier.padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    ) {
-                        RemoteAvatar(
-                            imageUrl = avatarUrl,
-                            name = displayName,
-                            fallback = "U",
-                            size = 64.dp,
-                            textStyle = MaterialTheme.typography.headlineSmall,
-                        )
-
-                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                            Text(
-                                displayName,
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold,
-                                color = colors.brandNavy,
-                            )
-                            Text(
-                                displayEmail,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = colors.mutedText,
-                            )
-                        }
-                    }
-
-                    if (displayLocation.isNotBlank()) {
-                        InfoLine(label = "Location", value = displayLocation)
-                    }
-                    if (isAuthenticated && displayPhone.isNotBlank()) {
-                        InfoLine(label = "Phone", value = displayPhone)
-                    }
-
-                    if (isAuthenticated) {
-                        SecondaryPillButton(
-                            text = "Edit profile",
-                            modifier = Modifier.fillMaxWidth(),
-                            onClick = onOpenProfile,
-                        )
-                    }
-                }
-            }
-        }
-
-        item {
-            SectionHeader("Profile settings")
-        }
-
-        item {
-            Card(
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-            ) {
-                Column(modifier = Modifier.padding(8.dp)) {
-                    ActionRow(
-                        title = "Edit profile",
-                        icon = Icons.Outlined.Person,
-                        onClick = {
-                            if (isAuthenticated) {
-                                onOpenProfile()
-                            } else {
-                                viewModel.requireAuthentication(
-                                    message = "Sign in or sign up to edit your profile.",
-                                    destination = NavRoutes.Profile,
-                                )
-                            }
-                        },
-                    )
-                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = LocalHayameColors.current.border)
-                    ActionRow(
-                        title = "Trips",
-                        icon = Icons.Outlined.CalendarMonth,
-                        onClick = {
-                            if (isAuthenticated) {
-                                onOpenTrips()
-                            } else {
-                                viewModel.requireAuthentication(
-                                    message = "Sign in or sign up to view your trips.",
-                                    destination = NavRoutes.main(MainTab.TRIPS),
-                                )
-                            }
-                        },
-                    )
-                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = LocalHayameColors.current.border)
-                    ActionRow(
-                        title = "Messages",
-                        icon = Icons.Outlined.ChatBubble,
-                        onClick = {
-                            if (isAuthenticated) {
-                                onOpenMessages()
-                            } else {
-                                viewModel.requireAuthentication(
-                                    message = "Sign in or sign up to view your messages.",
-                                    destination = NavRoutes.Messages,
-                                )
-                            }
-                        },
-                    )
-                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = LocalHayameColors.current.border)
-                    ActionRow(
-                        title = "Dashboard",
-                        icon = Icons.Outlined.Home,
-                        onClick = {
-                            if (isAuthenticated) {
-                                onOpenDashboard()
-                            } else {
-                                viewModel.requireAuthentication(
-                                    message = "Sign in or sign up to open your dashboard.",
-                                    destination = NavRoutes.Dashboard,
-                                )
-                            }
-                        },
-                    )
-                }
-            }
-        }
-
-        item {
-            SectionHeader("Notifications")
-        }
-
-        item {
-            NotificationPreferencesCard(
-                preferences = notificationPreferences,
-                isAuthenticated = isAuthenticated,
-                onPreferenceChange = { key, enabled ->
-                    when (key) {
-                        "booking_updates" -> viewModel.updateNotificationPreference(bookingUpdates = enabled)
-                        "messages" -> viewModel.updateNotificationPreference(messages = enabled)
-                        "account_security" -> viewModel.updateNotificationPreference(accountSecurity = enabled)
-                        "news_announcements" -> viewModel.updateNotificationPreference(newsAnnouncements = enabled)
-                    }
-                },
-                onRequireSignIn = {
-                    viewModel.requireAuthentication(
-                        message = "Sign in or sign up to manage notification preferences.",
-                        destination = NavRoutes.Profile,
-                    )
-                },
-            )
-        }
-
-        item {
-            SectionHeader("Appearance")
-        }
-
-        item {
-            val darkModeEnabled by viewModel.darkModeEnabled.collectAsState()
-            Card(
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
-                border = BorderStroke(
-                    width = if (glowAppearanceSettings) 2.dp else 1.dp,
-                    color = if (glowAppearanceSettings) colors.brandBlue else Color.Transparent,
-                ),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-                modifier = Modifier.then(
-                    if (glowAppearanceSettings) {
-                        Modifier.border(
-                            width = 1.dp,
-                            color = colors.brandBlue.copy(alpha = 0.25f),
-                            shape = RoundedCornerShape(20.dp),
-                        )
-                    } else {
-                        Modifier
-                    },
-                ),
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    Icon(
-                        imageVector = if (darkModeEnabled) Icons.Outlined.DarkMode else Icons.Outlined.LightMode,
-                        contentDescription = null,
-                        tint = colors.brandBlue,
-                        modifier = Modifier.size(24.dp),
-                    )
-                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(
-                            if (darkModeEnabled) "Dark mode" else "Light mode",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = colors.brandNavy,
-                        )
-                        Text(
-                            "Switch between light and dark appearance.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = colors.mutedText,
-                        )
-                    }
-                    Switch(
-                        checked = darkModeEnabled,
-                        onCheckedChange = { viewModel.setDarkMode(it) },
-                    )
-                }
-            }
-        }
-
-        item {
-            SectionHeader("Hosting")
-        }
-
-        item {
-            Card(
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-            ) {
-                when {
-                    isHost -> {
-                        Column(
-                            modifier = Modifier.padding(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp),
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            ) {
-                                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    Text(
-                                        "Host mode",
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = colors.brandNavy,
-                                    )
-                                    Text(
-                                        "Turn on Host mode to access host dashboard, listings, bookings, and earnings.",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = colors.mutedText,
-                                    )
-                                }
-                                Switch(
-                                    checked = hostModeEnabled,
-                                    onCheckedChange = { enabled ->
-                                        hostModeEnabled = enabled
-                                        if (enabled) {
-                                            if (isAuthenticated) {
-                                                onOpenHostDashboard()
-                                            } else {
-                                                hostModeEnabled = false
-                                                viewModel.requireAuthentication(
-                                                    message = "Sign in or sign up to access host mode.",
-                                                    destination = NavRoutes.HostShell,
-                                                )
-                                            }
-                                        }
-                                    },
-                                )
-                            }
-                        }
-                    }
-
-                    isPending -> {
-                        Column(
-                            modifier = Modifier.padding(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp),
-                        ) {
-                            InfoLine(label = "Application", value = "Pending")
-                            Text(
-                                "Your host application is pending review.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Warning,
-                            )
-                            SecondaryPillButton(
-                                text = "Review application",
-                                modifier = Modifier.fillMaxWidth(),
-                                onClick = {
-                                    if (isAuthenticated) {
-                                        onOpenBecomeHost()
-                                    } else {
-                                        viewModel.requireAuthentication(
-                                            message = "Sign in or sign up to review your host application.",
-                                            destination = NavRoutes.BecomeHost,
-                                        )
-                                    }
-                                },
-                            )
-                        }
-                    }
-
-                    else -> {
-                        Column(
-                            modifier = Modifier.padding(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp),
-                        ) {
-                            Text(
-                                "Start hosting to unlock listings, approvals, earnings, and host support tools.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = colors.mutedText,
-                            )
-                            SecondaryPillButton(
-                                text = "Become a Host",
-                                modifier = Modifier.fillMaxWidth(),
-                                onClick = {
-                                    if (isAuthenticated) {
-                                        onOpenBecomeHost()
-                                    } else {
-                                        viewModel.requireAuthentication(
-                                            message = "Sign in or sign up to become a host.",
-                                            destination = NavRoutes.BecomeHost,
-                                        )
-                                    }
-                                },
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        item {
-            SectionHeader("Support")
-        }
-
-        item {
-            Card(
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-            ) {
-                Column(modifier = Modifier.padding(8.dp)) {
-                    ActionRow(title = "Contact", icon = Icons.Outlined.MailOutline, onClick = onOpenContact)
-                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = LocalHayameColors.current.border)
-                    ActionRow(title = "Protection", icon = Icons.Outlined.Shield, onClick = onOpenProtection)
-                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = LocalHayameColors.current.border)
-                    ActionRow(title = "Cancellation Policy", icon = Icons.Outlined.CalendarMonth, onClick = onOpenCancellation)
-                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = LocalHayameColors.current.border)
-                    ActionRow(title = "Privacy", icon = Icons.Outlined.Public, onClick = onOpenPrivacy)
-                }
-            }
-        }
-
-        val isAdmin = me.isAdmin()
-        if (isAdmin) {
-            item {
-                Card(
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
-                    border = BorderStroke(1.dp, colors.brandBlue.copy(alpha = 0.25f)),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-                ) {
-                    Column(modifier = Modifier.padding(8.dp)) {
-                        ActionRow(
-                            title = "Admin Panel",
-                            icon = Icons.Outlined.Shield,
-                            onClick = onOpenAdmin,
-                            color = colors.brandBlue,
-                        )
-                    }
-                }
-            }
-        }
-
-        item {
-            if (isAuthenticated) {
-                OutlinedButton(
-                    onClick = { viewModel.logout() },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(44.dp),
-                    shape = RoundedCornerShape(999.dp),
-                    border = BorderStroke(1.dp, Danger.copy(alpha = 0.28f)),
-                    colors = ButtonDefaults.outlinedButtonColors(containerColor = MaterialTheme.colorScheme.surface),
-                ) {
-                    Text(
-                        text = "Sign out",
-                        color = Danger,
-                        style = MaterialTheme.typography.bodyLarge.copy(fontSize = 15.sp),
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                }
-            } else {
-                GradientPillButton(
-                    text = "Log in / Sign up",
-                    modifier = Modifier.fillMaxWidth(),
-                    onClick = { viewModel.returnToAuth() },
-                )
-            }
-        }
-
-        item { Spacer(modifier = Modifier.height(24.dp)) }
     }
 }
 
@@ -4650,7 +3441,7 @@ private fun ActionRow(title: String, icon: androidx.compose.ui.graphics.vector.I
 }
 
 @Composable
-private fun NotificationPreferencesCard(
+fun NotificationPreferencesCard(
     preferences: NotificationPreferencesDto,
     isAuthenticated: Boolean,
     onPreferenceChange: (key: String, enabled: Boolean) -> Unit,
@@ -4750,55 +3541,36 @@ private fun NotificationPreferenceRow(
 }
 
 @Composable
-private fun GradientPillButton(
+fun GradientPillButton(
+    text: String,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    // Kept for call sites; the app no longer uses gradients on buttons.
+    SolidPillButton(text = text, modifier = modifier, onClick = onClick)
+}
+
+/** Flat brand-blue pill, the same colour as the search button. */
+@Composable
+fun SolidPillButton(
     text: String,
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
     val colors = LocalHayameColors.current
-    val darkMode = colors.pageBackground.luminance() < 0.5f
     Button(
         onClick = onClick,
-        modifier = modifier
-            .height(48.dp)
-            .shadow(
-                elevation = 8.dp,
-                shape = RoundedCornerShape(999.dp),
-                clip = false,
-                ambientColor = colors.brandBlue.copy(alpha = 0.28f),
-                spotColor = colors.brandBlue.copy(alpha = 0.28f),
-            ),
-        shape = RoundedCornerShape(999.dp),
-        colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
-        contentPadding = PaddingValues(0.dp),
+        modifier = modifier.height(50.dp),
+        shape = RoundedCornerShape(16.dp),
+        colors = ButtonDefaults.buttonColors(containerColor = colors.brandBlue, contentColor = Color.White),
+        elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp, pressedElevation = 0.dp),
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.horizontalGradient(
-                        colors = if (darkMode) {
-                            listOf(colors.brandBlue, Color(0xFF1484D9))
-                        } else {
-                            listOf(colors.brandBlue, colors.brandNavy)
-                        },
-                    )
-                )
-                .clip(RoundedCornerShape(999.dp)),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = text,
-                color = Color.White,
-                style = MaterialTheme.typography.bodyLarge.copy(fontSize = 16.sp),
-                fontWeight = FontWeight.SemiBold,
-            )
-        }
+        Text(text, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = Color.White)
     }
 }
 
 @Composable
-private fun SecondaryPillButton(
+fun SecondaryPillButton(
     text: String,
     modifier: Modifier = Modifier,
     isSelected: Boolean = false,
@@ -4823,7 +3595,7 @@ private fun SecondaryPillButton(
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun CarDetailScreen(
     viewModel: AppViewModel,
@@ -4833,16 +3605,19 @@ fun CarDetailScreen(
     onOpenConversation: (String) -> Unit,
     onOpenProtection: () -> Unit = {},
     onOpenHostProfile: (String) -> Unit = {},
+    onResumeCheckout: (ResumableCheckoutUi) -> Unit = {},
 ) {
     val state by viewModel.carDetailState.collectAsState()
     val favoritesState by viewModel.favoritesState.collectAsState()
     val bookingsState by viewModel.bookingsState.collectAsState()
     val carReviewsState by viewModel.carReviewsState.collectAsState()
     val bookingDraft by viewModel.bookingDraft.collectAsState()
+    val resumableForCar = rememberResumableCheckout(viewModel)?.takeIf { it.carId == carId }
     val isAuthenticated by viewModel.isAuthenticated.collectAsState()
     val locations by viewModel.locations.collectAsState()
     val colors = LocalHayameColors.current
     val favoriteIds = (favoritesState as? UiState.Success<Set<String>>)?.data ?: emptySet()
+    val context = LocalContext.current
 
     LaunchedEffect(carId) {
         viewModel.loadCarDetail(carId)
@@ -4859,30 +3634,23 @@ fun CarDetailScreen(
 
     Scaffold(
         containerColor = colors.pageBackground,
-        topBar = {
-            Surface(color = colors.cardBackground, shadowElevation = 2.dp) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 8.dp, vertical = 10.dp),
-                ) {
-                    IconButton(onClick = onBack, modifier = Modifier.align(Alignment.CenterStart)) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = colors.brandNavy)
-                    }
-                    Text(
-                        text = "Car Detail",
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = colors.brandNavy,
-                        modifier = Modifier.align(Alignment.Center),
-                    )
-                }
-            }
-        },
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
     ) { inner ->
         when (val s = state) {
-            UiState.Loading -> LoadingBlock("Loading details...")
-            is UiState.Error -> ErrorBlock(s.message, onRetry = { viewModel.loadCarDetail(carId) })
+            UiState.Loading -> Box(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
+                IconButton(onClick = onBack, modifier = Modifier.padding(8.dp)) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = colors.brandNavy)
+                }
+                LoadingBlock("Loading details...")
+            }
+            is UiState.Error -> Box(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
+                IconButton(onClick = onBack, modifier = Modifier.padding(8.dp)) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = colors.brandNavy)
+                }
+                Box(modifier = Modifier.padding(top = 56.dp)) {
+                    ErrorBlock(s.message, onRetry = { viewModel.loadCarDetail(carId) })
+                }
+            }
             is UiState.Success -> {
                 val car = s.data
                 val imageUrls = remember(car.id, car.image_url, car.car_photos) {
@@ -4904,7 +3672,7 @@ fun CarDetailScreen(
                 val hostId = car.owner_id ?: car.owner?.id
                 val hostName = car.host_name ?: car.owner?.full_name ?: "Hayame Host"
                 val hostAvatar = car.host_avatar ?: car.owner?.avatar_url
-                val hostLevel = car.host_level ?: car.owner?.host_level ?: "Verified Host"
+                val hostLevel = hostLevelLabel(car.host_level ?: car.owner?.host_level)
                 val hostLocation = listOfNotNull(car.owner?.city, car.region).joinToString(", ").ifBlank {
                     listOfNotNull(car.city, car.region).joinToString(", ")
                 }
@@ -4953,10 +3721,22 @@ fun CarDetailScreen(
                 }
                 val addedDateLabel = remember(car.created_at) { formatAddedDateLabel(car.created_at) }
 
+                fun shareListing() {
+                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                        type = "text/plain"
+                        putExtra(Intent.EXTRA_SUBJECT, carTitle)
+                        putExtra(
+                            Intent.EXTRA_TEXT,
+                            "Check out $carTitle on Hayame\nhttps://www.hayamegh.com/cars/${car.id}",
+                        )
+                    }
+                    context.startActivity(Intent.createChooser(shareIntent, "Share $carTitle"))
+                }
+
                 var showGallery by rememberSaveable(car.id) { mutableStateOf(false) }
                 var selectedImageIndex by rememberSaveable(car.id) { mutableStateOf(0) }
                 var startDate by remember(car.id) { mutableStateOf(LocalDate.now()) }
-                var endDate by remember(car.id) { mutableStateOf(LocalDate.now().plusDays(1)) }
+                var endDate by remember(car.id) { mutableStateOf(LocalDate.now().plusDays(car.minimumTripDays.toLong())) }
                 var blockedBookingDates by remember(car.id) { mutableStateOf<Set<LocalDate>>(emptySet()) }
                 var selectedQuickDuration by rememberSaveable(car.id) { mutableStateOf<Int?>(null) }
                 var tripUseRegion by remember(car.id) {
@@ -4973,6 +3753,25 @@ fun CarDetailScreen(
                 var isCheckingAvailability by remember(car.id) { mutableStateOf(false) }
                 var isLoadingBookingAvailability by remember(car.id) { mutableStateOf(false) }
                 var showFloatingBookingBar by rememberSaveable(car.id) { mutableStateOf(false) }
+                var showLocationSheet by rememberSaveable(car.id) { mutableStateOf(false) }
+                var activeDateTarget by rememberSaveable(car.id) { mutableStateOf<String?>(null) }
+                var showReviewComposer by rememberSaveable(car.id) { mutableStateOf(false) }
+                var showFullDescription by rememberSaveable(car.id) { mutableStateOf(false) }
+                CoachTour(
+                    id = "carDetail",
+                    steps = listOf(
+                        CoachStep("detail.photos", "Swipe the photos", "Tap a photo to see it full screen."),
+                        CoachStep("detail.trip", "Your trip", "Tap the pencil to change dates or where you'll drive. The price updates as you go."),
+                        CoachStep("detail.host", "Talk to the host", "Ask about pickup or delivery before you book."),
+                        CoachStep("detail.book", "Ready when you are", "Book now walks you through dates, handoff and payment."),
+                    ),
+                )
+                val listState = rememberLazyListState()
+                val heroPx = with(LocalDensity.current) { 380.dp.toPx() }
+                // Once the hero photo scrolls away, the floating controls get a solid bar and the title.
+                val scrolledPastHero by remember(heroPx) {
+                    derivedStateOf { listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > heroPx - 240f }
+                }
 
                 val regionOptions = remember(locations, car.region, tripUseRegion) {
                     buildList {
@@ -5023,7 +3822,7 @@ fun CarDetailScreen(
                     if (blockedBookingDates.isNotEmpty() && !isBookableStartDate(startDate, blockedBookingDates)) {
                         nextBookableStartDate(
                             from = if (startDate.isBefore(LocalDate.now())) LocalDate.now() else startDate,
-                            duration = 1,
+                            duration = car.minimumTripDays,
                             blockedDates = blockedBookingDates,
                         )?.let { adjustedStart ->
                             if (adjustedStart != startDate) {
@@ -5037,6 +3836,7 @@ fun CarDetailScreen(
                         currentEnd = endDate,
                         startDate = startDate,
                         blockedDates = blockedBookingDates,
+                        minimumNights = car.minimumTripDays,
                     )?.let { adjustedEnd ->
                         if (adjustedEnd != endDate) {
                             endDate = adjustedEnd
@@ -5074,7 +3874,7 @@ fun CarDetailScreen(
                         selectedQuickDuration = null
                         val nextStart = nextBookableStartDate(
                             from = today,
-                            duration = 1,
+                            duration = car.minimumTripDays,
                             blockedDates = blocked,
                         )
 
@@ -5083,11 +3883,12 @@ fun CarDetailScreen(
                             return@loadAvailabilitySnapshot
                         }
 
-                        startDate = if (isBookableStartDate(startDate, blocked)) startDate else nextStart
+                        startDate = if (isBookableStartDate(startDate, blocked, car.minimumTripDays)) startDate else nextStart
                         preferredBookingEndDate(
                             currentEnd = endDate,
                             startDate = startDate,
                             blockedDates = blocked,
+                            minimumNights = car.minimumTripDays,
                         )?.let { endDate = it }
                     }
                 }
@@ -5129,14 +3930,43 @@ fun CarDetailScreen(
                 }
 
                 fun openBookingFlow() {
-                    viewModel.setBookingDraft(
-                        carId = car.id,
-                        startDate = startDate.toApiDate(),
-                        endDate = endDate.toApiDate(),
-                        region = tripUseRegion,
-                        city = tripUseCity,
-                        address = tripUseAddress.trim(),
-                    )
+                    // Pick up saved choices for this car so "Book now" never starts over.
+                    when (val resumable = resumableForCar) {
+                        is ResumableCheckoutUi.Held -> {
+                            val held = resumable.checkout
+                            viewModel.setBookingDraft(
+                                carId = car.id,
+                                startDate = held.startDate,
+                                endDate = held.endDate,
+                                region = held.tripUseRegion.orEmpty(),
+                                city = held.tripUseCity.orEmpty(),
+                                address = held.tripUseAddress.orEmpty(),
+                                tripMode = held.tripMode,
+                                deliveryAddress = held.deliveryAddress.orEmpty(),
+                                deliveryTime = held.deliveryTime.orEmpty(),
+                                contactPhone = held.contactPhone.orEmpty(),
+                                deliveryNotes = held.deliveryNotes.orEmpty(),
+                                carTitle = car.title?.trim().orEmpty(),
+                                carImageUrl = car.image_url ?: car.car_photos.orEmpty().firstNotNullOfOrNull { it.url },
+                                dailyPrice = pricePerDay,
+                                step = 0,
+                                persist = false,
+                            )
+                        }
+                        is ResumableCheckoutUi.Draft -> Unit // BookingScreen restores it as-is.
+                        null -> viewModel.setBookingDraft(
+                            carId = car.id,
+                            startDate = startDate.toApiDate(),
+                            endDate = endDate.toApiDate(),
+                            region = tripUseRegion,
+                            city = tripUseCity,
+                            address = tripUseAddress.trim(),
+                            carTitle = car.title?.trim().orEmpty(),
+                            carImageUrl = car.image_url ?: car.car_photos.orEmpty().firstNotNullOfOrNull { it.url },
+                            dailyPrice = pricePerDay,
+                            persist = false,
+                        )
+                    }
                     if (!isAuthenticated) {
                         viewModel.requireAuthentication(
                             message = "Sign in or sign up to book this car.",
@@ -5217,484 +4047,477 @@ fun CarDetailScreen(
             }
 
                 Box(modifier = Modifier.fillMaxSize()) {
-                    LazyColumn(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(inner)
-                            .padding(horizontal = 16.dp),
-                        verticalArrangement = Arrangement.spacedBy(14.dp),
-                        contentPadding = PaddingValues(bottom = 152.dp),
+                    val isHostVerified = car.id_verified == true || car.owner?.id_verified == true
+                    val isPhoneVerified = car.phone_verified == true || car.owner?.phone_verified == true
+                    val isEmailVerified = car.email_verified == true || car.owner?.email_verified == true
+                    val total = subtotal + (subtotal * 0.10).roundToInt() + insuranceFee + deliveryFee + outsideSurcharge + depositAmount
+                    val yearLabel = (car.year ?: car.car_year)?.roundToInt()?.takeIf { it > 1900 }?.toString()
+                    val ratingSummary = if (reviewsCount > 0) String.format("%.1f", ratingValue) else "New"
+                    val isFavoriteCar = favoriteIds.contains(car.id)
+
+                    HayameRefreshBox(
+                        onRefresh = { viewModel.loadCarDetail(carId); viewModel.loadCarReviews(carId); viewModel.loadFavorites() },
+                        modifier = Modifier.fillMaxSize(),
+                        indicatorTopPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 56.dp,
                     ) {
-                        item { Spacer(modifier = Modifier.height(2.dp)) }
-                        item {
-                            DetailSectionCard {
-                                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    LazyColumn(
+                            state = listState,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(inner),
+                            contentPadding = PaddingValues(bottom = 140.dp),
+                        ) {
+                            item(key = "hero") {
+                                Box(modifier = Modifier.coachTarget("detail.photos")) {
+                                    DetailHeroGallery(
+                                        pagerState = pagerState,
+                                        images = galleryItems,
+                                        selectedIndex = selectedImageIndex,
+                                        onTap = { if (imageUrls.isNotEmpty()) showGallery = true },
+                                    )
+                                }
+                            }
+                            item(key = "title") {
+                                Column(
+                                    modifier = Modifier.padding(horizontal = 16.dp).padding(top = 18.dp, bottom = 14.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    Text(carTitle, fontSize = 26.sp, fontWeight = FontWeight.Bold, color = colors.brandNavy, lineHeight = 32.sp)
+                                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        Text(listOfNotNull(yearLabel, car.car_type).joinToString(" "), style = MaterialTheme.typography.bodyLarge, color = colors.mutedText)
+                                        Box(modifier = Modifier.size(3.dp).background(colors.mutedText.copy(alpha = 0.5f), CircleShape))
+                                        Text(ratingSummary, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold, color = colors.brandNavy)
+                                        Icon(Icons.Filled.Star, contentDescription = null, tint = colors.brandBlue, modifier = Modifier.size(13.dp))
+                                        Text(if (reviewsCount == 1) "(1 review)" else "($reviewsCount reviews)", style = MaterialTheme.typography.bodyLarge, color = colors.mutedText)
+                                    }
+                                    Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(Icons.Outlined.Verified, contentDescription = null, tint = colors.brandBlue, modifier = Modifier.size(16.dp))
+                                            Text(if (hostLevel.contains("host", ignoreCase = true)) hostLevel else "$hostLevel host", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = colors.brandBlue)
+                                        }
+                                        Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                            Icon(Icons.Outlined.Place, contentDescription = null, tint = colors.mutedText, modifier = Modifier.size(15.dp))
+                                            Text(listOfNotNull(car.city, car.region).joinToString(", "), style = MaterialTheme.typography.bodyLarge, color = colors.mutedText, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        }
+                                    }
+                                }
+                            }
+                            item(key = "specs") {
+                                LazyRow(
+                                    contentPadding = PaddingValues(horizontal = 16.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.padding(bottom = 18.dp),
+                                ) {
+                                    item { DetailSpecChip(Icons.Outlined.People, "${(car.seats ?: 5.0).roundToInt()} seats") }
+                                    item { DetailSpecChip(Icons.Outlined.LocalGasStation, (car.fuel_type ?: "Petrol").replaceFirstChar { it.uppercase() }) }
+                                    item { DetailSpecChip(Icons.Outlined.Settings, (car.transmission ?: "Automatic").replaceFirstChar { it.uppercase() }) }
+                                    item { DetailSpecChip(painterRes = carTypeIconRes(car.car_type ?: "Car"), text = car.car_type ?: "Car") }
+                                    if (car.air_conditioning == true) item { DetailSpecChip(Icons.Outlined.AcUnit, "A/C") }
+                                    if (car.delivery_available == true) item { DetailSpecChip(Icons.Outlined.LocalShipping, "Delivery") }
+                                    if (car.allow_one_day_booking == true) item { DetailSpecChip(Icons.Outlined.CalendarMonth, "1-day bookings", tint = colors.brandBlue) }
+                                    if (car.instant_book == true) item { DetailSpecChip(Icons.Outlined.Bolt, "Instant book", tint = Success) }
+                                }
+                            }
+                            item(key = "band-trip") { DetailSectionBand() }
+                            item(key = "trip") {
+                                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                                    Text("Your trip", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = colors.brandNavy)
+                                    Box(modifier = Modifier.coachTarget("detail.trip")) {
+                                        DetailEditRow(
+                                            icon = Icons.Outlined.CalendarMonth,
+                                            title = "Trip dates",
+                                            lines = listOf("${startDate.toTripDateLabel()} at 10:00 AM", "${endDate.toTripDateLabel()} at 10:00 AM"),
+                                            isLoading = isLoadingBookingAvailability,
+                                            onEdit = { activeDateTarget = "start" },
+                                        )
+                                    }
                                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                        DetailPill("Car in ${car.city ?: "Ghana"}", LocalHayameColors.current.brandLight, LocalHayameColors.current.brandBlue)
-                                        DetailPill(car.car_type ?: "Car", LocalHayameColors.current.brandLight, LocalHayameColors.current.brandNavy)
-                                        DetailPill("Added $addedDateLabel", LocalHayameColors.current.border, LocalHayameColors.current.mutedText)
-                                    }
-
-                                    Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.Top) {
-                                        Column(
-                                            modifier = Modifier.weight(1f),
-                                            verticalArrangement = Arrangement.spacedBy(4.dp),
-                                        ) {
-                                            Text(
-                                                text = carTitle,
-                                                style = MaterialTheme.typography.headlineLarge,
-                                                fontWeight = FontWeight.ExtraBold,
-                                                color = LocalHayameColors.current.brandNavy,
-                                            )
-                                            Text(
-                                                text = listOfNotNull(car.city, car.region).joinToString(", "),
-                                                style = MaterialTheme.typography.titleMedium,
-                                                color = LocalHayameColors.current.mutedText,
-                                            )
-                                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        (if (car.allow_one_day_booking == true) listOf(1, 2, 5, 7) else listOf(2, 5, 7)).forEach { days ->
+                                            val selected = selectedQuickDuration == days
+                                            Surface(
+                                                onClick = { applyQuickTripDuration(days) },
+                                                shape = CircleShape,
+                                                color = if (selected) colors.brandBlue else colors.fieldBackground,
+                                            ) {
                                                 Text(
-                                                    text = "★ ${String.format("%.1f", ratingValue)}",
-                                                    style = MaterialTheme.typography.titleMedium,
+                                                    if (days == 1) "1 day" else "$days days",
+                                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
+                                                    style = MaterialTheme.typography.labelLarge,
                                                     fontWeight = FontWeight.Bold,
-                                                    color = Warning,
-                                                )
-                                                Text(
-                                                    text = "$reviewsCount reviews",
-                                                    style = MaterialTheme.typography.titleMedium,
-                                                    color = LocalHayameColors.current.mutedText,
+                                                    color = if (selected) Color.White else colors.brandNavy,
                                                 )
                                             }
                                         }
-                                        FavoriteOverviewButton(
-                                            isFavorite = favoriteIds.contains(car.id),
-                                            onClick = {
-                                                viewModel.toggleFavorite(
-                                                    carId = car.id,
-                                                    currentlyFavorite = favoriteIds.contains(car.id),
-                                                    authDestination = NavRoutes.carDetail(car.id),
-                                                )
-                                            },
-                                        )
+                                        Spacer(modifier = Modifier.weight(1f))
+                                        TextButton(onClick = { activeDateTarget = "end" }, contentPadding = PaddingValues(horizontal = 6.dp)) {
+                                            Icon(Icons.Outlined.CalendarMonth, contentDescription = null, tint = colors.brandBlue, modifier = Modifier.size(16.dp))
+                                            Spacer(modifier = Modifier.width(5.dp))
+                                            Text("Return", color = colors.brandBlue, fontWeight = FontWeight.Bold)
+                                        }
                                     }
-                                }
-                            }
-                        }
-
-                    item {
-                        SectionHeader(title = "Car photo")
-                        DetailSectionCard {
-                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                HorizontalPager(
-                                    state = pagerState,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(250.dp)
-                                        .clip(RoundedCornerShape(22.dp))
-                                        .clickable {
-                                            if (imageUrls.isNotEmpty()) {
-                                                showGallery = true
-                                            }
-                                        },
-                                ) { page ->
-                                    val imageUrl = galleryItems[page]
-                                    if (imageUrl.isBlank()) {
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxSize()
-                                                .background(LocalHayameColors.current.brandLight),
-                                            contentAlignment = Alignment.Center,
-                                        ) {
-                                            Text("No photos available", color = LocalHayameColors.current.mutedText)
-                                        }
-                                    } else {
-                                        AsyncImage(
-                                            model = imageUrl,
+                                    HorizontalDivider(color = colors.border)
+                                    DetailEditRow(
+                                        icon = Icons.Outlined.Place,
+                                        title = "Trip location",
+                                        lines = listOf(
+                                            "${AndroidReferenceData.cityDisplayName(tripUseCity)}, $tripUseRegion",
+                                            tripUseAddress.trim().ifBlank { "Add the exact area or destination" },
+                                        ),
+                                        onEdit = { showLocationSheet = true },
+                                    )
+                                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            if (outsideListingRegion) Icons.Outlined.Info else Icons.Outlined.CheckCircle,
                                             contentDescription = null,
-                                            modifier = Modifier.fillMaxSize(),
-                                            contentScale = ContentScale.Crop,
+                                            tint = if (outsideListingRegion) Warning else Success,
+                                            modifier = Modifier.size(14.dp),
+                                        )
+                                        Text(
+                                            text = if (outsideListingRegion) {
+                                                if (outsideRegionFee > 0) "Outside the listing region (+GHS $outsideRegionFee surcharge)" else "Outside the listing region"
+                                            } else {
+                                                "Within the listing region, no surcharge"
+                                            },
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = if (outsideListingRegion) Warning else Success,
                                         )
                                     }
-                                }
-
-                                if (imageUrls.size > 1) {
-                                    LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                        items(imageUrls.size, key = { it }) { index ->
-                                            AsyncImage(
-                                                model = imageUrls[index],
-                                                contentDescription = null,
-                                                modifier = Modifier
-                                                    .size(width = 78.dp, height = 56.dp)
-                                                    .clip(RoundedCornerShape(10.dp))
-                                                    .border(
-                                                        width = if (selectedImageIndex == index) 2.dp else 1.dp,
-                                                        color = if (selectedImageIndex == index) LocalHayameColors.current.brandBlue else LocalHayameColors.current.border,
-                                                        shape = RoundedCornerShape(10.dp),
-                                                    )
-                                                    .clickable {
-                                                        selectedImageIndex = index
-                                                        coroutineScope.launch { pagerState.scrollToPage(index) }
-                                                    },
-                                                contentScale = ContentScale.Crop,
+                                    HorizontalDivider(color = colors.border)
+                                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.Top) {
+                                        DetailRowIcon(if (car.is_available == false) Icons.Outlined.Info else Icons.Outlined.CheckCircle, tint = if (car.is_available == false) Danger else Success)
+                                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                            Text("Availability", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold, color = colors.brandNavy)
+                                            val message = availabilityMessage ?: if (car.is_available == false) "The host has paused this listing." else "Unavailable dates are crossed out in the calendar."
+                                            val good = availabilityMessage?.let { it.contains("available", true) && !it.contains("unavailable", true) }
+                                            Text(
+                                                message,
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = when (good) { true -> Success; false -> Warning; null -> colors.mutedText },
                                             )
                                         }
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    item {
-                        SectionHeader(title = "Details")
-                        DetailSectionCard {
-                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                CarDetailLine(label = "LOCATION", value = listOfNotNull(car.city, car.region).joinToString(", "))
-                                CarDetailLine(label = "BRAND", value = carBrand.ifBlank { "—" })
-                                CarDetailLine(label = "MODEL", value = carModel.ifBlank { "—" })
-                                CarDetailLine(label = "CAR TYPE", value = car.car_type ?: "Car")
-                                CarDetailLine(label = "SEATS", value = "${(car.seats ?: 5.0).roundToInt()} seats")
-                                CarDetailLine(label = "TRANSMISSION", value = (car.transmission ?: "Automatic").lowercase())
-                                CarDetailLine(label = "FUEL", value = (car.fuel_type ?: "Petrol").lowercase())
-                                CarDetailLine(label = "REGION", value = car.region ?: "—")
-                            }
-                        }
-                    }
-
-                    item {
-                        SectionHeader(title = "Description")
-                        DetailSectionCard {
-                            Text(
-                                text = car.description?.takeIf { it.isNotBlank() } ?: "No description provided.",
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = LocalHayameColors.current.mutedText,
-                                lineHeight = 24.sp,
-                            )
-                        }
-                    }
-
-                    item {
-                        SectionHeader(title = "Features")
-                        DetailSectionCard {
-                            if (normalizedFeatures.isEmpty()) {
-                                Text("No features listed.", color = LocalHayameColors.current.mutedText)
-                            } else {
-                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    normalizedFeatures.chunked(2).forEach { row ->
-                                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                            row.forEach { feature ->
-                                                Surface(
-                                                    modifier = Modifier.weight(1f),
-                                                    shape = RoundedCornerShape(12.dp),
-                                                    color = LocalHayameColors.current.brandLight,
-                                                ) {
-                                                    Text(
-                                                        text = feature,
-                                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                                                        style = MaterialTheme.typography.bodyLarge,
-                                                        fontWeight = FontWeight.SemiBold,
-                                                        color = LocalHayameColors.current.brandNavy,
-                                                    )
+                                        Surface(onClick = ::checkAvailabilityNow, shape = CircleShape, color = colors.brandLight, enabled = !isCheckingAvailability) {
+                                            Box(modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp), contentAlignment = Alignment.Center) {
+                                                if (isCheckingAvailability) {
+                                                    CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = colors.brandBlue)
+                                                } else {
+                                                    Text("Check", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = colors.brandBlue)
                                                 }
                                             }
-                                            if (row.size == 1) {
-                                                Spacer(modifier = Modifier.weight(1f))
+                                        }
+                                    }
+                                }
+                            }
+                            item(key = "band-price") { DetailSectionBand() }
+                            item(key = "price") {
+                                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    Text("Price details", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = colors.brandNavy)
+                                    DetailPriceLine("GHS $pricePerDay × $daysCount day${if (daysCount == 1) "" else "s"}", subtotal)
+                                    DetailPriceLine("Service fee", (subtotal * 0.10).roundToInt())
+                                    DetailPriceLine("Insurance", insuranceFee)
+                                    if (car.delivery_available == true) DetailPriceLine("Delivery (if chosen)", deliveryFee)
+                                    if (outsideListingRegion) DetailPriceLine("Outside region surcharge", outsideSurcharge)
+                                    DetailPriceLine("Refundable deposit", depositAmount)
+                                    HorizontalDivider(color = colors.border)
+                                    Row(verticalAlignment = Alignment.Bottom) {
+                                        Text("Estimated total", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold, color = colors.brandNavy)
+                                        Spacer(modifier = Modifier.weight(1f))
+                                        Text("GHS $total", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = colors.brandNavy)
+                                    }
+                                    Text(
+                                        "The final total is confirmed at checkout. Pay now; the host approves before pickup and you are refunded in full if they decline.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = colors.mutedText,
+                                    )
+                                    TextButton(onClick = onOpenProtection, contentPadding = PaddingValues(0.dp)) {
+                                        Icon(Icons.Outlined.Shield, contentDescription = null, tint = colors.brandBlue, modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("Protection and cancellation details", color = colors.brandBlue, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+                            item(key = "band-host") { DetailSectionBand() }
+                            item(key = "host") {
+                                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                                    Text("Hosted by", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = colors.brandNavy)
+                                    Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        HostAvatar(hostAvatar = hostAvatar, hostName = hostName)
+                                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                            Text(hostName, style = MaterialTheme.typography.titleMedium.copy(fontSize = 17.sp), fontWeight = FontWeight.Bold, color = colors.brandNavy)
+                                            Text(hostLevel, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = colors.brandBlue)
+                                            if (hostLocation.isNotBlank()) {
+                                                Text(hostLocation, style = MaterialTheme.typography.bodyMedium, color = colors.mutedText)
+                                            }
+                                        }
+                                        Surface(onClick = { if (!hostId.isNullOrBlank()) onOpenHostProfile(hostId) }, shape = CircleShape, color = colors.fieldBackground, modifier = Modifier.size(36.dp)) {
+                                            Box(contentAlignment = Alignment.Center) {
+                                                Icon(Icons.Outlined.ChevronRight, contentDescription = "View host profile", tint = colors.brandNavy, modifier = Modifier.size(18.dp))
+                                            }
+                                        }
+                                    }
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        DetailVerificationChip("ID", isHostVerified)
+                                        DetailVerificationChip("Phone", isPhoneVerified)
+                                        DetailVerificationChip("Email", isEmailVerified)
+                                    }
+                                    Surface(onClick = { openHostChat(null) }, shape = RoundedCornerShape(14.dp), color = colors.brandLight, modifier = Modifier.fillMaxWidth().coachTarget("detail.host")) {
+                                        Row(modifier = Modifier.padding(vertical = 13.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(Icons.Outlined.ChatBubble, contentDescription = null, tint = colors.brandNavy, modifier = Modifier.size(16.dp))
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text("Message $hostName", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold, color = colors.brandNavy)
+                                        }
+                                    }
+                                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        items(quickMessages) { prompt ->
+                                            Surface(onClick = { openHostChat(prompt) }, shape = CircleShape, color = colors.fieldBackground) {
+                                                Text(prompt, modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp), style = MaterialTheme.typography.labelLarge, color = colors.brandNavy)
                                             }
                                         }
                                     }
                                 }
                             }
-                        }
-                    }
-
-                    item {
-                        SectionHeader(title = "Latest reviews")
-                        DetailSectionCard {
-                            when (carReviewsState) {
-                                UiState.Loading -> LoadingBlock("Loading reviews...")
-                                is UiState.Error -> Text((carReviewsState as UiState.Error).message, color = LocalHayameColors.current.mutedText)
-                                UiState.Empty -> Text("No reviews yet. Be the first to share your experience.", color = LocalHayameColors.current.mutedText)
-                                is UiState.Success -> Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    listingReviews.take(3).forEach { review ->
-                                        ReviewSummaryCard(review = review)
+                            item(key = "band-about") { DetailSectionBand() }
+                            item(key = "about") {
+                                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    Text("About this car", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = colors.brandNavy)
+                                    val description = car.description?.takeIf { it.isNotBlank() } ?: "No description provided."
+                                    Text(
+                                        description,
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        color = colors.mutedText,
+                                        lineHeight = 22.sp,
+                                        maxLines = if (showFullDescription) Int.MAX_VALUE else 4,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                    if (description.length > 180) {
+                                        TextButton(onClick = { showFullDescription = !showFullDescription }, contentPadding = PaddingValues(0.dp)) {
+                                            Text(if (showFullDescription) "Show less" else "Read more", color = colors.brandBlue, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    Text("Features", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = colors.brandNavy)
+                                    if (normalizedFeatures.isEmpty()) {
+                                        Text("No features listed.", style = MaterialTheme.typography.bodyMedium, color = colors.mutedText)
+                                    } else {
+                                        normalizedFeatures.chunked(2).forEach { row ->
+                                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                row.forEach { feature ->
+                                                    Row(
+                                                        modifier = Modifier.weight(1f).background(colors.fieldBackground, RoundedCornerShape(12.dp)).padding(horizontal = 12.dp, vertical = 9.dp),
+                                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                    ) {
+                                                        Icon(Icons.Outlined.Check, contentDescription = null, tint = colors.brandNavy, modifier = Modifier.size(14.dp))
+                                                        Text(feature, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = colors.brandNavy, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                                    }
+                                                }
+                                                if (row.size == 1) Spacer(modifier = Modifier.weight(1f))
+                                            }
+                                        }
                                     }
                                 }
-                                else -> Text("No reviews yet. Be the first to share your experience.", color = LocalHayameColors.current.mutedText)
+                            }
+                            item(key = "band-reviews") { DetailSectionBand() }
+                            item(key = "reviews") {
+                                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        Text("Reviews", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = colors.brandNavy, modifier = Modifier.weight(1f))
+                                        Icon(Icons.Filled.Star, contentDescription = null, tint = colors.brandBlue, modifier = Modifier.size(14.dp))
+                                        Text(if (reviewsCount > 0) "$ratingSummary • $reviewsCount" else "No reviews yet", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold, color = colors.brandNavy)
+                                    }
+                                    when (carReviewsState) {
+                                        UiState.Loading -> LoadingBlock("Loading reviews...")
+                                        is UiState.Error -> Text((carReviewsState as UiState.Error).message, style = MaterialTheme.typography.bodyMedium, color = colors.mutedText)
+                                        is UiState.Success -> listingReviews.take(3).forEach { review -> DetailReviewRow(review) }
+                                        else -> Text("Be the first to share how the trip went.", style = MaterialTheme.typography.bodyMedium, color = colors.mutedText)
+                                    }
+                                    if (completedReviewBooking != null && isAuthenticated) {
+                                        if (showReviewComposer) {
+                                            Column(
+                                                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(colors.cardBackground).border(1.dp, colors.border, RoundedCornerShape(16.dp)).padding(14.dp),
+                                                verticalArrangement = Arrangement.spacedBy(10.dp),
+                                            ) {
+                                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                    Text("Your rating", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = colors.brandNavy)
+                                                    Spacer(modifier = Modifier.weight(1f))
+                                                    (1..5).forEach { star ->
+                                                        Icon(
+                                                            imageVector = if (star <= reviewRating) Icons.Filled.Star else Icons.Outlined.StarBorder,
+                                                            contentDescription = "$star star${if (star == 1) "" else "s"}",
+                                                            tint = colors.brandBlue,
+                                                            modifier = Modifier.size(26.dp).clickable { reviewRating = star },
+                                                        )
+                                                    }
+                                                }
+                                                OutlinedTextField(
+                                                    value = reviewComment,
+                                                    onValueChange = { reviewComment = it },
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    minLines = 3,
+                                                    maxLines = 5,
+                                                    placeholder = { Text("Share your experience") },
+                                                    shape = RoundedCornerShape(12.dp),
+                                                )
+                                                SolidPillButton(text = "Submit review", modifier = Modifier.fillMaxWidth(), onClick = ::submitReviewNow)
+                                            }
+                                        } else {
+                                            Surface(onClick = { showReviewComposer = true }, shape = CircleShape, color = colors.brandLight) {
+                                                Row(modifier = Modifier.padding(horizontal = 16.dp, vertical = 11.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                                                    Icon(Icons.Outlined.Edit, contentDescription = null, tint = colors.brandNavy, modifier = Modifier.size(15.dp))
+                                                    Text("Write a review", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = colors.brandNavy)
+                                                }
+                                            }
+                                        }
+                                    } else {
+                                        Text("Guests can review after a completed trip.", style = MaterialTheme.typography.bodySmall, color = colors.mutedText)
+                                    }
+                                    if (!reviewStatusMessage.isNullOrBlank()) {
+                                        Text(reviewStatusMessage.orEmpty(), color = colors.mutedText, style = MaterialTheme.typography.bodyMedium)
+                                    }
+                                }
+                            }
+                            item(key = "band-policies") { DetailSectionBand() }
+                            item(key = "policies") {
+                                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    Text("Good to know", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = colors.brandNavy)
+                                    DetailPolicyRow(Icons.Outlined.Shield, "Cancellation", (car.cancellation_policy ?: "Moderate").replace('_', ' ').replaceFirstChar { it.uppercase() })
+                                    DetailPolicyRow(Icons.Outlined.CreditCard, "Payment", "Paystack, card or mobile money")
+                                    DetailPolicyRow(Icons.Outlined.CheckCircle, "Host approval", if (car.instant_book == true) "Instant book" else "Confirmed before pickup")
+                                    DetailPolicyRow(Icons.Outlined.CalendarMonth, "Minimum trip", if (car.allow_one_day_booking == true) "1 day" else "2 days")
+                                    DetailPolicyRow(Icons.Outlined.CalendarMonth, "Listed", addedDateLabel)
+                                }
                             }
                         }
                     }
 
-                    item {
-                        SectionHeader(title = "Leave a review")
-                        DetailSectionCard {
-                            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                InfoLine(label = "Trip", value = completedReviewBooking?.id ?: "No eligible completed trip")
-                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Text(
-                                        text = "Rating",
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        fontWeight = FontWeight.Bold,
-                                        color = LocalHayameColors.current.brandNavy,
-                                    )
-                                    Spacer(modifier = Modifier.weight(1f))
-                                    (1..5).forEach { star ->
-                                        Text(
-                                            text = if (star <= reviewRating) "★" else "☆",
-                                            modifier = Modifier.clickable { reviewRating = star },
-                                            style = MaterialTheme.typography.headlineSmall,
-                                            color = Warning,
-                                        )
-                                    }
+                    // Floating controls over the hero photo; become a solid header once scrolled.
+                    val headerBackground by animateColorAsState(
+                        targetValue = if (scrolledPastHero) colors.cardBackground else Color.Transparent,
+                        label = "detailHeaderBackground",
+                    )
+                    val headerTitleAlpha by animateFloatAsState(targetValue = if (scrolledPastHero) 1f else 0f, label = "detailHeaderTitle")
+                    Column(
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .fillMaxWidth()
+                            .background(headerBackground),
+                    ) {
+                    Row(
+                        modifier = Modifier
+                            .statusBarsPadding()
+                            .padding(horizontal = 16.dp, vertical = 6.dp)
+                            .fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Surface(onClick = onBack, shape = CircleShape, color = colors.floatingControlBackground, modifier = Modifier.size(44.dp)) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = colors.brandNavy, modifier = Modifier.size(20.dp))
+                            }
+                        }
+                        Text(
+                            carTitle,
+                            modifier = Modifier.weight(1f).padding(horizontal = 12.dp).alpha(headerTitleAlpha),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = colors.brandNavy,
+                            textAlign = TextAlign.Center,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Surface(shape = CircleShape, color = colors.floatingControlBackground) {
+                            Row {
+                                IconButton(onClick = ::shareListing, modifier = Modifier.size(width = 48.dp, height = 44.dp)) {
+                                    Icon(Icons.Outlined.Share, contentDescription = "Share $carTitle", tint = colors.brandNavy, modifier = Modifier.size(20.dp))
                                 }
+                                IconButton(
+                                    onClick = {
+                                        viewModel.toggleFavorite(
+                                            carId = car.id,
+                                            currentlyFavorite = isFavoriteCar,
+                                            authDestination = NavRoutes.carDetail(car.id),
+                                        )
+                                    },
+                                    modifier = Modifier.size(width = 48.dp, height = 44.dp),
+                                ) {
+                                    Icon(
+                                        imageVector = if (isFavoriteCar) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                                        contentDescription = if (isFavoriteCar) "Remove from saved" else "Save",
+                                        tint = if (isFavoriteCar) colors.danger else colors.brandNavy,
+                                        modifier = Modifier.size(20.dp),
+                                    )
+                                }
+                            }
+                        }
+                    }
+                        if (scrolledPastHero) HorizontalDivider(color = colors.border)
+                    }
+
+                    activeDateTarget?.let { target ->
+                        val isStart = target == "start"
+                        AvailabilityCalendarDialog(
+                            title = if (isStart) "Choose start date" else "Choose end date",
+                            selectedDate = if (isStart) startDate else endDate,
+                            minimumDate = if (isStart) LocalDate.now() else startDate.plusDays(car.minimumTripDays.toLong()),
+                            blockedDates = blockedBookingDates,
+                            selectionRange = startDate..endDate,
+                            canSelectDate = { candidate ->
+                                if (isStart) {
+                                    isBookableStartDate(candidate, blockedBookingDates, car.minimumTripDays)
+                                } else {
+                                    isBookableEndDate(candidate, startDate, blockedBookingDates, car.minimumTripDays)
+                                }
+                            },
+                            onDismiss = { activeDateTarget = null },
+                            onDateSelected = { picked ->
+                                if (isStart) startDate = picked else endDate = picked
+                                selectedQuickDuration = null
+                                availabilityMessage = null
+                                activeDateTarget = null
+                            },
+                        )
+                    }
+
+                    if (showLocationSheet) {
+                        ModalBottomSheet(
+                            onDismissRequest = { showLocationSheet = false },
+                            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+                            containerColor = colors.pageBackground,
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 24.dp).navigationBarsPadding(),
+                                verticalArrangement = Arrangement.spacedBy(14.dp),
+                            ) {
+                                Text("Trip location", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = colors.brandNavy)
+                                Text("Where will you use the car? Pricing and the host handoff depend on it.", style = MaterialTheme.typography.bodyMedium, color = colors.mutedText)
+                                SelectionField(selected = tripUseRegion, placeholder = "Select region", options = regionOptions, onSelected = { tripUseRegion = it })
+                                SelectionField(selected = tripUseCity, placeholder = "Select city / district", options = cityOptions, onSelected = { tripUseCity = it })
                                 OutlinedTextField(
-                                    value = reviewComment,
-                                    onValueChange = { reviewComment = it },
+                                    value = tripUseAddress,
+                                    onValueChange = { tripUseAddress = it },
                                     modifier = Modifier.fillMaxWidth(),
-                                    minLines = 4,
-                                    maxLines = 5,
-                                    placeholder = { Text("Share your experience") },
+                                    placeholder = { Text("Area, landmark, or pickup point") },
                                     shape = RoundedCornerShape(14.dp),
                                 )
                                 Text(
-                                    text = if (completedReviewBooking != null && isAuthenticated) {
-                                        "Submit your review for a completed trip."
+                                    text = if (outsideListingRegion) {
+                                        if (outsideRegionFee > 0) "Outside ${car.region ?: "the listing region"}: +GHS $outsideRegionFee surcharge" else "Outside ${car.region ?: "the listing region"}"
                                     } else {
-                                        "Only guests with completed trips can review this listing."
+                                        "Within ${car.region ?: "the listing region"}, no surcharge"
                                     },
                                     style = MaterialTheme.typography.bodyMedium,
-                                    color = if (completedReviewBooking != null && isAuthenticated) LocalHayameColors.current.brandBlue else LocalHayameColors.current.mutedText,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = if (outsideListingRegion) Warning else Success,
                                 )
-                                GradientPillButton(
-                                    text = "Submit review",
-                                    modifier = Modifier.fillMaxWidth(),
-                                    onClick = ::submitReviewNow,
-                                )
-                                if (!reviewStatusMessage.isNullOrBlank()) {
-                                    Text(reviewStatusMessage.orEmpty(), color = LocalHayameColors.current.mutedText, style = MaterialTheme.typography.bodyMedium)
-                                }
+                                SolidPillButton(text = "Done", modifier = Modifier.fillMaxWidth(), onClick = { showLocationSheet = false })
                             }
                         }
-                    }
-
-                    item {
-                        SectionHeader(title = "Availability")
-                        DetailSectionCard {
-                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                InfoLine(label = "Status", value = if (car.is_available == false) "Unavailable" else "Available")
-                                Text("AVAILABILITY PREVIEW", style = MaterialTheme.typography.labelMedium, color = LocalHayameColors.current.mutedText, fontWeight = FontWeight.Bold)
-                                InfoLine(label = "Selected dates", value = "${startDate.toDisplayDate()} - ${endDate.toDisplayDate()}")
-                                SecondaryPillButton(
-                                    text = if (isCheckingAvailability) "Checking..." else "Check availability",
-                                    modifier = Modifier.fillMaxWidth(),
-                                    onClick = ::checkAvailabilityNow,
-                                )
-                                if (!availabilityMessage.isNullOrBlank()) {
-                                    val message = availabilityMessage.orEmpty()
-                                    Text(
-                                        text = message,
-                                        color = if (message.contains("available", ignoreCase = true)) Success else Warning,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.SemiBold,
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                        item {
-                            SectionHeader(title = "Trip")
-                            DetailSectionCard {
-                                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    Text(
-                                        text = "Pay now with Paystack; host approval required before pickup.",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = LocalHayameColors.current.mutedText,
-                                    )
-                                    Text(
-                                        text = "Refunded if host rejects",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = Success,
-                                    )
-
-                                    Text("HOST VERIFICATION", style = MaterialTheme.typography.labelMedium, color = LocalHayameColors.current.mutedText, fontWeight = FontWeight.Bold)
-                                    HostVerificationLine("ID Verified", car.id_verified == true || car.owner?.id_verified == true)
-                                    HostVerificationLine("Phone Verified", car.phone_verified == true || car.owner?.phone_verified == true)
-                                    HostVerificationLine("Email Verified", car.email_verified == true || car.owner?.email_verified == true)
-
-                                    InfoLine(label = "Cancellation", value = car.cancellation_policy ?: "Moderate")
-
-                                    Text("TRIP DATES", style = MaterialTheme.typography.labelMedium, color = LocalHayameColors.current.mutedText, fontWeight = FontWeight.Bold)
-                                    DateSelectionRow(
-                                        label = "Start date",
-                                        date = startDate,
-                                        minimumDate = LocalDate.now(),
-                                        blockedDates = blockedBookingDates,
-                                        isLoadingAvailability = isLoadingBookingAvailability,
-                                        selectionRange = startDate..endDate,
-                                        canSelectDate = { candidate -> isBookableStartDate(candidate, blockedBookingDates) },
-                                    ) {
-                                        selectedQuickDuration = null
-                                        startDate = it
-                                    }
-                                    DateSelectionRow(
-                                        label = "End date",
-                                        date = endDate,
-                                        minimumDate = startDate.plusDays(1),
-                                        blockedDates = blockedBookingDates,
-                                        isLoadingAvailability = isLoadingBookingAvailability,
-                                        selectionRange = startDate..endDate,
-                                        canSelectDate = { candidate -> isBookableEndDate(candidate, startDate, blockedBookingDates) },
-                                    ) {
-                                        selectedQuickDuration = null
-                                        endDate = it
-                                    }
-                                    Text(
-                                        text = "Unavailable dates are crossed out. The first available trip day is selected automatically.",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = LocalHayameColors.current.mutedText,
-                                    )
-
-                                    Text("Quick select:", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = LocalHayameColors.current.brandNavy)
-                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        SecondaryPillButton(text = "2 days", modifier = Modifier.weight(1f), isSelected = selectedQuickDuration == 2) { applyQuickTripDuration(2) }
-                                        SecondaryPillButton(text = "5 days", modifier = Modifier.weight(1f), isSelected = selectedQuickDuration == 5) { applyQuickTripDuration(5) }
-                                        SecondaryPillButton(text = "7 days", modifier = Modifier.weight(1f), isSelected = selectedQuickDuration == 7) { applyQuickTripDuration(7) }
-                                    }
-
-                                    Text("TRIP USE LOCATION", style = MaterialTheme.typography.labelMedium, color = LocalHayameColors.current.mutedText, fontWeight = FontWeight.Bold)
-                                    Text("Listing region: ${car.region ?: "Unknown"}", color = LocalHayameColors.current.mutedText, style = MaterialTheme.typography.bodyMedium)
-
-                                    SelectionField(
-                                        selected = tripUseRegion,
-                                        placeholder = "Select region",
-                                        options = regionOptions,
-                                        onSelected = { tripUseRegion = it },
-                                    )
-                                    SelectionField(
-                                        selected = tripUseCity,
-                                        placeholder = "Select city / district",
-                                        options = cityOptions,
-                                        onSelected = { tripUseCity = it },
-                                    )
-                                    OutlinedTextField(
-                                        value = tripUseAddress,
-                                        onValueChange = { tripUseAddress = it },
-                                        modifier = Modifier.fillMaxWidth(),
-                                        placeholder = { Text("Exact area / destination") },
-                                        shape = RoundedCornerShape(14.dp),
-                                    )
-                                    Text("Minimum 3 characters.", style = MaterialTheme.typography.labelLarge, color = LocalHayameColors.current.mutedText)
-
-                                    Text(
-                                        text = if (outsideListingRegion) {
-                                            if (outsideRegionFee > 0) "Outside listing region trip (+GH₵$outsideRegionFee)" else "Outside listing region trip"
-                                        } else {
-                                            "Within listing region (no outside-region surcharge)"
-                                        },
-                                        color = if (outsideListingRegion) Warning else Success,
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        fontWeight = FontWeight.SemiBold,
-                                    )
-                                    if (outsideListingRegion) {
-                                        Text(
-                                            text = "Trip use region differs from listing region (${car.region ?: "Unknown"}).",
-                                            color = LocalHayameColors.current.mutedText,
-                                            style = MaterialTheme.typography.bodyMedium,
-                                        )
-                                    }
-                                    if (outsideAccra) {
-                                        Text(
-                                            text = "Trip use location is also outside Accra.",
-                                            color = LocalHayameColors.current.mutedText,
-                                            style = MaterialTheme.typography.bodyMedium,
-                                        )
-                                    }
-
-                                    InfoLine(label = "Daily rate x $daysCount day(s)", value = "GH₵$subtotal")
-                                    InfoLine(label = "Insurance fee", value = "GH₵$insuranceFee")
-                                    InfoLine(label = "Delivery fee", value = "GH₵$deliveryFee")
-                                    InfoLine(
-                                        label = if (outsideSurcharge == 0) "Outside listing region surcharge (not applied)" else "Outside listing region surcharge",
-                                        value = "GH₵$outsideSurcharge",
-                                    )
-                                    InfoLine(label = "Deposit", value = "GH₵$depositAmount")
-                                    Text(
-                                        text = "Final payable total is calculated by the server at checkout.",
-                                        color = LocalHayameColors.current.mutedText,
-                                        style = MaterialTheme.typography.labelLarge,
-                                    )
-
-                                    SecondaryPillButton(
-                                        text = "View protection details",
-                                        modifier = Modifier.fillMaxWidth(),
-                                        onClick = onOpenProtection,
-                                    )
-                                }
-                            }
-                        }
-
-                        item {
-                            SectionHeader(title = "Host")
-                            DetailSectionCard {
-                                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                                        HostAvatar(hostAvatar = hostAvatar, hostName = hostName)
-                                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                            Text(hostName, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = LocalHayameColors.current.brandNavy)
-                                            Text(hostLevel, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = LocalHayameColors.current.brandBlue)
-                                            if (hostLocation.isNotBlank()) {
-                                                Text(hostLocation, style = MaterialTheme.typography.bodyMedium, color = LocalHayameColors.current.mutedText)
-                                            }
-                                        }
-                                    }
-
-                                    HostVerificationLine("ID Verified", car.id_verified == true || car.owner?.id_verified == true)
-                                    HostVerificationLine("Phone Verified", car.phone_verified == true || car.owner?.phone_verified == true)
-                                    HostVerificationLine("Email Verified", car.email_verified == true || car.owner?.email_verified == true)
-                                    Text(
-                                        text = "Host level updates as verification and trip performance grow.",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = LocalHayameColors.current.mutedText,
-                                    )
-
-                                    TextButton(
-                                        onClick = { if (!hostId.isNullOrBlank()) onOpenHostProfile(hostId) },
-                                        contentPadding = PaddingValues(0.dp),
-                                    ) {
-                                        Text("View host", color = LocalHayameColors.current.brandBlue, fontWeight = FontWeight.Bold)
-                                    }
-
-                                    SecondaryPillButton(
-                                        text = "Message $hostName",
-                                        modifier = Modifier.fillMaxWidth(),
-                                        onClick = { openHostChat(quickMessages.firstOrNull()) },
-                                    )
-                                    Text("Use a quick prompt to start the chat.", style = MaterialTheme.typography.bodyMedium, color = LocalHayameColors.current.mutedText)
-                                    quickMessages.forEach { prompt ->
-                                        SecondaryPillButton(
-                                            text = prompt,
-                                            modifier = Modifier.fillMaxWidth(),
-                                            onClick = { openHostChat(prompt) },
-                                        )
-                                    }
-                                    SecondaryPillButton(
-                                        text = "Chat without message",
-                                        modifier = Modifier.fillMaxWidth(),
-                                        onClick = { openHostChat(null) },
-                                    )
-                                }
-                            }
-                        }
-                        item { Spacer(modifier = Modifier.height(24.dp)) }
                     }
 
                     AnimatedVisibility(
                         visible = showFloatingBookingBar,
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
-                            .padding(horizontal = 16.dp)
-                            .navigationBarsPadding()
-                            .imePadding()
-                            .padding(bottom = 12.dp),
+                            .imePadding(),
                         enter = fadeIn(animationSpec = tween(durationMillis = 220, delayMillis = 60)) +
                             slideInVertically(
                                 initialOffsetY = { it / 2 },
@@ -5706,10 +4529,19 @@ fun CarDetailScreen(
                                 animationSpec = tween(durationMillis = 160),
                             ),
                     ) {
-                        FloatingBookingBar(
-                            pricePerDay = pricePerDay,
-                            onBook = ::openBookingFlow,
-                        )
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            resumableForCar?.let { resumable ->
+                                Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+                                    ResumeCheckoutStrip(resumable = resumable, onResume = { onResumeCheckout(resumable) })
+                                }
+                            }
+                            FloatingBookingBar(
+                                pricePerDay = pricePerDay,
+                                estimatedTotal = total,
+                                days = daysCount,
+                                onBook = ::openBookingFlow,
+                            )
+                        }
                     }
 
                     if (showGallery && imageUrls.isNotEmpty()) {
@@ -5748,68 +4580,39 @@ private fun DetailSectionCard(
 @Composable
 private fun FloatingBookingBar(
     pricePerDay: Int,
+    estimatedTotal: Int,
+    days: Int,
     onBook: () -> Unit,
 ) {
     val colors = LocalHayameColors.current
-
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        color = colors.cardBackground,
-        shadowElevation = 12.dp,
-        border = BorderStroke(1.dp, colors.border),
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 14.dp),
-            horizontalArrangement = Arrangement.spacedBy(14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(2.dp),
-            ) {
-                Text(
-                    text = "Price per day",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = colors.mutedText,
-                )
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalAlignment = Alignment.Bottom,
-                ) {
-                    Text(
-                        text = "GHS $pricePerDay",
-                        style = MaterialTheme.typography.headlineSmall.copy(fontSize = 24.sp),
-                        fontWeight = FontWeight.ExtraBold,
-                        color = colors.brandNavy,
-                    )
-                    Text(
-                        text = "/ day",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = colors.mutedText,
-                    )
-                }
-            }
-
-            Button(
-                onClick = onBook,
+    Surface(color = colors.cardBackground.copy(alpha = 0.97f), shadowElevation = 12.dp) {
+        Column {
+            HorizontalDivider(color = colors.bottomBarSeparator)
+            Row(
                 modifier = Modifier
-                    .height(48.dp)
-                    .widthIn(min = 134.dp),
-                shape = RoundedCornerShape(999.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = LocalHayameColors.current.brandBlue,
-                    contentColor = Color.White,
-                ),
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(
-                    text = "Book now",
-                    style = MaterialTheme.typography.bodyLarge.copy(fontSize = 15.sp),
-                    fontWeight = FontWeight.SemiBold,
-                )
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Text("GHS $pricePerDay", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = colors.brandNavy)
+                        Text("/day", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = colors.mutedText, modifier = Modifier.padding(bottom = 3.dp))
+                    }
+                    Text("GHS $estimatedTotal est. for $days day${if (days == 1) "" else "s"}", style = MaterialTheme.typography.bodySmall, color = colors.mutedText)
+                }
+                Button(
+                    onClick = onBook,
+                    modifier = Modifier.height(50.dp).coachTarget("detail.book"),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = colors.brandBlue, contentColor = Color.White),
+                    elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp, pressedElevation = 0.dp),
+                    contentPadding = PaddingValues(horizontal = 26.dp),
+                ) {
+                    Text("Book now", style = MaterialTheme.typography.bodyLarge.copy(fontSize = 16.sp), fontWeight = FontWeight.Bold)
+                }
             }
         }
     }
@@ -5836,34 +4639,26 @@ private fun DetailPill(
 }
 
 @Composable
-private fun FavoriteOverviewButton(
-    isFavorite: Boolean,
+private fun CircularDetailActionButton(
+    icon: ImageVector,
+    contentDescription: String,
+    tint: Color = LocalHayameColors.current.brandNavy,
     onClick: () -> Unit,
 ) {
     Surface(
         modifier = Modifier
-            .widthIn(min = 130.dp)
+            .size(44.dp)
             .clickable(onClick = onClick),
         color = LocalHayameColors.current.cardBackground,
-        shape = RoundedCornerShape(16.dp),
+        shape = CircleShape,
         border = BorderStroke(1.dp, LocalHayameColors.current.border),
     ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
+        Box(contentAlignment = Alignment.Center) {
             Icon(
-                imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-                contentDescription = "Favorite",
-                tint = if (isFavorite) Color.Red else LocalHayameColors.current.brandNavy,
-            )
-            Text(
-                text = "Save to favorites",
-                textAlign = TextAlign.Center,
-                style = MaterialTheme.typography.labelLarge,
-                color = LocalHayameColors.current.mutedText,
-                fontWeight = FontWeight.SemiBold,
+                imageVector = icon,
+                contentDescription = contentDescription,
+                tint = tint,
+                modifier = Modifier.size(20.dp),
             )
         }
     }
@@ -5890,7 +4685,7 @@ private fun CarDetailLine(label: String, value: String) {
 }
 
 @Composable
-private fun InfoLine(label: String, value: String) {
+internal fun InfoLine(label: String, value: String) {
     val colors = LocalHayameColors.current
 
     Row(verticalAlignment = Alignment.Top) {
@@ -5977,87 +4772,16 @@ private fun ReviewSummaryCard(review: ReviewDto) {
                 fontWeight = FontWeight.Bold,
                 color = LocalHayameColors.current.brandNavy,
             )
-            Text(
-                text = "★".repeat(rating),
-                style = MaterialTheme.typography.bodyLarge,
-                color = Warning,
-                fontWeight = FontWeight.Bold,
-            )
+            Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                repeat(rating.coerceIn(1, 5)) {
+                    Icon(Icons.Filled.Star, contentDescription = null, tint = Warning, modifier = Modifier.size(14.dp))
+                }
+            }
             Text(
                 text = review.comment?.takeIf { it.isNotBlank() } ?: "No comment provided.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = LocalHayameColors.current.mutedText,
             )
-        }
-    }
-}
-
-@Composable
-private fun DateSelectionRow(
-    label: String,
-    date: LocalDate,
-    minimumDate: LocalDate,
-    blockedDates: Set<LocalDate> = emptySet(),
-    isLoadingAvailability: Boolean = false,
-    selectionRange: ClosedRange<LocalDate>? = null,
-    canSelectDate: (LocalDate) -> Boolean = { candidate -> !candidate.isBefore(minimumDate) && candidate !in blockedDates },
-    onDateSelected: (LocalDate) -> Unit,
-) {
-    var showCalendar by remember(label, date, minimumDate, blockedDates, selectionRange) { mutableStateOf(false) }
-
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyLarge,
-            fontWeight = FontWeight.SemiBold,
-            color = LocalHayameColors.current.brandNavy,
-        )
-        Spacer(modifier = Modifier.weight(1f))
-        Surface(
-            modifier = Modifier.clickable { showCalendar = true },
-            color = LocalHayameColors.current.brandLight,
-            shape = RoundedCornerShape(999.dp),
-        ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                Text(
-                    text = date.toDisplayDate(),
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    color = LocalHayameColors.current.brandNavy,
-                )
-                if (isLoadingAvailability) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(16.dp),
-                        strokeWidth = 2.dp,
-                        color = LocalHayameColors.current.brandBlue,
-                    )
-                } else {
-                    Icon(
-                        imageVector = Icons.Outlined.CalendarMonth,
-                        contentDescription = null,
-                        tint = LocalHayameColors.current.brandBlue,
-                    )
-                }
-            }
-        }
-    }
-
-    if (showCalendar) {
-        AvailabilityCalendarDialog(
-            title = "Choose $label",
-            selectedDate = date,
-            minimumDate = minimumDate,
-            blockedDates = blockedDates,
-            selectionRange = selectionRange,
-            canSelectDate = canSelectDate,
-            onDismiss = { showCalendar = false },
-        ) { selected ->
-            showCalendar = false
-            onDateSelected(selected)
         }
     }
 }
@@ -6068,7 +4792,7 @@ private data class BookingCalendarMonthUi(
 )
 
 @Composable
-private fun AvailabilityCalendarDialog(
+internal fun AvailabilityCalendarDialog(
     title: String,
     selectedDate: LocalDate,
     minimumDate: LocalDate,
@@ -6201,7 +4925,7 @@ private fun AvailabilityCalendarDialog(
 }
 
 @Composable
-private fun SelectionField(
+internal fun SelectionField(
     selected: String,
     placeholder: String,
     options: List<String>,
@@ -6330,1067 +5054,6 @@ private fun FullScreenPhotoGallery(
 }
 
 @Composable
-fun BookingScreen(
-    viewModel: AppViewModel,
-    carId: String,
-    pendingPaystackCallbackUri: String?,
-    onBack: () -> Unit,
-    onOpenConversation: (String) -> Unit,
-    onBookingCompleted: () -> Unit,
-    onPaystackCallbackConsumed: () -> Unit,
-) {
-    val pendingCheckout by viewModel.pendingCheckout.collectAsState()
-    val carState by viewModel.carDetailState.collectAsState()
-    val locations by viewModel.locations.collectAsState()
-    val bookingDraft by viewModel.bookingDraft.collectAsState()
-    val isAuthenticated by viewModel.isAuthenticated.collectAsState()
-    val me by viewModel.me.collectAsState()
-    val context = LocalContext.current
-    val lifecycleOwner = LocalLifecycleOwner.current
-
-    var startDate by remember(carId) { mutableStateOf(LocalDate.now()) }
-    var endDate by remember(carId) { mutableStateOf(LocalDate.now().plusDays(1)) }
-    var blockedBookingDates by remember(carId) { mutableStateOf<Set<LocalDate>>(emptySet()) }
-    var selectedQuickDuration by rememberSaveable(carId) { mutableStateOf<Int?>(null) }
-    var region by remember(carId) { mutableStateOf("Greater Accra Region") }
-    var city by remember(carId) { mutableStateOf("Accra") }
-    var address by remember(carId) { mutableStateOf("") }
-    var tripMode by rememberSaveable(carId) { mutableStateOf<CheckoutTripMode?>(null) }
-    var deliveryAddress by rememberSaveable(carId) { mutableStateOf("") }
-    var deliveryTime by rememberSaveable(carId) { mutableStateOf(defaultDeliveryTimeString()) }
-    var contactPhone by rememberSaveable(carId) { mutableStateOf("") }
-    var deliveryNotes by rememberSaveable(carId) { mutableStateOf("") }
-    var paymentMessage by rememberSaveable(carId) { mutableStateOf<String?>(null) }
-    var isProcessingPayment by rememberSaveable(carId) { mutableStateOf(false) }
-    var isLoadingBookingAvailability by rememberSaveable(carId) { mutableStateOf(false) }
-    var initialized by rememberSaveable(carId) { mutableStateOf(false) }
-    var awaitingPaymentReturn by rememberSaveable(carId) { mutableStateOf(false) }
-    var returnedFromPaymentWithoutCallback by rememberSaveable(carId) { mutableStateOf(false) }
-    var currentStep by rememberSaveable(carId) { mutableStateOf(CheckoutStep.TRIP_DETAILS) }
-
-    LaunchedEffect(carId) {
-        viewModel.loadCarDetail(carId)
-        viewModel.loadReferenceData()
-    }
-
-    fun resolvedTripAddress(): String = address.trim().ifBlank { city.trim() }
-
-    fun goBackWithinCheckout() {
-        val previousStep = CheckoutStep.values().getOrNull(currentStep.ordinal - 1) ?: return
-        paymentMessage = null
-        currentStep = previousStep
-    }
-
-    val regionOptions = remember(locations, region) {
-        buildList {
-            add(region)
-            locations.keys.filter { it.isNotBlank() }.sorted().forEach(::add)
-        }.distinct()
-    }
-    val cityOptions = remember(locations, region, city) {
-        buildList {
-            add(city)
-            locations[region].orEmpty()
-                .filter { it.isNotBlank() }
-                .sorted()
-                .forEach(::add)
-        }.distinct()
-    }
-
-    LaunchedEffect(carState, bookingDraft) {
-        val car = (carState as? UiState.Success<CarDto>)?.data ?: return@LaunchedEffect
-        if (initialized) return@LaunchedEffect
-        val draft = bookingDraft?.takeIf { it.carId == carId }
-        startDate = parseApiDate(draft?.startDate) ?: LocalDate.now()
-        endDate = parseApiDate(draft?.endDate)?.takeIf { it.isAfter(startDate) } ?: startDate.plusDays(1)
-        region = draft?.region?.takeIf { it.isNotBlank() } ?: (car.region ?: region)
-        city = draft?.city?.takeIf { it.isNotBlank() } ?: (car.city ?: city)
-        address = draft?.address.orEmpty()
-        tripMode = draft?.tripMode?.let(::parseCheckoutTripMode)
-            ?: if (car.delivery_available == true) null else CheckoutTripMode.PICKUP
-        deliveryAddress = draft?.deliveryAddress.orEmpty()
-        deliveryTime = draft?.deliveryTime?.takeIf { it.isNotBlank() } ?: defaultDeliveryTimeString()
-        contactPhone = draft?.contactPhone.orEmpty()
-        deliveryNotes = draft?.deliveryNotes.orEmpty()
-        initialized = true
-    }
-
-    LaunchedEffect(startDate, blockedBookingDates) {
-        if (blockedBookingDates.isNotEmpty() && !isBookableStartDate(startDate, blockedBookingDates)) {
-            nextBookableStartDate(
-                from = if (startDate.isBefore(LocalDate.now())) LocalDate.now() else startDate,
-                duration = 1,
-                blockedDates = blockedBookingDates,
-            )?.let { adjustedStart ->
-                if (adjustedStart != startDate) {
-                    startDate = adjustedStart
-                    return@LaunchedEffect
-                }
-            }
-        }
-
-        preferredBookingEndDate(
-            currentEnd = endDate,
-            startDate = startDate,
-            blockedDates = blockedBookingDates,
-        )?.let { adjustedEnd ->
-            if (adjustedEnd != endDate) {
-                endDate = adjustedEnd
-            }
-        }
-        selectedQuickDuration?.let { duration ->
-            if (endDate != startDate.plusDays(duration.toLong())) {
-                selectedQuickDuration = null
-            }
-        }
-    }
-
-    LaunchedEffect(cityOptions, region) {
-        if (cityOptions.none { it.equals(city, ignoreCase = true) }) {
-            city = cityOptions.firstOrNull() ?: city
-        }
-    }
-
-    LaunchedEffect(tripMode, me?.preferredPhone()) {
-        if (tripMode == CheckoutTripMode.DELIVERY && contactPhone.isBlank()) {
-            contactPhone = me.preferredPhone().orEmpty()
-        }
-    }
-
-    LaunchedEffect(carId) {
-        val today = LocalDate.now()
-        isLoadingBookingAvailability = true
-        viewModel.loadAvailabilitySnapshot(
-            carId = carId,
-            startDate = today.toApiDate(),
-            endDate = today.plusDays(180).toApiDate(),
-        ) { envelope, error ->
-            isLoadingBookingAvailability = false
-            if (error != null) {
-                paymentMessage = error
-                return@loadAvailabilitySnapshot
-            }
-
-            val blocked = envelope?.blockedDates.orEmpty().mapNotNull(::parseApiDate).toSet()
-            blockedBookingDates = blocked
-            selectedQuickDuration = null
-            val nextStart = nextBookableStartDate(
-                from = today,
-                duration = 1,
-                blockedDates = blocked,
-            )
-
-            if (nextStart == null) {
-                paymentMessage = "No upcoming available dates in the next 6 months."
-                return@loadAvailabilitySnapshot
-            }
-
-            startDate = if (isBookableStartDate(startDate, blocked)) startDate else nextStart
-            preferredBookingEndDate(
-                currentEnd = endDate,
-                startDate = startDate,
-                blockedDates = blocked,
-            )?.let { endDate = it }
-        }
-    }
-
-    DisposableEffect(lifecycleOwner, awaitingPaymentReturn, pendingCheckout, isProcessingPayment, pendingPaystackCallbackUri) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (
-                event == Lifecycle.Event.ON_RESUME &&
-                awaitingPaymentReturn &&
-                pendingCheckout != null &&
-                !isProcessingPayment &&
-                pendingPaystackCallbackUri.isNullOrBlank()
-            ) {
-                awaitingPaymentReturn = false
-                returnedFromPaymentWithoutCallback = true
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose {
-            lifecycleOwner.lifecycle.removeObserver(observer)
-        }
-    }
-
-    when (val state = carState) {
-        UiState.Loading -> {
-            Scaffold(
-                containerColor = LocalHayameColors.current.pageBackground,
-                topBar = {
-                    CheckoutTopBar(title = "Checkout", backLabel = "Cancel", onBack = onBack)
-                },
-            ) { inner ->
-                Box(modifier = Modifier.padding(inner)) {
-                    LoadingBlock("Loading checkout...")
-                }
-            }
-        }
-
-        is UiState.Error -> {
-            Scaffold(
-                containerColor = LocalHayameColors.current.pageBackground,
-                topBar = {
-                    CheckoutTopBar(title = "Checkout", backLabel = "Cancel", onBack = onBack)
-                },
-            ) { inner ->
-                Box(modifier = Modifier.padding(inner)) {
-                    ErrorBlock(state.message, onRetry = { viewModel.loadCarDetail(carId) })
-                }
-            }
-        }
-
-        is UiState.Success -> {
-            val car = state.data
-            val carTitle = car.title?.takeIf { it.isNotBlank() } ?: "Hayame listing"
-            val pricePerDay = (car.daily_price ?: 0.0).roundToInt()
-            val insuranceFee = (car.insurance_fee ?: 0.0).roundToInt().coerceAtLeast(0)
-            val deliveryAvailable = car.delivery_available == true
-            val baseDeliveryFee = if (deliveryAvailable) {
-                (car.delivery_fee ?: 0.0).roundToInt().coerceAtLeast(0)
-            } else {
-                0
-            }
-            val selectedTripMode = tripMode ?: CheckoutTripMode.PICKUP
-            val deliveryFee = if (selectedTripMode == CheckoutTripMode.DELIVERY) baseDeliveryFee else 0
-            val depositAmount = (car.deposit_amount ?: 0.0).roundToInt().coerceAtLeast(0)
-            val outsideListingRegion = !region.equals(car.region.orEmpty(), ignoreCase = true)
-            val outsideRegionFee = (car.outside_accra_fee ?: 0.0).roundToInt().coerceAtLeast(0)
-            val outsideSurcharge = if (outsideListingRegion) outsideRegionFee else 0
-            val nights = max(1, ChronoUnit.DAYS.between(startDate, endDate).toInt())
-            val subtotal = pricePerDay * nights
-            // 10% service fee — mirrors the server total (NEXT_PUBLIC_PLATFORM_FEE_PERCENT).
-            // The server is authoritative; this keeps the displayed total honest.
-            val platformFee = (subtotal * 0.10).roundToInt()
-            val totalAmount = subtotal + platformFee + insuranceFee + deliveryFee + outsideSurcharge + depositAmount
-            val locationHelperText = if (outsideListingRegion) {
-                if (outsideRegionFee > 0) "Outside listing region (+GHS $outsideRegionFee)" else "Outside listing region"
-            } else {
-                "Within listing region (no extra charges)"
-            }
-            val summaryImageUrl = remember(car.id, car.image_url, car.car_photos) {
-                resolveAppImage(car.image_url) ?: car.car_photos.orEmpty().firstNotNullOfOrNull { resolveAppImage(it.url) }
-            }
-
-            fun applyQuickTripDuration(days: Int) {
-                val adjustedStart = nextBookableStartDate(
-                    from = startDate,
-                    duration = days,
-                    blockedDates = blockedBookingDates,
-                )
-                if (adjustedStart == null) {
-                    selectedQuickDuration = null
-                    paymentMessage = "No $days-day slot is available in the next 6 months."
-                } else {
-                    startDate = adjustedStart
-                    endDate = adjustedStart.plusDays(days.toLong())
-                    selectedQuickDuration = days
-                    paymentMessage = null
-                }
-            }
-
-            fun finalizePendingPayment(referenceOverride: String? = null) {
-                val checkout = pendingCheckout ?: return
-                val resolvedReference = referenceOverride
-                    ?.trim()
-                    ?.takeIf { it.isNotBlank() }
-                if (resolvedReference.isNullOrBlank()) {
-                    paymentMessage = "Payment was not completed. Open secure checkout and finish payment before verifying."
-                    return
-                }
-                returnedFromPaymentWithoutCallback = false
-                awaitingPaymentReturn = false
-                isProcessingPayment = true
-                paymentMessage = null
-                viewModel.finalizePaystack(
-                    request = PaystackFinalizeRequest(
-                        bookingId = checkout.bookingId,
-                        carId = carId,
-                        startDate = startDate.toApiDate(),
-                        endDate = endDate.toApiDate(),
-                        tripUseRegion = region.trim(),
-                        tripUseCity = city.trim(),
-                        tripUseAddress = resolvedTripAddress(),
-                        reference = resolvedReference,
-                        amount = (checkout.amount ?: 0.0).roundToInt(),
-                    ),
-                    onSuccess = {
-                        isProcessingPayment = false
-                        viewModel.showMessage("Payment successful. Your booking is now in Trips.")
-                        returnedFromPaymentWithoutCallback = false
-                        onBookingCompleted()
-                    },
-                    onError = {
-                        isProcessingPayment = false
-                        returnedFromPaymentWithoutCallback = false
-                        paymentMessage = it
-                    },
-                )
-            }
-
-            fun beginPayment() {
-                val normalizedRegion = region.trim()
-                val normalizedCity = city.trim()
-                val normalizedAddress = resolvedTripAddress()
-                val normalizedDeliveryAddress = deliveryAddress.trim()
-                val normalizedDeliveryTime = deliveryTime.trim()
-                val normalizedContactPhone = contactPhone.trim()
-                val normalizedDeliveryNotes = deliveryNotes.trim()
-
-                if (!isAuthenticated) {
-                    viewModel.setBookingDraft(
-                        carId = carId,
-                        startDate = startDate.toApiDate(),
-                        endDate = endDate.toApiDate(),
-                        region = normalizedRegion,
-                        city = normalizedCity,
-                        address = address.trim(),
-                        tripMode = tripMode?.rawValue,
-                        deliveryAddress = normalizedDeliveryAddress,
-                        deliveryTime = normalizedDeliveryTime,
-                        contactPhone = normalizedContactPhone,
-                        deliveryNotes = normalizedDeliveryNotes,
-                    )
-                    viewModel.requireAuthentication(
-                        message = "Sign in or sign up to continue booking.",
-                        destination = NavRoutes.booking(carId),
-                    )
-                    return
-                }
-                if (!endDate.isAfter(startDate)) {
-                    paymentMessage = "End date must be after start date."
-                    return
-                }
-                if (normalizedRegion.isBlank()) {
-                    paymentMessage = "Select your trip region to continue."
-                    return
-                }
-                if (normalizedCity.isBlank()) {
-                    paymentMessage = "Select your trip city to continue."
-                    return
-                }
-                if (deliveryAvailable && tripMode == null) {
-                    paymentMessage = "Choose pickup or delivery to continue."
-                    return
-                }
-                if (selectedTripMode == CheckoutTripMode.DELIVERY) {
-                    if (normalizedDeliveryAddress.length < 6) {
-                        paymentMessage = "Enter the exact delivery address."
-                        return
-                    }
-                    if (!isValidDeliveryTime(normalizedDeliveryTime)) {
-                        paymentMessage = "Enter a valid delivery time in HH:mm format."
-                        return
-                    }
-                    if (normalizedContactPhone.phoneDigitsCount() !in 7..15) {
-                        paymentMessage = "Enter a valid contact phone number."
-                        return
-                    }
-                }
-
-                isProcessingPayment = true
-                paymentMessage = null
-                viewModel.setBookingDraft(
-                    carId = carId,
-                    startDate = startDate.toApiDate(),
-                    endDate = endDate.toApiDate(),
-                    region = normalizedRegion,
-                    city = normalizedCity,
-                    address = address.trim(),
-                    tripMode = tripMode?.rawValue,
-                    deliveryAddress = normalizedDeliveryAddress,
-                    deliveryTime = normalizedDeliveryTime,
-                    contactPhone = normalizedContactPhone,
-                    deliveryNotes = normalizedDeliveryNotes,
-                )
-                viewModel.createBookingHoldAndInitiatePayment(
-                    carId = carId,
-                    startDate = startDate.toApiDate(),
-                    endDate = endDate.toApiDate(),
-                    tripMode = tripMode?.rawValue,
-                    tripUseRegion = normalizedRegion,
-                    tripUseCity = normalizedCity,
-                    tripUseAddress = normalizedAddress,
-                    deliveryAddress = normalizedDeliveryAddress.takeIf { selectedTripMode == CheckoutTripMode.DELIVERY },
-                    deliveryTime = normalizedDeliveryTime.takeIf { selectedTripMode == CheckoutTripMode.DELIVERY },
-                    contactPhone = normalizedContactPhone.takeIf { selectedTripMode == CheckoutTripMode.DELIVERY },
-                    deliveryNotes = normalizedDeliveryNotes.takeIf { selectedTripMode == CheckoutTripMode.DELIVERY },
-                    callbackUrl = "hayame://payment-callback",
-                    onReady = {
-                        isProcessingPayment = false
-                        awaitingPaymentReturn = true
-                        openExternalUrl(context, it.payment_url ?: it.authorization_url)
-                    },
-                    onError = {
-                        isProcessingPayment = false
-                        awaitingPaymentReturn = false
-                        paymentMessage = it
-                    },
-                )
-            }
-
-            LaunchedEffect(pendingPaystackCallbackUri, pendingCheckout?.reference) {
-                if (!pendingPaystackCallbackUri.isNullOrBlank() && pendingCheckout != null && !isProcessingPayment) {
-                    val callbackResult = parsePaystackCallback(pendingPaystackCallbackUri)
-                    awaitingPaymentReturn = false
-                    onPaystackCallbackConsumed()
-                    if (callbackResult.isCancelled || callbackResult.reference.isNullOrBlank()) {
-                        paymentMessage = "Payment was cancelled or not completed."
-                    } else {
-                        finalizePendingPayment(callbackResult.reference)
-                    }
-                }
-            }
-
-            LaunchedEffect(returnedFromPaymentWithoutCallback, pendingCheckout?.reference, isProcessingPayment) {
-                val checkout = pendingCheckout
-                if (returnedFromPaymentWithoutCallback && checkout != null && !isProcessingPayment) {
-                    paymentMessage = "Checking payment status..."
-                    finalizePendingPayment(checkout.reference)
-                }
-            }
-
-            Scaffold(
-                containerColor = LocalHayameColors.current.pageBackground,
-                topBar = {
-                    CheckoutTopBar(
-                        title = currentStep.title,
-                        backLabel = if (currentStep == CheckoutStep.TRIP_DETAILS) "Cancel" else "Back",
-                        onBack = {
-                            if (currentStep == CheckoutStep.TRIP_DETAILS) onBack() else goBackWithinCheckout()
-                        },
-                    )
-                },
-                bottomBar = {
-                    CheckoutBottomBar(
-                        buttonText = if (currentStep == CheckoutStep.PAYMENT) {
-                            if (isProcessingPayment) "Processing..." else "Make payment"
-                        } else {
-                            "Next"
-                        },
-                        note = currentStep.footerNote,
-                        error = paymentMessage,
-                        isLoading = isProcessingPayment && currentStep == CheckoutStep.PAYMENT,
-                    ) {
-                        when (currentStep) {
-                            CheckoutStep.TRIP_DETAILS -> {
-                                if (!endDate.isAfter(startDate)) {
-                                    paymentMessage = "Choose an end date after your start date."
-                                } else {
-                                    paymentMessage = null
-                                    currentStep = CheckoutStep.LOCATION
-                                }
-                            }
-
-                            CheckoutStep.LOCATION -> {
-                                if (deliveryAvailable && tripMode == null) {
-                                    paymentMessage = "Choose pickup or delivery to continue."
-                                } else if (region.trim().isBlank()) {
-                                    paymentMessage = "Select your trip region to continue."
-                                } else if (city.trim().isBlank()) {
-                                    paymentMessage = "Select your trip city to continue."
-                                } else if (selectedTripMode == CheckoutTripMode.DELIVERY && deliveryAddress.trim().length < 6) {
-                                    paymentMessage = "Enter the exact delivery address."
-                                } else if (selectedTripMode == CheckoutTripMode.DELIVERY && !isValidDeliveryTime(deliveryTime.trim())) {
-                                    paymentMessage = "Enter a valid delivery time in HH:mm format."
-                                } else if (selectedTripMode == CheckoutTripMode.DELIVERY && contactPhone.trim().phoneDigitsCount() !in 7..15) {
-                                    paymentMessage = "Enter a valid contact phone number."
-                                } else {
-                                    paymentMessage = null
-                                    currentStep = CheckoutStep.REVIEW
-                                }
-                            }
-
-                            CheckoutStep.REVIEW -> {
-                                paymentMessage = null
-                                currentStep = CheckoutStep.PAYMENT
-                            }
-
-                            CheckoutStep.PAYMENT -> beginPayment()
-                        }
-                    }
-                },
-            ) { inner ->
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(inner)
-                ) {
-                    CheckoutProgressHeader(
-                        currentStep = currentStep,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-                    )
-
-                    AnimatedContent(
-                        targetState = currentStep,
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth(),
-                        transitionSpec = {
-                            if (targetState.ordinal > initialState.ordinal) {
-                                (slideInHorizontally(animationSpec = tween(240)) { it / 3 } + fadeIn(animationSpec = tween(220))).togetherWith(
-                                    slideOutHorizontally(animationSpec = tween(180)) { -it / 5 } + fadeOut(animationSpec = tween(180))
-                                )
-                            } else {
-                                (slideInHorizontally(animationSpec = tween(240)) { -it / 3 } + fadeIn(animationSpec = tween(220))).togetherWith(
-                                    slideOutHorizontally(animationSpec = tween(180)) { it / 5 } + fadeOut(animationSpec = tween(180))
-                                )
-                            }
-                        },
-                        label = "checkout-step",
-                    ) { step ->
-                        Column(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .verticalScroll(rememberScrollState())
-                                .padding(horizontal = 16.dp),
-                            verticalArrangement = Arrangement.spacedBy(16.dp),
-                        ) {
-                            when (step) {
-                                CheckoutStep.TRIP_DETAILS -> {
-                                    CheckoutStepCard {
-                                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                            Text(
-                                                text = "Your trip",
-                                                style = MaterialTheme.typography.bodyLarge,
-                                                fontWeight = FontWeight.Bold,
-                                                color = LocalHayameColors.current.brandNavy,
-                                            )
-                                            Text(
-                                                text = "$nights day${if (nights == 1) "" else "s"}",
-                                                style = MaterialTheme.typography.headlineMedium,
-                                                fontWeight = FontWeight.ExtraBold,
-                                                color = LocalHayameColors.current.brandBlue,
-                                            )
-                                            Text(
-                                                text = "Choose dates below. Unavailable and booked days are blocked automatically.",
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                color = LocalHayameColors.current.mutedText,
-                                            )
-                                        }
-                                    }
-
-                                    CheckoutStepCard {
-                                        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                                            DateSelectionRow(
-                                                label = "Start date",
-                                                date = startDate,
-                                                minimumDate = LocalDate.now(),
-                                                blockedDates = blockedBookingDates,
-                                                isLoadingAvailability = isLoadingBookingAvailability,
-                                                selectionRange = startDate..endDate,
-                                                canSelectDate = { candidate -> isBookableStartDate(candidate, blockedBookingDates) },
-                                            ) {
-                                                selectedQuickDuration = null
-                                                startDate = it
-                                            }
-                                            DateSelectionRow(
-                                                label = "End date",
-                                                date = endDate,
-                                                minimumDate = startDate.plusDays(1),
-                                                blockedDates = blockedBookingDates,
-                                                isLoadingAvailability = isLoadingBookingAvailability,
-                                                selectionRange = startDate..endDate,
-                                                canSelectDate = { candidate -> isBookableEndDate(candidate, startDate, blockedBookingDates) },
-                                            ) {
-                                                selectedQuickDuration = null
-                                                endDate = it
-                                            }
-                                            Text(
-                                                text = "Unavailable dates are crossed out. The first bookable day is selected for you automatically.",
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                color = LocalHayameColors.current.mutedText,
-                                            )
-                                            Text(
-                                                text = "Quick select",
-                                                style = MaterialTheme.typography.bodyLarge,
-                                                fontWeight = FontWeight.Bold,
-                                                color = LocalHayameColors.current.brandNavy,
-                                            )
-                                            SecondaryPillButton(text = "2 days", modifier = Modifier.fillMaxWidth(), isSelected = selectedQuickDuration == 2) {
-                                                applyQuickTripDuration(2)
-                                            }
-                                            SecondaryPillButton(text = "5 days", modifier = Modifier.fillMaxWidth(), isSelected = selectedQuickDuration == 5) {
-                                                applyQuickTripDuration(5)
-                                            }
-                                            SecondaryPillButton(text = "7 days", modifier = Modifier.fillMaxWidth(), isSelected = selectedQuickDuration == 7) {
-                                                applyQuickTripDuration(7)
-                                            }
-                                        }
-                                    }
-
-	                                }
-
-                                CheckoutStep.LOCATION -> {
-                                    CheckoutStepCard {
-                                        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                                            CheckoutSectionHeader(
-                                                title = "Trip mode",
-                                                helpTitle = "Pickup or delivery",
-                                                helpMessage = "Pickup means you meet at the listing area and no delivery fee is charged. Delivery means the host brings the car to your preferred handoff point.",
-                                            )
-
-                                            if (deliveryAvailable) {
-                                                BookingModeOptionCard(
-                                                    title = CheckoutTripMode.PICKUP.label,
-                                                    subtitle = CheckoutTripMode.PICKUP.subtitle,
-                                                    trailingText = "No delivery fee",
-                                                    selected = tripMode == CheckoutTripMode.PICKUP,
-                                                    onClick = {
-                                                        tripMode = CheckoutTripMode.PICKUP
-                                                        paymentMessage = null
-                                                    },
-                                                )
-                                                BookingModeOptionCard(
-                                                    title = CheckoutTripMode.DELIVERY.label,
-                                                    subtitle = CheckoutTripMode.DELIVERY.subtitle,
-                                                    trailingText = if (baseDeliveryFee > 0) "GHS $baseDeliveryFee" else "Free",
-                                                    selected = tripMode == CheckoutTripMode.DELIVERY,
-                                                    onClick = {
-                                                        tripMode = CheckoutTripMode.DELIVERY
-                                                        if (contactPhone.isBlank()) {
-                                                            contactPhone = me.preferredPhone().orEmpty()
-                                                        }
-                                                        paymentMessage = null
-                                                    },
-                                                )
-                                                if (tripMode == null) {
-                                                    Text(
-                                                        text = "Choose pickup or delivery to continue.",
-                                                        style = MaterialTheme.typography.bodyMedium,
-                                                        fontWeight = FontWeight.SemiBold,
-                                                        color = Warning,
-                                                    )
-                                                }
-                                            } else {
-                                                BookingModeSummaryCard(
-                                                    title = CheckoutTripMode.PICKUP.label,
-                                                    message = "This listing is pickup only.",
-                                                )
-                                            }
-                                        }
-                                    }
-
-                                    if (tripMode == CheckoutTripMode.DELIVERY) {
-                                        CheckoutStepCard {
-                                            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                                                CheckoutSectionHeader(
-                                                    title = "Delivery details",
-                                                    helpTitle = "Delivery details",
-                                                    helpMessage = "These details are shared with the host so they know where and when to bring the car.",
-                                                )
-
-                                                OutlinedTextField(
-                                                    value = deliveryAddress,
-                                                    onValueChange = { deliveryAddress = it },
-                                                    modifier = Modifier.fillMaxWidth(),
-                                                    label = { Text("Delivery address") },
-                                                    placeholder = { Text("House number, street, landmark") },
-                                                    shape = RoundedCornerShape(16.dp),
-                                                    colors = OutlinedTextFieldDefaults.colors(
-                                                        focusedBorderColor = LocalHayameColors.current.brandBlue,
-                                                        unfocusedBorderColor = LocalHayameColors.current.border,
-                                                    ),
-                                                )
-                                                OutlinedTextField(
-                                                    value = deliveryTime,
-                                                    onValueChange = { deliveryTime = it.take(5) },
-                                                    modifier = Modifier.fillMaxWidth(),
-                                                    label = { Text("Preferred delivery time") },
-                                                    placeholder = { Text("10:00") },
-                                                    shape = RoundedCornerShape(16.dp),
-                                                    colors = OutlinedTextFieldDefaults.colors(
-                                                        focusedBorderColor = LocalHayameColors.current.brandBlue,
-                                                        unfocusedBorderColor = LocalHayameColors.current.border,
-                                                    ),
-                                                )
-                                                OutlinedTextField(
-                                                    value = contactPhone,
-                                                    onValueChange = { contactPhone = it },
-                                                    modifier = Modifier.fillMaxWidth(),
-                                                    label = { Text("Contact phone") },
-                                                    placeholder = { Text("+233 24 123 4567") },
-                                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
-                                                    shape = RoundedCornerShape(16.dp),
-                                                    colors = OutlinedTextFieldDefaults.colors(
-                                                        focusedBorderColor = LocalHayameColors.current.brandBlue,
-                                                        unfocusedBorderColor = LocalHayameColors.current.border,
-                                                    ),
-                                                )
-                                                OutlinedTextField(
-                                                    value = deliveryNotes,
-                                                    onValueChange = { deliveryNotes = it.take(500) },
-                                                    modifier = Modifier.fillMaxWidth(),
-                                                    label = { Text("Delivery notes (optional)") },
-                                                    placeholder = { Text("Gate code, landmark, or handoff notes") },
-                                                    minLines = 3,
-                                                    maxLines = 5,
-                                                    shape = RoundedCornerShape(16.dp),
-                                                    colors = OutlinedTextFieldDefaults.colors(
-                                                        focusedBorderColor = LocalHayameColors.current.brandBlue,
-                                                        unfocusedBorderColor = LocalHayameColors.current.border,
-                                                    ),
-                                                )
-                                                Text(
-                                                    text = if (deliveryFee > 0) {
-                                                        "Delivery fee: GHS $deliveryFee"
-                                                    } else {
-                                                        "This listing offers free delivery."
-                                                    },
-                                                    style = MaterialTheme.typography.bodyMedium,
-                                                    fontWeight = FontWeight.SemiBold,
-                                                    color = LocalHayameColors.current.brandBlue,
-                                                )
-                                            }
-                                        }
-                                    }
-
-                                    CheckoutStepCard {
-                                        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                                            SelectionField(
-                                                selected = region,
-                                                placeholder = "Region",
-                                                options = regionOptions,
-                                                onSelected = { region = it },
-                                            )
-                                            SelectionField(
-                                                selected = city,
-                                                placeholder = "City",
-                                                options = cityOptions,
-                                                onSelected = { city = it },
-                                            )
-                                            OutlinedTextField(
-                                                value = address,
-                                                onValueChange = { address = it },
-                                                modifier = Modifier.fillMaxWidth(),
-                                                placeholder = { Text("Exact destination (optional)") },
-                                                shape = RoundedCornerShape(16.dp),
-                                                colors = OutlinedTextFieldDefaults.colors(
-                                                    focusedBorderColor = LocalHayameColors.current.brandBlue,
-                                                    unfocusedBorderColor = LocalHayameColors.current.border,
-                                                ),
-                                            )
-                                            Text(
-                                                text = locationHelperText,
-                                                style = MaterialTheme.typography.bodyLarge,
-                                                fontWeight = FontWeight.SemiBold,
-                                                color = if (outsideListingRegion) Warning else Success,
-                                            )
-                                        }
-                                    }
-
-                                    CheckoutStepCard {
-                                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                            Text(
-                                                text = "Smart defaults",
-                                                style = MaterialTheme.typography.bodyLarge,
-                                                fontWeight = FontWeight.Bold,
-                                                color = LocalHayameColors.current.brandNavy,
-                                            )
-                                            Text(
-                                                text = "Trip use location stays separate from pickup or delivery so pricing and host handoff stay accurate.",
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                color = LocalHayameColors.current.mutedText,
-                                            )
-                                        }
-                                    }
-                                }
-
-                                CheckoutStep.REVIEW -> {
-                                    CheckoutStepCard {
-                                        Row(
-                                            horizontalArrangement = Arrangement.spacedBy(14.dp),
-                                            verticalAlignment = Alignment.Top,
-                                        ) {
-                                            if (!summaryImageUrl.isNullOrBlank()) {
-                                                AsyncImage(
-                                                    model = summaryImageUrl,
-                                                    contentDescription = null,
-                                                    modifier = Modifier
-                                                        .size(width = 86.dp, height = 72.dp)
-                                                        .clip(RoundedCornerShape(16.dp)),
-                                                    contentScale = ContentScale.Crop,
-                                                )
-                                            } else {
-                                                Box(
-                                                    modifier = Modifier
-                                                        .size(width = 86.dp, height = 72.dp)
-                                                        .background(LocalHayameColors.current.brandLight, RoundedCornerShape(16.dp)),
-                                                    contentAlignment = Alignment.Center,
-                                                ) {
-                                                    Icon(
-                                                        Icons.Outlined.DirectionsCar,
-                                                        contentDescription = null,
-                                                        tint = LocalHayameColors.current.brandBlue,
-                                                    )
-                                                }
-                                            }
-
-                                            Column(
-                                                modifier = Modifier.weight(1f),
-                                                verticalArrangement = Arrangement.spacedBy(6.dp),
-                                            ) {
-                                                Text(
-                                                    text = carTitle,
-                                                    style = MaterialTheme.typography.titleLarge,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = LocalHayameColors.current.brandNavy,
-                                                    maxLines = 2,
-                                                    overflow = TextOverflow.Ellipsis,
-                                                )
-                                                Text(
-                                                    text = "${startDate.toDisplayDate()} - ${endDate.toDisplayDate()}",
-                                                    style = MaterialTheme.typography.bodyLarge,
-                                                    fontWeight = FontWeight.SemiBold,
-                                                    color = LocalHayameColors.current.brandBlue,
-                                                )
-                                                Text(
-                                                    text = "$nights day${if (nights == 1) "" else "s"} • ${selectedTripMode.label}",
-                                                    style = MaterialTheme.typography.bodyMedium,
-                                                    color = LocalHayameColors.current.mutedText,
-                                                    maxLines = 2,
-                                                    overflow = TextOverflow.Ellipsis,
-                                                )
-                                                Text(
-                                                    text = resolvedTripAddress(),
-                                                    style = MaterialTheme.typography.bodyMedium,
-                                                    color = LocalHayameColors.current.mutedText,
-                                                    maxLines = 2,
-                                                    overflow = TextOverflow.Ellipsis,
-                                                )
-                                            }
-                                        }
-                                    }
-
-                                    CheckoutStepCard {
-                                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                            Text(
-                                                text = "Trip summary",
-                                                style = MaterialTheme.typography.bodyLarge,
-                                                fontWeight = FontWeight.Bold,
-                                                color = LocalHayameColors.current.brandNavy,
-                                            )
-                                            InfoLine(label = "Trip mode", value = selectedTripMode.label)
-                                            InfoLine(label = "Trip use area", value = resolvedTripAddress())
-                                            if (selectedTripMode == CheckoutTripMode.DELIVERY) {
-                                                InfoLine(label = "Delivery address", value = deliveryAddress.trim().ifBlank { "Not provided" })
-                                                InfoLine(label = "Delivery time", value = deliveryTime.trim().ifBlank { "Not provided" })
-                                                InfoLine(label = "Contact phone", value = contactPhone.trim().ifBlank { "Not provided" })
-                                                if (deliveryNotes.trim().isNotBlank()) {
-                                                    InfoLine(label = "Delivery notes", value = deliveryNotes.trim())
-                                                }
-                                            }
-                                        }
-                                    }
-
-                                    CheckoutStepCard {
-                                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                            Text(
-                                                text = "Price breakdown",
-                                                style = MaterialTheme.typography.bodyLarge,
-                                                fontWeight = FontWeight.Bold,
-                                                color = LocalHayameColors.current.brandNavy,
-                                            )
-                                            InfoLine(label = "Daily rate × $nights", value = "GHS $subtotal")
-                                            InfoLine(label = "Insurance", value = "GHS $insuranceFee")
-                                            InfoLine(label = "Service fee", value = "GHS $platformFee")
-                                            if (selectedTripMode == CheckoutTripMode.DELIVERY) {
-                                                InfoLine(label = "Delivery", value = "GHS $deliveryFee")
-                                            }
-                                            if (outsideListingRegion || outsideSurcharge > 0) {
-                                                InfoLine(label = "Outside region fee", value = "GHS $outsideSurcharge")
-                                            }
-                                            InfoLine(label = "Deposit", value = "GHS $depositAmount")
-                                            HorizontalDivider(color = LocalHayameColors.current.border)
-                                            Row(verticalAlignment = Alignment.Bottom) {
-                                                Text(
-                                                    text = "Total",
-                                                    style = MaterialTheme.typography.bodyLarge,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = LocalHayameColors.current.brandNavy,
-                                                )
-                                                Spacer(modifier = Modifier.weight(1f))
-                                                Text(
-                                                    text = "GHS $totalAmount",
-                                                    style = MaterialTheme.typography.headlineMedium,
-                                                    fontWeight = FontWeight.ExtraBold,
-                                                    color = LocalHayameColors.current.brandBlue,
-                                                )
-                                            }
-                                            Text(
-                                                text = "No hidden fees. This is the amount shown before payment.",
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                color = LocalHayameColors.current.mutedText,
-                                            )
-                                        }
-                                    }
-                                }
-
-                                CheckoutStep.PAYMENT -> {
-                                    CheckoutStepCard {
-                                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                            Text(
-                                                text = "Total amount",
-                                                style = MaterialTheme.typography.bodyLarge,
-                                                fontWeight = FontWeight.Bold,
-                                                color = LocalHayameColors.current.mutedText,
-                                            )
-                                            Text(
-                                                text = "GHS $totalAmount",
-                                                style = MaterialTheme.typography.headlineLarge,
-                                                fontWeight = FontWeight.ExtraBold,
-                                                color = LocalHayameColors.current.brandNavy,
-                                            )
-                                            Text(
-                                                text = "Secure payment with no hidden fees.",
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                color = LocalHayameColors.current.mutedText,
-                                            )
-                                        }
-                                    }
-
-                                    CheckoutStepCard {
-                                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                            Text(
-                                                text = "Payment methods",
-                                                style = MaterialTheme.typography.bodyLarge,
-                                                fontWeight = FontWeight.Bold,
-                                                color = LocalHayameColors.current.brandNavy,
-                                            )
-                                            CheckoutPaymentMethodRow(
-                                                title = "Mobile Money",
-                                                subtitle = "Fast checkout from your phone",
-                                                icon = Icons.Outlined.PhoneIphone,
-                                            )
-                                            CheckoutPaymentMethodRow(
-                                                title = "Card",
-                                                subtitle = "Visa and Mastercard supported",
-                                                icon = Icons.Outlined.CreditCard,
-                                            )
-                                            CheckoutPaymentMethodRow(
-                                                title = "Bank transfer",
-                                                subtitle = "Available in secure checkout",
-                                                icon = Icons.Outlined.AccountBalance,
-                                            )
-                                        }
-                                    }
-
-                                    CheckoutStepCard {
-                                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                            Text(
-                                                text = "What happens next",
-                                                style = MaterialTheme.typography.bodyLarge,
-                                                fontWeight = FontWeight.Bold,
-                                                color = LocalHayameColors.current.brandNavy,
-                                            )
-                                            Text(
-                                                text = "Tap Make payment and we'll open the secure checkout sheet to finish your booking.",
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                color = LocalHayameColors.current.mutedText,
-                                            )
-                                        }
-                                    }
-
-                                    if (pendingCheckout != null) {
-                                        CheckoutStepCard {
-                                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                                Text(
-                                                    text = "Payment pending",
-                                                    style = MaterialTheme.typography.titleLarge,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = LocalHayameColors.current.brandNavy,
-                                                )
-                                                Text(
-                                                    text = "Complete the payment in the secure checkout sheet. We'll detect completion automatically when you return.",
-                                                    style = MaterialTheme.typography.bodyMedium,
-                                                    color = LocalHayameColors.current.mutedText,
-                                                )
-                                                InfoLine(label = "Reference", value = pendingCheckout!!.reference)
-                                                GradientPillButton(
-                                                    text = "Open checkout",
-                                                    modifier = Modifier.fillMaxWidth(),
-                                                    onClick = {
-                                                        awaitingPaymentReturn = true
-                                                        paymentMessage = null
-                                                        openExternalUrl(
-                                                            context,
-                                                            pendingCheckout!!.payment_url ?: pendingCheckout!!.authorization_url,
-                                                        )
-                                                    },
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-
-                            Spacer(modifier = Modifier.height(24.dp))
-                        }
-                    }
-                }
-
-                if (isProcessingPayment) {
-                    PaymentProcessingOverlay()
-                }
-            }
-        }
-
-        else -> Unit
-    }
-}
-
-private enum class CheckoutTripMode(
-    val rawValue: String,
-    val label: String,
-    val subtitle: String,
-) {
-    PICKUP(
-        rawValue = "pickup",
-        label = "Pickup",
-        subtitle = "Pick up the car at the listing area and avoid the delivery fee.",
-    ),
-    DELIVERY(
-        rawValue = "delivery",
-        label = "Delivery",
-        subtitle = "Have the host bring the car to your preferred handoff point.",
-    ),
-}
-
-private fun parseCheckoutTripMode(value: String?): CheckoutTripMode? {
-    return CheckoutTripMode.entries.firstOrNull { it.rawValue.equals(value?.trim(), ignoreCase = true) }
-}
-
-private fun defaultDeliveryTimeString(): String = "10:00"
-
-private fun isValidDeliveryTime(value: String): Boolean {
-    return Regex("""^\d{2}:\d{2}$""").matches(value.trim())
-}
-
-private fun String.phoneDigitsCount(): Int = count { it.isDigit() }
-
-@Composable
-private fun CheckoutSectionHeader(
-    title: String,
-    helpTitle: String? = null,
-    helpMessage: String? = null,
-) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.bodyLarge,
-            fontWeight = FontWeight.Bold,
-            color = LocalHayameColors.current.brandNavy,
-        )
-        if (!helpTitle.isNullOrBlank() && !helpMessage.isNullOrBlank()) {
-            InlineInfoButton(title = helpTitle, message = helpMessage)
-        }
-    }
-}
-
-@Composable
 private fun InlineInfoButton(
     title: String,
     message: String,
@@ -7421,78 +5084,7 @@ private fun InlineInfoButton(
 }
 
 @Composable
-private fun BookingModeOptionCard(
-    title: String,
-    subtitle: String,
-    trailingText: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-) {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-        color = if (selected) LocalHayameColors.current.brandBlue.copy(alpha = 0.1f) else LocalHayameColors.current.brandLight,
-        shape = RoundedCornerShape(16.dp),
-        border = BorderStroke(
-            1.dp,
-            if (selected) LocalHayameColors.current.brandBlue else LocalHayameColors.current.border,
-        ),
-    ) {
-        Row(
-            modifier = Modifier.padding(14.dp),
-            verticalAlignment = Alignment.Top,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                Text(title, color = LocalHayameColors.current.brandNavy, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyLarge)
-                Text(subtitle, color = LocalHayameColors.current.mutedText, style = MaterialTheme.typography.bodyMedium)
-            }
-            Column(
-                horizontalAlignment = Alignment.End,
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Text(trailingText, color = LocalHayameColors.current.brandBlue, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge)
-                Surface(
-                    modifier = Modifier.size(18.dp),
-                    shape = CircleShape,
-                    color = if (selected) LocalHayameColors.current.brandBlue else Color.Transparent,
-                    border = BorderStroke(2.dp, if (selected) LocalHayameColors.current.brandBlue else Color.Black.copy(alpha = 0.14f)),
-                ) {}
-            }
-        }
-    }
-}
-
-@Composable
-private fun BookingModeSummaryCard(
-    title: String,
-    message: String,
-) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = LocalHayameColors.current.brandLight,
-        shape = RoundedCornerShape(16.dp),
-    ) {
-        Row(
-            modifier = Modifier.padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Text("✓", color = Success, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(title, color = LocalHayameColors.current.brandNavy, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyLarge)
-                Text(message, color = LocalHayameColors.current.mutedText, style = MaterialTheme.typography.bodyMedium)
-            }
-        }
-    }
-}
-
-@Composable
-private fun CheckoutTopBar(
+internal fun CheckoutTopBar(
     title: String,
     backLabel: String,
     onBack: () -> Unit,
@@ -7518,120 +5110,8 @@ private fun CheckoutTopBar(
     }
 }
 
-private enum class CheckoutStep(
-    val title: String,
-    val subtitle: String,
-    val progressLabel: String,
-    val footerNote: String,
-) {
-    TRIP_DETAILS(
-        title = "Trip details",
-        subtitle = "Set your dates first. Nothing else competes for attention here.",
-        progressLabel = "Trip",
-        footerNote = "Choose your dates first.",
-    ),
-    LOCATION(
-        title = "Location",
-        subtitle = "Choose pickup or delivery, then confirm where the trip will happen.",
-        progressLabel = "Location",
-        footerNote = "Pickup or delivery comes first. Then confirm the trip area.",
-    ),
-    REVIEW(
-        title = "Review & price",
-        subtitle = "See the trip mode, handoff details, and every charge before you pay.",
-        progressLabel = "Review",
-        footerNote = "Review every charge before continuing.",
-    ),
-    PAYMENT(
-        title = "Checkout",
-        subtitle = "Confirm the total, then complete payment securely.",
-        progressLabel = "Pay",
-        footerNote = "Secure payment. No hidden fees.",
-    ),
-}
-
 @Composable
-private fun CheckoutProgressHeader(
-    currentStep: CheckoutStep,
-    modifier: Modifier = Modifier,
-) {
-    Column(
-        modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-        Text(
-            text = "Step ${currentStep.ordinal + 1} of ${CheckoutStep.values().size}",
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.Bold,
-            color = LocalHayameColors.current.brandBlue,
-        )
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(
-                text = currentStep.title,
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.ExtraBold,
-                color = LocalHayameColors.current.brandNavy,
-            )
-            Text(
-                text = currentStep.subtitle,
-                style = MaterialTheme.typography.bodyMedium,
-                color = LocalHayameColors.current.mutedText,
-            )
-        }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            CheckoutStep.values().forEach { step ->
-                CheckoutProgressItem(
-                    step = step,
-                    isActive = step == currentStep,
-                    isCompleted = step.ordinal < currentStep.ordinal,
-                    modifier = Modifier.weight(1f),
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun CheckoutProgressItem(
-    step: CheckoutStep,
-    isActive: Boolean,
-    isCompleted: Boolean,
-    modifier: Modifier = Modifier,
-) {
-    Column(
-        modifier = modifier,
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Surface(
-            modifier = Modifier.size(28.dp),
-            shape = CircleShape,
-            color = if (isActive || isCompleted) LocalHayameColors.current.brandBlue else LocalHayameColors.current.subtleFill,
-            border = BorderStroke(1.dp, if (isActive || isCompleted) LocalHayameColors.current.brandBlue else LocalHayameColors.current.border),
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Text(
-                    text = if (isCompleted) "✓" else "${step.ordinal + 1}",
-                    color = if (isActive || isCompleted) Color.White else LocalHayameColors.current.mutedText,
-                    fontWeight = FontWeight.Bold,
-                    style = MaterialTheme.typography.labelLarge,
-                )
-            }
-        }
-        Text(
-            text = step.progressLabel,
-            style = MaterialTheme.typography.labelMedium,
-            color = if (isActive || isCompleted) LocalHayameColors.current.brandNavy else LocalHayameColors.current.mutedText,
-            fontWeight = FontWeight.SemiBold,
-        )
-    }
-}
-
-@Composable
-private fun CheckoutStepCard(
+internal fun CheckoutStepCard(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Card(
@@ -7648,169 +5128,7 @@ private fun CheckoutStepCard(
     }
 }
 
-@Composable
-private fun CheckoutBottomBar(
-    buttonText: String,
-    note: String,
-    error: String?,
-    isLoading: Boolean,
-    onClick: () -> Unit,
-) {
-    val colors = LocalHayameColors.current
-    val darkMode = colors.pageBackground.luminance() < 0.5f
-    val primaryGradient = if (darkMode) {
-        listOf(colors.brandBlue, Color(0xFF1484D9))
-    } else {
-        listOf(colors.brandBlue, colors.brandNavy)
-    }
-    Surface(color = colors.cardBackground.copy(alpha = 0.96f), shadowElevation = 10.dp) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .navigationBarsPadding()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            if (!error.isNullOrBlank()) {
-                Text(
-                    text = error,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Danger,
-                    fontWeight = FontWeight.SemiBold,
-                )
-            }
-
-            Button(
-                onClick = onClick,
-                enabled = !isLoading,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(54.dp),
-                shape = RoundedCornerShape(18.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
-                contentPadding = PaddingValues(0.dp),
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(
-                            Brush.horizontalGradient(colors = primaryGradient),
-                            RoundedCornerShape(18.dp),
-                        ),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        if (isLoading) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(18.dp),
-                                strokeWidth = 2.dp,
-                                color = Color.White,
-                            )
-                        }
-                        Text(
-                            text = buttonText,
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Color.White,
-                        )
-                    }
-                }
-            }
-
-            Text(
-                text = note,
-                style = MaterialTheme.typography.bodyMedium,
-                color = colors.mutedText,
-            )
-        }
-    }
-}
-
-@Composable
-private fun CheckoutPaymentMethodRow(
-    title: String,
-    subtitle: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-) {
-    Surface(
-        shape = RoundedCornerShape(16.dp),
-        color = LocalHayameColors.current.brandLight,
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(34.dp)
-                    .background(LocalHayameColors.current.brandBlue.copy(alpha = 0.12f), CircleShape),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = LocalHayameColors.current.brandBlue,
-                    modifier = Modifier.size(18.dp),
-                )
-            }
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(2.dp),
-            ) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = LocalHayameColors.current.brandNavy,
-                )
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = LocalHayameColors.current.mutedText,
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun PaymentProcessingOverlay() {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.2f)),
-        contentAlignment = Alignment.Center,
-    ) {
-        Card(
-            shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(containerColor = LocalHayameColors.current.cardBackground),
-            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
-        ) {
-            Column(
-                modifier = Modifier.padding(horizontal = 22.dp, vertical = 18.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                CircularProgressIndicator(color = LocalHayameColors.current.brandBlue)
-                Text("Processing payment", color = LocalHayameColors.current.brandNavy, fontWeight = FontWeight.Bold)
-                Text(
-                    "Please wait while we confirm your payment.",
-                    color = LocalHayameColors.current.mutedText,
-                    style = MaterialTheme.typography.bodyMedium,
-                    textAlign = TextAlign.Center,
-                )
-            }
-        }
-    }
-}
-
-private fun parseApiDate(value: String?): LocalDate? {
+internal fun parseApiDate(value: String?): LocalDate? {
     if (value.isNullOrBlank()) return null
     return runCatching { LocalDate.parse(value, DateTimeFormatter.ISO_LOCAL_DATE) }.getOrNull()
 }
@@ -7856,17 +5174,22 @@ private fun isContinuousBookingRangeAvailable(
     return true
 }
 
-private fun isBookableStartDate(date: LocalDate, blockedDates: Set<LocalDate>): Boolean {
+/**
+ * [minimumNights] is the listing's shortest trip ([CarDto.minimumTripDays]):
+ * a start day only counts as bookable when that many nights after it are free.
+ */
+internal fun isBookableStartDate(date: LocalDate, blockedDates: Set<LocalDate>, minimumNights: Int = 1): Boolean {
     return !date.isBefore(LocalDate.now()) &&
         isContinuousBookingRangeAvailable(
             startDate = date,
-            endDate = date.plusDays(1),
+            endDate = date.plusDays(minimumNights.coerceAtLeast(1).toLong()),
             blockedDates = blockedDates,
         )
 }
 
-private fun isBookableEndDate(date: LocalDate, startDate: LocalDate, blockedDates: Set<LocalDate>): Boolean {
-    return date.isAfter(startDate) &&
+internal fun isBookableEndDate(date: LocalDate, startDate: LocalDate, blockedDates: Set<LocalDate>, minimumNights: Int = 1): Boolean {
+    val earliestEnd = startDate.plusDays(minimumNights.coerceAtLeast(1).toLong())
+    return !date.isBefore(earliestEnd) &&
         isContinuousBookingRangeAvailable(
             startDate = startDate,
             endDate = date,
@@ -7874,20 +5197,21 @@ private fun isBookableEndDate(date: LocalDate, startDate: LocalDate, blockedDate
         )
 }
 
-private fun preferredBookingEndDate(
+internal fun preferredBookingEndDate(
     currentEnd: LocalDate,
     startDate: LocalDate,
     blockedDates: Set<LocalDate>,
+    minimumNights: Int = 1,
 ): LocalDate? {
-    if (isBookableEndDate(currentEnd, startDate, blockedDates)) {
+    if (isBookableEndDate(currentEnd, startDate, blockedDates, minimumNights)) {
         return currentEnd
     }
 
-    val fallback = startDate.plusDays(1)
+    val fallback = startDate.plusDays(minimumNights.coerceAtLeast(1).toLong())
     return if (isContinuousBookingRangeAvailable(startDate, fallback, blockedDates)) fallback else null
 }
 
-private fun nextBookableStartDate(
+internal fun nextBookableStartDate(
     from: LocalDate,
     duration: Int,
     blockedDates: Set<LocalDate>,
@@ -7908,12 +5232,12 @@ private fun nextBookableStartDate(
     return null
 }
 
-private data class PaystackCallbackResult(
+internal data class PaystackCallbackResult(
     val reference: String?,
     val isCancelled: Boolean,
 )
 
-private fun parsePaystackCallback(callbackUri: String?): PaystackCallbackResult {
+internal fun parsePaystackCallback(callbackUri: String?): PaystackCallbackResult {
     if (callbackUri.isNullOrBlank()) return PaystackCallbackResult(reference = null, isCancelled = false)
     val parsed = runCatching { Uri.parse(callbackUri) }.getOrNull()
         ?: return PaystackCallbackResult(reference = null, isCancelled = false)
@@ -7962,7 +5286,7 @@ private fun CarDto.listingBadgeText(): String? {
     return if (isNewListing(created_at)) "New" else null
 }
 
-private fun isNewListing(createdAt: String?): Boolean {
+internal fun isNewListing(createdAt: String?): Boolean {
     if (createdAt.isNullOrBlank()) return false
     return try {
         val createdDate = LocalDate.parse(createdAt.take(10), DateTimeFormatter.ISO_LOCAL_DATE)
@@ -7972,168 +5296,118 @@ private fun isNewListing(createdAt: String?): Boolean {
     }
 }
 @Composable
-fun MessagesScreen(
+fun BecomeHostScreen(
     viewModel: AppViewModel,
     onBack: () -> Unit,
-    onOpenConversation: (String) -> Unit,
-    title: String = "Messages",
-    showBackButton: Boolean = true,
+    onOpenAuth: () -> Unit = {},
+    onOpenHostDashboard: () -> Unit = {},
+    onSubmissionCompleted: () -> Unit = onBack,
 ) {
-    val state by viewModel.conversationsState.collectAsState()
-    LaunchedEffect(Unit) { viewModel.loadConversations() }
     val colors = LocalHayameColors.current
-
-    Scaffold(
-        containerColor = colors.pageBackground,
-        topBar = {
-            PageTopBar(title = title, onBack = if (showBackButton) onBack else null)
-        }
-    ) { inner ->
-        when (val s = state) {
-            UiState.Loading -> LazyColumn(modifier = Modifier.fillMaxSize().padding(inner).padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                item { Spacer(modifier = Modifier.height(8.dp)) }
-                items(4) { ConversationPlaceholderRow() }
-            }
-            is UiState.Error -> ErrorBlock(s.message, onRetry = { viewModel.loadConversations() })
-            UiState.Empty -> EmptyBlock("No messages", "Your conversations will appear here.")
-            is UiState.Success -> LazyColumn(modifier = Modifier.fillMaxSize().padding(inner).padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                item { Spacer(modifier = Modifier.height(8.dp)) }
-                items(s.data, key = { it.id }) { row ->
-                    ConversationItem(row = row, onClick = { onOpenConversation(row.id) })
-                }
-            }
-            else -> {}
-        }
-    }
-}
-
-@Composable
-private fun ConversationItem(row: com.hayame.app.core.network.ConversationDto, onClick: () -> Unit) {
-    val colors = LocalHayameColors.current
-    Card(
-        modifier = Modifier.fillMaxWidth().clickable { onClick() },
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
-        border = BorderStroke(1.dp, colors.border),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-    ) {
-        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            val other = row.other_user
-            val otherAvatar = resolveAppImage(other?.avatar)
-            if (!otherAvatar.isNullOrBlank()) {
-                AsyncImage(model = otherAvatar, contentDescription = null, modifier = Modifier.size(52.dp).clip(CircleShape), contentScale = ContentScale.Crop)
-            } else {
-                Box(modifier = Modifier.size(52.dp).background(colors.brandLight, CircleShape), contentAlignment = Alignment.Center) {
-                    Text(other?.name?.take(1) ?: "U", fontWeight = FontWeight.Bold, color = colors.brandBlue)
-                }
-            }
-            Column(modifier = Modifier.weight(1f)) {
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text(other?.name ?: "User", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = colors.brandNavy)
-                    if ((row.unread_count ?: 0) > 0) {
-                        Surface(color = colors.brandBlue, shape = CircleShape) {
-                            Text("${row.unread_count}", color = Color.White, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
-                        }
-                    }
-                }
-                Text(row.last_message_preview ?: "Tap to open chat", style = MaterialTheme.typography.bodyMedium, color = colors.mutedText, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-        }
-    }
-}
-
-@Composable
-fun ConversationScreen(
-    viewModel: AppViewModel,
-    conversationId: String,
-    onBack: () -> Unit,
-) {
-    val messagesState by viewModel.messagesState.collectAsState()
+    val context = LocalContext.current
+    val isAuthenticated by viewModel.isAuthenticated.collectAsState()
     val me by viewModel.me.collectAsState()
-    var draft by rememberSaveable { mutableStateOf("") }
+    val application = me?.host_application
+    val applicationStatus = (application?.status ?: me?.host_application_status ?: me?.host_status)
+        ?.trim()
+        ?.lowercase()
+        .orEmpty()
+    val isApproved = me?.is_host == true || applicationStatus == "approved"
+    val isPending = applicationStatus == "pending"
 
-    LaunchedEffect(conversationId) { viewModel.selectConversation(conversationId) }
-    val colors = LocalHayameColors.current
+    var fullName by rememberSaveable { mutableStateOf("") }
+    var phone by rememberSaveable { mutableStateOf("") }
+    var region by rememberSaveable { mutableStateOf(AndroidReferenceData.defaultRegion) }
+    var city by rememberSaveable { mutableStateOf("Accra") }
+    var idType by rememberSaveable { mutableStateOf("Ghana Card") }
+    var idNumber by rememberSaveable { mutableStateOf("") }
+    var experience by rememberSaveable { mutableStateOf("") }
+    var fleetSize by rememberSaveable { mutableStateOf(1) }
+    var note by rememberSaveable { mutableStateOf("") }
+    var didPrefill by rememberSaveable { mutableStateOf(false) }
+    var idFrontUri by remember { mutableStateOf<Uri?>(null) }
+    var idBackUri by remember { mutableStateOf<Uri?>(null) }
+    var faceUri by remember { mutableStateOf<Uri?>(null) }
+    var idFrontFile by remember { mutableStateOf<File?>(null) }
+    var idBackFile by remember { mutableStateOf<File?>(null) }
+    var faceFile by remember { mutableStateOf<File?>(null) }
+    var isSubmitting by rememberSaveable { mutableStateOf(false) }
+    var submissionError by rememberSaveable { mutableStateOf<String?>(null) }
+    var showSuccessDialog by rememberSaveable { mutableStateOf(false) }
 
-    Scaffold(
-        containerColor = colors.pageBackground,
-        topBar = {
-            PageTopBar(title = "Chat", onBack = onBack)
-        },
-        bottomBar = {
-            Surface(tonalElevation = 4.dp, color = colors.cardBackground) {
-                Row(modifier = Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        value = draft,
-                        onValueChange = { draft = it },
-                        placeholder = { Text("Type a message...") },
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(24.dp),
-                        maxLines = 4
-                    )
-                    IconButton(
-                        onClick = { if (draft.isNotBlank()) { viewModel.sendMessage(conversationId, draft); draft = "" } },
-                        enabled = draft.isNotBlank(),
-                        modifier = Modifier.background(if (draft.isNotBlank()) colors.brandBlue else colors.border, CircleShape).size(48.dp)
-                    ) { Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null, tint = Color.White) }
-                }
-            }
-        }
-    ) { inner ->
-        when (val s = messagesState) {
-            UiState.Loading -> LoadingBlock()
-            is UiState.Error -> ErrorBlock(s.message, onRetry = { viewModel.loadMessages(conversationId) })
-            is UiState.Success -> LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(inner).padding(horizontal = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                reverseLayout = false
-            ) {
-                item { Spacer(modifier = Modifier.height(8.dp)) }
-                items(s.data, key = { it.id }) { message ->
-                    val isMe = message.sender_id == me?.user?.id
-                    MessageBubble(message = message, isMe = isMe)
-                }
-                item { Spacer(modifier = Modifier.height(8.dp)) }
-            }
-            else -> {}
+    val idFrontPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        uri ?: return@rememberLauncherForActivityResult
+        idFrontFile?.delete()
+        idFrontUri = uri
+        idFrontFile = copyUriToTempFile(context, uri, "host-id-front")
+        if (idFrontFile == null) submissionError = "Unable to process selected image."
+    }
+    val idBackPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        uri ?: return@rememberLauncherForActivityResult
+        idBackFile?.delete()
+        idBackUri = uri
+        idBackFile = copyUriToTempFile(context, uri, "host-id-back")
+        if (idBackFile == null) submissionError = "Unable to process selected image."
+    }
+    val facePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        uri ?: return@rememberLauncherForActivityResult
+        faceFile?.delete()
+        faceUri = uri
+        faceFile = copyUriToTempFile(context, uri, "host-face")
+        if (faceFile == null) submissionError = "Unable to process selected image."
+    }
+
+    val cityOptions = remember(region, city) {
+        buildList {
+            city.trim().takeIf { it.isNotBlank() }?.let(::add)
+            AndroidReferenceData.districtsByRegion[region].orEmpty().forEach(::add)
+        }.distinctBy { it.lowercase(Locale.US) }
+    }
+    val existingFrontPath = application?.id_front_path?.trim().orEmpty()
+    val existingBackPath = application?.id_back_path?.trim().orEmpty()
+
+    val blockingReason = when {
+        !isAuthenticated -> "Sign in to submit your host application."
+        isPending -> "Your application is under review."
+        isSubmitting -> "Please wait for uploads to finish."
+        fullName.trim().length < 2 -> "Enter your full name (at least 2 characters)."
+        phone.count(Char::isDigit) < 6 -> "Enter a valid phone number (at least 6 digits)."
+        region.trim().length < 2 || city.trim().length < 2 -> "Select your region and city."
+        idType.isBlank() -> "Select an ID type."
+        idNumber.trim().length < 4 -> "Enter your ID number (at least 4 characters)."
+        idFrontFile == null && existingFrontPath.isBlank() -> "Upload your ID front image."
+        idBackFile == null && existingBackPath.isBlank() -> "Upload your ID back image."
+        experience.trim().length < 3 -> "Add a short hosting experience (at least 3 characters)."
+        else -> null
+    }
+
+    LaunchedEffect(Unit) {
+        viewModel.loadHostStatus()
+    }
+
+    LaunchedEffect(me, application?.id) {
+        if (didPrefill || me == null) return@LaunchedEffect
+        fullName = application?.full_name ?: me.preferredFullName().orEmpty()
+        phone = application?.phone ?: me.preferredPhone().orEmpty()
+        region = application?.region ?: me.preferredRegion()?.takeIf { it.isNotBlank() }
+            ?: AndroidReferenceData.defaultRegion
+        city = application?.city ?: me.preferredCity()?.takeIf { it.isNotBlank() } ?: "Accra"
+        idType = application?.id_type ?: "Ghana Card"
+        idNumber = application?.id_number.orEmpty()
+        experience = application?.experience.orEmpty()
+        fleetSize = application?.fleet_size?.roundToInt()?.coerceIn(1, 50) ?: 1
+        note = application?.note.orEmpty()
+        didPrefill = true
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            idFrontFile?.delete()
+            idBackFile?.delete()
+            faceFile?.delete()
         }
     }
-}
 
-@Composable
-private fun MessageBubble(message: com.hayame.app.core.network.MessageDto, isMe: Boolean) {
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = if (isMe) Alignment.End else Alignment.Start
-    ) {
-        Surface(
-            color = if (isMe) LocalHayameColors.current.brandBlue else LocalHayameColors.current.brandLight,
-            shape = RoundedCornerShape(
-                topStart = 16.dp,
-                topEnd = 16.dp,
-                bottomStart = if (isMe) 16.dp else 4.dp,
-                bottomEnd = if (isMe) 4.dp else 16.dp
-            )
-        ) {
-            Text(
-                text = message.body,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-                color = if (isMe) Color.White else LocalHayameColors.current.brandNavy,
-                style = MaterialTheme.typography.bodyLarge
-            )
-        }
-        Text(
-            text = message.created_at.takeLast(5),
-            style = MaterialTheme.typography.labelSmall,
-            color = LocalHayameColors.current.mutedText,
-            modifier = Modifier.padding(top = 2.dp, start = 4.dp, end = 4.dp)
-        )
-    }
-}
-
-@Composable
-fun BecomeHostScreen(viewModel: AppViewModel, onBack: () -> Unit) {
-    val colors = LocalHayameColors.current
     Scaffold(
         containerColor = colors.pageBackground,
         topBar = {
@@ -8144,310 +5418,312 @@ fun BecomeHostScreen(viewModel: AppViewModel, onBack: () -> Unit) {
             modifier = Modifier.fillMaxSize().padding(inner).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            item { SectionHeader("Become Host") }
             item {
-                Card(
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
-                    border = BorderStroke(1.dp, colors.border),
-                ) {
-                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("Host application", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = colors.brandNavy)
-                        Text("Your Android host application form is being finalized to match iOS parity.", color = colors.mutedText)
-                        Button(onClick = { viewModel.loadHostStatus() }, modifier = Modifier.fillMaxWidth()) { Text("Refresh status") }
-                    }
-                }
+                Text("Apply to list your cars", style = MaterialTheme.typography.bodyMedium, color = colors.mutedText)
+                Text(
+                    "We verify every host to keep the marketplace safe. Applications are typically reviewed within 1-2 business days.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.mutedText,
+                )
             }
-        }
-    }
-}
 
-@Composable
-fun HostDashboardScreen(
-    viewModel: AppViewModel,
-    onBack: () -> Unit,
-    onOpenCars: () -> Unit,
-    onOpenCreateCar: () -> Unit,
-    onOpenBookings: () -> Unit,
-    onOpenEarnings: () -> Unit,
-    onOpenMessages: () -> Unit,
-    onOpenFavorites: () -> Unit = {},
-    onOpenReviews: () -> Unit,
-    onOpenProfile: () -> Unit,
-) {
-    val me by viewModel.me.collectAsState()
-    val myCarsState by viewModel.myCarsState.collectAsState()
-    val bookingsState by viewModel.bookingsState.collectAsState()
-    val hostReviewsState by viewModel.hostReviewsListState.collectAsState()
-    val conversationsState by viewModel.conversationsState.collectAsState()
-    var hostModeEnabled by rememberSaveable { mutableStateOf(true) }
-
-    LaunchedEffect(Unit) {
-        viewModel.loadMyCars()
-        viewModel.loadBookings()
-        viewModel.loadHostReviews()
-        viewModel.loadConversations()
-    }
-
-    val carsCount = (myCarsState as? UiState.Success<List<CarDto>>)?.data?.size ?: 0
-    val currentUserId = me?.user?.id.orEmpty()
-    val bookings = (bookingsState as? UiState.Success<List<com.hayame.app.core.network.BookingDto>>)?.data.orEmpty()
-    val hostBookings = remember(bookings, currentUserId) {
-        bookings.filter { isHostBooking(it, currentUserId) }
-    }
-    val reviewList = (hostReviewsState as? UiState.Success<List<ReviewDto>>)?.data.orEmpty()
-    val unreadCount = (conversationsState as? UiState.Success<List<com.hayame.app.core.network.ConversationDto>>)
-        ?.data
-        ?.sumOf { it.unread_count ?: 0 }
-        ?: 0
-    val urgentBookings = remember(hostBookings) {
-        hostBookings.filter {
-            it.status.equals("awaiting_host", ignoreCase = true) && it.payment_status.equals("paid", ignoreCase = true)
-        }
-    }
-    val totalEarnings = hostBookings
-        .filter { it.status.equals("confirmed", ignoreCase = true) || it.status.equals("completed", ignoreCase = true) || it.status.equals("awaiting_host", ignoreCase = true) }
-        .sumOf { (it.total_price ?: 0.0).toInt() }
-    val currentMonthKey = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM"))
-    val thisMonthEarnings = hostBookings
-        .filter { bookingMonthKey(it.created_at) == currentMonthKey }
-        .sumOf { (it.total_price ?: 0.0).toInt() }
-    val averageRating = if (reviewList.isEmpty()) 0.0 else reviewList.map { it.rating ?: 0.0 }.average()
-    val fullName = me.preferredFullName()?.takeIf { it.isNotBlank() } ?: me?.user?.email ?: "Host"
-    val avatarUrl = resolveAppImage(me.preferredAvatarRaw())
-    val colors = LocalHayameColors.current
-
-    Scaffold(
-        containerColor = colors.pageBackground,
-        topBar = {
-            PageTopBar(title = "Dashboard")
-        },
-    ) { inner ->
-        LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(inner).padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            item {
-                Text("Host Dashboard", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.ExtraBold, color = colors.brandNavy)
-            }
-            item {
-                Card(
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Text("Host mode", style = MaterialTheme.typography.titleMedium, color = colors.brandNavy, fontWeight = FontWeight.Bold)
-                                Text("Turn off Host mode to move back to User mode.", color = colors.mutedText, style = MaterialTheme.typography.bodyMedium)
-                            }
-                            Switch(
-                                checked = hostModeEnabled,
-                                onCheckedChange = { enabled ->
-                                    hostModeEnabled = enabled
-                                    if (!enabled) {
-                                        onBack()
-                                    }
-                                },
+            if (application != null || applicationStatus.isNotBlank()) {
+                item {
+                    Card(
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
+                        border = BorderStroke(1.dp, colors.border),
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text("Status", fontWeight = FontWeight.SemiBold, color = colors.brandNavy)
+                            Spacer(modifier = Modifier.weight(1f))
+                            Text(
+                                applicationStatus.ifBlank { "pending" }.replaceFirstChar { it.uppercase() },
+                                fontWeight = FontWeight.Bold,
+                                color = if (isApproved) colors.success else colors.warning,
                             )
                         }
                     }
                 }
-            }
-            item {
-                Card(
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Row(
-                        modifier = Modifier.padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        RemoteAvatar(
-                            imageUrl = avatarUrl,
-                            name = fullName,
-                            fallback = "H",
-                            size = 48.dp,
-                            textStyle = MaterialTheme.typography.labelLarge,
-                            borderColor = LocalHayameColors.current.border,
+                if (isApproved) {
+                    item {
+                        GradientPillButton(
+                            text = "Open Host Dashboard",
+                            modifier = Modifier.fillMaxWidth(),
+                            onClick = onOpenHostDashboard,
                         )
-                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            Text(fullName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = colors.brandNavy)
-                            Text("Manage host settings", color = colors.mutedText, style = MaterialTheme.typography.bodyMedium)
-                        }
-                        SecondaryPillButton(text = "Open", onClick = onOpenProfile)
+                    }
+                } else if (isPending) {
+                    item {
+                        Text(
+                            "Your application is pending review. You will get host access once approved.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = colors.warning,
+                        )
                     }
                 }
             }
-            if (urgentBookings.isNotEmpty()) {
+
+            if (!isAuthenticated) {
+                item { EmptyBlock("Log in required", "Sign in to submit your host application.") }
+                item {
+                    GradientPillButton(
+                        text = "Log in",
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = onOpenAuth,
+                    )
+                }
+            } else if (!isPending && !isApproved) {
+                item {
+                    OutlinedTextField(
+                        value = fullName,
+                        onValueChange = { fullName = it },
+                        label = { Text("Full name") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                    )
+                }
+                item {
+                    OutlinedTextField(
+                        value = phone,
+                        onValueChange = { phone = it },
+                        label = { Text("Phone") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                        shape = RoundedCornerShape(12.dp),
+                    )
+                }
+                item {
+                    SelectionField(
+                        selected = region,
+                        placeholder = "Region",
+                        options = AndroidReferenceData.regionsIncluding(region),
+                        onSelected = { selected ->
+                            region = selected
+                            val availableCities = AndroidReferenceData.districtsByRegion[selected].orEmpty()
+                            if (availableCities.none { it.equals(city, ignoreCase = true) }) {
+                                city = availableCities.firstOrNull().orEmpty()
+                            }
+                        },
+                    )
+                }
+                item {
+                    SelectionField(
+                        selected = city,
+                        placeholder = "City",
+                        options = cityOptions,
+                        onSelected = { city = it },
+                    )
+                }
+                item {
+                    SelectionField(
+                        selected = idType,
+                        placeholder = "ID type",
+                        options = listOf("Ghana Card", "NHIS", "Voters ID", "Driving Licence"),
+                        onSelected = { idType = it },
+                    )
+                }
+                item {
+                    OutlinedTextField(
+                        value = idNumber,
+                        onValueChange = { idNumber = it },
+                        label = { Text("ID number") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                    )
+                }
+                item {
+                    OutlinedTextField(
+                        value = experience,
+                        onValueChange = { experience = it },
+                        label = { Text("Hosting experience") },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 3,
+                        maxLines = 6,
+                        shape = RoundedCornerShape(12.dp),
+                    )
+                }
                 item {
                     Card(
-                        shape = RoundedCornerShape(18.dp),
+                        shape = RoundedCornerShape(16.dp),
                         colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
-                        modifier = Modifier.fillMaxWidth(),
+                        border = BorderStroke(1.dp, colors.border),
                     ) {
-                        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text("Urgent booking requests", color = Danger, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-                            Text("You have ${urgentBookings.size} request(s) waiting for approval.", color = colors.mutedText, style = MaterialTheme.typography.bodyMedium)
-                            SecondaryPillButton(text = "Review now", onClick = onOpenBookings)
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text("Fleet size: $fleetSize", modifier = Modifier.weight(1f), fontWeight = FontWeight.SemiBold, color = colors.brandNavy)
+                            TextButton(onClick = { fleetSize = (fleetSize - 1).coerceAtLeast(1) }) { Text("−") }
+                            TextButton(onClick = { fleetSize = (fleetSize + 1).coerceAtMost(50) }) { Text("+") }
                         }
                     }
                 }
-            }
-            item {
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    HostMetricCard(title = "Total Earnings", value = "GH₵$totalEarnings", modifier = Modifier.weight(1f))
-                    HostMetricCard(title = "This Month", value = "GH₵$thisMonthEarnings", modifier = Modifier.weight(1f))
+                item {
+                    OutlinedTextField(
+                        value = note,
+                        onValueChange = { note = it },
+                        label = { Text("Notes (optional)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 2,
+                        maxLines = 5,
+                        shape = RoundedCornerShape(12.dp),
+                    )
+                }
+                item {
+                    HostApplicationPhotoCard(
+                        title = "ID front image",
+                        guidance = "Upload your ID front image.",
+                        actionLabel = if (idFrontFile != null || existingFrontPath.isNotBlank()) "Replace ID front" else "Upload ID front",
+                        selectedUri = idFrontUri,
+                        isSelected = idFrontFile != null || existingFrontPath.isNotBlank(),
+                        onChoose = { idFrontPicker.launch("image/*") },
+                    )
+                }
+                item {
+                    HostApplicationPhotoCard(
+                        title = "ID back image",
+                        guidance = "Upload your ID back image.",
+                        actionLabel = if (idBackFile != null || existingBackPath.isNotBlank()) "Replace ID back" else "Upload ID back",
+                        selectedUri = idBackUri,
+                        isSelected = idBackFile != null || existingBackPath.isNotBlank(),
+                        onChoose = { idBackPicker.launch("image/*") },
+                    )
+                }
+                item {
+                    HostApplicationPhotoCard(
+                        title = "Face photo",
+                        guidance = "Use a clear selfie that matches your ID.",
+                        actionLabel = "Upload face photo",
+                        selectedUri = faceUri,
+                        fallbackImageUrl = me.preferredAvatarRaw(),
+                        isSelected = faceFile != null || !me.preferredAvatarRaw().isNullOrBlank(),
+                        onChoose = { facePicker.launch("image/*") },
+                    )
+                }
+                if (!submissionError.isNullOrBlank()) {
+                    item { Text(submissionError.orEmpty(), color = colors.danger, fontWeight = FontWeight.SemiBold) }
+                }
+                if (!blockingReason.isNullOrBlank()) {
+                    item { Text(blockingReason.orEmpty(), color = colors.warning, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold) }
+                }
+                item {
+                    GradientPillButton(
+                        text = if (isSubmitting) "Submitting..." else "Submit application",
+                        modifier = Modifier.fillMaxWidth().alpha(if (blockingReason == null) 1f else 0.55f),
+                        onClick = {
+                            val userId = me?.user?.id ?: return@GradientPillButton
+                            if (blockingReason != null) return@GradientPillButton
+                            isSubmitting = true
+                            submissionError = null
+                            viewModel.submitHostApplicationWithDocuments(
+                                userId = userId,
+                                front = idFrontFile,
+                                back = idBackFile,
+                                existingFrontPath = existingFrontPath,
+                                existingBackPath = existingBackPath,
+                                face = faceFile,
+                                requestBuilder = { frontPath, backPath ->
+                                    HostApplicationRequest(
+                                        full_name = fullName.trim(),
+                                        phone = phone.trim(),
+                                        region = region.trim(),
+                                        city = city.trim(),
+                                        id_type = idType.trim(),
+                                        id_number = idNumber.trim(),
+                                        id_front_path = frontPath,
+                                        id_back_path = backPath,
+                                        note = note.trim().takeIf { it.isNotBlank() },
+                                        experience = experience.trim(),
+                                        fleet_size = fleetSize,
+                                    )
+                                },
+                                onResult = { error ->
+                                    isSubmitting = false
+                                    submissionError = error
+                                    if (error == null) showSuccessDialog = true
+                                },
+                            )
+                        },
+                    )
                 }
             }
-            item {
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    HostMetricCard(title = "My Cars", value = "$carsCount", modifier = Modifier.weight(1f))
-                    HostMetricCard(title = "Reviews", value = String.format("%.1f/5", averageRating), modifier = Modifier.weight(1f))
-                }
-            }
-            item { Text("Quick nav", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.ExtraBold, color = colors.brandNavy) }
-            item { HostQuickActionCard("Overview", "Snapshot of host performance", Icons.Outlined.Home, onClick = {}) }
-            item { HostQuickActionCard("Vehicles", "Create and manage car listings", Icons.Outlined.DirectionsCar, onOpenCars) }
-            item { HostQuickActionCard("Add car", "Create a new listing", Icons.Outlined.AddCircleOutline, onOpenCreateCar) }
-            item { HostQuickActionCard("Bookings", "Review requests and trip history", Icons.Outlined.CalendarMonth, onOpenBookings) }
-            item { HostQuickActionCard("Earnings", "Track payout performance", Icons.Outlined.AttachMoney, onOpenEarnings) }
-            item {
-                HostQuickActionCard(
-                    title = "Unread messages",
-                    subtitle = if (unreadCount > 0) "$unreadCount unread chat message(s)." else "No unread messages.",
-                    icon = Icons.Outlined.MailOutline,
-                    onClick = onOpenMessages,
-                )
-            }
-            item { HostQuickActionCard(if (unreadCount > 0) "Chats $unreadCount" else "Chats", "Open and respond to guest conversations.", Icons.Outlined.ChatBubble, onOpenMessages) }
-            item { HostQuickActionCard("Reviews", "Read guest feedback", Icons.Outlined.FavoriteBorder, onOpenReviews) }
-            item { HostQuickActionCard("Favorites insights", "See most-saved listings", Icons.Outlined.FavoriteBorder, onOpenFavorites) }
-            item { HostQuickActionCard("Settings", "Manage host settings", Icons.Outlined.Person, onOpenProfile) }
-            item { Spacer(modifier = Modifier.height(16.dp)) }
+            item { Spacer(modifier = Modifier.height(24.dp)) }
         }
+    }
+
+    if (showSuccessDialog) {
+        AlertDialog(
+            onDismissRequest = {},
+            title = { Text("Application submitted") },
+            text = { Text("Your host request is being reviewed. We will email you once there is an update.") },
+            confirmButton = {
+                Button(onClick = {
+                    showSuccessDialog = false
+                    onSubmissionCompleted()
+                }) { Text("Go to dashboard") }
+            },
+        )
     }
 }
 
 @Composable
-fun HostCarsScreen(
-    viewModel: AppViewModel,
-    onBack: () -> Unit,
-    onCreate: () -> Unit,
-    onEdit: (String) -> Unit,
-    onOpenPhotos: (String) -> Unit = {},
-    onOpenAvailability: (String) -> Unit = {},
+private fun HostApplicationPhotoCard(
+    title: String,
+    guidance: String,
+    actionLabel: String,
+    selectedUri: Uri?,
+    fallbackImageUrl: String? = null,
+    isSelected: Boolean,
+    onChoose: () -> Unit,
 ) {
-    val state by viewModel.myCarsState.collectAsState()
     val colors = LocalHayameColors.current
-
-    LaunchedEffect(Unit) { viewModel.loadMyCars() }
-
-    Scaffold(
-        containerColor = colors.pageBackground,
-        topBar = {
-            PageTopBar(title = "My Cars")
-        },
-    ) { inner ->
-        LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(inner).padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            item {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable(onClick = onCreate),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
-                    border = BorderStroke(1.dp, colors.border),
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 18.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    Card(
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
+        border = BorderStroke(1.dp, colors.border),
+    ) {
+        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(title, style = MaterialTheme.typography.labelLarge, color = colors.mutedText, fontWeight = FontWeight.SemiBold)
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (selectedUri != null || !fallbackImageUrl.isNullOrBlank()) {
+                    AsyncImage(
+                        model = selectedUri ?: resolveAppImage(fallbackImageUrl),
+                        contentDescription = "$title preview",
+                        modifier = Modifier.size(64.dp).clip(CircleShape).border(1.dp, colors.controlStroke, CircleShape),
+                        contentScale = ContentScale.Crop,
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier.size(64.dp).background(colors.brandLight, CircleShape).border(1.dp, colors.controlStroke, CircleShape),
+                        contentAlignment = Alignment.Center,
                     ) {
-                        Icon(Icons.Outlined.AddCircleOutline, contentDescription = null, tint = LocalHayameColors.current.brandBlue)
-                        Text("Create Listing", color = colors.brandNavy, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                        Icon(Icons.Outlined.Person, contentDescription = null, tint = colors.brandNavy)
                     }
                 }
-            }
-            item {
-                Text("My car listing", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = colors.brandNavy)
-            }
-            when (val s = state) {
-                UiState.Loading -> items(3) { HostListingPlaceholderRow() }
-                is UiState.Error -> item { ErrorBlock(s.message, onRetry = { viewModel.loadMyCars() }) }
-                UiState.Empty -> item { EmptyBlock("No listings yet", "Create your first listing to start hosting.") }
-                is UiState.Success -> {
-                    items(s.data, key = { it.id }) { car ->
-                        val thumbnailUrl = resolveAppImage(car.image_url)
-                            ?: car.car_photos.orEmpty().firstNotNullOfOrNull { resolveAppImage(it.url) }
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { onEdit(car.id) },
-                            shape = RoundedCornerShape(14.dp),
-                            colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
-                            border = BorderStroke(1.dp, colors.border),
-                        ) {
-                            Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    verticalAlignment = Alignment.Top,
-                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                ) {
-                                    HostListingThumbnail(imageUrl = thumbnailUrl)
-
-                                    Column(
-                                        modifier = Modifier.weight(1f),
-                                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            verticalAlignment = Alignment.Top,
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                        ) {
-                                            Text(
-                                                car.title ?: listOfNotNull(car.brand, car.model).joinToString(" "),
-                                                style = MaterialTheme.typography.titleMedium,
-                                                fontWeight = FontWeight.Bold,
-                                                color = colors.brandNavy,
-                                                modifier = Modifier.weight(1f),
-                                            )
-                                            StatusBadge(status = if (car.approval_status.equals("approved", ignoreCase = true)) "approved" else "pending")
-                                        }
-                                        Text(
-                                            listOfNotNull(car.city, car.region).joinToString(", "),
-                                            color = colors.mutedText,
-                                            style = MaterialTheme.typography.bodyMedium,
-                                        )
-                                        Text(
-                                            "GH₵${(car.daily_price ?: 0.0).toInt()} / day",
-                                            color = LocalHayameColors.current.brandBlue,
-                                            fontWeight = FontWeight.Bold,
-                                        )
-                                    }
-                                }
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                                    OutlinedButton(onClick = { onEdit(car.id) }, modifier = Modifier.weight(1f)) { Text("Open") }
-                                    OutlinedButton(onClick = { onOpenPhotos(car.id) }, modifier = Modifier.weight(1f)) { Text("Photos") }
-                                }
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                                    OutlinedButton(onClick = { onOpenAvailability(car.id) }, modifier = Modifier.weight(1f)) { Text("Availability") }
-                                    OutlinedButton(onClick = { viewModel.deleteCar(car.id) }, modifier = Modifier.weight(1f)) { Text("Delete", color = Danger) }
-                                }
-                            }
-                        }
-                    }
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(guidance, style = MaterialTheme.typography.bodyMedium, color = colors.mutedText)
+                    SecondaryPillButton(text = actionLabel, onClick = onChoose)
                 }
-                UiState.Idle -> items(3) { HostListingPlaceholderRow() }
+            }
+            if (isSelected) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Outlined.Check, contentDescription = null, tint = colors.success, modifier = Modifier.size(16.dp))
+                    Text("Selected", color = colors.success, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                }
             }
         }
     }
 }
+
 
 @Composable
 fun HostCarEditorScreen(
@@ -8501,6 +5777,7 @@ fun HostCarEditorScreen(
     var description by rememberSaveable(carId) { mutableStateOf("") }
     var instantBook by rememberSaveable(carId) { mutableStateOf(false) }
     var deliveryAvailable by rememberSaveable(carId) { mutableStateOf(false) }
+    var allowOneDayBooking by rememberSaveable(carId) { mutableStateOf(false) }
     var airConditioning by rememberSaveable(carId) { mutableStateOf(true) }
     var deliveryFee by rememberSaveable(carId) { mutableStateOf("") }
     var insuranceFee by rememberSaveable(carId) { mutableStateOf("") }
@@ -8701,6 +5978,7 @@ fun HostCarEditorScreen(
             description = description,
             instantBook = instantBook,
             deliveryAvailable = deliveryAvailable,
+            allowOneDayBooking = allowOneDayBooking,
             airConditioning = airConditioning,
             deliveryFee = deliveryFee.trim().toIntOrNull() ?: 0,
             insuranceFee = insuranceFee.trim().toIntOrNull() ?: 0,
@@ -8725,6 +6003,7 @@ fun HostCarEditorScreen(
         description = draft.description
         instantBook = draft.instantBook
         deliveryAvailable = draft.deliveryAvailable
+        allowOneDayBooking = draft.allowOneDayBooking
         airConditioning = draft.airConditioning
         deliveryFee = draft.deliveryFee.asOptionalFeeText()
         insuranceFee = draft.insuranceFee.asOptionalFeeText()
@@ -8840,6 +6119,7 @@ fun HostCarEditorScreen(
             description = existingCar.description.orEmpty()
             instantBook = existingCar.instant_book == true
             deliveryAvailable = existingCar.delivery_available == true
+            allowOneDayBooking = existingCar.allow_one_day_booking == true
             airConditioning = existingCar.air_conditioning != false
             deliveryFee = ((existingCar.delivery_fee ?: 0.0).roundToInt()).asOptionalFeeText()
             insuranceFee = ((existingCar.insurance_fee ?: 0.0).roundToInt()).asOptionalFeeText()
@@ -8890,6 +6170,7 @@ fun HostCarEditorScreen(
         description,
         instantBook,
         deliveryAvailable,
+        allowOneDayBooking,
         airConditioning,
         deliveryFee,
         insuranceFee,
@@ -8938,6 +6219,7 @@ fun HostCarEditorScreen(
             put("is_available", true)
             put("instant_book", instantBook)
             put("delivery_available", deliveryAvailable)
+            put("allow_one_day_booking", allowOneDayBooking)
             put("air_conditioning", airConditioning)
             put("delivery_fee", if (deliveryAvailable) parsedDeliveryFee else 0)
             put("insurance_fee", parsedInsuranceFee)
@@ -8994,6 +6276,9 @@ fun HostCarEditorScreen(
             jumpToStep(HostListingEditorStep.entries[currentStep.ordinal - 1])
         }
     }
+
+    // System back steps back through the editor instead of discarding it.
+    BackHandler(enabled = currentStep != HostListingEditorStep.BASIC_INFO) { handleBackAction() }
 
     fun handlePrimaryAction() {
         if (currentStep == HostListingEditorStep.REVIEW) {
@@ -9319,6 +6604,12 @@ fun HostCarEditorScreen(
                                         helpTitle = "Delivery",
                                         helpMessage = "Turn this on if you want guests to choose delivery during checkout. Add a delivery fee only if you charge for bringing the car to them.",
                                     ) { deliveryAvailable = it }
+                                    HostToggleRow(
+                                        label = "1-day bookings",
+                                        checked = allowOneDayBooking,
+                                        helpTitle = "1-day bookings",
+                                        helpMessage = "When this is on, guests can book this car for one day: pick-up at the 10:00 AM hand-off and return at the same time the next day. When it's off, every trip must be at least 2 days. The listing shows which one applies.",
+                                    ) { allowOneDayBooking = it }
                                     HostToggleRow("Air conditioning", airConditioning) { airConditioning = it }
                                     SelectionTextField(
                                         label = "Cancellation policy",
@@ -9496,6 +6787,7 @@ fun HostCarEditorScreen(
                                 lines = listOf(
                                     if (instantBook) "Instant Book enabled" else "Instant Book off",
                                     if (deliveryAvailable) "Delivery enabled" else "Delivery off",
+                                    if (allowOneDayBooking) "1-day bookings allowed" else "2-day minimum trip",
                                     if (airConditioning) "Air conditioning included" else "Air conditioning off",
                                     cancellationPolicy,
                                 ),
@@ -9584,312 +6876,190 @@ fun HostCarEditorScreen(
     }
 }
 
-@Composable
-fun HostBookingsScreen(
-    viewModel: AppViewModel,
-    onBack: () -> Unit,
-    onOpenConversation: (String) -> Unit = {},
-) {
-    val bookingsState by viewModel.bookingsState.collectAsState()
-    val me by viewModel.me.collectAsState()
-    val pendingBookingFocus by viewModel.pendingBookingFocus.collectAsState()
-    val currentUserId = me?.user?.id.orEmpty()
-    val listState = rememberLazyListState()
-    val colors = LocalHayameColors.current
-
-    LaunchedEffect(Unit) { viewModel.loadBookings() }
-
-    val hostBookings = (bookingsState as? UiState.Success<List<BookingDto>>)
-        ?.data
-        .orEmpty()
-        .filter { isHostBooking(it, currentUserId) }
-
-    LaunchedEffect(pendingBookingFocus, hostBookings) {
-        val bookingId = pendingBookingFocus ?: return@LaunchedEffect
-        val index = hostBookings.indexOfFirst { it.id == bookingId }
-        if (index < 0) return@LaunchedEffect
-        listState.animateScrollToItem(index)
-        viewModel.consumePendingBookingFocus(bookingId)
-    }
-
-    Scaffold(
-        containerColor = colors.pageBackground,
-        topBar = {
-            PageTopBar(title = "Host Bookings")
-        },
-    ) { inner ->
-        LazyColumn(
-            state = listState,
-            modifier = Modifier.fillMaxSize().padding(inner).padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            when (val state = bookingsState) {
-                UiState.Loading -> item { LoadingBlock("Loading host bookings...") }
-                is UiState.Error -> item { ErrorBlock(state.message, onRetry = { viewModel.loadBookings() }) }
-                UiState.Empty -> item { EmptyBlock("No host bookings", "Requests will show here when guests book your cars.") }
-                is UiState.Success -> {
-                    if (hostBookings.isEmpty()) {
-                        item { EmptyBlock("No host bookings", "Requests will show here when guests book your cars.") }
-                    } else {
-                        items(hostBookings, key = { it.id }) { booking ->
-                            val canAct = booking.status.equals("awaiting_host", ignoreCase = true) && booking.payment_status.equals("paid", ignoreCase = true)
-                            Card(
-                                shape = RoundedCornerShape(16.dp),
-                                colors = CardDefaults.cardColors(containerColor = LocalHayameColors.current.cardBackground),
-                                border = BorderStroke(
-                                    width = if (pendingBookingFocus == booking.id) 2.dp else 1.dp,
-                                    color = if (pendingBookingFocus == booking.id) LocalHayameColors.current.brandBlue else LocalHayameColors.current.border,
-                                ),
-                                elevation = CardDefaults.cardElevation(
-                                    defaultElevation = if (pendingBookingFocus == booking.id) 6.dp else 1.dp,
-                                ),
-                            ) {
-                                val displayStatus = resolveBookingDisplayStatus(
-                                    status = booking.status,
-                                    startDate = booking.start_date,
-                                    endDate = booking.end_date,
-                                )
-                                val helperText = bookingHelperText(
-                                    status = displayStatus,
-                                    role = BookingDisplayRole.Host,
-                                    paymentStatus = booking.payment_status,
-                                )
-                                val showPaidBadge = shouldShowCompletedPaidBadge(
-                                    displayStatus,
-                                    booking.payment_status,
-                                )
-                                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) {
-                                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                            Text(
-                                                booking.cars?.title ?: "Hayame listing",
-                                                style = MaterialTheme.typography.titleMedium,
-                                                color = LocalHayameColors.current.brandNavy,
-                                                fontWeight = FontWeight.Bold,
-                                            )
-                                            Text(
-                                                text = "Renter: ${booking.renter?.full_name ?: "Guest"}",
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                color = LocalHayameColors.current.mutedText,
-                                                fontWeight = FontWeight.Medium,
-                                            )
-                                            Text(
-                                                text = helperText,
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = LocalHayameColors.current.mutedText,
-                                            )
-                                        }
-                                        BookingStatusBadgeStack(
-                                            status = displayStatus,
-                                            showPaidBadge = showPaidBadge,
-                                        )
-                                    }
-                                    InfoLine(label = "Trip", value = "${booking.start_date.orEmpty().ifBlank { "-" }} - ${booking.end_date.orEmpty().ifBlank { "-" }}")
-                                    InfoLine(label = "Trip use", value = booking.trip_use_address ?: listOfNotNull(booking.trip_use_city, booking.trip_use_region).joinToString(", ").ifBlank { "Not provided" })
-                                    InfoLine(label = "Payment", value = booking.payment_status?.replace("_", " ")?.uppercase() ?: "PENDING")
-                                    InfoLine(label = "Total", value = "GHS${(booking.total_price ?: 0.0).roundToInt()}")
-                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                                        OutlinedButton(
-                                            onClick = {
-                                                val conversationId = booking.conversation_id
-                                                if (!conversationId.isNullOrBlank()) {
-                                                    onOpenConversation(conversationId)
-                                                } else if (!booking.renter_id.isNullOrBlank()) {
-                                                    viewModel.createConversation(
-                                                        hostId = currentUserId.ifBlank { booking.cars?.owner_id.orEmpty() }.takeIf { it.isNotBlank() },
-                                                        participantId = booking.renter_id,
-                                                        carId = booking.car_id,
-                                                    ) { created ->
-                                                        onOpenConversation(created)
-                                                    }
-                                                } else {
-                                                    viewModel.showMessage("Guest conversation is not available for this booking.")
-                                                }
-                                            },
-                                            modifier = Modifier.weight(1f),
-                                        ) {
-                                            Text("Message")
-                                        }
-                                        if (canAct) {
-                                            OutlinedButton(onClick = { viewModel.rejectBooking(booking.id, "Rejected by host") }, modifier = Modifier.weight(1f)) {
-                                                Text("Reject")
-                                            }
-                                            Button(onClick = { viewModel.approveBooking(booking.id) }, modifier = Modifier.weight(1f)) {
-                                                Text("Approve")
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                UiState.Idle -> item { LoadingBlock("Loading host bookings...") }
-            }
-        }
-    }
-}
-
-@Composable
-fun HostEarningsScreen(viewModel: AppViewModel, onBack: () -> Unit) {
-    val bookingsState by viewModel.bookingsState.collectAsState()
-    val me by viewModel.me.collectAsState()
-    val currentUserId = me?.user?.id.orEmpty()
-
-    LaunchedEffect(Unit) { viewModel.loadBookings() }
-
-    val hostBookings = (bookingsState as? UiState.Success<List<BookingDto>>)
-        ?.data
-        .orEmpty()
-        .filter { isHostBooking(it, currentUserId) }
-    val earningBookings = hostBookings.filter {
-        it.status.equals("awaiting_host", ignoreCase = true) ||
-            it.status.equals("confirmed", ignoreCase = true) ||
-            it.status.equals("completed", ignoreCase = true)
-    }
-    val totalEarned = earningBookings.sumOf { (it.total_price ?: 0.0).roundToInt() }
-    val pendingPayout = hostBookings
-        .filter { it.status.equals("awaiting_host", ignoreCase = true) }
-        .sumOf { (it.total_price ?: 0.0).roundToInt() }
-    val completedTrips = hostBookings.count { it.status.equals("completed", ignoreCase = true) }
-    val monthlySeries = remember(hostBookings) { buildHostMonthlySeries(hostBookings) }
-    val maxSeriesAmount = monthlySeries.maxOfOrNull { it.amount }?.coerceAtLeast(1) ?: 1
-    val colors = LocalHayameColors.current
-    val darkMode = colors.pageBackground.luminance() < 0.5f
-    val chartGradient = if (darkMode) {
-        listOf(colors.brandBlue, Color(0xFF1484D9))
-    } else {
-        listOf(colors.brandBlue, colors.brandNavy)
-    }
-
-    Scaffold(
-        containerColor = colors.pageBackground,
-        topBar = {
-            PageTopBar(title = "Earnings")
-        },
-    ) { inner ->
-        LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(inner).padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            item {
-                Text("Payouts overview", style = MaterialTheme.typography.headlineSmall, color = colors.brandNavy, fontWeight = FontWeight.ExtraBold)
-            }
-            item {
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-                    HostMetricCard(title = "Total earned", value = "GHS$totalEarned", modifier = Modifier.weight(1f))
-                    HostMetricCard(title = "Pending", value = "GHS$pendingPayout", modifier = Modifier.weight(1f))
-                }
-            }
-            item {
-                Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = colors.cardBackground)) {
-                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text("Revenue trend", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = colors.brandNavy)
-                        if (monthlySeries.all { it.amount == 0 }) {
-                            EmptyBlock("No payouts yet", "Completed or confirmed bookings will appear as earnings here.")
-                        } else {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = Alignment.Bottom,
-                            ) {
-                                monthlySeries.forEach { bucket ->
-                                    val barHeight = max(20, ((bucket.amount.toFloat() / maxSeriesAmount.toFloat()) * 160f).roundToInt())
-                                    Column(
-                                        modifier = Modifier.weight(1f),
-                                        horizontalAlignment = Alignment.CenterHorizontally,
-                                        verticalArrangement = Arrangement.spacedBy(6.dp),
-                                    ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .height(barHeight.dp)
-                                                .fillMaxWidth()
-                                                .clip(RoundedCornerShape(10.dp))
-                                                .background(
-                                                    Brush.verticalGradient(
-                                                        colors = chartGradient,
-                                                    )
-                                                )
-                                        )
-                                        Text(bucket.month, style = MaterialTheme.typography.labelMedium, color = colors.mutedText)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            item {
-                Text("Payout history", style = MaterialTheme.typography.headlineSmall, color = colors.brandNavy, fontWeight = FontWeight.ExtraBold)
-            }
-            item {
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-                    HostMetricCard(title = "Completed trips", value = "$completedTrips", modifier = Modifier.weight(1f))
-                    HostMetricCard(title = "Tracked months", value = "${monthlySeries.size}", modifier = Modifier.weight(1f))
-                }
-            }
-            items(monthlySeries, key = { it.month }) { bucket ->
-                Card(shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = colors.cardBackground)) {
-                    Row(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text(bucket.month, color = colors.brandNavy, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                        Surface(
-                            shape = RoundedCornerShape(999.dp),
-                            color = if (bucket.isPending) Warning.copy(alpha = 0.14f) else Success.copy(alpha = 0.14f),
-                        ) {
-                            Text(
-                                if (bucket.isPending) "pending" else "paid",
-                                color = if (bucket.isPending) Warning else Success,
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                            )
-                        }
-                        Text("GHS${bucket.amount}", color = LocalHayameColors.current.brandBlue, fontWeight = FontWeight.Bold)
-                    }
-                }
-            }
-        }
-    }
-}
 
 @Composable
 fun HostReviewsScreen(viewModel: AppViewModel, onBack: () -> Unit) {
     val state by viewModel.hostReviewsListState.collectAsState()
     val colors = LocalHayameColors.current
     LaunchedEffect(Unit) { viewModel.loadHostReviews() }
+    val reviews = (state as? UiState.Success<List<ReviewDto>>)?.data.orEmpty()
+        .sortedByDescending { it.created_at.orEmpty() }
+    val average = if (reviews.isEmpty()) 0.0 else reviews.sumOf { it.rating ?: 0.0 } / reviews.size
 
     Scaffold(
         containerColor = colors.pageBackground,
-        topBar = {
-            PageTopBar(title = "Host Reviews", onBack = onBack)
-        },
+        topBar = { PageTopBar(title = "Host Reviews", onBack = onBack) },
     ) { inner ->
-        LazyColumn(
-            modifier = Modifier.fillMaxSize().background(colors.pageBackground).padding(inner).padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+        HayameRefreshBox(
+            onRefresh = { viewModel.loadHostReviews() },
+            modifier = Modifier.fillMaxSize(),
+            indicatorTopPadding = inner.calculateTopPadding(),
         ) {
-            when (val s = state) {
-                UiState.Loading -> item { LoadingBlock("Loading reviews...") }
-                is UiState.Error -> item { ErrorBlock(s.message, onRetry = { viewModel.loadHostReviews() }) }
-                UiState.Empty -> item { EmptyBlock("No reviews yet", "Reviews from completed trips will appear here.") }
-                is UiState.Success -> {
-                    items(s.data, key = { it.id }) { review ->
-                        Card(
-                            shape = RoundedCornerShape(14.dp),
-                            colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
-                            border = BorderStroke(1.dp, colors.border),
-                        ) {
-                            Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Text("Rating: ${review.rating ?: 0}", color = colors.brandNavy, fontWeight = FontWeight.Bold)
-                                Text(review.comment ?: "No comment", color = colors.mutedText)
-                                Text(review.created_at ?: "", style = MaterialTheme.typography.labelSmall, color = colors.mutedText)
+        LazyColumn(
+                modifier = Modifier.fillMaxSize().background(colors.pageBackground).padding(inner),
+                contentPadding = PaddingValues(16.dp),
+            ) {
+                item(key = "header") {
+                    StaggeredAppear(index = 0) {
+                        Column(verticalArrangement = Arrangement.spacedBy(3.dp), modifier = Modifier.padding(bottom = 16.dp)) {
+                            Text("Guest feedback", fontSize = 30.sp, fontWeight = FontWeight.Bold, color = colors.brandNavy)
+                            Text(
+                                if (reviews.isEmpty()) "Reviews from completed trips show up here."
+                                else "${String.format("%.1f", average)} average across ${reviews.size} ${if (reviews.size == 1) "review" else "reviews"}",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = colors.mutedText,
+                            )
+                        }
+                    }
+                }
+                when (val s = state) {
+                    UiState.Loading, UiState.Idle -> items(4, key = { "skeleton-$it" }) {
+                        Row(modifier = Modifier.padding(vertical = 14.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                            HayameShimmerBlock(modifier = Modifier.size(44.dp), cornerRadius = 22.dp)
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                HayameShimmerBlock(modifier = Modifier.width(140.dp).height(14.dp))
+                                HayameShimmerBlock(modifier = Modifier.width(220.dp).height(12.dp))
+                            }
+                        }
+                    }
+                    is UiState.Error -> item(key = "error") { ErrorBlock(s.message, onRetry = { viewModel.loadHostReviews() }) }
+                    UiState.Empty -> item(key = "empty") { StaggeredAppear(index = 1) { HostReviewsEmptyState() } }
+                    is UiState.Success -> {
+                        if (reviews.isEmpty()) {
+                            item(key = "empty") { StaggeredAppear(index = 1) { HostReviewsEmptyState() } }
+                        } else {
+                            item(key = "summary") {
+                                StaggeredAppear(index = 1) { HostReviewsSummary(reviews = reviews, average = average) }
+                            }
+                            itemsIndexed(reviews, key = { _, review -> review.id }) { index, review ->
+                                StaggeredAppear(index = minOf(index, 8) + 2) {
+                                    Column {
+                                        HostReviewRow(review)
+                                        if (index < reviews.size - 1) {
+                                            HorizontalDivider(color = colors.border, modifier = Modifier.padding(start = 58.dp))
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
                 }
-                UiState.Idle -> item { LoadingBlock("Loading reviews...") }
             }
         }
+    }
+}
+
+@Composable
+private fun HostReviewsSummary(reviews: List<ReviewDto>, average: Double) {
+    val colors = LocalHayameColors.current
+    var revealed by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { revealed = true }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 8.dp)
+            .clip(RoundedCornerShape(20.dp))
+            .background(colors.cardBackground)
+            .border(1.dp, colors.border, RoundedCornerShape(20.dp))
+            .padding(16.dp),
+        horizontalArrangement = Arrangement.spacedBy(18.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(String.format("%.1f", average), fontSize = 44.sp, fontWeight = FontWeight.Bold, color = colors.brandNavy)
+            HostStarRow(rating = average, size = 14.dp)
+            Text("${reviews.size} ${if (reviews.size == 1) "review" else "reviews"}", style = MaterialTheme.typography.labelLarge, color = colors.mutedText)
+        }
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+            (5 downTo 1).forEach { stars ->
+                val count = reviews.count { (it.rating ?: 0.0).roundToInt() == stars }
+                val fraction by animateFloatAsState(
+                    targetValue = if (revealed) count.toFloat() / reviews.size.coerceAtLeast(1) else 0f,
+                    animationSpec = tween(700, delayMillis = 150 + (5 - stars) * 60),
+                    label = "review-bar-$stars",
+                )
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("$stars", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = colors.mutedText, modifier = Modifier.width(10.dp))
+                    Box(modifier = Modifier.weight(1f).height(7.dp).clip(CircleShape).background(colors.fieldBackground)) {
+                        Box(modifier = Modifier.fillMaxHeight().fillMaxWidth(fraction).clip(CircleShape).background(colors.brandBlue))
+                    }
+                    Text("$count", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = colors.brandNavy, modifier = Modifier.width(18.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HostReviewRow(review: ReviewDto) {
+    val colors = LocalHayameColors.current
+    val name = review.reviewer?.full_name?.takeIf { it.isNotBlank() } ?: "Hayame guest"
+    val dateLabel = review.created_at?.take(10)?.let { raw ->
+        runCatching { LocalDate.parse(raw).format(DateTimeFormatter.ofPattern("d MMM yyyy")) }.getOrNull()
+    }.orEmpty()
+    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp), horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.Top) {
+        Box(modifier = Modifier.size(44.dp).background(colors.brandLight, CircleShape), contentAlignment = Alignment.Center) {
+            Text(avatarInitials(name, "G"), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = colors.brandNavy)
+        }
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = colors.brandNavy, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                Text(dateLabel, style = MaterialTheme.typography.labelMedium, color = colors.mutedText)
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                HostStarRow(rating = review.rating ?: 0.0, size = 11.dp)
+                review.cars?.title?.takeIf { it.isNotBlank() }?.let { title ->
+                    Icon(Icons.Outlined.DirectionsCar, contentDescription = null, tint = colors.mutedText, modifier = Modifier.size(12.dp))
+                    Text(title, style = MaterialTheme.typography.labelLarge, color = colors.mutedText, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+            review.comment?.takeIf { it.isNotBlank() }?.let { comment ->
+                Text(comment, style = MaterialTheme.typography.bodyLarge, color = colors.brandNavy.copy(alpha = 0.88f))
+            }
+        }
+    }
+}
+
+@Composable
+private fun HostStarRow(rating: Double, size: androidx.compose.ui.unit.Dp) {
+    val colors = LocalHayameColors.current
+    Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+        (1..5).forEach { star ->
+            val filled = rating - (star - 1) >= 0.5
+            Icon(
+                if (filled) Icons.Filled.Star else Icons.Outlined.StarBorder,
+                contentDescription = null,
+                tint = if (filled) colors.brandBlue else colors.mutedText.copy(alpha = 0.45f),
+                modifier = Modifier.size(size),
+            )
+        }
+    }
+}
+
+@Composable
+private fun HostReviewsEmptyState() {
+    val colors = LocalHayameColors.current
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(22.dp))
+            .background(colors.cardBackground)
+            .border(1.dp, colors.border, RoundedCornerShape(22.dp))
+            .padding(horizontal = 24.dp, vertical = 36.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Box(modifier = Modifier.size(84.dp).background(colors.warning.copy(alpha = 0.14f), CircleShape), contentAlignment = Alignment.Center) {
+            Icon(Icons.Outlined.StarBorder, contentDescription = null, tint = colors.warning, modifier = Modifier.size(34.dp))
+        }
+        Text("No reviews yet", fontSize = 19.sp, fontWeight = FontWeight.Bold, color = colors.brandNavy)
+        Text(
+            "Guests can leave a rating after a completed trip. Clear handoffs and a clean car earn the best ones.",
+            style = MaterialTheme.typography.bodyLarge,
+            color = colors.mutedText,
+            textAlign = TextAlign.Center,
+        )
     }
 }
 
@@ -10076,128 +7246,6 @@ fun GuestProfileScreen(
 }
 
 @Composable
-fun HostProfileScreen(
-    viewModel: AppViewModel,
-    onBack: () -> Unit,
-    onOpenReviews: () -> Unit = {},
-    onOpenFavorites: () -> Unit = {},
-    onOpenContact: () -> Unit = {},
-    onOpenProtection: () -> Unit = {},
-    onOpenCancellation: () -> Unit = {},
-    onTurnOffHostMode: () -> Unit = onBack,
-) {
-    val me by viewModel.me.collectAsState()
-    val notificationPreferences by viewModel.notificationPreferences.collectAsState()
-    val profile = me?.profile
-    val avatarUrl = resolveAppImage(me.preferredAvatarRaw())
-    val fullName = me.preferredFullName()?.takeIf { it.isNotBlank() } ?: me?.user?.email ?: "Host"
-    val email = me.preferredEmail() ?: me?.user?.email.orEmpty()
-    val location = listOfNotNull(me.preferredCity(), me.preferredRegion())
-        .filter { it.isNotBlank() }
-        .joinToString(", ")
-        .ifBlank { "Location not set" }
-    val hostLevel = profile?.host_level?.takeIf { !it.isNullOrBlank() } ?: "Verified Host"
-    val colors = LocalHayameColors.current
-
-    Scaffold(
-        containerColor = colors.pageBackground,
-        topBar = {
-            PageTopBar(title = "Profile")
-        },
-    ) { inner ->
-        LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(inner).padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            item {
-                Card(
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
-                    border = BorderStroke(1.dp, colors.border),
-                ) {
-                    Column(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            RemoteAvatar(
-                                imageUrl = avatarUrl,
-                                name = fullName,
-                                fallback = "H",
-                                size = 56.dp,
-                                textStyle = MaterialTheme.typography.titleMedium,
-                            )
-                            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Text(fullName, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = colors.brandNavy)
-                                Text(email, style = MaterialTheme.typography.bodyMedium, color = colors.mutedText)
-                            }
-                        }
-                        HorizontalDivider(color = colors.border)
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            Icon(Icons.Outlined.LocationOn, contentDescription = null, tint = colors.mutedText)
-                            Text(location, style = MaterialTheme.typography.bodyMedium, color = colors.brandNavy)
-                        }
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            Icon(Icons.Outlined.Shield, contentDescription = null, tint = LocalHayameColors.current.brandBlue)
-                            Text("Host level: $hostLevel", style = MaterialTheme.typography.bodyMedium, color = LocalHayameColors.current.brandBlue, fontWeight = FontWeight.SemiBold)
-                        }
-                    }
-                }
-            }
-            item {
-                Text("Notifications", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = colors.brandNavy)
-            }
-            item {
-                NotificationPreferencesCard(
-                    preferences = notificationPreferences,
-                    isAuthenticated = true,
-                    onPreferenceChange = { key, enabled ->
-                        when (key) {
-                            "booking_updates" -> viewModel.updateNotificationPreference(bookingUpdates = enabled)
-                            "messages" -> viewModel.updateNotificationPreference(messages = enabled)
-                            "account_security" -> viewModel.updateNotificationPreference(accountSecurity = enabled)
-                            "news_announcements" -> viewModel.updateNotificationPreference(newsAnnouncements = enabled)
-                        }
-                    },
-                )
-            }
-            item {
-                Text("Host", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = colors.brandNavy)
-            }
-            item {
-                Card(
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
-                    border = BorderStroke(1.dp, colors.border),
-                ) {
-                    Column(modifier = Modifier.padding(8.dp)) {
-                        ActionRow("Guest feedback", Icons.Outlined.FavoriteBorder, onOpenReviews)
-                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = colors.border)
-                        ActionRow("Favorites analytics", Icons.Outlined.FavoriteBorder, onOpenFavorites)
-                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = colors.border)
-                        ActionRow("Contact", Icons.Outlined.MailOutline, onOpenContact)
-                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = colors.border)
-                        ActionRow("Protection", Icons.Outlined.Shield, onOpenProtection)
-                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = colors.border)
-                        ActionRow("Cancellation", Icons.Outlined.CalendarMonth, onOpenCancellation)
-                    }
-                }
-            }
-            item {
-                Card(
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
-                    border = BorderStroke(1.dp, colors.border),
-                ) {
-                    Column(modifier = Modifier.padding(8.dp)) {
-                        ActionRow("Turn off Host mode", Icons.Outlined.Home, onTurnOffHostMode)
-                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = colors.border)
-                        ActionRow("Sign out", Icons.AutoMirrored.Outlined.ExitToApp, onClick = { viewModel.logout() }, color = Danger)
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
 fun SupportLegalScreen(
     onBack: () -> Unit,
     onOpenContact: () -> Unit = {},
@@ -10240,24 +7288,9 @@ fun SupportLegalScreen(
     }
 }
 
-@Composable
-private fun HostMetricCard(title: String, value: String, modifier: Modifier = Modifier) {
-    val colors = LocalHayameColors.current
-    Card(
-        modifier = modifier,
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-    ) {
-        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(title, style = MaterialTheme.typography.labelMedium, color = colors.mutedText)
-            Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.ExtraBold, color = colors.brandNavy)
-        }
-    }
-}
 
 @Composable
-private fun PageTopBar(title: String, onBack: (() -> Unit)? = null) {
+fun PageTopBar(title: String, onBack: (() -> Unit)? = null) {
     val colors = LocalHayameColors.current
     Surface(color = colors.cardBackground, tonalElevation = 2.dp) {
         Row(
@@ -10290,7 +7323,7 @@ private fun PageTopBar(title: String, onBack: (() -> Unit)? = null) {
     }
 }
 
-private data class HostMonthlyBucket(
+data class HostMonthlyBucket(
     val month: String,
     val amount: Int,
     val isPending: Boolean,
@@ -10312,6 +7345,7 @@ private data class ListingEditorDraftState(
     val description: String = "",
     val instantBook: Boolean = false,
     val deliveryAvailable: Boolean = false,
+    val allowOneDayBooking: Boolean = false,
     val airConditioning: Boolean = true,
     val deliveryFee: Int = 0,
     val insuranceFee: Int = 0,
@@ -10354,34 +7388,8 @@ private fun buildGeneratedListingTitle(
     return "$normalizedBrand $normalizedModel $normalizedYear"
 }
 
-private fun resolveAppImage(raw: String?): String? = RemoteImageUrlResolver.resolve(raw)
+fun resolveAppImage(raw: String?): String? = RemoteImageUrlResolver.resolve(raw)
 
-@Composable
-private fun HostListingThumbnail(imageUrl: String?) {
-    Box(
-        modifier = Modifier
-            .size(width = 92.dp, height = 76.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .background(LocalHayameColors.current.brandLight),
-        contentAlignment = Alignment.Center,
-    ) {
-        if (!imageUrl.isNullOrBlank()) {
-            AsyncImage(
-                model = imageUrl,
-                contentDescription = null,
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop,
-            )
-        } else {
-            Icon(
-                Icons.Outlined.DirectionsCar,
-                contentDescription = null,
-                tint = LocalHayameColors.current.brandBlue,
-                modifier = Modifier.size(22.dp),
-            )
-        }
-    }
-}
 
 private fun avatarInitials(value: String?, fallback: String = "U"): String {
     val initials = value
@@ -10397,7 +7405,7 @@ private fun avatarInitials(value: String?, fallback: String = "U"): String {
 }
 
 @Composable
-private fun RemoteAvatar(
+fun RemoteAvatar(
     imageUrl: String?,
     name: String?,
     fallback: String,
@@ -10546,12 +7554,12 @@ private suspend fun prepareListingImageFile(
     temp
 }
 
-private fun isHostBooking(booking: BookingDto, currentUserId: String): Boolean {
+fun isHostBooking(booking: BookingDto, currentUserId: String): Boolean {
     return booking.role.orEmpty().contains("owner", ignoreCase = true) ||
         (!currentUserId.isBlank() && booking.cars?.owner_id == currentUserId)
 }
 
-private fun bookingMonthKey(raw: String?): String? {
+fun bookingMonthKey(raw: String?): String? {
     val parsed = parseApiLocalDate(raw) ?: return null
     return parsed.format(DateTimeFormatter.ofPattern("yyyy-MM"))
 }
@@ -10562,7 +7570,7 @@ private fun parseApiLocalDate(raw: String?): LocalDate? {
     return runCatching { LocalDate.parse(value.take(10)) }.getOrNull()
 }
 
-private fun buildHostMonthlySeries(bookings: List<BookingDto>): List<HostMonthlyBucket> {
+fun buildHostMonthlySeries(bookings: List<BookingDto>): List<HostMonthlyBucket> {
     val formatter = DateTimeFormatter.ofPattern("MMM")
     val now = LocalDate.now().withDayOfMonth(1)
     return (0..5).map { offset ->
@@ -10911,10 +7919,7 @@ private fun HostListingBottomBar(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(
-                            brush = Brush.horizontalGradient(colors = primaryGradient),
-                            shape = RoundedCornerShape(18.dp),
-                        )
+                        .background(colors.brandBlue, RoundedCornerShape(18.dp))
                         .padding(vertical = 16.dp),
                     contentAlignment = Alignment.Center,
                 ) {
@@ -11119,78 +8124,60 @@ fun HostPublicProfileScreen(
         containerColor = colors.pageBackground,
         topBar = { PageTopBar(title = "Host", onBack = onBack) },
     ) { inner ->
-        LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(inner).padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
+        HayameRefreshBox(
+            onRefresh = { viewModel.loadCars(mapOf("limit" to "100")) },
+            modifier = Modifier.fillMaxSize(),
+            indicatorTopPadding = inner.calculateTopPadding(),
         ) {
-            item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    val avatarUrl = RemoteImageUrlResolver.resolve(hostAvatar)
-                    if (!avatarUrl.isNullOrBlank()) {
-                        AsyncImage(
-                            model = avatarUrl,
-                            contentDescription = null,
-                            modifier = Modifier.size(54.dp).clip(CircleShape),
-                            contentScale = ContentScale.Crop,
-                        )
-                    } else {
-                        val initials = hostName.split(" ").take(2)
-                            .mapNotNull { it.firstOrNull()?.toString() }
-                            .joinToString("").uppercase().ifEmpty { "H" }
-                        Box(
-                            modifier = Modifier
-                                .size(54.dp)
-                                .background(colors.brandLight, CircleShape)
-                                .border(1.dp, colors.controlStroke, CircleShape),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Text(initials, fontWeight = FontWeight.Bold, color = colors.brandNavy)
+        LazyColumn(
+                modifier = Modifier.fillMaxSize().padding(inner).padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        val avatarUrl = RemoteImageUrlResolver.resolve(hostAvatar)
+                        if (!avatarUrl.isNullOrBlank()) {
+                            AsyncImage(
+                                model = avatarUrl,
+                                contentDescription = null,
+                                modifier = Modifier.size(54.dp).clip(CircleShape),
+                                contentScale = ContentScale.Crop,
+                            )
+                        } else {
+                            val initials = hostName.split(" ").take(2)
+                                .mapNotNull { it.firstOrNull()?.toString() }
+                                .joinToString("").uppercase().ifEmpty { "H" }
+                            Box(
+                                modifier = Modifier
+                                    .size(54.dp)
+                                    .background(colors.brandLight, CircleShape)
+                                    .border(1.dp, colors.controlStroke, CircleShape),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(initials, fontWeight = FontWeight.Bold, color = colors.brandNavy)
+                            }
+                        }
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text(
+                                hostName,
+                                style = MaterialTheme.typography.headlineSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = colors.brandNavy,
+                            )
+                            Text(
+                                "Verified host profile",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = colors.mutedText,
+                            )
                         }
                     }
-                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Text(
-                            hostName,
-                            style = MaterialTheme.typography.headlineSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = colors.brandNavy,
-                        )
-                        Text(
-                            "Verified host profile",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = colors.mutedText,
-                        )
-                    }
                 }
-            }
 
-            item {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .shadow(0.dp, RoundedCornerShape(16.dp), false, colors.cardShadow, colors.cardShadow)
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(colors.cardBackground)
-                        .border(1.dp, colors.border, RoundedCornerShape(16.dp))
-                        .padding(16.dp),
-                ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        HostVerificationLine("ID Verified", idVerified)
-                        HostVerificationLine("Phone Verified", phoneVerified)
-                        HostVerificationLine("Email Verified", emailVerified)
-                    }
-                }
-            }
-
-            item { SectionHeader("Listings") }
-
-            when {
-                carsState is UiState.Loading -> items(3) { HostListingPlaceholderRow() }
-                hostCars.isEmpty() -> item { EmptyBlock("No listings", "This host has no active listings.") }
-                else -> items(hostCars, key = { it.id }) { car ->
+                item {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -11198,33 +8185,35 @@ fun HostPublicProfileScreen(
                             .clip(RoundedCornerShape(16.dp))
                             .background(colors.cardBackground)
                             .border(1.dp, colors.border, RoundedCornerShape(16.dp))
-                            .clickable { onOpenCarDetail(car.id) }
-                            .padding(14.dp),
+                            .padding(16.dp),
                     ) {
-                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text(
-                                car.title ?: listOfNotNull(car.brand, car.model).joinToString(" "),
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = colors.brandNavy,
-                            )
-                            Text(
-                                listOfNotNull(car.city, car.region).joinToString(", "),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = colors.mutedText,
-                            )
-                            Text(
-                                "GH₵${(car.daily_price ?: 0.0).toInt()} / day",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = colors.brandBlue,
-                            )
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            HostVerificationLine("ID Verified", idVerified)
+                            HostVerificationLine("Phone Verified", phoneVerified)
+                            HostVerificationLine("Email Verified", emailVerified)
                         }
                     }
                 }
-            }
 
-            item { Spacer(modifier = Modifier.height(24.dp)) }
+                item { SectionHeader("Listings") }
+
+                when {
+                    carsState is UiState.Loading -> items(3) { HostListingPlaceholderRow() }
+                    hostCars.isEmpty() -> item { EmptyBlock("No listings", "This host has no active listings.") }
+                    else -> items(hostCars, key = { it.id }) { car ->
+                        ListingCard(
+                            car = car,
+                            isFavorite = false,
+                            imageHeight = 170.dp,
+                            showsFavoriteButton = false,
+                            onClick = { onOpenCarDetail(car.id) },
+                            onFavoriteClick = {},
+                        )
+                    }
+                }
+
+                item { Spacer(modifier = Modifier.height(24.dp)) }
+            }
         }
     }
 }
@@ -11240,9 +8229,19 @@ fun AdminShellScreen(
     viewModel: AppViewModel,
     onExitAdmin: () -> Unit,
     onOpenConversation: (String) -> Unit,
+    onOpenCarEditor: (String) -> Unit = {},
 ) {
     var selectedTab by remember { mutableStateOf(AdminTab.HOME) }
+    var adminPage by rememberSaveable { mutableStateOf("home") }
+    var previewCarId by rememberSaveable { mutableStateOf<String?>(null) }
     val colors = LocalHayameColors.current
+
+    BackHandler(enabled = selectedTab == AdminTab.HOME && adminPage != "home") {
+        adminPage = "home"
+        previewCarId = null
+    }
+    // Back from Messages or Profile returns to the admin Home tab first.
+    BackHandler(enabled = selectedTab != AdminTab.HOME) { selectedTab = AdminTab.HOME }
 
     Scaffold(
         containerColor = colors.pageBackground,
@@ -11253,7 +8252,11 @@ fun AdminShellScreen(
             ) {
                 NavigationBarItem(
                     selected = selectedTab == AdminTab.HOME,
-                    onClick = { selectedTab = AdminTab.HOME },
+                    onClick = {
+                        selectedTab = AdminTab.HOME
+                        adminPage = "home"
+                        previewCarId = null
+                    },
                     icon = { Icon(Icons.Outlined.Shield, contentDescription = null) },
                     label = { Text("Admin") },
                     colors = NavigationBarItemDefaults.colors(
@@ -11294,7 +8297,32 @@ fun AdminShellScreen(
         },
     ) { inner ->
         when (selectedTab) {
-            AdminTab.HOME -> AdminHomeScreen(viewModel = viewModel, paddingValues = inner)
+            AdminTab.HOME -> when (adminPage) {
+                "platform" -> AdminPlatformScreen(
+                    viewModel = viewModel,
+                    paddingValues = inner,
+                    onBack = { adminPage = "home" },
+                    onPreviewCar = { carId -> previewCarId = carId; adminPage = "car" },
+                )
+                "filters" -> AdminFiltersScreen(paddingValues = inner, onBack = { adminPage = "home" })
+                "user" -> AdminUserDetailScreen(viewModel = viewModel, paddingValues = inner, onBack = { adminPage = "home" })
+                "car" -> AdminCarPreviewScreen(
+                    viewModel = viewModel,
+                    carId = previewCarId.orEmpty(),
+                    paddingValues = inner,
+                    onBack = { adminPage = "home"; previewCarId = null },
+                    onEdit = onOpenCarEditor,
+                )
+                else -> AdminHomeScreen(
+                    viewModel = viewModel,
+                    paddingValues = inner,
+                    onOpenPlatform = { adminPage = "platform" },
+                    onOpenMessages = { selectedTab = AdminTab.MESSAGES },
+                    onOpenFilters = { adminPage = "filters" },
+                    onOpenUser = { adminPage = "user" },
+                    onPreviewCar = { carId -> previewCarId = carId; adminPage = "car" },
+                )
+            }
             AdminTab.MESSAGES -> MessagesScreen(
                 viewModel = viewModel,
                 onBack = {},
@@ -11312,7 +8340,15 @@ fun AdminShellScreen(
 }
 
 @Composable
-private fun AdminHomeScreen(viewModel: AppViewModel, paddingValues: PaddingValues) {
+private fun AdminHomeScreen(
+    viewModel: AppViewModel,
+    paddingValues: PaddingValues,
+    onOpenPlatform: () -> Unit,
+    onOpenMessages: () -> Unit,
+    onOpenFilters: () -> Unit,
+    onOpenUser: () -> Unit,
+    onPreviewCar: (String) -> Unit,
+) {
     val colors = LocalHayameColors.current
     val carsState by viewModel.carsState.collectAsState()
     val me by viewModel.me.collectAsState()
@@ -11345,6 +8381,23 @@ private fun AdminHomeScreen(viewModel: AppViewModel, paddingValues: PaddingValue
                 title = "Platform controls",
                 subtitle = "${pendingCars.size} pending listing${if (pendingCars.size == 1) "" else "s"}",
                 icon = Icons.Outlined.Shield,
+                onClick = onOpenPlatform,
+            )
+        }
+        item {
+            AdminNavCard(
+                title = "Office messages",
+                subtitle = "Open admin conversations",
+                icon = Icons.Outlined.MailOutline,
+                onClick = onOpenMessages,
+            )
+        }
+        item {
+            AdminNavCard(
+                title = "Filter catalog",
+                subtitle = "Browse vehicle makes and models",
+                icon = Icons.Outlined.Tune,
+                onClick = onOpenFilters,
             )
         }
         item {
@@ -11352,6 +8405,7 @@ private fun AdminHomeScreen(viewModel: AppViewModel, paddingValues: PaddingValue
                 title = "User details",
                 subtitle = "Signed in as ${me?.profile?.full_name ?: me?.user?.email ?: "Admin"}",
                 icon = Icons.Outlined.Person,
+                onClick = onOpenUser,
             )
         }
 
@@ -11366,13 +8420,13 @@ private fun AdminHomeScreen(viewModel: AppViewModel, paddingValues: PaddingValue
                     }
                 } else {
                     items(pendingCars.take(5), key = { it.id }) { car ->
-                        AdminListingModerationCard(car = car, viewModel = viewModel)
+                        AdminListingModerationCard(car = car, viewModel = viewModel, onPreview = { onPreviewCar(car.id) })
                     }
                 }
                 if (allCars.isNotEmpty()) {
                     item { SectionHeader("All listings (${allCars.size})") }
                     items(allCars, key = { "all_${it.id}" }) { car ->
-                        AdminListingModerationCard(car = car, viewModel = viewModel)
+                        AdminListingModerationCard(car = car, viewModel = viewModel, onPreview = { onPreviewCar(car.id) })
                     }
                 }
             }
@@ -11383,7 +8437,12 @@ private fun AdminHomeScreen(viewModel: AppViewModel, paddingValues: PaddingValue
 }
 
 @Composable
-private fun AdminNavCard(title: String, subtitle: String, icon: androidx.compose.ui.graphics.vector.ImageVector) {
+private fun AdminNavCard(
+    title: String,
+    subtitle: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    onClick: () -> Unit,
+) {
     val colors = LocalHayameColors.current
     Box(
         modifier = Modifier
@@ -11392,6 +8451,7 @@ private fun AdminNavCard(title: String, subtitle: String, icon: androidx.compose
             .clip(RoundedCornerShape(16.dp))
             .background(colors.cardBackground)
             .border(1.dp, colors.border, RoundedCornerShape(16.dp))
+            .clickable(onClick = onClick)
             .padding(16.dp),
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -11414,7 +8474,11 @@ private fun AdminNavCard(title: String, subtitle: String, icon: androidx.compose
 }
 
 @Composable
-private fun AdminListingModerationCard(car: CarDto, viewModel: AppViewModel) {
+private fun AdminListingModerationCard(
+    car: CarDto,
+    viewModel: AppViewModel,
+    onPreview: () -> Unit = {},
+) {
     val colors = LocalHayameColors.current
     val isApproved = car.approval_status.orEmpty().equals("approved", ignoreCase = true)
 
@@ -11425,6 +8489,7 @@ private fun AdminListingModerationCard(car: CarDto, viewModel: AppViewModel) {
             .clip(RoundedCornerShape(16.dp))
             .background(colors.cardBackground)
             .border(1.dp, colors.border, RoundedCornerShape(16.dp))
+            .clickable(onClick = onPreview)
             .padding(14.dp),
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -11467,6 +8532,195 @@ private fun AdminListingModerationCard(car: CarDto, viewModel: AppViewModel) {
                         onClick = { viewModel.updateCarApprovalStatus(car.id, "rejected") },
                     )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AdminPlatformScreen(
+    viewModel: AppViewModel,
+    paddingValues: PaddingValues,
+    onBack: () -> Unit,
+    onPreviewCar: (String) -> Unit,
+) {
+    val carsState by viewModel.carsState.collectAsState()
+    val pendingCars = (carsState as? UiState.Success<List<CarDto>>)?.data.orEmpty().filter {
+        !it.approval_status.orEmpty().equals("approved", ignoreCase = true)
+    }
+
+    Column(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
+        PageTopBar(title = "Admin Platform", onBack = onBack)
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            item { Spacer(modifier = Modifier.height(8.dp)) }
+            item { SectionHeader("Platform Controls") }
+            item { SectionHeader("Listing approvals") }
+            when (carsState) {
+                UiState.Loading, UiState.Idle -> items(3) { HostListingPlaceholderRow() }
+                is UiState.Error -> item {
+                    ErrorBlock((carsState as UiState.Error).message, onRetry = { viewModel.loadCars(mapOf("limit" to "100")) })
+                }
+                else -> {
+                    if (pendingCars.isEmpty()) {
+                        item { EmptyBlock("No pending listings", "All listings are approved.") }
+                    } else {
+                        items(pendingCars, key = { it.id }) { car ->
+                            AdminListingModerationCard(
+                                car = car,
+                                viewModel = viewModel,
+                                onPreview = { onPreviewCar(car.id) },
+                            )
+                        }
+                    }
+                }
+            }
+            item { Spacer(modifier = Modifier.height(24.dp)) }
+        }
+    }
+}
+
+@Composable
+private fun AdminFiltersScreen(
+    paddingValues: PaddingValues,
+    onBack: () -> Unit,
+) {
+    val colors = LocalHayameColors.current
+    val allModels = remember {
+        AndroidReferenceData.carModelsByMake.values.flatten().distinct().sortedWith(String.CASE_INSENSITIVE_ORDER)
+    }
+
+    Column(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
+        PageTopBar(title = "Filter Catalog", onBack = onBack)
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            item { Spacer(modifier = Modifier.height(8.dp)) }
+            item { SectionHeader("Car makes") }
+            items(AndroidReferenceData.carMakes, key = { "make_$it" }) { make ->
+                Text(
+                    make,
+                    modifier = Modifier.fillMaxWidth().background(colors.cardBackground, RoundedCornerShape(12.dp)).padding(12.dp),
+                    color = colors.brandNavy,
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+            }
+            item { SectionHeader("Models") }
+            items(allModels, key = { "model_$it" }) { model ->
+                Text(
+                    model,
+                    modifier = Modifier.fillMaxWidth().background(colors.cardBackground, RoundedCornerShape(12.dp)).padding(12.dp),
+                    color = colors.brandNavy,
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+            }
+            item { Spacer(modifier = Modifier.height(24.dp)) }
+        }
+    }
+}
+
+@Composable
+private fun AdminUserDetailScreen(
+    viewModel: AppViewModel,
+    paddingValues: PaddingValues,
+    onBack: () -> Unit,
+) {
+    val me by viewModel.me.collectAsState()
+    val colors = LocalHayameColors.current
+    val profile = me?.profile
+
+    Column(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
+        PageTopBar(title = "User Details", onBack = onBack)
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            item { SectionHeader(me.preferredFullName() ?: "Hayame User") }
+            item {
+                Card(
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
+                    border = BorderStroke(1.dp, colors.border),
+                ) {
+                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        InfoRow("Email", me?.user?.email ?: "—")
+                        InfoRow("Phone", profile?.phone ?: "—")
+                        InfoRow("City", profile?.city ?: "—")
+                        InfoRow("Region", profile?.region ?: "—")
+                        InfoRow("Role", me.preferredRole()?.replaceFirstChar { it.uppercase() } ?: "Admin")
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AdminCarPreviewScreen(
+    viewModel: AppViewModel,
+    carId: String,
+    paddingValues: PaddingValues,
+    onBack: () -> Unit,
+    onEdit: (String) -> Unit,
+) {
+    val carsState by viewModel.carsState.collectAsState()
+    val colors = LocalHayameColors.current
+    val car = (carsState as? UiState.Success<List<CarDto>>)?.data?.firstOrNull { it.id == carId }
+
+    Column(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
+        PageTopBar(title = "Listing Preview", onBack = onBack)
+        if (car == null) {
+            EmptyBlock("Listing unavailable", "This listing could not be loaded.")
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize().padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                item {
+                    val imageUrl = resolveAppImage(car.image_url)
+                        ?: car.car_photos.orEmpty().firstNotNullOfOrNull { resolveAppImage(it.url) }
+                    if (!imageUrl.isNullOrBlank()) {
+                        AsyncImage(
+                            model = imageUrl,
+                            contentDescription = car.title,
+                            modifier = Modifier.fillMaxWidth().height(220.dp).clip(RoundedCornerShape(16.dp)),
+                            contentScale = ContentScale.Crop,
+                        )
+                    }
+                }
+                item {
+                    Text(
+                        car.title ?: listOfNotNull(car.brand, car.model).joinToString(" "),
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = colors.brandNavy,
+                    )
+                }
+                item { Text(car.description ?: "No description available.", color = colors.mutedText) }
+                item {
+                    Card(
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
+                        border = BorderStroke(1.dp, colors.border),
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            InfoRow("Status", car.approval_status?.replaceFirstChar { it.uppercase() } ?: "Pending")
+                            InfoRow("Price", "GHS${(car.daily_price ?: 0.0).roundToInt()}/day")
+                            InfoRow("Host", car.host_name ?: car.owner?.full_name ?: "Unknown")
+                        }
+                    }
+                }
+                item {
+                    GradientPillButton(
+                        text = "Edit Listing",
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = { onEdit(car.id) },
+                    )
+                }
+                item { Spacer(modifier = Modifier.height(24.dp)) }
             }
         }
     }
@@ -11558,7 +8812,7 @@ private fun InfoRow(label: String, value: String) {
     }
 }
 
-private fun openExternalUrl(context: Context, url: String) {
+internal fun openExternalUrl(context: Context, url: String) {
     runCatching {
         val heightPx = (context.resources.displayMetrics.heightPixels * 0.82f).toInt()
         CustomTabsIntent.Builder()
@@ -11584,4 +8838,237 @@ private fun copyUriToTempFile(context: Context, uri: Uri, prefix: String): File?
         context.contentResolver.openInputStream(uri).use { input -> temp.outputStream().use { output -> input?.copyTo(output) } }
         temp
     }.getOrNull()
+}
+
+
+// MARK: Car type icons ----------------------------------------------------------------------------
+
+/** Maps a listing's car type (and the Home category pills) to the bundled `ic_cartype_*` vectors. */
+internal fun carTypeIconRes(type: String): Int {
+    return when (type.trim().lowercase(Locale.US)) {
+        "all" -> R.drawable.ic_cartype_all
+        "suv", "4x4", "jeep", "4wd" -> R.drawable.ic_cartype_suv
+        "sedan", "saloon" -> R.drawable.ic_cartype_sedan
+        "hatchback", "compact", "hatch", "mini", "small" -> R.drawable.ic_cartype_hatchback
+        "crossover" -> R.drawable.ic_cartype_crossover
+        "convertible", "cabriolet", "roadster" -> R.drawable.ic_cartype_convertible
+        "coupe", "coupé", "sports", "sport", "sports car" -> R.drawable.ic_cartype_coupe
+        "pickup", "pick-up", "pick up", "bakkie" -> R.drawable.ic_cartype_pickup
+        "truck", "lorry" -> R.drawable.ic_cartype_truck
+        "van", "bus", "cargo van" -> R.drawable.ic_cartype_van
+        "minivan", "mpv", "people carrier", "mini van" -> R.drawable.ic_cartype_minivan
+        "electric", "ev", "hybrid", "plug-in" -> R.drawable.ic_cartype_electric
+        "luxury", "executive", "limousine", "limo", "premium" -> R.drawable.ic_cartype_luxury
+        else -> R.drawable.ic_cartype_sedan
+    }
+}
+
+private val homeCategoryGroups: List<Set<String>> = listOf(
+    setOf("hatchback", "compact", "hatch", "mini", "small"),
+    setOf("pickup", "pick-up", "pick up", "truck", "bakkie"),
+    setOf("electric", "ev"),
+    setOf("coupe", "coupé", "sports", "sport", "sports car"),
+    setOf("luxury", "executive", "limousine", "limo", "premium"),
+    setOf("van", "cargo van", "bus"),
+    setOf("minivan", "mpv", "mini van", "people carrier"),
+    setOf("convertible", "cabriolet", "roadster"),
+    setOf("suv", "4x4", "jeep", "4wd"),
+)
+
+/** Category pill matching for the Home feed: exact type match plus the aliases buyers use. */
+internal fun matchesHomeCategory(carType: String?, category: String): Boolean {
+    val selected = category.trim().lowercase(Locale.US)
+    if (selected.isBlank() || selected == "all") return true
+    val type = carType?.trim()?.lowercase(Locale.US).orEmpty()
+    if (type == selected) return true
+    return homeCategoryGroups.any { selected in it && type in it }
+}
+
+
+// MARK: Car detail pieces -------------------------------------------------------------------------
+
+@Composable
+private fun DetailHeroGallery(
+    pagerState: androidx.compose.foundation.pager.PagerState,
+    images: List<String>,
+    selectedIndex: Int,
+    onTap: () -> Unit,
+) {
+    val colors = LocalHayameColors.current
+    Box(modifier = Modifier.fillMaxWidth().height(380.dp)) {
+        HorizontalPager(
+            state = pagerState,
+            modifier = Modifier.fillMaxSize().clickable(onClick = onTap),
+        ) { page ->
+            val imageUrl = images[page]
+            if (imageUrl.isBlank()) {
+                Box(modifier = Modifier.fillMaxSize().background(colors.brandLight), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Outlined.DirectionsCar, contentDescription = null, tint = colors.brandBlue, modifier = Modifier.size(44.dp))
+                }
+            } else {
+                AsyncImage(model = imageUrl, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+            }
+        }
+        // Keeps the floating controls legible over bright photos.
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(150.dp)
+                .background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.38f), Color.Transparent))),
+        )
+        if (images.size > 1) {
+            Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = colors.cardBackground.copy(alpha = 0.92f),
+                modifier = Modifier.align(Alignment.BottomStart).padding(16.dp),
+            ) {
+                Text(
+                    "${selectedIndex + 1} of ${images.size}",
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = colors.brandNavy,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DetailSectionBand() {
+    Box(modifier = Modifier.fillMaxWidth().height(8.dp).background(LocalHayameColors.current.fieldBackground))
+}
+
+@Composable
+private fun DetailSpecChip(
+    icon: ImageVector? = null,
+    text: String,
+    tint: Color = LocalHayameColors.current.brandNavy,
+    painterRes: Int? = null,
+) {
+    val colors = LocalHayameColors.current
+    Row(
+        modifier = Modifier.background(colors.fieldBackground, RoundedCornerShape(12.dp)).padding(horizontal = 12.dp, vertical = 9.dp),
+        horizontalArrangement = Arrangement.spacedBy(7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        when {
+            painterRes != null -> Icon(painter = painterResource(painterRes), contentDescription = null, tint = tint, modifier = Modifier.size(width = 18.dp, height = 13.dp))
+            icon != null -> Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(15.dp))
+        }
+        Text(text, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = tint)
+    }
+}
+
+@Composable
+private fun DetailRowIcon(icon: ImageVector, tint: Color = LocalHayameColors.current.brandNavy) {
+    Box(
+        modifier = Modifier.size(40.dp).background(LocalHayameColors.current.fieldBackground, RoundedCornerShape(12.dp)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(19.dp))
+    }
+}
+
+/** A row in "Your trip": icon, title, one or two lines, and a pencil to edit. */
+@Composable
+private fun DetailEditRow(
+    icon: ImageVector,
+    title: String,
+    lines: List<String>,
+    isLoading: Boolean = false,
+    onEdit: () -> Unit,
+) {
+    val colors = LocalHayameColors.current
+    Row(
+        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable(onClick = onEdit),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        DetailRowIcon(icon)
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold, color = colors.brandNavy)
+            lines.forEach { line ->
+                Text(
+                    line,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = colors.brandNavy.copy(alpha = if (isLoading) 0.35f else 0.85f),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+        Box(
+            modifier = Modifier.size(42.dp).border(1.dp, colors.controlStroke, RoundedCornerShape(12.dp)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(Icons.Outlined.Edit, contentDescription = "Edit ${title.lowercase()}", tint = colors.brandNavy, modifier = Modifier.size(17.dp))
+        }
+    }
+}
+
+@Composable
+private fun DetailPriceLine(label: String, value: Int) {
+    val colors = LocalHayameColors.current
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(label, style = MaterialTheme.typography.bodyLarge, color = colors.mutedText, modifier = Modifier.weight(1f))
+        Text("GHS $value", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold, color = colors.brandNavy)
+    }
+}
+
+@Composable
+private fun DetailVerificationChip(label: String, verified: Boolean) {
+    val colors = LocalHayameColors.current
+    val tint = if (verified) Success else colors.mutedText
+    Row(
+        modifier = Modifier.background(tint.copy(alpha = 0.12f), CircleShape).padding(horizontal = 10.dp, vertical = 7.dp),
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(if (verified) Icons.Outlined.Verified else Icons.Outlined.Info, contentDescription = null, tint = tint, modifier = Modifier.size(13.dp))
+        Text(label, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = tint)
+    }
+}
+
+@Composable
+private fun DetailPolicyRow(icon: ImageVector, title: String, value: String) {
+    val colors = LocalHayameColors.current
+    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+        DetailRowIcon(icon)
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold, color = colors.brandNavy)
+            Text(value, style = MaterialTheme.typography.bodyMedium, color = colors.mutedText)
+        }
+    }
+}
+
+@Composable
+private fun DetailReviewRow(review: ReviewDto) {
+    val colors = LocalHayameColors.current
+    val rating = (review.rating ?: 0.0).roundToInt().coerceIn(1, 5)
+    val name = review.reviewer?.full_name ?: "Hayame guest"
+    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.Top, modifier = Modifier.padding(vertical = 4.dp)) {
+        Box(modifier = Modifier.size(36.dp).background(colors.brandLight, CircleShape), contentAlignment = Alignment.Center) {
+            Text(avatarInitials(name, "G"), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = colors.brandNavy)
+        }
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(name, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold, color = colors.brandNavy)
+                Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                    repeat(rating) { Icon(Icons.Filled.Star, contentDescription = null, tint = colors.brandBlue, modifier = Modifier.size(11.dp)) }
+                }
+            }
+            Text(review.comment?.takeIf { it.isNotBlank() } ?: "No comment provided.", style = MaterialTheme.typography.bodyMedium, color = colors.mutedText)
+        }
+    }
+}
+
+private fun LocalDate.toTripDateLabel(): String = format(DateTimeFormatter.ofPattern("EEE, d MMM"))
+
+/** Turns an API host level such as "verified_host" into "Verified host". */
+internal fun hostLevelLabel(raw: String?): String {
+    val cleaned = raw?.trim()?.replace('_', ' ')?.replace('-', ' ')?.trim().orEmpty()
+    if (cleaned.isBlank()) return "Verified host"
+    val lower = cleaned.lowercase()
+    return if (lower == "superhost" || lower == "super host") "Superhost" else lower.replaceFirstChar { it.uppercase() }
 }

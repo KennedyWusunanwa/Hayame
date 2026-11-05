@@ -5,7 +5,11 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getRequestUser } from "@/lib/supabase/request-auth";
 import { verifyPaystackTransaction, refundPaystack } from "@/lib/paystack";
-import { isLocationOutsideAccra, isOutsideListingRegion } from "@/lib/utils";
+import {
+  isLocationOutsideAccra,
+  isOutsideListingRegion,
+  minimumTripNights,
+} from "@/lib/utils";
 import {
   buildAdminBookingNoticeEmail,
   buildBookingInvoiceEmail,
@@ -273,7 +277,7 @@ export async function POST(req: Request) {
     const { data: carData, error: carError } = await supa
       .from("cars")
       .select(
-        "id,title,daily_price,owner_id,instant_book,is_available,approval_status,city,region,delivery_fee,insurance_fee,deposit_amount,outside_accra_fee",
+        "id,title,daily_price,owner_id,instant_book,is_available,approval_status,city,region,delivery_fee,insurance_fee,deposit_amount,outside_accra_fee,allow_one_day_booking",
       )
       .eq("id", carId)
       .single();
@@ -449,10 +453,30 @@ export async function POST(req: Request) {
       );
     }
 
-    const nights = Math.max(
-      differenceInCalendarDays(new Date(endDate), new Date(startDate)),
-      1,
+    const rawNights = differenceInCalendarDays(
+      new Date(endDate),
+      new Date(startDate),
     );
+    // The hold already enforced this; it is re-checked here because this
+    // route is also the one that writes the booking the host sees.
+    const minimumNights = minimumTripNights(car);
+    if (rawNights < minimumNights) {
+      if (bookingId) {
+        await writeDb
+          .from("bookings")
+          .update({
+            status: "cancelled",
+            payment_status: "failed",
+            hold_expires_at: null,
+          })
+          .eq("id", bookingId);
+      }
+      return NextResponse.json(
+        { message: `This car has a ${minimumNights}-day minimum trip.` },
+        { status: 400 },
+      );
+    }
+    const nights = Math.max(rawNights, 1);
     const subtotal = Number(car.daily_price ?? 0) * nights;
 
     const { data: settings } = await supa

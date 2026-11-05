@@ -28,6 +28,10 @@ data class HayameColors(
     val skeletonHighlight: Color,
     val bottomBarSeparator: Color,
     val primaryButtonEnd: Color,
+    /** Hero panels (More profile card, host Home, Trips): bright brand gradient in light, deep muted blue in dark. */
+    val heroStart: Color,
+    val heroEnd: Color,
+    val heroHighlight: Color,
 )
 
 val LightHayameColors = HayameColors(
@@ -53,6 +57,9 @@ val LightHayameColors = HayameColors(
     skeletonHighlight = Color(0x80FFFFFF), // iOS skeletonHighlight light: white @ 50%
     bottomBarSeparator = Color(0xBFFFFFFF),// iOS bottomBarSeparator light: white @ 75%
     primaryButtonEnd = Color(0xFF0A2B54),  // iOS primaryButtonEnd light: brandNavy
+    heroStart = Color(0xFF1484D9),
+    heroEnd = Color(0xFF0A2B54),
+    heroHighlight = Color(0x47FFFFFF),      // white @ 28%
 )
 
 val DarkHayameColors = HayameColors(
@@ -78,6 +85,9 @@ val DarkHayameColors = HayameColors(
     skeletonHighlight = Color(0x2EFFFFFF), // iOS skeletonHighlight dark: white @ 18%
     bottomBarSeparator = Color(0x1FFFFFFF),// iOS bottomBarSeparator dark: white @ 12%
     primaryButtonEnd = Color(0xFF1484D9),  // iOS primaryButtonEnd dark: brandBlue
+    heroStart = Color(0xFF0E3A66),
+    heroEnd = Color(0xFF071F3A),
+    heroHighlight = Color(0x294DB3FF),      // brand blue @ 16%
 )
 
 val LocalHayameColors = staticCompositionLocalOf { LightHayameColors }

@@ -4,7 +4,11 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getRequestUser } from "@/lib/supabase/request-auth";
 import { initializePaystackTransaction } from "@/lib/paystack";
-import { isLocationOutsideAccra, isOutsideListingRegion } from "@/lib/utils";
+import {
+  isLocationOutsideAccra,
+  isOutsideListingRegion,
+  minimumTripNights,
+} from "@/lib/utils";
 import { failJson } from "@/lib/api-errors";
 
 type Body = {
@@ -120,7 +124,7 @@ export async function POST(req: Request) {
     const { data: car, error: carError } = await db
       .from("cars")
       .select(
-        "id,title,daily_price,owner_id,is_available,approval_status,region,outside_accra_fee,delivery_fee,insurance_fee,deposit_amount",
+        "id,title,daily_price,owner_id,is_available,approval_status,region,outside_accra_fee,delivery_fee,insurance_fee,deposit_amount,allow_one_day_booking",
       )
       .eq("id", booking.car_id)
       .single();
@@ -175,13 +179,18 @@ export async function POST(req: Request) {
             listingRegion: car.region ?? null,
           });
 
-    const nights = Math.max(
-      differenceInCalendarDays(
-        new Date(booking.end_date),
-        new Date(booking.start_date),
-      ),
-      1,
+    const rawNights = differenceInCalendarDays(
+      new Date(booking.end_date),
+      new Date(booking.start_date),
     );
+    const minimumNights = minimumTripNights(car);
+    if (rawNights < minimumNights) {
+      return NextResponse.json(
+        { message: `This car has a ${minimumNights}-day minimum trip.` },
+        { status: 400 },
+      );
+    }
+    const nights = Math.max(rawNights, 1);
     const subtotal = Number(car.daily_price ?? 0) * nights;
 
     const { data: settings } = await db

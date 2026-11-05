@@ -1,5 +1,6 @@
 package com.hayame.app.ui.screens
 
+import com.hayame.app.ui.components.HayameRefreshBox
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -33,7 +34,6 @@ import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.Refresh
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -121,92 +121,98 @@ fun RenterDashboardScreen(
             ParityTopBar(title = "Dashboard", onBack = onBack)
         },
     ) { inner ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(inner)
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            contentPadding = PaddingValues(vertical = 12.dp),
+        HayameRefreshBox(
+            onRefresh = { viewModel.loadBookings(); viewModel.loadFavorites(); viewModel.loadConversations() },
+            modifier = Modifier.fillMaxSize(),
+            indicatorTopPadding = inner.calculateTopPadding(),
         ) {
-            item {
-                Card(
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
-                    border = BorderStroke(1.dp, colors.border),
-                ) {
-                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text("Welcome back", style = androidx.compose.material3.MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.ExtraBold, color = colors.brandNavy)
-                        Text("Manage bookings, favorites, chats, and hosting access.", color = colors.mutedText)
+        LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(inner)
+                    .padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                contentPadding = PaddingValues(vertical = 12.dp),
+            ) {
+                item {
+                    Card(
+                        shape = RoundedCornerShape(20.dp),
+                        colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
+                        border = BorderStroke(1.dp, colors.border),
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text("Welcome back", style = androidx.compose.material3.MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.ExtraBold, color = colors.brandNavy)
+                            Text("Manage bookings, favorites, chats, and hosting access.", color = colors.mutedText)
+                        }
                     }
                 }
-            }
 
-            item {
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-                    HostStatCard("Upcoming trips", "$upcomingTrips", modifier = Modifier.weight(1f))
-                    HostStatCard(
-                        title = "Past trips",
-                        value = "$pastTrips",
-                        modifier = Modifier.weight(1f),
-                        onClick = {
-                            if (isHost) {
-                                onOpenHostVehicles()
-                            } else {
-                                onOpenBecomeHost()
+                item {
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                        HostStatCard("Upcoming trips", "$upcomingTrips", modifier = Modifier.weight(1f))
+                        HostStatCard(
+                            title = "Past trips",
+                            value = "$pastTrips",
+                            modifier = Modifier.weight(1f),
+                            onClick = {
+                                if (isHost) {
+                                    onOpenHostVehicles()
+                                } else {
+                                    onOpenBecomeHost()
+                                }
+                            },
+                        )
+                    }
+                }
+                item {
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                        HostStatCard("Saved cars", "$savedCount", modifier = Modifier.weight(1f))
+                        HostStatCard("Unread chats", "$unreadCount", modifier = Modifier.weight(1f))
+                    }
+                }
+
+                item { SectionHeader("Quick nav") }
+                item { ParityNavRow("Bookings", "Review upcoming and past trips", onOpenTrips) }
+                item { ParityNavRow("Chats", "Open conversations with hosts", onOpenMessages) }
+                item { ParityNavRow("Favorites", "See the cars you saved", onOpenSaved) }
+
+                if (isHost) {
+                    item {
+                        Card(
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
+                            border = BorderStroke(1.dp, colors.border),
+                        ) {
+                            Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text("Host mode is active.", color = colors.brandNavy, fontWeight = FontWeight.Bold)
+                                Text("Open host dashboard to manage listings, bookings, earnings, and reviews.", color = colors.mutedText)
+                                OutlinedButton(onClick = onOpenHostDashboard) { Text("Open host dashboard") }
                             }
-                        },
-                    )
-                }
-            }
-            item {
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-                    HostStatCard("Saved cars", "$savedCount", modifier = Modifier.weight(1f))
-                    HostStatCard("Unread chats", "$unreadCount", modifier = Modifier.weight(1f))
-                }
-            }
-
-            item { SectionHeader("Quick nav") }
-            item { ParityNavRow("Bookings", "Review upcoming and past trips", onOpenTrips) }
-            item { ParityNavRow("Chats", "Open conversations with hosts", onOpenMessages) }
-            item { ParityNavRow("Favorites", "See the cars you saved", onOpenSaved) }
-
-            if (isHost) {
-                item {
-                    Card(
-                        shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
-                        border = BorderStroke(1.dp, colors.border),
-                    ) {
-                        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text("Host mode is active.", color = colors.brandNavy, fontWeight = FontWeight.Bold)
-                            Text("Open host dashboard to manage listings, bookings, earnings, and reviews.", color = colors.mutedText)
-                            OutlinedButton(onClick = onOpenHostDashboard) { Text("Open host dashboard") }
+                        }
+                    }
+                } else {
+                    item {
+                        Card(
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
+                            border = BorderStroke(1.dp, colors.border),
+                        ) {
+                            Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text("Become a host", color = colors.brandNavy, fontWeight = FontWeight.Bold)
+                                Text("Apply to list your cars. Review usually takes 1-2 business days.", color = colors.mutedText)
+                                OutlinedButton(onClick = onOpenBecomeHost) { Text("Host application") }
+                            }
                         }
                     }
                 }
-            } else {
-                item {
-                    Card(
-                        shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
-                        border = BorderStroke(1.dp, colors.border),
-                    ) {
-                        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text("Become a host", color = colors.brandNavy, fontWeight = FontWeight.Bold)
-                            Text("Apply to list your cars. Review usually takes 1-2 business days.", color = colors.mutedText)
-                            OutlinedButton(onClick = onOpenBecomeHost) { Text("Host application") }
-                        }
-                    }
-                }
-            }
 
-            if (!isAuthenticated) {
-                item {
-                    EmptyBlock(
-                        title = "Guest mode",
-                        subtitle = "Log in to see your real bookings, favorites, and message history.",
-                    )
+                if (!isAuthenticated) {
+                    item {
+                        EmptyBlock(
+                            title = "Guest mode",
+                            subtitle = "Log in to see your real bookings, favorites, and message history.",
+                        )
+                    }
                 }
             }
         }
@@ -443,39 +449,45 @@ fun HostApplicationPendingScreen(viewModel: AppViewModel, onBack: () -> Unit, on
         containerColor = LocalHayameColors.current.pageBackground,
         topBar = { ParityTopBar(title = "Host Review", onBack = onBack) },
     ) { inner ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(inner)
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            contentPadding = PaddingValues(vertical = 12.dp),
+        HayameRefreshBox(
+            onRefresh = { viewModel.loadHostStatus() },
+            modifier = Modifier.fillMaxSize(),
+            indicatorTopPadding = inner.calculateTopPadding(),
         ) {
-            item {
-                EmptyBlock(
-                    title = "Host Application Pending",
-                    subtitle = "Your host application is still under review. Continue browsing as a renter while we process it.",
-                )
-            }
+        LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(inner)
+                    .padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                contentPadding = PaddingValues(vertical = 12.dp),
+            ) {
+                item {
+                    EmptyBlock(
+                        title = "Host Application Pending",
+                        subtitle = "Your host application is still under review. Continue browsing as a renter while we process it.",
+                    )
+                }
 
-            item {
-                Card(shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = LocalHayameColors.current.cardBackground)) {
-                    Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text("Status", color = LocalHayameColors.current.mutedText)
-                        Text(status.ifBlank { "pending" }.replace("_", " ").uppercase(), color = LocalHayameColors.current.brandNavy, fontWeight = FontWeight.Bold)
+                item {
+                    Card(shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = LocalHayameColors.current.cardBackground)) {
+                        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text("Status", color = LocalHayameColors.current.mutedText)
+                            Text(status.ifBlank { "pending" }.replace("_", " ").uppercase(), color = LocalHayameColors.current.brandNavy, fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
-            }
 
-            item {
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-                    OutlinedButton(onClick = { viewModel.loadHostStatus() }, modifier = Modifier.weight(1f)) {
-                        Icon(Icons.Outlined.Refresh, contentDescription = null)
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Refresh")
-                    }
-                    Button(onClick = onOpenBecomeHost, modifier = Modifier.weight(1f)) {
-                        Text("View application")
+                item {
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                        OutlinedButton(onClick = { viewModel.loadHostStatus() }, modifier = Modifier.weight(1f)) {
+                            Icon(Icons.Outlined.Refresh, contentDescription = null)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Refresh")
+                        }
+                        Button(onClick = onOpenBecomeHost, modifier = Modifier.weight(1f)) {
+                            Text("View application")
+                        }
                     }
                 }
             }
@@ -496,38 +508,54 @@ fun HostFavoritesScreen(viewModel: AppViewModel, onBack: () -> Unit) {
         containerColor = LocalHayameColors.current.pageBackground,
         topBar = { ParityTopBar(title = "Favorites", onBack = onBack) },
     ) { inner ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(inner)
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            contentPadding = PaddingValues(vertical = 12.dp),
+        HayameRefreshBox(
+            onRefresh = { viewModel.loadMyCars() },
+            modifier = Modifier.fillMaxSize(),
+            indicatorTopPadding = inner.calculateTopPadding(),
         ) {
-            when (val state = myCarsState) {
-                UiState.Loading -> item { LoadingBlock("Loading listings...") }
-                is UiState.Error -> item { ErrorBlock(state.message, onRetry = { viewModel.loadMyCars() }) }
-                UiState.Empty -> item { EmptyBlock("No host listings", "Create listings to track favorite performance.") }
-                is UiState.Success -> {
-                    if (cars.isEmpty()) {
-                        item { EmptyBlock("No host listings", "Create listings to track favorite performance.") }
-                    } else {
-                        items(cars, key = { it.id }) { car ->
-                            Card(shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = LocalHayameColors.current.cardBackground)) {
-                                Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    Text(car.title.orEmpty().ifBlank { listOfNotNull(car.brand, car.model).joinToString(" ") }, color = LocalHayameColors.current.brandNavy, fontWeight = FontWeight.Bold)
-                                    Text(listOfNotNull(car.city, car.region).joinToString(", "), color = LocalHayameColors.current.mutedText)
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text("GH₵${(car.daily_price ?: 0.0).toInt()} / day", color = LocalHayameColors.current.brandBlue, fontWeight = FontWeight.Bold)
-                                        Spacer(modifier = Modifier.weight(1f))
-                                        AssistChip(onClick = {}, label = { Text("${(car.favorites_count ?: 0.0).toInt()} saves") })
+        LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(inner)
+                    .padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                contentPadding = PaddingValues(vertical = 12.dp),
+            ) {
+                when (val state = myCarsState) {
+                    UiState.Loading -> item { LoadingBlock("Loading listings...") }
+                    is UiState.Error -> item { ErrorBlock(state.message, onRetry = { viewModel.loadMyCars() }) }
+                    UiState.Empty -> item { EmptyBlock("No host listings", "Create listings to track favorite performance.") }
+                    is UiState.Success -> {
+                        if (cars.isEmpty()) {
+                            item { EmptyBlock("No host listings", "Create listings to track favorite performance.") }
+                        } else {
+                            items(cars, key = { it.id }) { car ->
+                                Card(shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = LocalHayameColors.current.cardBackground)) {
+                                    Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        Text(car.title.orEmpty().ifBlank { listOfNotNull(car.brand, car.model).joinToString(" ") }, color = LocalHayameColors.current.brandNavy, fontWeight = FontWeight.Bold)
+                                        Text(listOfNotNull(car.city, car.region).joinToString(", "), color = LocalHayameColors.current.mutedText)
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text("GH₵${(car.daily_price ?: 0.0).toInt()} / day", color = LocalHayameColors.current.brandBlue, fontWeight = FontWeight.Bold)
+                                            Spacer(modifier = Modifier.weight(1f))
+                                            Surface(
+                                                shape = RoundedCornerShape(999.dp),
+                                                color = LocalHayameColors.current.fieldBackground,
+                                            ) {
+                                                Text(
+                                                    "${(car.favorites_count ?: 0.0).toInt()} saves",
+                                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                                    color = LocalHayameColors.current.brandNavy,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                )
+                                            }
+                                        }
                                     }
                                 }
                             }
                         }
                     }
+                    UiState.Idle -> item { LoadingBlock("Loading listings...") }
                 }
-                UiState.Idle -> item { LoadingBlock("Loading listings...") }
             }
         }
     }
@@ -558,78 +586,84 @@ fun HostListingPhotosScreen(viewModel: AppViewModel, carId: String, onBack: () -
         containerColor = LocalHayameColors.current.pageBackground,
         topBar = { ParityTopBar(title = "Listing Photos", onBack = onBack) },
     ) { inner ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(inner)
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            contentPadding = PaddingValues(vertical = 12.dp),
+        HayameRefreshBox(
+            onRefresh = { viewModel.loadCarPhotos(carId) },
+            modifier = Modifier.fillMaxSize(),
+            indicatorTopPadding = inner.calculateTopPadding(),
         ) {
-            item {
-                Card(shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = LocalHayameColors.current.cardBackground)) {
-                    Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text("Photos", color = LocalHayameColors.current.mutedText)
-                        Text("${photos.size} / $photosLimit", color = LocalHayameColors.current.brandNavy, fontWeight = FontWeight.Bold)
-                        Text("Maximum $photosLimit photos, up to 4MB each.", color = LocalHayameColors.current.mutedText)
+        LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(inner)
+                    .padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                contentPadding = PaddingValues(vertical = 12.dp),
+            ) {
+                item {
+                    Card(shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = LocalHayameColors.current.cardBackground)) {
+                        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text("Photos", color = LocalHayameColors.current.mutedText)
+                            Text("${photos.size} / $photosLimit", color = LocalHayameColors.current.brandNavy, fontWeight = FontWeight.Bold)
+                            Text("Maximum $photosLimit photos, up to 4MB each.", color = LocalHayameColors.current.mutedText)
+                        }
                     }
                 }
-            }
 
-            when (val state = photosState) {
-                UiState.Loading -> item { LoadingBlock("Loading photos...") }
-                is UiState.Error -> item { ErrorBlock(state.message, onRetry = { viewModel.loadCarPhotos(carId) }) }
-                UiState.Empty -> item { EmptyBlock("No photos uploaded", "Upload high-quality exterior and interior angles.") }
-                is UiState.Success -> {
-                    items(photos, key = { it.id }) { photo ->
-                        Card(shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = LocalHayameColors.current.cardBackground)) {
-                            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                val resolved = resolveParityImage(photo.url)
-                                if (!resolved.isNullOrBlank()) {
-                                    AsyncImage(
-                                        model = resolved,
-                                        contentDescription = null,
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .height(180.dp)
-                                            .clip(RoundedCornerShape(12.dp)),
-                                        contentScale = ContentScale.Crop,
-                                    )
-                                }
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                                    OutlinedButton(
-                                        onClick = {
-                                            replacePhotoId = photo.id
-                                            pickImage.launch("image/*")
-                                        },
-                                        modifier = Modifier.weight(1f),
-                                    ) {
-                                        Text("Replace")
+                when (val state = photosState) {
+                    UiState.Loading -> item { LoadingBlock("Loading photos...") }
+                    is UiState.Error -> item { ErrorBlock(state.message, onRetry = { viewModel.loadCarPhotos(carId) }) }
+                    UiState.Empty -> item { EmptyBlock("No photos uploaded", "Upload high-quality exterior and interior angles.") }
+                    is UiState.Success -> {
+                        items(photos, key = { it.id }) { photo ->
+                            Card(shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = LocalHayameColors.current.cardBackground)) {
+                                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    val resolved = resolveParityImage(photo.url)
+                                    if (!resolved.isNullOrBlank()) {
+                                        AsyncImage(
+                                            model = resolved,
+                                            contentDescription = null,
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(180.dp)
+                                                .clip(RoundedCornerShape(12.dp)),
+                                            contentScale = ContentScale.Crop,
+                                        )
                                     }
-                                    OutlinedButton(
-                                        onClick = { viewModel.deleteCarPhoto(carId = carId, photoId = photo.id) },
-                                        modifier = Modifier.weight(1f),
-                                    ) {
-                                        Text("Delete", color = Color(0xFFB42334))
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                                        OutlinedButton(
+                                            onClick = {
+                                                replacePhotoId = photo.id
+                                                pickImage.launch("image/*")
+                                            },
+                                            modifier = Modifier.weight(1f),
+                                        ) {
+                                            Text("Replace")
+                                        }
+                                        OutlinedButton(
+                                            onClick = { viewModel.deleteCarPhoto(carId = carId, photoId = photo.id) },
+                                            modifier = Modifier.weight(1f),
+                                        ) {
+                                            Text("Delete", color = Color(0xFFB42334))
+                                        }
                                     }
                                 }
                             }
                         }
                     }
+                    UiState.Idle -> item { LoadingBlock("Loading photos...") }
                 }
-                UiState.Idle -> item { LoadingBlock("Loading photos...") }
-            }
 
-            item {
-                Button(
-                    onClick = {
-                        replacePhotoId = null
-                        pickImage.launch("image/*")
-                    },
-                    enabled = photos.size < photosLimit,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(if (photos.size >= photosLimit) "Photo limit reached" else "Add photo")
+                item {
+                    Button(
+                        onClick = {
+                            replacePhotoId = null
+                            pickImage.launch("image/*")
+                        },
+                        enabled = photos.size < photosLimit,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(if (photos.size >= photosLimit) "Photo limit reached" else "Add photo")
+                    }
                 }
             }
         }

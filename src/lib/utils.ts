@@ -28,6 +28,17 @@ export function calculateNights(start?: string | null, end?: string | null) {
   return Math.max(differenceInCalendarDays(new Date(end), new Date(start)), 0);
 }
 
+/**
+ * Nights a trip must cover on a listing. Hosts opt in to single-day trips per
+ * car; everything else keeps the 2-day minimum. The server and all three
+ * booking flows read this so they agree.
+ */
+export function minimumTripNights(
+  car?: { allow_one_day_booking?: boolean | null } | null,
+) {
+  return car?.allow_one_day_booking ? 1 : 2;
+}
+
 function normalizeLocationToken(value?: string | null) {
   return (value ?? "").toString().trim().toLowerCase().replace(/\s+/g, " ");
 }

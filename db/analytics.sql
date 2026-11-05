@@ -39,7 +39,7 @@ create table if not exists public.analytics_events (
   session_key text,                    -- client-generated pseudonymous id
 
   -- Where
-  platform text not null default 'web',  -- 'web' | 'ios'
+  platform text not null default 'web',  -- 'web' | 'ios' | 'android'
   app_version text,
   path text,                           -- in-app route, query string stripped
 

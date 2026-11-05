@@ -9,6 +9,14 @@ enum HayameTheme {
     // Auth (sign in / sign up) header band. Bright brand blue in light mode, but
     // a deep, muted blue in dark mode so it reads as premium instead of glaring.
     static let authHeaderBackground = adaptiveColor(light: UIColor(hex: 0x1484D9), dark: UIColor(hex: 0x0E3A66))
+    // Hero panels (More profile card, host Home, Trips) and prominent tiles. Bright
+    // brand gradient in light mode; a deep, muted blue in dark mode, like the splash.
+    static let heroStart = adaptiveColor(light: UIColor(hex: 0x1484D9), dark: UIColor(hex: 0x0E3A66))
+    static let heroEnd = adaptiveColor(light: UIColor(hex: 0x0A2B54), dark: UIColor(hex: 0x071F3A))
+    static let heroHighlight = adaptiveColor(
+        light: UIColor.white.withAlphaComponent(0.28),
+        dark: UIColor(hex: 0x4DB3FF, alpha: 0.16)
+    )
     static let mutedText = adaptiveColor(light: UIColor(hex: 0x737D91), dark: UIColor(hex: 0xA8B4C8))
     static let success = adaptiveColor(light: UIColor(hex: 0x1CA160), dark: UIColor(hex: 0x4DDB93))
     static let warning = adaptiveColor(light: UIColor(hex: 0xED8F30), dark: UIColor(hex: 0xFFB35C))
@@ -69,10 +77,26 @@ enum HayameSystemAppearance {
         navAppearance.configureWithOpaqueBackground()
         navAppearance.backgroundColor = palette.pageBackground
         navAppearance.shadowColor = palette.separator
-        navAppearance.titleTextAttributes = [.foregroundColor: palette.primaryText]
-        navAppearance.largeTitleTextAttributes = [.foregroundColor: palette.primaryText]
-        navAppearance.buttonAppearance.normal.titleTextAttributes = [.foregroundColor: palette.brandBlue]
-        navAppearance.doneButtonAppearance.normal.titleTextAttributes = [.foregroundColor: palette.brandBlue]
+        navAppearance.titleTextAttributes = [
+            .foregroundColor: palette.primaryText,
+            .font: HayameFontFamily.uiFont(size: 17, weight: .semibold),
+        ]
+        navAppearance.largeTitleTextAttributes = [
+            .foregroundColor: palette.primaryText,
+            .font: HayameFontFamily.uiFont(size: 34, weight: .bold),
+        ]
+        navAppearance.buttonAppearance.normal.titleTextAttributes = [
+            .foregroundColor: palette.brandBlue,
+            .font: HayameFontFamily.uiFont(size: 17, weight: .medium),
+        ]
+        navAppearance.doneButtonAppearance.normal.titleTextAttributes = [
+            .foregroundColor: palette.brandBlue,
+            .font: HayameFontFamily.uiFont(size: 17, weight: .semibold),
+        ]
+        UIBarButtonItem.appearance().setTitleTextAttributes(
+            [.font: HayameFontFamily.uiFont(size: 17, weight: .medium)],
+            for: .normal
+        )
 
         let tabAppearance = UITabBarAppearance()
         tabAppearance.configureWithOpaqueBackground()
@@ -119,28 +143,29 @@ enum HayameSystemAppearance {
         let separator: UIColor
     }
 
+    /// Dynamic colours so bars that already exist re-resolve when the window's
+    /// interface style flips (SwiftUI's `preferredColorScheme`). Static colours
+    /// here are the reason a navigation bar used to keep its old scheme until the
+    /// screen was pushed again. `darkMode` is kept for call-site compatibility.
     private static func palette(darkMode: Bool) -> Palette {
-        if darkMode {
-            return Palette(
-                pageBackground: UIColor(hex: 0x071A2F),
-                cardBackground: UIColor(hex: 0x0E263F),
-                brandBlue: UIColor(hex: 0x4DB3FF),
-                primaryText: UIColor(hex: 0xEAF4FF),
-                secondaryText: UIColor(hex: 0xA8B4C8),
-                selectedFill: UIColor(hex: 0x123452),
-                separator: UIColor.white.withAlphaComponent(0.10)
+        Palette(
+            pageBackground: dynamic(light: UIColor(hex: 0xF7FAFF), dark: UIColor(hex: 0x071A2F)),
+            cardBackground: dynamic(light: UIColor.white, dark: UIColor(hex: 0x0E263F)),
+            brandBlue: dynamic(light: UIColor(hex: 0x1484D9), dark: UIColor(hex: 0x4DB3FF)),
+            primaryText: dynamic(light: UIColor(hex: 0x0A2B54), dark: UIColor(hex: 0xEAF4FF)),
+            secondaryText: dynamic(light: UIColor(hex: 0x737D91), dark: UIColor(hex: 0xA8B4C8)),
+            selectedFill: dynamic(light: UIColor(hex: 0xEDF7FF), dark: UIColor(hex: 0x123452)),
+            separator: dynamic(
+                light: UIColor.black.withAlphaComponent(0.06),
+                dark: UIColor.white.withAlphaComponent(0.10)
             )
-        }
-
-        return Palette(
-            pageBackground: UIColor(hex: 0xF7FAFF),
-            cardBackground: UIColor.white,
-            brandBlue: UIColor(hex: 0x1484D9),
-            primaryText: UIColor(hex: 0x0A2B54),
-            secondaryText: UIColor(hex: 0x737D91),
-            selectedFill: UIColor(hex: 0xEDF7FF),
-            separator: UIColor.black.withAlphaComponent(0.06)
         )
+    }
+
+    private static func dynamic(light: UIColor, dark: UIColor) -> UIColor {
+        UIColor { traits in
+            traits.userInterfaceStyle == .dark ? dark : light
+        }
     }
 
     private static func configureTabItem(_ appearance: UITabBarItemAppearance, palette: Palette) {
@@ -237,25 +262,31 @@ private extension UIColor {
     }
 }
 
+/// Flat brand-blue pill, the same colour as the search button, for calls to
+/// action that should sit quietly in the page rather than announce themselves.
+struct SolidPillButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.hayame(size: 16, weight: .semibold))
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 13)
+            .background(HayameTheme.brandBlue.opacity(configuration.isPressed ? 0.82 : 1))
+            .foregroundStyle(.white)
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .scaleEffect(configuration.isPressed ? 0.98 : 1)
+            .animation(HayameMotion.snappy, value: configuration.isPressed)
+    }
+}
+
 struct PrimaryPillButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 16, weight: .semibold, design: .rounded))
+            .font(.hayame(size: 16, weight: .semibold))
             .frame(maxWidth: .infinity)
             .padding(.vertical, 12)
-            .background(
-                LinearGradient(
-                    colors: [
-                        HayameTheme.brandBlue.opacity(configuration.isPressed ? 0.8 : 1),
-                        HayameTheme.primaryButtonEnd.opacity(configuration.isPressed ? 0.86 : 1)
-                    ],
-                    startPoint: .leading,
-                    endPoint: .trailing
-                )
-            )
+            .background(HayameTheme.brandBlue.opacity(configuration.isPressed ? 0.82 : 1))
             .foregroundStyle(.white)
-            .clipShape(Capsule())
-            .shadow(color: HayameTheme.brandBlue.opacity(0.28), radius: 8, x: 0, y: 4)
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             // Tactile feedback on press, matching the bottom tab bar.
             .onChange(of: configuration.isPressed) { _, isPressed in
                 if isPressed {
@@ -268,7 +299,7 @@ struct PrimaryPillButtonStyle: ButtonStyle {
 struct SecondaryPillButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 15, weight: .semibold, design: .rounded))
+            .font(.hayame(size: 15, weight: .semibold))
             .padding(.vertical, 10)
             .padding(.horizontal, 14)
             .background(HayameTheme.brandLight)
@@ -299,12 +330,12 @@ extension View {
     }
 
     func hayameSectionTitleStyle() -> some View {
-        font(.system(size: 22, weight: .bold, design: .rounded))
+        font(.hayame(size: 22, weight: .bold))
             .foregroundStyle(HayameTheme.brandNavy)
     }
 
     func hayameCaptionStyle() -> some View {
-        font(.system(size: 13, weight: .medium, design: .rounded))
+        font(.hayame(size: 13, weight: .medium))
             .foregroundStyle(HayameTheme.mutedText)
     }
 
@@ -356,6 +387,11 @@ struct HayameBottomTabBar<Selection: Hashable>: View {
                 tabButton(for: item)
             }
         }
+        // Only the bar animates with a spring (pill slide, icon weight). The
+        // selection write itself is not wrapped in withAnimation, so the page
+        // swap above is left to the shell's own calm transition instead of
+        // bouncing a whole screen into place.
+        .animation(HayameMotion.respecting(.spring(response: 0.32, dampingFraction: 0.82)), value: selection)
         .padding(.horizontal, 6)
         .padding(.vertical, 6)
         .background(floatingBackground)
@@ -372,19 +408,17 @@ struct HayameBottomTabBar<Selection: Hashable>: View {
         return Button {
             guard selection != item.id else { return }
             UIImpactFeedbackGenerator(style: .soft).impactOccurred()
-            withAnimation(.spring(response: 0.32, dampingFraction: 0.74)) {
-                selection = item.id
-            }
+            selection = item.id
         } label: {
             VStack(spacing: 3) {
                 Image(systemName: item.systemImage)
-                    .font(.system(size: 20, weight: selected ? .semibold : .regular))
+                    .font(.hayame(size: 20, weight: selected ? .semibold : .regular))
                     .symbolVariant(selected ? .fill : .none)
                     .frame(height: 24)
                     .overlay(alignment: .topTrailing) { badge(for: item) }
 
                 Text(item.title)
-                    .font(.system(size: 10, weight: selected ? .bold : .semibold, design: .rounded))
+                    .font(.hayame(size: 10, weight: selected ? .bold : .semibold))
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
             }
@@ -409,7 +443,7 @@ struct HayameBottomTabBar<Selection: Hashable>: View {
     private func badge(for item: HayameBottomTabItem<Selection>) -> some View {
         if item.badgeCount > 0 {
             Text(item.badgeCount > 99 ? "99+" : "\(item.badgeCount)")
-                .font(.system(size: 9, weight: .bold, design: .rounded))
+                .font(.hayame(size: 9, weight: .bold))
                 .foregroundStyle(.white)
                 .padding(.horizontal, 4)
                 .padding(.vertical, 1.5)
@@ -431,4 +465,22 @@ struct HayameBottomTabBar<Selection: Hashable>: View {
             )
             .shadow(color: HayameTheme.cardShadow, radius: 20, x: 0, y: 10)
     }
+}
+
+// MARK: - Swipe back
+
+/// SwiftUI turns off the edge swipe-back on screens that hide the navigation
+/// bar (car page, chat, dashboard). Owning the gesture's delegate keeps it on
+/// for every pushed screen; on a stack's root it stays off.
+extension UINavigationController: @retroactive UIGestureRecognizerDelegate {
+    override open func viewDidLoad() {
+        super.viewDidLoad()
+        interactivePopGestureRecognizer?.delegate = self
+    }
+
+    public func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        guard gestureRecognizer === interactivePopGestureRecognizer else { return true }
+        return viewControllers.count > 1 && transitionCoordinator == nil
+    }
+
 }

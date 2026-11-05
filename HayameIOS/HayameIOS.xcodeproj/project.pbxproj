@@ -7,7 +7,22 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A1C0C0DE0000000000000010 /* TripsSavedScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0C0DE000000000000000F /* TripsSavedScreens.swift */; };
+		A1C0C0DE0000000000000012 /* Manrope-Variable.ttf in Resources */ = {isa = PBXBuildFile; fileRef = A1C0C0DE0000000000000011 /* Manrope-Variable.ttf */; };
+		A1C0C0DE0000000000000014 /* HayameFont.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0C0DE0000000000000013 /* HayameFont.swift */; };
+		A1C0C0DE0000000000000017 /* ListingCards.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0C0DE0000000000000016 /* ListingCards.swift */; };
+		A1C0C0DE0000000000000019 /* CarDetailScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0C0DE0000000000000018 /* CarDetailScreen.swift */; };
+		A1C0C0DE000000000000001B /* MessagingScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0C0DE000000000000001A /* MessagingScreens.swift */; };
+		A1C0C0DE000000000000001D /* BookingFlowScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0C0DE000000000000001C /* BookingFlowScreens.swift */; };
+		A1C0C0DE000000000000000E /* CheckoutResumeScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0C0DE000000000000000D /* CheckoutResumeScreens.swift */; };
+		A1C0C0DE000000000000000C /* ModeSwitchOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0C0DE000000000000000B /* ModeSwitchOverlay.swift */; };
+		A1C0C0DE000000000000000A /* HostHomeScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0C0DE0000000000000009 /* HostHomeScreens.swift */; };
+		A1C0C0DE0000000000000008 /* AppIconManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0C0DE0000000000000007 /* AppIconManager.swift */; };
+		A1C0C0DE0000000000000006 /* MoreScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0C0DE0000000000000005 /* MoreScreens.swift */; };
+		A1C0C0DE0000000000000004 /* AppIconWordmark.icon in Resources */ = {isa = PBXBuildFile; fileRef = A1C0C0DE0000000000000003 /* AppIconWordmark.icon */; };
+		A1C0C0DE0000000000000002 /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = A1C0C0DE0000000000000001 /* AppIcon.icon */; };
 		09E5D900D752DA4D484ACA55 /* DesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A7DE7E9F8B1C1F99E6B4BAE /* DesignSystem.swift */; };
+		7A1E4C2B9D3F4E5A8B6C1D0E /* HayameMotion.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A1E4C2B9D3F4E5A8B6C1D0F /* HayameMotion.swift */; };
 		167262C57183500C2A79920D /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 0F690E7EC7ADED4D29ACD519 /* LaunchScreen.storyboard */; };
 		1C2772E9C70DAD52F03C75E8 /* MockDataService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FC388EB25847DA29E3DFF2C /* MockDataService.swift */; };
 		2FB9D38448C3276E9C41BEA9 /* NotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90869CE125FCD22FD5450526 /* NotificationManager.swift */; };
@@ -16,6 +31,7 @@
 		3A10EE1CB1A4A7755CCB9078 /* AuthComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = E729E5F78A6D661F7D731FD5 /* AuthComponents.swift */; };
 		4283F2AC8F40398F6628A3E2 /* AdminScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = EDDD74C69D95930539578828 /* AdminScreens.swift */; };
 		4EA8F953F7D42F5C7920714E /* Components.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70C63679032CDE6B1C16B367 /* Components.swift */; };
+		A1C0C0DE000000000000001F /* CoachMarks.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0C0DE000000000000001E /* CoachMarks.swift */; };
 		5136B34C04DCDEA1FB21C1D4 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 62B555BAFABD9F1EE76F7D93 /* Assets.xcassets */; };
 		620FD9E2896DCD0F2CC80714 /* HomeLocationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B80380492FACA470622D08F /* HomeLocationManager.swift */; };
 		662EEF16760A82C361576D99 /* DatabaseReferenceData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7939F5F4C58306B8B9C7A871 /* DatabaseReferenceData.swift */; };
@@ -37,7 +53,22 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		A1C0C0DE000000000000000F /* TripsSavedScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TripsSavedScreens.swift; sourceTree = "<group>"; };
+		A1C0C0DE0000000000000011 /* Manrope-Variable.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Manrope-Variable.ttf"; sourceTree = "<group>"; };
+		A1C0C0DE0000000000000013 /* HayameFont.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HayameFont.swift; sourceTree = "<group>"; };
+		A1C0C0DE0000000000000016 /* ListingCards.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ListingCards.swift; sourceTree = "<group>"; };
+		A1C0C0DE0000000000000018 /* CarDetailScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarDetailScreen.swift; sourceTree = "<group>"; };
+		A1C0C0DE000000000000001A /* MessagingScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessagingScreens.swift; sourceTree = "<group>"; };
+		A1C0C0DE000000000000001C /* BookingFlowScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookingFlowScreens.swift; sourceTree = "<group>"; };
+		A1C0C0DE000000000000000D /* CheckoutResumeScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CheckoutResumeScreens.swift; sourceTree = "<group>"; };
+		A1C0C0DE000000000000000B /* ModeSwitchOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModeSwitchOverlay.swift; sourceTree = "<group>"; };
+		A1C0C0DE0000000000000009 /* HostHomeScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostHomeScreens.swift; sourceTree = "<group>"; };
+		A1C0C0DE0000000000000007 /* AppIconManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppIconManager.swift; sourceTree = "<group>"; };
+		A1C0C0DE0000000000000005 /* MoreScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoreScreens.swift; sourceTree = "<group>"; };
+		A1C0C0DE0000000000000003 /* AppIconWordmark.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = AppIconWordmark.icon; sourceTree = "<group>"; };
+		A1C0C0DE0000000000000001 /* AppIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = AppIcon.icon; sourceTree = "<group>"; };
 		0A7DE7E9F8B1C1F99E6B4BAE /* DesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignSystem.swift; sourceTree = "<group>"; };
+		7A1E4C2B9D3F4E5A8B6C1D0F /* HayameMotion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HayameMotion.swift; sourceTree = "<group>"; };
 		0B01B8766BE90C8F9BC7AA65 /* ScreenshotRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotRootView.swift; sourceTree = "<group>"; };
 		0B589AC7DD3105CF712A4F96 /* HayameIOS.Release.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = HayameIOS.Release.entitlements; sourceTree = "<group>"; };
 		0F690E7EC7ADED4D29ACD519 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
@@ -49,6 +80,7 @@
 		5B84DC030B2466D74C04F42B /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		62B555BAFABD9F1EE76F7D93 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		70C63679032CDE6B1C16B367 /* Components.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Components.swift; sourceTree = "<group>"; };
+		A1C0C0DE000000000000001E /* CoachMarks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoachMarks.swift; sourceTree = "<group>"; };
 		7939F5F4C58306B8B9C7A871 /* DatabaseReferenceData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DatabaseReferenceData.swift; sourceTree = "<group>"; };
 		7F95E920C7641A88FCE7E0E6 /* AuthScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthScreens.swift; sourceTree = "<group>"; };
 		7FC388EB25847DA29E3DFF2C /* MockDataService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockDataService.swift; sourceTree = "<group>"; };
@@ -83,6 +115,7 @@
 			isa = PBXGroup;
 			children = (
 				70C63679032CDE6B1C16B367 /* Components.swift */,
+				A1C0C0DE000000000000001E /* CoachMarks.swift */,
 			);
 			path = Components;
 			sourceTree = "<group>";
@@ -90,6 +123,7 @@
 		36610C36B7FBCB614D6CAAD0 /* App */ = {
 			isa = PBXGroup;
 			children = (
+				A1C0C0DE0000000000000007 /* AppIconManager.swift */,
 				C35FF516F27CD52298E15051 /* AppState.swift */,
 				374D26C81A3EC27AE6793B1C /* HayameIOSApp.swift */,
 				0B01B8766BE90C8F9BC7AA65 /* ScreenshotRootView.swift */,
@@ -101,7 +135,10 @@
 		4C55F44381FCE8BBBA8A0488 /* HayameIOS */ = {
 			isa = PBXGroup;
 			children = (
+				A1C0C0DE0000000000000001 /* AppIcon.icon */,
+				A1C0C0DE0000000000000003 /* AppIconWordmark.icon */,
 				62B555BAFABD9F1EE76F7D93 /* Assets.xcassets */,
+				A1C0C0DE0000000000000015 /* Fonts */,
 				E4692DF6BD8CEF4505C17B06 /* Hayame 2.0 .code-workspace */,
 				CC4A194AF5E2455FC5953850 /* HayameIOS.Debug.entitlements */,
 				0B589AC7DD3105CF712A4F96 /* HayameIOS.Release.entitlements */,
@@ -122,6 +159,8 @@
 			isa = PBXGroup;
 			children = (
 				0A7DE7E9F8B1C1F99E6B4BAE /* DesignSystem.swift */,
+				A1C0C0DE0000000000000013 /* HayameFont.swift */,
+				7A1E4C2B9D3F4E5A8B6C1D0F /* HayameMotion.swift */,
 			);
 			path = Theme;
 			sourceTree = "<group>";
@@ -145,6 +184,13 @@
 		B21F94A8D13B9C925BC3B311 /* Renter */ = {
 			isa = PBXGroup;
 			children = (
+				A1C0C0DE000000000000000D /* CheckoutResumeScreens.swift */,
+				A1C0C0DE0000000000000005 /* MoreScreens.swift */,
+				A1C0C0DE000000000000000F /* TripsSavedScreens.swift */,
+				A1C0C0DE0000000000000016 /* ListingCards.swift */,
+				A1C0C0DE0000000000000018 /* CarDetailScreen.swift */,
+				A1C0C0DE000000000000001A /* MessagingScreens.swift */,
+				A1C0C0DE000000000000001C /* BookingFlowScreens.swift */,
 				81AA2598E2189D8B1F3B5720 /* RenterScreens.swift */,
 			);
 			path = Renter;
@@ -153,6 +199,7 @@
 		BA483E3EE7A53891E8FE241A /* Common */ = {
 			isa = PBXGroup;
 			children = (
+				A1C0C0DE000000000000000B /* ModeSwitchOverlay.swift */,
 				EDDD74C69D95930539578828 /* AdminScreens.swift */,
 				D93B8C2E51A6F70429E1B845 /* AnalyticsConsentSheet.swift */,
 				95B87581576C44D745F473DF /* LegalAndSupportScreens.swift */,
@@ -165,6 +212,7 @@
 		C1541E8158C7B7B267BFBCF0 /* Host */ = {
 			isa = PBXGroup;
 			children = (
+				A1C0C0DE0000000000000009 /* HostHomeScreens.swift */,
 				C43DD509D97C8BC09DFDAEEC /* HostScreens.swift */,
 			);
 			path = Host;
@@ -202,6 +250,14 @@
 				7F95E920C7641A88FCE7E0E6 /* AuthScreens.swift */,
 			);
 			path = Auth;
+			sourceTree = "<group>";
+		};
+		A1C0C0DE0000000000000015 /* Fonts */ = {
+			isa = PBXGroup;
+			children = (
+				A1C0C0DE0000000000000011 /* Manrope-Variable.ttf */,
+			);
+			path = Fonts;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -262,6 +318,9 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A1C0C0DE0000000000000002 /* AppIcon.icon in Resources */,
+				A1C0C0DE0000000000000012 /* Manrope-Variable.ttf in Resources */,
+				A1C0C0DE0000000000000004 /* AppIconWordmark.icon in Resources */,
 				5136B34C04DCDEA1FB21C1D4 /* Assets.xcassets in Resources */,
 				BF3F421D93056E0F7C9433A9 /* Hayame 2.0 .code-workspace in Resources */,
 				167262C57183500C2A79920D /* LaunchScreen.storyboard in Resources */,
@@ -276,6 +335,17 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A1C0C0DE000000000000000E /* CheckoutResumeScreens.swift in Sources */,
+				A1C0C0DE0000000000000010 /* TripsSavedScreens.swift in Sources */,
+				A1C0C0DE0000000000000014 /* HayameFont.swift in Sources */,
+				A1C0C0DE0000000000000017 /* ListingCards.swift in Sources */,
+				A1C0C0DE0000000000000019 /* CarDetailScreen.swift in Sources */,
+				A1C0C0DE000000000000001B /* MessagingScreens.swift in Sources */,
+				A1C0C0DE000000000000001D /* BookingFlowScreens.swift in Sources */,
+				A1C0C0DE000000000000000C /* ModeSwitchOverlay.swift in Sources */,
+				A1C0C0DE000000000000000A /* HostHomeScreens.swift in Sources */,
+				A1C0C0DE0000000000000008 /* AppIconManager.swift in Sources */,
+				A1C0C0DE0000000000000006 /* MoreScreens.swift in Sources */,
 				A1C4E7B209D3F5188E2A6014 /* AnalyticsService.swift in Sources */,
 				B7E3A9410C6F2D8B14A5E730 /* AnalyticsConsentSheet.swift in Sources */,
 				83383CFE842BB17A7022D329 /* APIClient.swift in Sources */,
@@ -284,8 +354,10 @@
 				3A10EE1CB1A4A7755CCB9078 /* AuthComponents.swift in Sources */,
 				87DCF289372A6C6F4AEA75BB /* AuthScreens.swift in Sources */,
 				4EA8F953F7D42F5C7920714E /* Components.swift in Sources */,
+				A1C0C0DE000000000000001F /* CoachMarks.swift in Sources */,
 				662EEF16760A82C361576D99 /* DatabaseReferenceData.swift in Sources */,
 				09E5D900D752DA4D484ACA55 /* DesignSystem.swift in Sources */,
+				7A1E4C2B9D3F4E5A8B6C1D0E /* HayameMotion.swift in Sources */,
 				A0227C9F0F57B9B47C6CC29B /* HayameIOSApp.swift in Sources */,
 				620FD9E2896DCD0F2CC80714 /* HomeLocationManager.swift in Sources */,
 				AACF7916269FF138234FE1DE /* HostScreens.swift in Sources */,
@@ -340,7 +412,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 9;
+				CURRENT_PROJECT_VERSION = 11;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = XJHSMVRVW4;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -360,7 +432,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 1.0.6;
+				MARKETING_VERSION = 2.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -376,6 +448,8 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = AppIconWordmark;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = HayameIOS/HayameIOS.Release.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
@@ -430,7 +504,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 9;
+				CURRENT_PROJECT_VERSION = 11;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = XJHSMVRVW4;
 				ENABLE_NS_ASSERTIONS = NO;
@@ -444,7 +518,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 1.0.6;
+				MARKETING_VERSION = 2.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -459,6 +533,8 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = AppIconWordmark;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = HayameIOS/HayameIOS.Debug.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";

@@ -336,6 +336,8 @@ struct Car: Identifiable, Hashable {
     var hostLevel: String
     var instantBook: Bool
     var deliveryAvailable: Bool
+    /// Hosts opt in to single-day trips; off means a 2-day minimum.
+    var allowOneDayBooking: Bool = false
     var airConditioning: Bool
     var deliveryFee: Int = 0
     var insuranceFee: Int = 0
@@ -349,6 +351,9 @@ struct Car: Identifiable, Hashable {
 }
 
 extension Car {
+    /// Shortest trip this listing accepts, in days. Mirrors the server rule.
+    var minimumTripDays: Int { allowOneDayBooking ? 1 : 2 }
+
     var isNewListing: Bool {
         let sevenDays: TimeInterval = 7 * 24 * 60 * 60
         let age = Date().timeIntervalSince(createdAt)
@@ -561,6 +566,7 @@ struct ListingDraft: Hashable, Codable {
     var description: String = ""
     var instantBook: Bool = false
     var deliveryAvailable: Bool = false
+    var allowOneDayBooking: Bool = false
     var airConditioning: Bool = true
     var deliveryFee: Int = 0
     var insuranceFee: Int = 0
@@ -658,4 +664,187 @@ extension Date {
         formatter.dateFormat = "h:mm a"
         return formatter.string(from: self)
     }
+}
+
+// MARK: - Resumable checkout
+
+/// One thing that would stop a saved checkout from going ahead today, as the
+/// server reports it (car paused, dates taken, start date passed, ...).
+struct CheckoutIssue: Hashable, Codable {
+    let code: String
+    let message: String
+}
+
+/// The authoritative total for a saved checkout, computed server-side with the
+/// same formula Paystack is charged with.
+struct CheckoutPricing: Hashable, Codable {
+    var nights: Int = 1
+    var dailyRate: Int = 0
+    var subtotal: Int = 0
+    var platformFee: Int = 0
+    var insuranceFee: Int = 0
+    var deliveryFee: Int = 0
+    var outsideAccraSurcharge: Int = 0
+    var depositAmount: Int = 0
+    var total: Int = 0
+    var amountMinor: Int = 0
+}
+
+/// A checkout the renter started paying for and did not finish. Lives on the
+/// server as the held booking row, so it survives app restarts and devices.
+struct PendingCheckout: Identifiable, Hashable {
+    enum HoldState: String, Hashable {
+        case held
+        case expired
+    }
+
+    let id: String
+    var carID: String
+    var state: HoldState
+    var holdExpiresAt: Date?
+    var createdAt: Date?
+    var startDate: Date
+    var endDate: Date
+    var startDateString: String
+    var endDateString: String
+    var nights: Int
+    var tripMode: BookingTripMode
+    var tripUseRegion: String
+    var tripUseCity: String
+    var tripUseAddress: String
+    var delivery: BookingDeliveryDetails
+    var carTitle: String
+    var carImageURL: String?
+    var carDailyPrice: Int
+    var carCity: String
+    var carRegion: String
+    var carInstantBook: Bool
+    var carDeliveryAvailable: Bool
+    var hostName: String
+    var pricing: CheckoutPricing
+    var issues: [CheckoutIssue]
+    var canResume: Bool
+    var paymentReference: String?
+
+    var bookingID: String { id }
+
+    var isHeld: Bool {
+        guard state == .held, let holdExpiresAt else { return false }
+        return holdExpiresAt > Date()
+    }
+
+    /// Minimal `Car` so views built around a listing (success stage, checkout
+    /// sheet) can render even when the full listing is not in memory.
+    func placeholderCar() -> Car {
+        Car(
+            id: carID,
+            title: carTitle,
+            year: 2020,
+            city: carCity,
+            region: carRegion,
+            dailyPrice: carDailyPrice,
+            rating: 0,
+            reviewsCount: 0,
+            type: "Car",
+            transmission: "Automatic",
+            seats: 4,
+            fuelType: "Petrol",
+            description: "",
+            imageNames: [carImageURL].compactMap { $0 },
+            hostName: hostName,
+            hostVerified: false,
+            hostLevel: "Host",
+            instantBook: carInstantBook,
+            deliveryAvailable: carDeliveryAvailable,
+            airConditioning: false,
+            deliveryFee: pricing.deliveryFee,
+            insuranceFee: pricing.insuranceFee,
+            depositAmount: pricing.depositAmount,
+            outsideAccraFee: pricing.outsideAccraSurcharge,
+            approvalStatus: "approved",
+            isAvailable: true,
+            favoritesCount: 0
+        )
+    }
+}
+
+/// Selections the renter made in the checkout sheet before paying, kept on
+/// this device so closing the sheet never throws their work away.
+struct CheckoutDraft: Hashable, Codable {
+    var userID: String
+    var carID: String
+    var carTitle: String
+    var carImageURL: String?
+    var dailyPrice: Int
+    var startDate: String
+    var endDate: String
+    var region: String
+    var city: String
+    var address: String
+    var tripMode: BookingTripMode?
+    var delivery: BookingDeliveryDetails
+    var step: Int
+    var updatedAt: Date
+}
+
+/// Whatever the renter can pick back up: a server-held checkout wins over a
+/// local draft because it already carries a booking id and the live price.
+enum ResumableCheckout: Hashable, Identifiable {
+    case held(PendingCheckout)
+    case draft(CheckoutDraft)
+
+    var id: String {
+        switch self {
+        case .held(let checkout): return "held-\(checkout.id)"
+        case .draft(let draft): return "draft-\(draft.carID)-\(draft.startDate)"
+        }
+    }
+
+    var carID: String {
+        switch self {
+        case .held(let checkout): return checkout.carID
+        case .draft(let draft): return draft.carID
+        }
+    }
+
+    var carTitle: String {
+        switch self {
+        case .held(let checkout): return checkout.carTitle
+        case .draft(let draft): return draft.carTitle
+        }
+    }
+
+    var carImageURL: String? {
+        switch self {
+        case .held(let checkout): return checkout.carImageURL
+        case .draft(let draft): return draft.carImageURL
+        }
+    }
+
+    var tripMode: BookingTripMode {
+        switch self {
+        case .held(let checkout): return checkout.tripMode
+        case .draft(let draft): return draft.tripMode ?? .pickup
+        }
+    }
+
+    var heldCheckout: PendingCheckout? {
+        if case .held(let checkout) = self { return checkout }
+        return nil
+    }
+
+    var draft: CheckoutDraft? {
+        if case .draft(let draft) = self { return draft }
+        return nil
+    }
+}
+
+/// What the server decided when the renter asked to resume.
+enum CheckoutResumeOutcome: Hashable {
+    /// Hold refreshed; the price and options are current and payment can start.
+    case ready(PendingCheckout)
+    /// Something changed (dates taken, car paused, ...). Issues explain what.
+    case blocked(PendingCheckout)
+    /// The earlier payment had gone through; the booking is already in Trips.
+    case completed(bookingID: String, conversationID: String?)
 }

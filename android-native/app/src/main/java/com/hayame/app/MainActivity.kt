@@ -19,18 +19,34 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.outlined.BarChart
+import androidx.compose.material.icons.outlined.Cancel
+import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.LightMode
 import androidx.compose.material3.Icon
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import com.hayame.app.ui.components.LocalCoachMarks
+import com.hayame.app.ui.components.CoachMarkOverlay
+import com.hayame.app.ui.components.CoachMarkController
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
+import com.hayame.app.ui.viewmodel.AppearanceMode
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -44,9 +60,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.core.view.WindowCompat
 import com.google.firebase.FirebaseApp
 import com.google.firebase.messaging.FirebaseMessaging
+import com.hayame.app.core.analytics.AnalyticsService
 import com.hayame.app.ui.navigation.HayameNavApp
 import com.hayame.app.ui.theme.HayameTheme
 import com.hayame.app.ui.theme.LocalHayameColors
@@ -59,6 +78,7 @@ class MainActivity : ComponentActivity() {
 
     private var pendingConversationId by mutableStateOf<String?>(null)
     private var pendingBookingId by mutableStateOf<String?>(null)
+    private var pendingCarId by mutableStateOf<String?>(null)
     private var pendingBookingRecipientRole by mutableStateOf<String?>(null)
     private var pendingPaystackCallbackUri by mutableStateOf<String?>(null)
     private var pendingAnnouncementId by mutableStateOf<String?>(null)
@@ -70,9 +90,19 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         val container = (application as HayameApplication).container
         viewModelFactory = AppViewModelFactory(container)
+        // A forced light or dark appearance paints the window in that palette from
+        // the first frame, so launch doesn't flash the phone's palette first.
+        when (launchPrefs().getString(LAUNCH_APPEARANCE_KEY, AppearanceMode.SYSTEM.storageValue)) {
+            AppearanceMode.DARK.storageValue -> setTheme(R.style.Theme_Hayame_ForcedDark)
+            AppearanceMode.LIGHT.storageValue -> setTheme(R.style.Theme_Hayame_ForcedLight)
+        }
         super.onCreate(savedInstanceState)
 
         ingestIntent(intent)
+        // Debug builds: `--ez hayame_reset_tips true` replays every first-use tip.
+        if (savedInstanceState == null && BuildConfig.DEBUG && intent?.getBooleanExtra("hayame_reset_tips", false) == true) {
+            CoachMarkController.reset(applicationContext)
+        }
 
         WindowCompat.setDecorFitsSystemWindows(window, false)
         window.statusBarColor = Color(0xFF0F85E3).toArgb()
@@ -90,9 +120,23 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
-            val darkMode by viewModel.darkModeEnabled.collectAsState()
+            val appearanceMode by viewModel.appearanceMode.collectAsState()
+            val bootstrapping by viewModel.bootstrapping.collectAsState()
+            LaunchedEffect(appearanceMode, bootstrapping) {
+                if (!bootstrapping) rememberLaunchAppearance(appearanceMode)
+            }
+            val systemDark = isSystemInDarkTheme()
+            // Resolved here (not only in the view model) so a phone-wide switch applies on the same frame.
+            val darkMode = when (appearanceMode) {
+                AppearanceMode.SYSTEM -> systemDark
+                AppearanceMode.LIGHT -> false
+                AppearanceMode.DARK -> true
+            }
+            LaunchedEffect(systemDark) { viewModel.setSystemDarkTheme(systemDark) }
+            val coachMarks = remember { CoachMarkController(applicationContext) }
             var showAppearanceTransition by remember { mutableStateOf(false) }
             var appearanceTransitionTargetsDarkMode by remember { mutableStateOf(darkMode) }
+            var showAnalyticsConsent by remember { mutableStateOf(false) }
 
             LaunchedEffect(Unit) {
                 viewModel.appearanceTransitionEvents.collect { targetsDarkMode ->
@@ -101,6 +145,10 @@ class MainActivity : ComponentActivity() {
                     kotlinx.coroutines.delay(1_420)
                     showAppearanceTransition = false
                 }
+            }
+            LaunchedEffect(Unit) {
+                kotlinx.coroutines.delay(900)
+                showAnalyticsConsent = AnalyticsService.needsConsentDecision()
             }
 
             HayameTheme(darkTheme = darkMode) {
@@ -121,12 +169,14 @@ class MainActivity : ComponentActivity() {
                         isAppearanceLightNavigationBars = !darkMode
                     }
                 }
+                CompositionLocalProvider(LocalCoachMarks provides coachMarks) {
                 Box(modifier = Modifier.fillMaxSize()) {
                     HayameNavApp(
                         viewModel = viewModel,
                         pendingConversationId = pendingConversationId,
                         pendingBookingId = pendingBookingId,
                         pendingBookingRecipientRole = pendingBookingRecipientRole,
+                        pendingCarId = pendingCarId,
                         pendingPaystackCallbackUri = pendingPaystackCallbackUri,
                         pendingAnnouncementId = pendingAnnouncementId,
                         pendingAnnouncementTitle = pendingAnnouncementTitle,
@@ -138,6 +188,7 @@ class MainActivity : ComponentActivity() {
                             pendingBookingId = null
                             pendingBookingRecipientRole = null
                         },
+                        onCarConsumed = { pendingCarId = null },
                         onPaystackCallbackConsumed = { pendingPaystackCallbackUri = null },
                         onAnnouncementConsumed = {
                             pendingAnnouncementId = null
@@ -148,6 +199,9 @@ class MainActivity : ComponentActivity() {
                         },
                     )
 
+                    // First-use tips sit above the app and below the theme-switch veil.
+                    CoachMarkOverlay(controller = coachMarks)
+
                     AnimatedVisibility(
                         visible = showAppearanceTransition,
                         enter = fadeIn(tween(280)) + scaleIn(initialScale = 1.01f),
@@ -155,6 +209,16 @@ class MainActivity : ComponentActivity() {
                     ) {
                         AppearanceTransitionOverlay(targetsDarkMode = appearanceTransitionTargetsDarkMode)
                     }
+
+                    if (showAnalyticsConsent) {
+                        AnalyticsConsentDialog(
+                            onDecision = { granted ->
+                                AnalyticsService.setConsent(granted)
+                                showAnalyticsConsent = false
+                            },
+                        )
+                    }
+                }
                 }
             }
         }
@@ -162,6 +226,25 @@ class MainActivity : ComponentActivity() {
         window.decorView.postDelayed({
             initializePushTokenRegistration()
         }, 500L)
+    }
+
+    private fun launchPrefs() = getSharedPreferences(LAUNCH_PREFS, MODE_PRIVATE)
+
+    /**
+     * Keeps the next launch in step with the chosen appearance: the window theme
+     * above reads this, and on Android 13+ the system splash uses the matching theme.
+     */
+    private fun rememberLaunchAppearance(mode: AppearanceMode) {
+        launchPrefs().edit().putString(LAUNCH_APPEARANCE_KEY, mode.storageValue).apply()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            splashScreen.setSplashScreenTheme(
+                when (mode) {
+                    AppearanceMode.DARK -> R.style.Theme_Hayame_ForcedDark
+                    AppearanceMode.LIGHT -> R.style.Theme_Hayame_ForcedLight
+                    AppearanceMode.SYSTEM -> R.style.Theme_Hayame
+                },
+            )
+        }
     }
 
     private fun initializePushTokenRegistration() {
@@ -226,11 +309,98 @@ class MainActivity : ComponentActivity() {
             return
         }
 
+        val carIntentData = intent?.data
+        val carIntentScheme = carIntentData?.scheme?.lowercase()
+        val carIntentHost = carIntentData?.host?.lowercase()
+        val carIdFromPath = if (carIntentScheme == "https" && (carIntentHost == "hayamegh.com" || carIntentHost == "www.hayamegh.com")) {
+            val segments = carIntentData?.pathSegments.orEmpty()
+            val carsIndex = segments.indexOf("cars")
+            if (carsIndex >= 0 && carsIndex + 1 < segments.size) segments[carsIndex + 1] else null
+        } else {
+            null
+        }
+        val carFromExtra = intent?.getStringExtra("carId")
+        val carFromData = intent?.data?.getQueryParameter("carId")
+        val resolvedCarId = carIdFromPath ?: (if (!carFromExtra.isNullOrBlank()) carFromExtra else carFromData)
+        if (!resolvedCarId.isNullOrBlank()) {
+            pendingCarId = resolvedCarId
+            return
+        }
+
         val data = intent?.data
         val scheme = data?.scheme?.lowercase()
         if (scheme == "hayameandroid" || scheme == "hayame") {
             pendingPaystackCallbackUri = data.toString()
         }
+    }
+}
+
+@Composable
+private fun AnalyticsConsentDialog(onDecision: (Boolean) -> Unit) {
+    val colors = LocalHayameColors.current
+    Dialog(
+        onDismissRequest = {},
+        properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false),
+    ) {
+        Surface(
+            shape = RoundedCornerShape(24.dp),
+            color = colors.cardBackground,
+            tonalElevation = 6.dp,
+        ) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(24.dp),
+                verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(18.dp),
+            ) {
+                Icon(
+                    Icons.Outlined.BarChart,
+                    contentDescription = null,
+                    tint = colors.brandBlue,
+                    modifier = Modifier.size(40.dp),
+                )
+                Text("Help us improve Hayame?", color = colors.brandNavy, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    "We'd like to measure how people search and book, so we can fix what's broken and list the cars you're actually looking for.",
+                    color = colors.mutedText,
+                    fontSize = 14.sp,
+                )
+                ConsentBullet(
+                    icon = Icons.Outlined.CheckCircle,
+                    tint = colors.success,
+                    text = "What we'd collect: which cars you view, what you search for, and where a booking gets stuck.",
+                )
+                ConsentBullet(
+                    icon = Icons.Outlined.Cancel,
+                    tint = colors.danger,
+                    text = "What we never do: track you across other apps or websites, sell your data, or use advertising trackers.",
+                )
+                ConsentBullet(
+                    icon = Icons.Outlined.CheckCircle,
+                    tint = colors.brandBlue,
+                    text = "You can change this any time in Settings. Declining does not limit any feature.",
+                )
+                Button(
+                    onClick = { onDecision(true) },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = colors.brandBlue),
+                ) { Text("Allow", modifier = Modifier.padding(vertical = 6.dp), color = Color.White, fontWeight = FontWeight.Bold) }
+                Button(
+                    onClick = { onDecision(false) },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = colors.subtleFill, contentColor = colors.brandNavy),
+                ) { Text("No thanks", modifier = Modifier.padding(vertical = 6.dp), fontWeight = FontWeight.Bold) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ConsentBullet(icon: androidx.compose.ui.graphics.vector.ImageVector, tint: Color, text: String) {
+    val colors = LocalHayameColors.current
+    Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp)) {
+        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(18.dp))
+        Text(text, modifier = Modifier.weight(1f), color = colors.mutedText, fontSize = 13.sp)
     }
 }
 
@@ -294,3 +464,6 @@ private fun AppearanceTransitionOverlay(targetsDarkMode: Boolean) {
         }
     }
 }
+
+private const val LAUNCH_PREFS = "hayame_launch"
+private const val LAUNCH_APPEARANCE_KEY = "appearance"

@@ -32,9 +32,13 @@ class SessionStore(private val context: Context) {
         val seenAnnouncements = stringSetPreferencesKey("seen_announcement_ids")
         val firstLaunchAtMillis = longPreferencesKey("first_launch_at_millis")
         val darkMode = booleanPreferencesKey("dark_mode_enabled")
+        // "system", "light" or "dark"; older builds only stored the boolean above.
+        val appearanceMode = stringPreferencesKey("appearance_mode")
         // Home browse location — deliberately separate from the profile city.
         val browseCity = stringPreferencesKey("browse_city")
         val browseRegion = stringPreferencesKey("browse_region")
+        // Checkout selections saved on this device before payment (JSON).
+        val checkoutDraft = stringPreferencesKey("checkout_draft_json")
     }
 
     val sessionFlow: Flow<SessionState> = context.dataStore.data
@@ -110,6 +114,24 @@ class SessionStore(private val context: Context) {
         context.dataStore.edit { prefs -> prefs[Keys.darkMode] = enabled }
     }
 
+    /** "system", "light" or "dark". Falls back to the legacy on/off switch, then to "system". */
+    suspend fun appearanceMode(): String {
+        return context.dataStore.data
+            .catch { emit(emptyPreferences()) }
+            .map { prefs ->
+                prefs[Keys.appearanceMode] ?: when (prefs[Keys.darkMode]) {
+                    true -> "dark"
+                    false -> "light"
+                    null -> "system"
+                }
+            }
+            .first()
+    }
+
+    suspend fun setAppearanceMode(mode: String) {
+        context.dataStore.edit { prefs -> prefs[Keys.appearanceMode] = mode }
+    }
+
     suspend fun browseLocation(): Pair<String, String> {
         return context.dataStore.data
             .catch { emit(emptyPreferences()) }
@@ -122,6 +144,17 @@ class SessionStore(private val context: Context) {
             putOrRemove(prefs, Keys.browseCity, city)
             putOrRemove(prefs, Keys.browseRegion, region)
         }
+    }
+
+    suspend fun checkoutDraftJson(): String? {
+        return context.dataStore.data
+            .catch { emit(emptyPreferences()) }
+            .map { prefs -> prefs[Keys.checkoutDraft] }
+            .first()
+    }
+
+    suspend fun setCheckoutDraftJson(json: String?) {
+        context.dataStore.edit { prefs -> putOrRemove(prefs, Keys.checkoutDraft, json) }
     }
 
     suspend fun authHeader(): String? = current().accessToken?.let { "Bearer $it" }

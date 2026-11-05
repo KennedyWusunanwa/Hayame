@@ -29,7 +29,7 @@ struct AuthScaffold<Content: View>: View {
                                 onTabChange(tab)
                             } label: {
                                 Text(tab.label)
-                                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                                    .font(.hayame(size: 14, weight: .semibold))
                                     .foregroundStyle(selectedTab == tab ? HayameTheme.brandNavy : .white.opacity(0.70))
                                     .frame(maxWidth: .infinity)
                                     .padding(.vertical, 9)
@@ -52,10 +52,10 @@ struct AuthScaffold<Content: View>: View {
                 VStack(alignment: .leading, spacing: 20) {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(title)
-                            .font(.system(size: 22, weight: .bold, design: .rounded))
+                            .font(.hayame(size: 22, weight: .bold))
                             .foregroundStyle(HayameTheme.brandNavy)
                         Text(subtitle)
-                            .font(.system(size: 13, weight: .medium, design: .rounded))
+                            .font(.hayame(size: 13, weight: .medium))
                             .foregroundStyle(HayameTheme.mutedText)
                     }
 
@@ -84,7 +84,7 @@ struct AuthField: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(label)
-                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                .font(.hayame(size: 12, weight: .semibold))
                 .foregroundStyle(HayameTheme.brandNavy)
             TextField(placeholder, text: $text)
                 .keyboardType(keyboardType)
@@ -114,7 +114,7 @@ struct AuthSecureField: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(label)
-                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                .font(.hayame(size: 12, weight: .semibold))
                 .foregroundStyle(HayameTheme.brandNavy)
             HStack {
                 Group {
@@ -128,7 +128,7 @@ struct AuthSecureField: View {
                 .autocorrectionDisabled()
                 .textInputAutocapitalization(.never)
                 Button(isVisible ? "Hide" : "Show") { isVisible.toggle() }
-                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .font(.hayame(size: 12, weight: .semibold))
                     .foregroundStyle(HayameTheme.brandBlue)
             }
             .padding(.horizontal, 14)
@@ -153,7 +153,7 @@ struct AuthSelectField: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(label)
-                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                .font(.hayame(size: 12, weight: .semibold))
                 .foregroundStyle(HayameTheme.brandNavy)
             Menu {
                 ForEach(options, id: \.self) { opt in
@@ -162,14 +162,14 @@ struct AuthSelectField: View {
             } label: {
                 HStack {
                     Text(selected.isEmpty ? "Select" : selected)
-                        .font(.system(size: 13, design: .rounded))
+                        .font(.hayame(size: 13))
                         .foregroundStyle(selected.isEmpty
                             ? HayameTheme.mutedText
                             : HayameTheme.brandNavy)
                         .lineLimit(1)
                     Spacer()
                     Image(systemName: "chevron.down")
-                        .font(.system(size: 10, weight: .semibold))
+                        .font(.hayame(size: 10, weight: .semibold))
                         .foregroundStyle(HayameTheme.mutedText)
                 }
                 .padding(.horizontal, 14)
@@ -198,7 +198,7 @@ struct AuthPrimaryButton: View {
                     ProgressView().tint(.white)
                 }
                 Text(title)
-                    .font(.system(size: 15, weight: .semibold, design: .rounded))
+                    .font(.hayame(size: 15, weight: .semibold))
             }
             .foregroundStyle(.white)
             .frame(maxWidth: .infinity)
@@ -217,7 +217,7 @@ struct AuthGuestButton: View {
     var body: some View {
         Button(action: action) {
             Text("Continue as guest")
-                .font(.system(size: 14, weight: .medium, design: .rounded))
+                .font(.hayame(size: 14, weight: .medium))
                 .foregroundStyle(HayameTheme.brandNavy)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 13)
@@ -242,7 +242,7 @@ struct AuthBiometricButton: View {
                 Image(systemName: "faceid")
                 Text(title)
             }
-            .font(.system(size: 14, weight: .semibold, design: .rounded))
+            .font(.hayame(size: 14, weight: .semibold))
             .foregroundStyle(HayameTheme.brandNavy)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 13)

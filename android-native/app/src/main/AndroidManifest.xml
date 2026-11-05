@@ -14,16 +14,12 @@
         android:label="Hayame"
         android:supportsRtl="true"
         android:theme="@style/Theme.Hayame"
-        android:networkSecurityConfig="@xml/network_security_config">
+        android:networkSecurityConfig="@xml/network_security_config"
+        android:enableOnBackInvokedCallback="true">
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTask">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -31,7 +27,51 @@
                 <data android:scheme="hayameandroid" />
                 <data android:scheme="hayame" />
             </intent-filter>
+
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="https"
+                    android:host="hayamegh.com"
+                    android:pathPrefix="/cars" />
+                <data
+                    android:scheme="https"
+                    android:host="www.hayamegh.com"
+                    android:pathPrefix="/cars" />
+            </intent-filter>
         </activity>
+
+        <!-- Launcher entries. Exactly one alias is enabled at a time; Settings > Appearance >
+             App icon switches between them (see core/AppIconManager.kt). Both target MainActivity,
+             so deep links and notifications keep working whichever icon is active. -->
+        <activity-alias
+            android:name=".LauncherLogo"
+            android:targetActivity=".MainActivity"
+            android:enabled="true"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher"
+            android:roundIcon="@mipmap/ic_launcher_round"
+            android:label="Hayame">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".LauncherWordmark"
+            android:targetActivity=".MainActivity"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_wordmark"
+            android:roundIcon="@mipmap/ic_launcher_wordmark_round"
+            android:label="Hayame">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
 
         <service
             android:name=".push.HayameFirebaseMessagingService"

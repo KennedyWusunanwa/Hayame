@@ -28,6 +28,7 @@ type ExploreCar = Omit<CarShape, "rating"> & {
   rating?: number;
   instant_book?: boolean;
   delivery_available?: boolean;
+  allow_one_day_booking?: boolean;
   air_conditioning?: boolean;
   year?: number;
   bookings_count?: number;
@@ -209,6 +210,10 @@ function mapApiCars(rows: any[]): ExploreCar[] {
       delivery_available:
         typeof car.delivery_available === "boolean"
           ? car.delivery_available
+          : undefined,
+      allow_one_day_booking:
+        typeof car.allow_one_day_booking === "boolean"
+          ? car.allow_one_day_booking
           : undefined,
       air_conditioning:
         typeof car.air_conditioning === "boolean"
@@ -713,6 +718,7 @@ function ExploreContent() {
                       description: car.description,
                       image_url: car.image,
                       host_type: car.host_type,
+                      allow_one_day_booking: car.allow_one_day_booking,
                     }}
                     isFavorite={favoriteIds.includes(car.id)}
                     onToggleFavorite={toggleFavorite}

@@ -15,11 +15,27 @@ enum ScreenshotRoute: String, CaseIterable, Identifiable {
     case bookingReview = "booking-review"
     case bookingPayment = "booking-payment"
     case paymentProcessing = "payment-processing"
+    case bookingSuccess = "booking-success"
+    case hostBookings = "host-bookings"
+    case hostHome = "host-home"
+    case hostProfile = "host-profile"
+    case modeSwitch = "mode-switch"
     case trips
     case favorites
     case messages
     case profile
+    case more
+    case profilePage = "profile-page"
+    case settings
     case renterDashboard = "renter-dashboard"
+    case checkoutResumeHome = "checkout-resume-home"
+    case checkoutResumeTrips = "checkout-resume-trips"
+    case checkoutResumeDetail = "checkout-resume-detail"
+    case checkoutResumeSheet = "checkout-resume-sheet"
+    case checkoutResumeBlocked = "checkout-resume-blocked"
+    case chatThread = "chat-thread"
+    case hostReviews = "host-reviews"
+    case hostReviewsEmpty = "host-reviews-empty"
 
     var id: String { rawValue }
 
@@ -60,6 +76,7 @@ struct ScreenshotRootView: View {
             }
         }
         .environmentObject(appState)
+        .coachMarkHost()
         .background(HayameTheme.pageBackground.ignoresSafeArea())
     }
 }
