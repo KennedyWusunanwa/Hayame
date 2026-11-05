@@ -6226,10 +6226,10 @@ fun HostCarEditorScreen(
             put("deposit_amount", parsedDepositAmount)
             put("outside_accra_fee", parsedOutsideAccraFee)
             put("cancellation_policy", normalizedCancellation.lowercase())
+            // Instant Book and delivery are their own fields above; only real
+            // vehicle features belong in this list or the server rejects it.
             put("features", buildJsonArray {
                 if (airConditioning) add(JsonPrimitive("Air Conditioning"))
-                if (instantBook) add(JsonPrimitive("Instant Book"))
-                if (deliveryAvailable) add(JsonPrimitive("Delivery Available"))
             })
         }
 

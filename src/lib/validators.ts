@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { featureOptions, fuelTypes } from "./utils";
+import { fuelTypes, normalizeFeatures } from "./utils";
 
 export const carFormSchema = z.object({
   title: z.string().optional(),
@@ -18,9 +18,15 @@ export const carFormSchema = z.object({
     .int()
     .min(2000)
     .max(new Date().getFullYear() + 1),
+  // Keep the features we recognise and quietly drop the rest. Older app
+  // builds sent "Instant Book" and "Delivery Available" here (they are
+  // separate booleans), and a stray label must not block a whole listing.
   features: z
-    .array(z.string().refine((f) => featureOptions.includes(f)))
-    .optional(),
+    .array(z.string())
+    .optional()
+    .transform((values) =>
+      values === undefined ? undefined : normalizeFeatures(values),
+    ),
   is_available: z.boolean().optional(),
   instant_book: z.boolean().optional(),
   delivery_available: z.boolean().optional(),
