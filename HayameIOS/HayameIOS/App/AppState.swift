@@ -95,6 +95,12 @@ final class AppState: ObservableObject {
     private let api = APIClient.shared
     private let defaults = UserDefaults.standard
 
+    /// Platform fee the server charges on top of the daily rate, as a percent.
+    /// Set in the admin; it comes with every car list response and is kept
+    /// between launches so the first price preview is already right.
+    @Published private(set) var platformFeePercent: Double =
+        UserDefaults.standard.object(forKey: "hayame.platform_fee_percent") as? Double ?? 10
+
     private let authTokenKey = "hayame.auth_token"
     private let refreshTokenKey = "hayame.refresh_token"
     private let apiBaseURLKey = "hayame.api_base_url"
@@ -2871,6 +2877,20 @@ final class AppState: ObservableObject {
         await syncConversations()
     }
 
+    /// Service fee for a subtotal at the current platform fee, in whole cedis
+    /// like the amount the server charges.
+    func platformFee(forSubtotal subtotal: Int) -> Int {
+        Int(Double(subtotal) * platformFeePercent / 100)
+    }
+
+    private func applyPlatformFee(from meta: CarsMetaDTO?) {
+        guard let value = meta?.platform_fee_percent?.doubleValue,
+              value.isFinite, value >= 0, value <= 100 else { return }
+        guard platformFeePercent != value else { return }
+        platformFeePercent = value
+        defaults.set(value, forKey: "hayame.platform_fee_percent")
+    }
+
     func refreshAllRemoteData() async {
         #if DEBUG
         if Self.isScreenshotMode { return }
@@ -2979,6 +2999,7 @@ final class AppState: ObservableObject {
     }
 
     private func applyPublicCars(_ response: CarsEnvelopeDTO) async {
+        applyPlatformFee(from: response.meta)
         cars = response.data.map(mapCar)
         publicCarsLoadState = cars.isEmpty ? .empty : .loaded
 
@@ -3009,6 +3030,7 @@ final class AppState: ObservableObject {
             let response = try await withAuthenticatedToken { token in
                 try await api.getMyCars(baseURL: apiBaseURL, token: token)
             }
+            applyPlatformFee(from: response.meta)
             let mapped = response.data.map(mapCar)
             ownedCars = mapped
             if hasSyncedOwnedCarsOnce {

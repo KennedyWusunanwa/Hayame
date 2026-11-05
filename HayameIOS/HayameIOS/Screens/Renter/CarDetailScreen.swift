@@ -79,7 +79,7 @@ struct CarDetailScreen: View {
     }
 
     private var subtotal: Int { car.dailyPrice * daysCount }
-    private var platformFee: Int { Int(Double(subtotal) * 0.10) }
+    private var platformFee: Int { appState.platformFee(forSubtotal: subtotal) }
     private var insuranceFee: Int { max(car.insuranceFee, 0) }
     private var deliveryFee: Int { car.deliveryAvailable ? max(car.deliveryFee, 0) : 0 }
 

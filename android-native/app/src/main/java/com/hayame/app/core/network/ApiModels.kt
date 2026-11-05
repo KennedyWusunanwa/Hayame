@@ -201,6 +201,14 @@ data class CarDto(
 @Serializable
 data class CarsEnvelope(
     val data: List<CarDto> = emptyList(),
+    val meta: CarsMetaDto? = null,
+)
+
+@Serializable
+data class CarsMetaDto(
+    /** Platform fee the server charges on top of the daily rate, as a percent. */
+    @Serializable(with = FlexibleDoubleSerializer::class)
+    val platform_fee_percent: Double? = null,
 )
 
 @Serializable

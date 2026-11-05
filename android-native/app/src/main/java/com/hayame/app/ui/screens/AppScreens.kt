@@ -3788,6 +3788,7 @@ fun CarDetailScreen(
                         baseCities.filter { it.isNotBlank() }.sorted().forEach(::add)
                     }.distinct()
                 }
+                val platformFeePercent by viewModel.platformFeePercent.collectAsState()
                 val daysCount = remember(startDate, endDate) {
                     max(1, ChronoUnit.DAYS.between(startDate, endDate).toInt())
                 }
@@ -4050,7 +4051,7 @@ fun CarDetailScreen(
                     val isHostVerified = car.id_verified == true || car.owner?.id_verified == true
                     val isPhoneVerified = car.phone_verified == true || car.owner?.phone_verified == true
                     val isEmailVerified = car.email_verified == true || car.owner?.email_verified == true
-                    val total = subtotal + (subtotal * 0.10).roundToInt() + insuranceFee + deliveryFee + outsideSurcharge + depositAmount
+                    val total = subtotal + (subtotal * platformFeePercent / 100).roundToInt() + insuranceFee + deliveryFee + outsideSurcharge + depositAmount
                     val yearLabel = (car.year ?: car.car_year)?.roundToInt()?.takeIf { it > 1900 }?.toString()
                     val ratingSummary = if (reviewsCount > 0) String.format("%.1f", ratingValue) else "New"
                     val isFavoriteCar = favoriteIds.contains(car.id)
@@ -4214,7 +4215,7 @@ fun CarDetailScreen(
                                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                     Text("Price details", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = colors.brandNavy)
                                     DetailPriceLine("GHS $pricePerDay × $daysCount day${if (daysCount == 1) "" else "s"}", subtotal)
-                                    DetailPriceLine("Service fee", (subtotal * 0.10).roundToInt())
+                                    DetailPriceLine("Service fee", (subtotal * platformFeePercent / 100).roundToInt())
                                     DetailPriceLine("Insurance", insuranceFee)
                                     if (car.delivery_available == true) DetailPriceLine("Delivery (if chosen)", deliveryFee)
                                     if (outsideListingRegion) DetailPriceLine("Outside region surcharge", outsideSurcharge)

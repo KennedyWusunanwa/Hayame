@@ -105,6 +105,12 @@ struct ProfileDTO: Decodable {
 
 struct CarsEnvelopeDTO: Decodable {
     let data: [CarDTO]
+    let meta: CarsMetaDTO?
+}
+
+struct CarsMetaDTO: Decodable {
+    /// Platform fee the server charges on top of the daily rate, as a percent.
+    let platform_fee_percent: DoubleOrIntOrString?
 }
 
 struct CarDetailEnvelopeDTO: Decodable {
