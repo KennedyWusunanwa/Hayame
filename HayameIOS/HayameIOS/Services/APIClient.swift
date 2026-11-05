@@ -141,6 +141,7 @@ struct CarDTO: Decodable {
     let instant_book: Bool?
     let delivery_available: Bool?
     let allow_one_day_booking: Bool?
+    let with_driver: Bool?
     let air_conditioning: Bool?
     let approval_status: String?
     let created_at: String?

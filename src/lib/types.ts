@@ -20,6 +20,7 @@ export type Car = {
   host_avatar?: string;
   host_type?: string;
   allow_one_day_booking?: boolean;
+  with_driver?: boolean;
 };
 
 export type Booking = {

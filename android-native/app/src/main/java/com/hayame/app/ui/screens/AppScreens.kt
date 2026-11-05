@@ -4114,6 +4114,7 @@ fun CarDetailScreen(
                                     item { DetailSpecChip(painterRes = carTypeIconRes(car.car_type ?: "Car"), text = car.car_type ?: "Car") }
                                     if (car.air_conditioning == true) item { DetailSpecChip(Icons.Outlined.AcUnit, "A/C") }
                                     if (car.delivery_available == true) item { DetailSpecChip(Icons.Outlined.LocalShipping, "Delivery") }
+                                    if (car.with_driver == true) item { DetailSpecChip(Icons.Outlined.Person, "With driver") }
                                     if (car.allow_one_day_booking == true) item { DetailSpecChip(Icons.Outlined.CalendarMonth, "1-day bookings", tint = colors.brandBlue) }
                                     if (car.instant_book == true) item { DetailSpecChip(Icons.Outlined.Bolt, "Instant book", tint = Success) }
                                 }
@@ -4384,6 +4385,7 @@ fun CarDetailScreen(
                                     DetailPolicyRow(Icons.Outlined.CreditCard, "Payment", "Paystack, card or mobile money")
                                     DetailPolicyRow(Icons.Outlined.CheckCircle, "Host approval", if (car.instant_book == true) "Instant book" else "Confirmed before pickup")
                                     DetailPolicyRow(Icons.Outlined.CalendarMonth, "Minimum trip", if (car.allow_one_day_booking == true) "1 day" else "2 days")
+                                    DetailPolicyRow(Icons.Outlined.Person, "Driver", if (car.with_driver == true) "Comes with a driver" else "Self-drive")
                                     DetailPolicyRow(Icons.Outlined.CalendarMonth, "Listed", addedDateLabel)
                                 }
                             }
@@ -5778,6 +5780,7 @@ fun HostCarEditorScreen(
     var instantBook by rememberSaveable(carId) { mutableStateOf(false) }
     var deliveryAvailable by rememberSaveable(carId) { mutableStateOf(false) }
     var allowOneDayBooking by rememberSaveable(carId) { mutableStateOf(false) }
+    var withDriver by rememberSaveable(carId) { mutableStateOf(false) }
     var airConditioning by rememberSaveable(carId) { mutableStateOf(true) }
     var deliveryFee by rememberSaveable(carId) { mutableStateOf("") }
     var insuranceFee by rememberSaveable(carId) { mutableStateOf("") }
@@ -5979,6 +5982,7 @@ fun HostCarEditorScreen(
             instantBook = instantBook,
             deliveryAvailable = deliveryAvailable,
             allowOneDayBooking = allowOneDayBooking,
+            withDriver = withDriver,
             airConditioning = airConditioning,
             deliveryFee = deliveryFee.trim().toIntOrNull() ?: 0,
             insuranceFee = insuranceFee.trim().toIntOrNull() ?: 0,
@@ -6004,6 +6008,7 @@ fun HostCarEditorScreen(
         instantBook = draft.instantBook
         deliveryAvailable = draft.deliveryAvailable
         allowOneDayBooking = draft.allowOneDayBooking
+        withDriver = draft.withDriver
         airConditioning = draft.airConditioning
         deliveryFee = draft.deliveryFee.asOptionalFeeText()
         insuranceFee = draft.insuranceFee.asOptionalFeeText()
@@ -6120,6 +6125,7 @@ fun HostCarEditorScreen(
             instantBook = existingCar.instant_book == true
             deliveryAvailable = existingCar.delivery_available == true
             allowOneDayBooking = existingCar.allow_one_day_booking == true
+            withDriver = existingCar.with_driver == true
             airConditioning = existingCar.air_conditioning != false
             deliveryFee = ((existingCar.delivery_fee ?: 0.0).roundToInt()).asOptionalFeeText()
             insuranceFee = ((existingCar.insurance_fee ?: 0.0).roundToInt()).asOptionalFeeText()
@@ -6171,6 +6177,7 @@ fun HostCarEditorScreen(
         instantBook,
         deliveryAvailable,
         allowOneDayBooking,
+        withDriver,
         airConditioning,
         deliveryFee,
         insuranceFee,
@@ -6220,6 +6227,7 @@ fun HostCarEditorScreen(
             put("instant_book", instantBook)
             put("delivery_available", deliveryAvailable)
             put("allow_one_day_booking", allowOneDayBooking)
+            put("with_driver", withDriver)
             put("air_conditioning", airConditioning)
             put("delivery_fee", if (deliveryAvailable) parsedDeliveryFee else 0)
             put("insurance_fee", parsedInsuranceFee)
@@ -6505,6 +6513,41 @@ fun HostCarEditorScreen(
                                         onValueChange = { dailyPrice = it.filter(Char::isDigit) },
                                         suggestionText = "Suggested: GHS ${pricingSuggestion.first}–${pricingSuggestion.second}/day",
                                     )
+                                    // Booking options sit next to the price so hosts cannot miss them.
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(18.dp))
+                                            .background(LocalHayameColors.current.brandBlue.copy(alpha = 0.06f))
+                                            .border(1.dp, LocalHayameColors.current.brandBlue.copy(alpha = 0.25f), RoundedCornerShape(18.dp))
+                                            .padding(14.dp),
+                                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                                    ) {
+                                        Text(
+                                            text = "Booking options",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = LocalHayameColors.current.brandNavy,
+                                        )
+                                        Text(
+                                            text = "Shown on the listing so guests know before they book.",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = LocalHayameColors.current.mutedText,
+                                        )
+                                        HostToggleRow(
+                                            label = "Allow 1-day bookings",
+                                            checked = allowOneDayBooking,
+                                            helpTitle = "1-day bookings",
+                                            helpMessage = "When this is on, guests can book this car for one day: pick-up at the 10:00 AM hand-off and return at the same time the next day. When it's off, every trip must be at least 2 days. The listing shows which one applies.",
+                                        ) { allowOneDayBooking = it }
+                                        HorizontalDivider(color = LocalHayameColors.current.border)
+                                        HostToggleRow(
+                                            label = "Comes with a driver",
+                                            checked = withDriver,
+                                            helpTitle = "With driver",
+                                            helpMessage = "Turn this on if the car is only rented with a driver (chauffeur service). Guests see a \"With driver\" tag on the listing and will not expect to drive themselves.",
+                                        ) { withDriver = it }
+                                    }
                                     Text(
                                         text = "Optional add-ons",
                                         style = MaterialTheme.typography.titleMedium,
@@ -6604,12 +6647,6 @@ fun HostCarEditorScreen(
                                         helpTitle = "Delivery",
                                         helpMessage = "Turn this on if you want guests to choose delivery during checkout. Add a delivery fee only if you charge for bringing the car to them.",
                                     ) { deliveryAvailable = it }
-                                    HostToggleRow(
-                                        label = "1-day bookings",
-                                        checked = allowOneDayBooking,
-                                        helpTitle = "1-day bookings",
-                                        helpMessage = "When this is on, guests can book this car for one day: pick-up at the 10:00 AM hand-off and return at the same time the next day. When it's off, every trip must be at least 2 days. The listing shows which one applies.",
-                                    ) { allowOneDayBooking = it }
                                     HostToggleRow("Air conditioning", airConditioning) { airConditioning = it }
                                     SelectionTextField(
                                         label = "Cancellation policy",
@@ -6788,6 +6825,7 @@ fun HostCarEditorScreen(
                                     if (instantBook) "Instant Book enabled" else "Instant Book off",
                                     if (deliveryAvailable) "Delivery enabled" else "Delivery off",
                                     if (allowOneDayBooking) "1-day bookings allowed" else "2-day minimum trip",
+                                    if (withDriver) "Comes with a driver" else "Self-drive",
                                     if (airConditioning) "Air conditioning included" else "Air conditioning off",
                                     cancellationPolicy,
                                 ),
@@ -7346,6 +7384,7 @@ private data class ListingEditorDraftState(
     val instantBook: Boolean = false,
     val deliveryAvailable: Boolean = false,
     val allowOneDayBooking: Boolean = false,
+    val withDriver: Boolean = false,
     val airConditioning: Boolean = true,
     val deliveryFee: Int = 0,
     val insuranceFee: Int = 0,

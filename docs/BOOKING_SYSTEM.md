@@ -22,6 +22,9 @@ This document explains how the Hayame booking system works end-to-end: availabil
     than 2 nights (`minimumTripNights` in `src/lib/utils.ts`). Apply
     `db/patch_cars_allow_one_day_booking.sql` before deploying: the mobile
     list endpoint selects the column from `car_search_view`.
+  - `with_driver` boolean (default false). The host or their chauffeur
+    drives; shown as a "With driver" tag. Apply `db/patch_cars_with_driver.sql`
+    before deploying for the same reason.
 - `public.bookings`
   - `start_date`, `end_date` (exclusive end)
   - `status` (`pending`, `awaiting_host`, `confirmed`, `rejected`, `cancelled`, `completed`, `refunded`)

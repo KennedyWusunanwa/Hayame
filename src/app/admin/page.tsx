@@ -621,7 +621,7 @@ export default async function AdminPage({
   let carsQuery = admin
     .from("cars")
     .select(
-      "id,title,owner_id,city,region,daily_price,approval_status,is_available,car_type,brand,model,car_year,created_at,owner:profiles!cars_owner_id_fkey(full_name,avatar_url,phone)",
+      "id,title,owner_id,city,region,daily_price,approval_status,is_available,car_type,brand,model,car_year,created_at,allow_one_day_booking,with_driver,owner:profiles!cars_owner_id_fkey(full_name,avatar_url,phone)",
     )
     .order("created_at", { ascending: false })
     .limit(vehicleTerm ? 200 : 60);
@@ -1294,6 +1294,16 @@ export default async function AdminPage({
                           {nextTrip ? (
                             <span className="rounded-full bg-sky-50 px-2 py-1 text-brand">
                               Next trip {nextTrip.start_date}
+                            </span>
+                          ) : null}
+                          {car.with_driver ? (
+                            <span className="rounded-full bg-[#06223a] px-2 py-1 text-white">
+                              With driver
+                            </span>
+                          ) : null}
+                          {car.allow_one_day_booking ? (
+                            <span className="rounded-full bg-emerald-50 px-2 py-1 text-emerald-700">
+                              1-day OK
                             </span>
                           ) : null}
                         </div>

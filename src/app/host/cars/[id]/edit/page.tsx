@@ -81,6 +81,7 @@ export default async function EditCarPage({ params }: PageProps) {
                 (hydratedCar as any).delivery_available ?? false,
               allow_one_day_booking:
                 (hydratedCar as any).allow_one_day_booking ?? false,
+              with_driver: (hydratedCar as any).with_driver ?? false,
               air_conditioning: (hydratedCar as any).air_conditioning ?? false,
               delivery_fee: Number((hydratedCar as any).delivery_fee ?? 0),
               insurance_fee: Number((hydratedCar as any).insurance_fee ?? 0),

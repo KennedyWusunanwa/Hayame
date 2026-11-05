@@ -338,6 +338,8 @@ struct Car: Identifiable, Hashable {
     var deliveryAvailable: Bool
     /// Hosts opt in to single-day trips; off means a 2-day minimum.
     var allowOneDayBooking: Bool = false
+    /// The host or their chauffeur drives; guests do not self-drive.
+    var withDriver: Bool = false
     var airConditioning: Bool
     var deliveryFee: Int = 0
     var insuranceFee: Int = 0
@@ -567,6 +569,7 @@ struct ListingDraft: Hashable, Codable {
     var instantBook: Bool = false
     var deliveryAvailable: Bool = false
     var allowOneDayBooking: Bool = false
+    var withDriver: Bool = false
     var airConditioning: Bool = true
     var deliveryFee: Int = 0
     var insuranceFee: Int = 0
