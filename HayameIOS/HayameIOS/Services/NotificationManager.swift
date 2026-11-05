@@ -6,6 +6,9 @@ extension Notification.Name {
     static let hayameDidRegisterPushToken = Notification.Name("hayameDidRegisterPushToken")
     static let hayamePushRegistrationFailed = Notification.Name("hayamePushRegistrationFailed")
     static let hayameDidOpenPushNotification = Notification.Name("hayameDidOpenPushNotification")
+    /// Posted with the push `userInfo` whenever a push arrives while the app is open or is tapped,
+    /// so data that it talks about (a listing decision, a booking) refreshes without a relaunch.
+    static let hayameDidReceivePushNotification = Notification.Name("hayameDidReceivePushNotification")
 }
 
 struct PushNotificationRoute: Equatable {
@@ -18,6 +21,10 @@ struct PushNotificationRoute: Equatable {
     let announcementBody: String?
     let announcementCategory: String?
     let announcementCTAURL: String?
+    /// Server-side kind, e.g. "listing_status".
+    let type: String?
+    /// Listing the push is about (admin approved or rejected it).
+    let carID: String?
 }
 
 @MainActor
@@ -163,8 +170,10 @@ final class NotificationManager: NSObject, ObservableObject {
             participantName(from: alertTitle(from: userInfo))
         let title = pushString(forKey: "title", in: userInfo) ?? alertTitle(from: userInfo)
         let body = pushString(forKey: "body", in: userInfo) ?? alertBody(from: userInfo)
+        let type = pushString(forKey: "type", in: userInfo)?.lowercased()
+        let carID = pushString(forKey: "carId", in: userInfo) ?? pushString(forKey: "listingId", in: userInfo)
 
-        guard conversationID != nil || bookingID != nil || announcementID != nil else { return nil }
+        guard conversationID != nil || bookingID != nil || announcementID != nil || carID != nil else { return nil }
         return PushNotificationRoute(
             conversationID: conversationID,
             bookingID: bookingID,
@@ -174,7 +183,9 @@ final class NotificationManager: NSObject, ObservableObject {
             announcementTitle: title,
             announcementBody: body,
             announcementCategory: announcementCategory,
-            announcementCTAURL: announcementCTAURL
+            announcementCTAURL: announcementCTAURL,
+            type: type,
+            carID: carID
         )
     }
 
@@ -230,6 +241,11 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
+        // The app is open: show the banner and let the data it refers to refresh now.
+        let userInfo = notification.request.content.userInfo
+        Task { @MainActor in
+            NotificationCenter.default.post(name: .hayameDidReceivePushNotification, object: nil, userInfo: userInfo)
+        }
         completionHandler([.banner, .badge, .sound])
     }
 
@@ -239,9 +255,9 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         Task { @MainActor in
-            NotificationManager.shared.handleNotificationResponse(
-                userInfo: response.notification.request.content.userInfo
-            )
+            let userInfo = response.notification.request.content.userInfo
+            NotificationCenter.default.post(name: .hayameDidReceivePushNotification, object: nil, userInfo: userInfo)
+            NotificationManager.shared.handleNotificationResponse(userInfo: userInfo)
             completionHandler()
         }
     }

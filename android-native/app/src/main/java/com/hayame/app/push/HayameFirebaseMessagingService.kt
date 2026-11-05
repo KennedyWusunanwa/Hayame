@@ -52,9 +52,15 @@ class HayameFirebaseMessagingService : FirebaseMessagingService() {
         val announcementId = message.data["announcementId"]
         val ctaUrl = message.data["ctaUrl"]
         val announcementCategory = message.data["category"]
+        val pushType = message.data["type"]
+
+        // Let whatever screen is open refresh now; the notification below is
+        // for when the app is in the background.
+        PushEvents.emit(message.data)
 
         val intent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra("pushType", pushType)
             putExtra("conversationId", conversationId)
             putExtra("bookingId", bookingId)
             putExtra("recipientRole", recipientRole)

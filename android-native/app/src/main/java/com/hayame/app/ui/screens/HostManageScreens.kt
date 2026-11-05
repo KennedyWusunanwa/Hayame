@@ -624,6 +624,16 @@ fun HostCarsScreen(
     LaunchedEffect(Unit) { viewModel.loadMyCars() }
 
     val cars = (state as? UiState.Success<List<CarDto>>)?.data.orEmpty()
+    // While a listing waits for review, keep checking so an approval shows up
+    // within seconds even if the push never arrives.
+    val hasPendingListing = cars.any { !it.approval_status.equals("approved", ignoreCase = true) }
+    LaunchedEffect(hasPendingListing) {
+        if (!hasPendingListing) return@LaunchedEffect
+        while (true) {
+            delay(15_000L)
+            viewModel.loadMyCars()
+        }
+    }
     val query = search.trim().lowercase()
     // Every word of the search has to match somewhere: title, make, model,
     // year, place or live/pending status.
