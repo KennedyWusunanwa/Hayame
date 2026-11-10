@@ -22,12 +22,29 @@ async function pendingApplications() {
   }
 }
 
+/** Renters waiting for their face photo and licence to be checked. */
+async function pendingRenterVerifications() {
+  try {
+    const db = createSupabaseAdminClient() as any;
+    const { count, error } = await db
+      .from("renter_verifications")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "pending");
+    if (error) return 0;
+    return count ?? 0;
+  } catch {
+    return 0;
+  }
+}
+
 export default async function AdminLayout({ children }: { children: ReactNode }) {
   const admin = await getCurrentAdmin();
   // Signed out (sign-in screen) or forced to change a temporary password: no navigation.
   if (!admin || admin.mustChangePassword) return <>{children}</>;
 
-  const pending = can(admin.role, "applications.review") ? await pendingApplications() : 0;
+  const [pending, pendingVerifications] = can(admin.role, "applications.review")
+    ? await Promise.all([pendingApplications(), pendingRenterVerifications()])
+    : [0, 0];
   const maintenanceSettings = await getMaintenanceSettings();
   const maintenanceOn = isMaintenanceActive(maintenanceSettings);
   const maintenanceUntil =
@@ -45,7 +62,8 @@ export default async function AdminLayout({ children }: { children: ReactNode })
     {
       title: "Operations",
       items: [
-        { label: "Applications", href: "/admin?tab=applications", icon: "applications", badge: pending, show: allow("applications.review") },
+        { label: "Renter verification", href: "/admin/verifications", icon: "verifications", badge: pendingVerifications, show: allow("applications.review") },
+        { label: "Host applications", href: "/admin?tab=applications", icon: "applications", badge: pending, show: allow("applications.review") },
         { label: "Hosts", href: "/admin?tab=hosts", icon: "hosts", show: allow("hosts.view") },
         { label: "Vehicles", href: "/admin?tab=vehicles", icon: "vehicles", show: allow("vehicles.review") },
         { label: "Users", href: "/admin?tab=users", icon: "users", show: allow("users.view") },
@@ -61,6 +79,7 @@ export default async function AdminLayout({ children }: { children: ReactNode })
           icon: "controls",
           show: anyOf("vehicles.review", "bookings.refund", "disputes.resolve", "reviews.moderate", "announcements.send", "platform.fee"),
         },
+        { label: "Payments", href: "/admin/payments", icon: "payments", show: allow("payments.view") },
         { label: "Analytics", href: "/admin/analytics", icon: "analytics", show: allow("analytics.view") },
       ],
     },

@@ -1,7 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
 import {
   BarChart3,
   Car,
@@ -16,6 +16,10 @@ import {
 } from "lucide-react";
 import { AdminLoadingLink } from "@/components/admin/admin-loading-link";
 import { AdminNotice } from "@/components/admin/admin-notice";
+import {
+  AdminOverviewSummary,
+  AdminOverviewSummarySkeleton,
+} from "@/components/admin/overview-summary";
 import { PageHeader, SeverityPill } from "@/components/admin/admin-ui";
 import { PreviewLink } from "@/components/admin/image-lightbox";
 import { ShellSync } from "@/components/admin/shell-sync";
@@ -794,6 +798,9 @@ export default async function AdminPage({
 
       {initialTab === "overview" ? (
         <div className="space-y-6">
+          <Suspense fallback={<AdminOverviewSummarySkeleton />}>
+            <AdminOverviewSummary role={me.role} />
+          </Suspense>
           <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
             <Card className="border-border/80 shadow-sm">
               <CardHeader>

@@ -15,6 +15,12 @@ import {
   minimumTripNights,
 } from "@/lib/utils";
 import { failJson } from "@/lib/api-errors";
+import { requireVerifiedRenter } from "@/lib/renter-verification";
+import {
+  TERMS_REQUIRED_MESSAGE,
+  isTermsAcceptanceRequired,
+  readTermsAcceptance,
+} from "@/lib/terms";
 
 const BLOCKING_STATUSES = ["pending", "awaiting_host", "confirmed"];
 const HOLD_MINUTES = 15;
@@ -35,6 +41,21 @@ export async function POST(req: Request) {
     const user = await getRequestUser(supabase as any, req);
     if (!user)
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+
+    // The Terms of Service must be accepted first (they say, among other
+    // things, that only the person who books may drive).
+    if (isTermsAcceptanceRequired() && !readTermsAcceptance(user).accepted) {
+      return NextResponse.json(
+        { message: TERMS_REQUIRED_MESSAGE, code: "terms_required" },
+        { status: 403 },
+      );
+    }
+
+    // Nobody holds dates (and so nobody reaches payment) until their face
+    // photo and driving licence are approved. This is the single gate for the
+    // website, both apps and resumed checkouts.
+    const verificationBlock = await requireVerifiedRenter(db, user.id);
+    if (verificationBlock) return verificationBlock;
 
     const start = parseISO(parsed.startDate);
     const end = parseISO(parsed.endDate);

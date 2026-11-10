@@ -1645,3 +1645,212 @@ export function buildAdminWelcomeEmail(params: {
     cta: { label: "Open the admin portal", url: `${siteUrl}/admin` },
   });
 }
+
+// ---------------------------------------------------------------------------
+// Renter identity verification (face photo + driving licence)
+// ---------------------------------------------------------------------------
+
+export function buildRenterVerificationSubmittedEmail(params: {
+  renterName?: string | null;
+}) {
+  const plainName = params.renterName?.trim() || "there";
+  const renterName = escapeHtml(plainName);
+  const subject = `${appName}: We received your verification photos`;
+  const html = `
+    <div style="font-family: ${FONT_STACK}; line-height: 1.6; color: ${INK};">
+      <p style="margin: 0 0 8px; font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: ${BRAND};">Identity verification</p>
+      <h2 style="margin: 0 0 16px; font-size: 22px; font-weight: 600;">Your verification is under review</h2>
+      <p style="margin: 0 0 12px;">Hi ${renterName},</p>
+      <p style="margin: 0 0 12px;">Thank you. We have your face photo and both sides of your driving licence, and our team is checking them now.</p>
+      <p style="margin: 0 0 16px;">Most reviews are finished within a few hours. We will email you as soon as you are approved, and you can book straight away after that.</p>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-top: 1px solid ${BORDER};">
+        ${metaRow("Status", statusPill("awaiting_host").replace("Awaiting host approval", "Pending review"))}
+      </table>
+      ${ctaButton(`${siteUrl}/verify`, "View my verification")}
+      <p style="margin: 12px 0 0; font-size: 13px; color: ${MUTED};">Your photos are only seen by the ${appName} team and are never shown to hosts or other users.</p>
+    </div>
+  `;
+  const text = `Your verification is under review
+
+Hi ${plainName},
+
+Thank you. We have your face photo and both sides of your driving licence, and our team is checking them now.
+
+Most reviews are finished within a few hours. We will email you as soon as you are approved, and you can book straight away after that.
+
+Status: Pending review
+
+View my verification: ${siteUrl}/verify
+
+Your photos are only seen by the ${appName} team and are never shown to hosts or other users.`;
+  return { subject, ...withOfficialFooter(html, text) };
+}
+
+export function buildRenterVerificationDecisionEmail(params: {
+  approved: boolean;
+  renterName?: string | null;
+  reason?: string | null;
+}) {
+  const plainName = params.renterName?.trim() || "there";
+  const renterName = escapeHtml(plainName);
+
+  if (params.approved) {
+    const subject = `${appName}: You're verified and ready to book`;
+    const html = `
+    <div style="font-family: ${FONT_STACK}; line-height: 1.6; color: ${INK};">
+      <p style="margin: 0 0 8px; font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: ${BRAND};">Identity verification</p>
+      <h2 style="margin: 0 0 16px; font-size: 22px; font-weight: 600;">You're verified</h2>
+      <p style="margin: 0 0 12px;">Hi ${renterName},</p>
+      <p style="margin: 0 0 16px;">Your identity and driving licence have been checked and approved. You can now book any car on ${appName}. If you started a booking earlier, your selections are saved and waiting for you.</p>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-top: 1px solid ${BORDER};">
+        ${metaRow("Status", statusPill("confirmed").replace("Confirmed", "Verified"))}
+      </table>
+      ${ctaButton(`${siteUrl}/explore`, "Find a car")}
+    </div>
+  `;
+    const text = `You're verified
+
+Hi ${plainName},
+
+Your identity and driving licence have been checked and approved. You can now book any car on ${appName}. If you started a booking earlier, your selections are saved and waiting for you.
+
+Status: Verified
+
+Find a car: ${siteUrl}/explore`;
+    return { subject, ...withOfficialFooter(html, text) };
+  }
+
+  const reason = params.reason?.trim() || "The photos could not be verified.";
+  const subject = `${appName}: Please resend your verification photos`;
+  const html = `
+    <div style="font-family: ${FONT_STACK}; line-height: 1.6; color: ${INK};">
+      <p style="margin: 0 0 8px; font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #b91c1c;">Identity verification</p>
+      <h2 style="margin: 0 0 16px; font-size: 22px; font-weight: 600;">We could not verify you yet</h2>
+      <p style="margin: 0 0 12px;">Hi ${renterName},</p>
+      <p style="margin: 0 0 16px;">We checked the photos you sent but could not approve them. Please read the note below and send new photos. It only takes a minute.</p>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-top: 1px solid ${BORDER};">
+        ${metaRow("Status", statusPill("rejected").replace("Rejected", "Not approved"))}
+        ${metaRow("What to fix", escapeHtml(reason))}
+      </table>
+      ${ctaButton(`${siteUrl}/verify`, "Send new photos")}
+      <p style="margin: 12px 0 0; font-size: 13px; color: ${MUTED};">Tips: make sure your face is clearly visible, and that the whole licence is in the photo, flat, in focus and readable. If you think this was a mistake, reply to this email.</p>
+    </div>
+  `;
+  const text = `We could not verify you yet
+
+Hi ${plainName},
+
+We checked the photos you sent but could not approve them. Please read the note below and send new photos. It only takes a minute.
+
+Status: Not approved
+What to fix: ${reason}
+
+Send new photos: ${siteUrl}/verify
+
+Tips: make sure your face is clearly visible, and that the whole licence is in the photo, flat, in focus and readable. If you think this was a mistake, reply to this email.`;
+  return { subject, ...withOfficialFooter(html, text) };
+}
+
+export function buildAdminRenterVerificationEmail(params: {
+  verificationId: string;
+  userId: string;
+  renterName: string;
+  renterEmail?: string | null;
+  phone?: string | null;
+  city?: string | null;
+  resubmission?: boolean;
+  submittedAt?: string | null;
+}) {
+  return renderAdminNotice({
+    subject: `[${appName} Admin] ${params.resubmission ? "Renter resubmitted verification" : "New renter verification"}: ${params.renterName}`,
+    eyebrow: "Renter verification",
+    heading: `${params.renterName} sent photos for verification`,
+    intro:
+      "A renter has submitted a face photo and both sides of their driving licence. They cannot book until this is approved, so please review it soon.",
+    rows: [
+      { label: "Verification ID", value: shortId(params.verificationId) },
+      { label: "Renter", value: params.renterName },
+      { label: "Email", value: params.renterEmail ?? "Not available" },
+      { label: "Phone", value: params.phone ?? "Not provided" },
+      { label: "City", value: params.city ?? "Not provided" },
+      {
+        label: "Type",
+        value: params.resubmission ? "Resubmission after rejection" : "First submission",
+      },
+      {
+        label: "Submitted at",
+        value: formatDateTime(params.submittedAt ?? new Date()),
+      },
+    ],
+    cta: {
+      label: "Review verification",
+      url: `${siteUrl}/admin/verifications`,
+    },
+    links: [
+      { label: "Open user", url: `${siteUrl}/admin/users/${params.userId}` },
+    ],
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Account deletion requests
+// ---------------------------------------------------------------------------
+
+export function buildAccountDeletionRequestedEmail(params: {
+  userName?: string | null;
+  hasOpenTrips: boolean;
+}) {
+  const plainName = params.userName?.trim() || "there";
+  const openTrips = params.hasOpenTrips
+    ? "You still have a trip in progress or coming up. We will close your account once it is finished and any money owed is settled."
+    : "We will delete your account and personal information within 30 days.";
+  const subject = `${appName}: We received your request to delete your account`;
+  const html = `
+    <div style="font-family: ${FONT_STACK}; line-height: 1.6; color: ${INK};">
+      <p style="margin: 0 0 8px; font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: ${BRAND};">Your account</p>
+      <h2 style="margin: 0 0 16px; font-size: 22px; font-weight: 600;">Account deletion requested</h2>
+      <p style="margin: 0 0 12px;">Hi ${escapeHtml(plainName)},</p>
+      <p style="margin: 0 0 12px;">We have received your request to delete your ${appName} account. ${escapeHtml(openTrips)}</p>
+      <p style="margin: 0 0 12px;">Some records, such as past payments, must be kept for as long as the law requires. Everything else is removed.</p>
+      <p style="margin: 0; font-size: 13px; color: ${MUTED};">If you did not ask for this, or you have changed your mind, reply to this email straight away and we will cancel the request.</p>
+    </div>
+  `;
+  const text = `Account deletion requested
+
+Hi ${plainName},
+
+We have received your request to delete your ${appName} account. ${openTrips}
+
+Some records, such as past payments, must be kept for as long as the law requires. Everything else is removed.
+
+If you did not ask for this, or you have changed your mind, reply to this email straight away and we will cancel the request.`;
+  return { subject, ...withOfficialFooter(html, text) };
+}
+
+export function buildAdminAccountDeletionEmail(params: {
+  userId: string;
+  userName: string;
+  userEmail?: string | null;
+  platform?: string | null;
+  openTrips: number;
+  isHost: boolean;
+  requestedAt: string;
+}) {
+  return renderAdminNotice({
+    subject: `[${appName} Admin] Account deletion requested: ${params.userName}`,
+    eyebrow: "Account deletion",
+    heading: `${params.userName} asked to delete their account`,
+    intro:
+      "A user has asked for their account and personal information to be deleted. This must be completed within 30 days, once any open trips, refunds or disputes are settled.",
+    rows: [
+      { label: "User", value: params.userName },
+      { label: "Email", value: params.userEmail ?? "Not available" },
+      { label: "User ID", value: params.userId },
+      { label: "Host", value: params.isHost ? "Yes" : "No" },
+      { label: "Open trips", value: String(params.openTrips) },
+      { label: "Requested from", value: params.platform ?? "Unknown" },
+      { label: "Requested at", value: formatDateTime(params.requestedAt) },
+    ],
+    cta: { label: "Open user", url: `${siteUrl}/admin/users/${params.userId}` },
+  });
+}

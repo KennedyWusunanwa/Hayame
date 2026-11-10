@@ -165,7 +165,10 @@ export async function POST(req: Request) {
       const { data: booking, error: bookingError } = await supa
         .from("bookings")
         .select(
-          "id,car_id,renter_id,start_date,end_date,status,hold_expires_at,trip_use_region,trip_use_city,trip_use_address,delivery_address,delivery_time,contact_phone,delivery_notes,trip_outside_accra,trip_outside_listing_region,outside_accra_surcharge,payment_reference,payment_provider",
+          // payment_status must be here: the apps only treat a finalize as
+          // done when the returned row says "paid", and the webhook-won-the-
+          // race shortcut below returns this row as-is.
+          "id,car_id,renter_id,start_date,end_date,status,hold_expires_at,trip_use_region,trip_use_city,trip_use_address,delivery_address,delivery_time,contact_phone,delivery_notes,trip_outside_accra,trip_outside_listing_region,outside_accra_surcharge,payment_reference,payment_provider,payment_status,paid_at",
         )
         .eq("id", bookingId)
         .single();
@@ -592,6 +595,22 @@ export async function POST(req: Request) {
     try {
       tx = await verifyPaystackTransaction(reference);
     } catch {
+      // The webhook can confirm the booking while this request is in flight.
+      // If it did, the payment went through; say so instead of "not completed".
+      if (bookingId) {
+        const { data: current } = await writeDb
+          .from("bookings")
+          .select("*")
+          .eq("id", bookingId)
+          .maybeSingle();
+        if (
+          current &&
+          ["confirmed", "awaiting_host"].includes(String(current.status)) &&
+          String(current.payment_reference ?? "") === reference.trim()
+        ) {
+          return NextResponse.json({ data: current, alreadyConfirmed: true });
+        }
+      }
       return NextResponse.json(
         {
           message:

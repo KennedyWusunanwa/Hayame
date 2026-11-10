@@ -36,6 +36,7 @@ const COMPANY_LINKS: FooterLink[] = [
 ];
 
 const LEGAL_LINKS: FooterLink[] = [
+  { href: "/terms", label: "Terms of service" },
   { href: "/privacy", label: "Privacy policy" },
   { href: "/protection", label: "Protection policy" },
   { href: "/cancellation", label: "Cancellation policy" },

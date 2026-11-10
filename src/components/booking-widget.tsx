@@ -260,6 +260,30 @@ export function BookingWidget({
         });
         if (!holdRes.ok) {
           const error = await holdRes.json().catch(() => ({}));
+          if (error?.code === "terms_required") {
+            // The Terms of Service must be accepted before a first booking.
+            track("booking_abandoned", {
+              car_id: carId,
+              reason: "terms_required",
+            });
+            router.push(
+              `/terms?from=booking&next=${encodeURIComponent(`/cars/${carId}`)}`,
+            );
+            return;
+          }
+          if (error?.code === "verification_required") {
+            // Renters must have their face photo and driving licence approved
+            // before paying. Take them straight to that step, and bring them
+            // back to this car afterwards.
+            track("booking_abandoned", {
+              car_id: carId,
+              reason: "verification_required",
+            });
+            router.push(
+              `/verify?from=booking&next=${encodeURIComponent(`/cars/${carId}`)}`,
+            );
+            return;
+          }
           throw new Error(error.message ?? "Unable to reserve dates");
         }
         const payload = (await holdRes.json()) as {
@@ -656,6 +680,16 @@ export function BookingWidget({
       >
         {loading ? "Processing..." : instantBook ? "Instant Book" : "Book Now"}
       </Button>
+      <p className="text-center text-xs text-gray-500">
+        First trip? We check your face photo and driving licence before you
+        pay.{" "}
+        <Link
+          href={`/verify?next=${encodeURIComponent(`/cars/${carId}`)}`}
+          className="font-semibold text-brand"
+        >
+          Verify now
+        </Link>
+      </p>
     </div>
   );
 }

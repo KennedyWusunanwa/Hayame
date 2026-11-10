@@ -15,6 +15,7 @@ export const PERMISSIONS = [
   "messages.reply",
   "disputes.resolve",
   "bookings.refund",
+  "payments.view",
   "reviews.moderate",
   "announcements.send",
   "filters.manage",
@@ -30,7 +31,7 @@ export type Permission = (typeof PERMISSIONS)[number];
 
 export const PERMISSION_LABELS: Record<Permission, string> = {
   "overview.view": "See the dashboard",
-  "applications.review": "Approve or reject host applications",
+  "applications.review": "Approve or reject host applications and renter verifications",
   "hosts.view": "View hosts",
   "users.view": "View users",
   "users.manage": "Edit, email or confirm users",
@@ -39,6 +40,7 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   "messages.reply": "Message users as Hayame",
   "disputes.resolve": "Update disputes",
   "bookings.refund": "Issue refunds",
+  "payments.view": "See Paystack balance, payments and payouts",
   "reviews.moderate": "Hide or restore reviews",
   "announcements.send": "Send announcements and push messages",
   "filters.manage": "Manage car makes and models",
@@ -84,6 +86,7 @@ const ROLE_PERMISSIONS: Record<AdminRole, readonly Permission[] | "all"> = {
     "users.view",
     "disputes.resolve",
     "bookings.refund",
+    "payments.view",
     "analytics.view",
     "audit.view",
   ],
@@ -104,7 +107,7 @@ export const ROLE_META: Record<AdminRole, { label: string; description: string }
   },
   finance: {
     label: "Finance",
-    description: "Refunds, disputes and analytics. Cannot change listings, users or the team.",
+    description: "Payments, refunds, disputes and analytics. Cannot change listings, users or the team.",
   },
 };
 

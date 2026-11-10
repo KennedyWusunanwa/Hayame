@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { LegalDocumentView } from "@/components/legal-document";
+import { LEGAL_DOCUMENTS, legalFaqJsonLd } from "@/lib/legal-docs";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PrivacyChoices } from "@/components/privacy-choices";
@@ -13,16 +15,23 @@ export const metadata: Metadata = {
 // Keep in step with CONSENT_POLICY_VERSION in src/lib/analytics/consent.ts.
 // If that constant changes, everyone is re-asked for consent — so these two
 // dates moving together is what makes the re-prompt honest.
-const LAST_UPDATED = "July 17, 2026";
+const LAST_UPDATED = "November 10, 2026";
 
 export default function PrivacyPage() {
   return (
-    <div className="mx-auto max-w-4xl space-y-6 px-6 py-10">
-      <div>
+    <div className="mx-auto max-w-5xl space-y-6 px-4 py-8 sm:px-6 sm:py-10">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(legalFaqJsonLd(LEGAL_DOCUMENTS.privacy)),
+        }}
+      />
+      <LegalDocumentView document={LEGAL_DOCUMENTS.privacy} />
+      <div id="full-policy" className="scroll-mt-24 border-t border-border pt-10">
         <p className="text-sm font-semibold text-brand">Legal</p>
-        <h1 className="text-3xl font-semibold text-foreground">
-          Privacy Policy
-        </h1>
+        <h2 className="text-3xl font-semibold text-foreground">
+          The full Privacy Policy
+        </h2>
         <p className="mt-2 text-sm text-gray-700">
           Last updated: {LAST_UPDATED}
         </p>
@@ -63,11 +72,16 @@ export default function PrivacyPage() {
           </p>
           <p>
             <span className="font-semibold text-foreground">
-              Identity &amp; host verification:
+              Identity &amp; verification:
             </span>{" "}
-            if you apply to become a host, a government-issued ID and related
-            verification details so we can confirm your identity, comply with
-            our legal obligations, and keep the marketplace safe.
+            before your first booking, a photo of your face and photos of the
+            front and back of your driving licence, so we can confirm who you
+            are and that you are licensed to drive; and if you apply to become
+            a host, a government-issued ID and related verification details.
+            We use these to confirm your identity, comply with our legal
+            obligations, and keep the marketplace safe. These photos are
+            reviewed by the Hayame team and are not shown to hosts or other
+            users.
           </p>
           <p>
             <span className="font-semibold text-foreground">
@@ -141,9 +155,11 @@ export default function PrivacyPage() {
             </span>{" "}
             Some information is required to provide the Service. You must provide
             your name, email, phone number, and password to create an account
-            and to book or list a vehicle; if you apply to become a host, you
-            must provide a government-issued ID for identity verification and our
-            legal and fraud-prevention obligations. If you do not provide this
+            and to book or list a vehicle; before you can book, you must provide
+            a photo of your face and of both sides of your driving licence; and
+            if you apply to become a host, you must provide a government-issued
+            ID for identity verification and our legal and fraud-prevention
+            obligations. If you do not provide this
             required information, we cannot create your account or let you book
             or list vehicles. Other items &mdash; such as camera, photo library,
             or Android device-location access &mdash; are optional and used only
@@ -165,7 +181,8 @@ export default function PrivacyPage() {
               refunds between guests and hosts.
             </li>
             <li>
-              Verify host identity and help prevent fraud, abuse, and unsafe
+              Verify the identity of hosts and renters, check that renters
+              hold a driving licence, and help prevent fraud, abuse, and unsafe
               activity on the marketplace.
             </li>
             <li>
@@ -301,7 +318,8 @@ export default function PrivacyPage() {
             In the preceding 12 months we disclosed the following categories of
             personal information for business purposes: identifiers,
             commercial/booking information, communications, photos, geolocation,
-            and (for hosts) government identifiers &mdash; to the categories of
+            and (for hosts and for renters who verify to book) government
+            identifiers &mdash; to the categories of
             recipients above (service providers, the other party to a booking,
             and, where required, legal or regulatory authorities and parties to
             a business transfer). We did not sell or share any category of
@@ -376,9 +394,10 @@ export default function PrivacyPage() {
               up to six years after the transaction).
             </li>
             <li>
-              Host verification documents (government ID) &mdash; only as long as
-              needed to verify and maintain host status and to meet our legal
-              and fraud-prevention obligations, then securely deleted.
+              Verification documents (hosts&rsquo; government ID; renters&rsquo;
+              face photo and driving licence) &mdash; only as long as needed to
+              verify and maintain your host or renter status and to meet our
+              legal and fraud-prevention obligations, then securely deleted.
             </li>
             <li>
               Messages, reviews, and support requests &mdash; while needed to
@@ -531,8 +550,9 @@ export default function PrivacyPage() {
               Sensitive personal information.
             </span>{" "}
             For California residents, certain information we collect is treated
-            as sensitive: government-issued ID and verification details (hosts
-            only), your account log-in credentials, the contents of messages
+            as sensitive: government-issued ID, driving licence, face photo and
+            verification details (hosts, and renters who verify to book), your
+            account log-in credentials, the contents of messages
             between guests and hosts and of support requests, and, on Android
             where you grant permission, precise device location. We use this
             information only to provide and secure the Service, verify host
