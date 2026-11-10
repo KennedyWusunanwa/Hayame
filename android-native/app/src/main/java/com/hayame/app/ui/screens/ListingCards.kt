@@ -1,5 +1,7 @@
 package com.hayame.app.ui.screens
 
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -103,13 +105,20 @@ internal fun ListingCard(
                 }
             }
             if (car.instant_book == true || car.allow_one_day_booking == true || car.with_driver == true) {
-                Row(
-                    modifier = Modifier.align(Alignment.BottomStart).padding(8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                // Three labelled pills do not fit a narrow grid tile. Rather than let
+                // the labels wrap, drop to icon-only pills, keeping the "1 day" label
+                // longest because its icon alone says least.
+                androidx.compose.foundation.layout.BoxWithConstraints(
+                    modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(8.dp),
                 ) {
-                    if (car.instant_book == true) ListingPhotoPill(Icons.Outlined.Bolt, "Instant")
-                    if (car.with_driver == true) ListingPhotoPill(Icons.Outlined.Person, "Driver")
-                    if (car.allow_one_day_booking == true) ListingPhotoPill(Icons.Outlined.CalendarMonth, "1 day")
+                    val pillCount = listOf(car.instant_book, car.with_driver, car.allow_one_day_booking).count { it == true }
+                    val labelAll = pillCount < 3 || maxWidth >= 216.dp
+                    val labelOneDay = labelAll || maxWidth >= 132.dp
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        if (car.instant_book == true) ListingPhotoPill(Icons.Outlined.Bolt, "Instant", showText = labelAll)
+                        if (car.with_driver == true) ListingPhotoPill(Icons.Outlined.Person, "Driver", showText = labelAll)
+                        if (car.allow_one_day_booking == true) ListingPhotoPill(Icons.Outlined.CalendarMonth, "1 day", showText = labelOneDay)
+                    }
                 }
             }
         }
@@ -227,15 +236,18 @@ internal fun ListingCardSkeleton(layout: ListingCardLayout = ListingCardLayout.T
 
 /** Small dark capsule over a listing photo: "Instant", "1 day". */
 @Composable
-private fun ListingPhotoPill(icon: androidx.compose.ui.graphics.vector.ImageVector, text: String) {
+private fun ListingPhotoPill(icon: androidx.compose.ui.graphics.vector.ImageVector, text: String, showText: Boolean = true) {
     Row(
         modifier = Modifier
+            .semantics(mergeDescendants = true) { contentDescription = text }
             .background(Color.Black.copy(alpha = 0.42f), CircleShape)
             .padding(horizontal = 8.dp, vertical = 5.dp),
         horizontalArrangement = Arrangement.spacedBy(3.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(11.dp))
-        Text(text, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = Color.White)
+        if (showText) {
+            Text(text, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = Color.White, maxLines = 1, softWrap = false)
+        }
     }
 }

@@ -74,16 +74,13 @@ struct ListingCard: View {
             }
 
             if car.instantBook || car.allowOneDayBooking || car.withDriver {
-                HStack(spacing: 6) {
-                    if car.instantBook {
-                        photoPill(systemImage: "bolt.fill", text: "Instant")
-                    }
-                    if car.withDriver {
-                        photoPill(systemImage: "person.fill", text: "Driver")
-                    }
-                    if car.allowOneDayBooking {
-                        photoPill(systemImage: "calendar", text: "1 day")
-                    }
+                // Three labelled pills do not fit a narrow grid tile. Rather than
+                // let the labels wrap, fall back to icon-only pills, keeping the
+                // "1 day" label longest because its icon alone says least.
+                ViewThatFits(in: .horizontal) {
+                    photoPills(labelInstantAndDriver: true, labelOneDay: true)
+                    photoPills(labelInstantAndDriver: false, labelOneDay: true)
+                    photoPills(labelInstantAndDriver: false, labelOneDay: false)
                 }
                 .padding(8)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
@@ -92,14 +89,34 @@ struct ListingCard: View {
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 
-    /// Small dark capsule over the photo: "Instant", "1 day".
-    private func photoPill(systemImage: String, text: String) -> some View {
+    private func photoPills(labelInstantAndDriver: Bool, labelOneDay: Bool) -> some View {
+        HStack(spacing: 6) {
+            if car.instantBook {
+                photoPill(systemImage: "bolt.fill", text: "Instant", showsText: labelInstantAndDriver)
+            }
+            if car.withDriver {
+                photoPill(systemImage: "person.fill", text: "Driver", showsText: labelInstantAndDriver)
+            }
+            if car.allowOneDayBooking {
+                photoPill(systemImage: "calendar", text: "1 day", showsText: labelOneDay)
+            }
+        }
+    }
+
+    /// Small dark capsule over the photo: "Instant", "1 day". Never wraps.
+    private func photoPill(systemImage: String, text: String, showsText: Bool = true) -> some View {
         HStack(spacing: 4) {
             Image(systemName: systemImage)
                 .font(.hayame(size: 9, weight: .bold))
-            Text(text)
-                .font(.hayame(size: 10, weight: .bold))
+            if showsText {
+                Text(text)
+                    .font(.hayame(size: 10, weight: .bold))
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+            }
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(text)
         .foregroundStyle(.white)
         .padding(.horizontal, 8)
         .padding(.vertical, 5)
