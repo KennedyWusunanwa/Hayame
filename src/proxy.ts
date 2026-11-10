@@ -9,7 +9,22 @@ const ADMIN_FLAG_COOKIE = "hayame_maint_admin";
 
 // Always reachable, even in maintenance: the admin portal (to switch it off),
 // the maintenance page itself, and API routes (payment webhooks, mobile apps).
-const EXEMPT_PREFIXES = ["/admin", "/api", "/maintenance", "/.well-known"];
+// Also reachable: the legal pages (app stores and users must always be able to
+// read them) and the pages a renter needs to become allowed to book from the
+// app, which keeps working during maintenance: accept the terms, sign in, and
+// send verification photos.
+const EXEMPT_PREFIXES = [
+  "/admin",
+  "/api",
+  "/maintenance",
+  "/.well-known",
+  "/terms",
+  "/privacy",
+  "/protection",
+  "/cancellation",
+  "/verify",
+  "/auth",
+];
 const EXEMPT_EXACT = new Set([
   "/robots.txt",
   "/sitemap.xml",

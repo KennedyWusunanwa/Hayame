@@ -14,6 +14,7 @@ import {
 import { reviewHostApplication } from "@/lib/admin-host-applications";
 import { PageHeader } from "@/components/admin/admin-ui";
 import { EvidenceGallery } from "@/components/admin/image-lightbox";
+import { RenterVerificationCard } from "@/components/admin/renter-verification-card";
 import { requireAdmin } from "@/lib/admin-auth";
 import { logAdminAction } from "@/lib/admin-audit";
 import { can } from "@/lib/admin-permissions";
@@ -22,6 +23,7 @@ import { friendlyError } from "@/lib/client-errors";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { sendVerificationEmail } from "@/lib/auth-mail";
 import { buildAdminBroadcastEmail, sendEmailSafe } from "@/lib/email";
+import { readTermsAcceptance } from "@/lib/terms";
 import { formatCurrency } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -497,6 +499,7 @@ export default async function AdminUserDetailsPage({
   // The auth record is the source of truth for whether login is possible.
   // `profiles.email_verified` is a separate, admin-managed trust badge.
   const emailConfirmedAt = authUser?.email_confirmed_at ?? null;
+  const termsAcceptance = readTermsAcceptance(authUser);
   const hostApplications = hostApplicationsResult.data ?? [];
   const cars = carsResult.data ?? [];
   const renterBookings = renterBookingsResult.data ?? [];
@@ -966,9 +969,30 @@ export default async function AdminUserDetailsPage({
         </CardContent>
       </Card>
 
+      <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-white px-4 py-3 text-sm shadow-sm">
+        <span className="font-semibold text-foreground">Terms of Service</span>
+        {termsAcceptance.accepted ? (
+          <span className="rounded-full bg-emerald-100 px-2 py-1 text-xs font-semibold text-emerald-800">
+            Accepted version {termsAcceptance.acceptedVersion}
+            {termsAcceptance.acceptedAt ? ` on ${formatDate(termsAcceptance.acceptedAt)}` : ""}
+          </span>
+        ) : (
+          <span className="rounded-full bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-700">
+            {termsAcceptance.acceptedVersion
+              ? `Accepted an older version (${termsAcceptance.acceptedVersion}), must accept again to book`
+              : "Not accepted yet, cannot book"}
+          </span>
+        )}
+      </div>
+
+      <RenterVerificationCard
+        userId={userId}
+        canReview={can(me.role, "applications.review")}
+      />
+
       <Card>
         <CardHeader>
-          <CardTitle>Verification evidence</CardTitle>
+          <CardTitle>Host verification evidence</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3 px-3 sm:px-6">
           <div className="flex flex-wrap items-center gap-2 text-xs">

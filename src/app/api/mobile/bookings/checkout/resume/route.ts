@@ -4,6 +4,12 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getRequestUser } from "@/lib/supabase/request-auth";
 import { failJson } from "@/lib/api-errors";
 import { POST as createBookingHold } from "@/app/api/bookings/hold/route";
+import { requireVerifiedRenter } from "@/lib/renter-verification";
+import {
+  TERMS_REQUIRED_MESSAGE,
+  isTermsAcceptanceRequired,
+  readTermsAcceptance,
+} from "@/lib/terms";
 import {
   BOOKING_CHECKOUT_SELECT,
   CHECKOUT_SUPERSEDED_REASON,
@@ -98,6 +104,18 @@ export async function POST(req: Request) {
         },
       });
     }
+
+    // Checked after the paid-already reconcile above, so someone whose money
+    // went through is never turned away; everyone else must be verified before
+    // a hold is refreshed for another payment attempt.
+    if (isTermsAcceptanceRequired() && !readTermsAcceptance(user).accepted) {
+      return NextResponse.json(
+        { message: TERMS_REQUIRED_MESSAGE, code: "terms_required" },
+        { status: 403 },
+      );
+    }
+    const verificationBlock = await requireVerifiedRenter(db, user.id);
+    if (verificationBlock) return verificationBlock;
 
     if (first.dto.issues.length > 0) {
       return NextResponse.json({

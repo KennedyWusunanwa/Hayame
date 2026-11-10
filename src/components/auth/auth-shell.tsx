@@ -197,6 +197,13 @@ export function AuthShell({
           >
             By continuing, you agree to our{" "}
             <Link
+              href="/terms"
+              className="font-medium text-brand hover:underline"
+            >
+              Terms of Service
+            </Link>
+            ,{" "}
+            <Link
               href="/privacy"
               className="font-medium text-brand hover:underline"
             >

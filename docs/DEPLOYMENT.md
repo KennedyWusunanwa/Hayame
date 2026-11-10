@@ -48,6 +48,25 @@
 - Native iOS and Android payments do not store Paystack keys. They open checkout URLs returned by the backend, so production mobile payments use live mode when the deployed backend has a live `PAYSTACK_SECRET_KEY`.
 - Host rejection triggers the Paystack refund path for paid Paystack bookings. Confirm `PAYSTACK_SECRET_KEY` has refund permissions in the production Paystack account.
 
+## Renter verification (face photo + driving licence)
+
+1. Run `db/patch_renter_verifications.sql` once in the Supabase SQL editor **before** deploying. It creates `renter_verifications` and lets each person upload into their own folder of the private `host-ids` bucket. Until the table exists the booking gate is off and nobody can submit photos.
+2. Rule: nobody can hold dates or pay until an admin approves their face photo and both sides of their driving licence. It is enforced in `/api/bookings/hold` (website, both apps, resumed checkouts). Finalize and the Paystack webhook are never gated, so a payment that already went through is always honoured.
+3. Renters submit in the apps (they are switched to it at the pay step, with their booking saved) or at `/verify` on the website. Each submission emails `ADMIN_NOTIFICATIONS_EMAIL` and appears under **Admin > Renter verification**. Approve/reject emails and pushes the renter.
+4. Emergency switch: set `RENTER_VERIFICATION_REQUIRED=false` and redeploy to let everyone book without approval. Remove it (or set `true`) to turn the rule back on.
+5. App versions released before this rule show the server's message at the pay step and point people to `/verify`; ship the updated apps for the guided flow.
+
+## Terms of Service
+
+- The one copy of the terms is `src/lib/terms.ts`; the website (`/terms`) and both apps read it from `GET /api/terms`. To change the terms, edit the sections and bump `TERMS_VERSION` and `TERMS_LAST_UPDATED`: every user is then asked to accept again.
+- Acceptance is saved on the user's auth record (`app_metadata.terms_version`, `terms_accepted_at`, `terms_platform`), which only the server can write. No database migration is needed.
+- `/api/bookings/hold` refuses bookings from anyone who has not accepted the current version. Emergency switch: `TERMS_ACCEPTANCE_REQUIRED=false`.
+
+## Admin payments page
+
+- **Admin > Payments** reads live from Paystack with `PAYSTACK_SECRET_KEY` (read-only): balance, amount waiting for payout, every transaction matched to its renter and booking, refunds and bank payouts. Visible to Super admin and Finance (`payments.view`).
+- A successful Paystack payment with no paid booking behind it is flagged "Check" at the top of the page.
+
 ## Admin accounts, roles and audit log
 
 1. Run `db/admin_roles_audit.sql` once in the Supabase SQL editor (creates `admin_users`, adds who/where/severity columns to `admin_actions`, and makes the log append-only).

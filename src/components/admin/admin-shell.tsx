@@ -11,6 +11,7 @@ import {
   ClipboardCheck,
   Construction,
   FileClock,
+  IdCard,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -21,6 +22,7 @@ import {
   UserCog,
   UserRound,
   Users,
+  Wallet,
   X,
   type LucideIcon,
 } from "lucide-react";
@@ -32,6 +34,8 @@ import { cn } from "@/lib/utils";
 const ICONS: Record<string, LucideIcon> = {
   overview: LayoutDashboard,
   applications: ClipboardCheck,
+  verifications: IdCard,
+  payments: Wallet,
   hosts: ShieldCheck,
   vehicles: Car,
   users: Users,
