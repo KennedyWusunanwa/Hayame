@@ -61,6 +61,7 @@ class HayameFirebaseMessagingService : FirebaseMessagingService() {
         val intent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             putExtra("pushType", pushType)
+            putExtra("verificationStatus", if (pushType == "renter_verification") message.data["status"] else null)
             putExtra("conversationId", conversationId)
             putExtra("bookingId", bookingId)
             putExtra("recipientRole", recipientRole)

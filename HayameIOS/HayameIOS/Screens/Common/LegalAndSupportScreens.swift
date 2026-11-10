@@ -27,111 +27,25 @@ struct ContactScreen: View {
     }
 }
 
+// The three policy documents share one screen (`LegalDocumentScreen`); the
+// text comes from the server. These names are the entry points used across
+// the app.
+
 struct PrivacyScreen: View {
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                SectionHeader(title: "Privacy")
-                Text("We store only the information required to operate bookings, payments, messages and listings. For account/data requests, contact support@hayamegh.com.")
-                    .font(.hayame(size: 14, weight: .medium))
-                    .foregroundStyle(HayameTheme.mutedText)
-                    .hayameCard()
-            }
-            .padding(16)
-        }
-        .background(HayameTheme.pageBackground)
-        .navigationTitle("Privacy")
+        LegalDocumentScreen(kind: .privacy)
     }
 }
 
 struct ProtectionScreen: View {
-    private let sections: [(title: String, body: String)] = [
-        (
-            title: "Damage and incident reporting",
-            body: "Hayame does not advertise bundled insurance on the platform today. Hosts should only list cars they are authorized to rent out and insure, and guests should report any new damage or trip issue promptly in Messages or Support."
-        ),
-        (
-            title: "Trip records and support review",
-            body: "Trip dates, pricing, messages, uploaded photos, and booking status are retained in the trip record so support can review cancellations, disputes, and post-trip issues consistently."
-        ),
-        (
-            title: "Host and guest accountability",
-            body: "Identity, phone, and email verification states are shown where available. When a policy breach or misuse report is raised, Hayame may review listing details, trip history, and conversation records before taking action."
-        ),
-        (
-            title: "Deposits and extra fees",
-            body: "If a listing includes a security deposit or trip fee, the amount is shown before checkout and recorded on the booking. Any deduction should be backed by trip evidence or an open dispute."
-        ),
-        (
-            title: "Disputes and emergency support",
-            body: "For accidents or immediate safety issues, contact local emergency services first. Then notify the other party and reach Hayame via Messages, the dispute flow, or support@hayamegh.com."
-        )
-    ]
-
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                SectionHeader(title: "Protection")
-                Text("This page describes the support, evidence, and dispute process currently available on Hayame.")
-                    .hayameCaptionStyle()
-
-                Text("Hayame does not publish bundled insurance coverage on this page. Any third-party cover must be confirmed directly with the vehicle owner.")
-                    .hayameCaptionStyle()
-                    .hayameCard()
-
-                ForEach(sections, id: \.title) { section in
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(section.title)
-                            .font(.hayame(size: 15, weight: .bold))
-                            .foregroundStyle(HayameTheme.brandNavy)
-                        Text(section.body)
-                            .font(.hayame(size: 13, weight: .medium))
-                            .foregroundStyle(HayameTheme.mutedText)
-                    }
-                    .hayameCard()
-                }
-            }
-            .padding(16)
-        }
-        .background(HayameTheme.pageBackground)
-        .navigationTitle("Protection")
+        LegalDocumentScreen(kind: .protection)
     }
 }
 
 struct CancellationPolicyScreen: View {
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                SectionHeader(title: "Cancellation")
-
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Flexible")
-                        .font(.hayame(size: 15, weight: .bold))
-                    Text("Best for last-minute changes and quick rebooking.")
-                        .hayameCaptionStyle()
-                }
-                .hayameCard()
-
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Moderate")
-                        .font(.hayame(size: 15, weight: .bold))
-                    Text("Balanced terms for guests and hosts. Default on new listings.")
-                        .hayameCaptionStyle()
-                }
-                .hayameCard()
-
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Strict")
-                        .font(.hayame(size: 15, weight: .bold))
-                    Text("For high-demand inventory with higher late-cancel risk.")
-                        .hayameCaptionStyle()
-                }
-                .hayameCard()
-            }
-            .padding(16)
-        }
-        .background(HayameTheme.pageBackground)
-        .navigationTitle("Cancellation")
+        LegalDocumentScreen(kind: .cancellation)
     }
 }
 

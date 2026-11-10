@@ -1,5 +1,7 @@
 package com.hayame.app.core.repo
 
+import com.hayame.app.core.network.AccountDeletionDto
+import com.hayame.app.core.network.AccountDeletionRequest
 import com.hayame.app.core.network.AuthSessionDto
 import com.hayame.app.core.network.EmailRequest
 import com.hayame.app.core.network.HayameApi
@@ -56,6 +58,16 @@ class AuthRepository(
 
     suspend fun forgotPassword(email: String) {
         api.forgotPassword(EmailRequest(email.trim()))
+    }
+
+    /**
+     * Asks Hayame to delete this account. Nothing is removed on the device here; the caller
+     * signs the user out once they have read the answer.
+     */
+    suspend fun requestAccountDeletion(): AccountDeletionDto? {
+        return authedCall { auth ->
+            api.requestAccountDeletion(auth = auth, body = AccountDeletionRequest())
+        }.data
     }
 
     suspend fun logout() {

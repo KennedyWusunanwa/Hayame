@@ -35,6 +35,7 @@
 		A1C0C0DE000000000000000A /* HostHomeScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0C0DE0000000000000009 /* HostHomeScreens.swift */; };
 		A1C0C0DE000000000000000C /* ModeSwitchOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0C0DE000000000000000B /* ModeSwitchOverlay.swift */; };
 		A1C0C0DE000000000000000E /* CheckoutResumeScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0C0DE000000000000000D /* CheckoutResumeScreens.swift */; };
+		A1C0C0DE0000000000000021 /* RenterVerificationScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0C0DE0000000000000020 /* RenterVerificationScreens.swift */; };
 		A1C0C0DE0000000000000010 /* TripsSavedScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0C0DE000000000000000F /* TripsSavedScreens.swift */; };
 		A1C0C0DE0000000000000012 /* Manrope-Variable.ttf in Resources */ = {isa = PBXBuildFile; fileRef = A1C0C0DE0000000000000011 /* Manrope-Variable.ttf */; };
 		A1C0C0DE0000000000000014 /* HayameFont.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0C0DE0000000000000013 /* HayameFont.swift */; };
@@ -49,6 +50,11 @@
 		B7E3A9410C6F2D8B14A5E730 /* AnalyticsConsentSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = D93B8C2E51A6F70429E1B845 /* AnalyticsConsentSheet.swift */; };
 		BF3F421D93056E0F7C9433A9 /* Hayame 2.0 .code-workspace in Resources */ = {isa = PBXBuildFile; fileRef = E4692DF6BD8CEF4505C17B06 /* Hayame 2.0 .code-workspace */; };
 		DA39E78681979B4160CB9FB2 /* LegalAndSupportScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95B87581576C44D745F473DF /* LegalAndSupportScreens.swift */; };
+		A1C0C0DE0000000000000023 /* TermsOfServiceScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0C0DE0000000000000022 /* TermsOfServiceScreen.swift */; };
+		A1C0C0DE000000000000002B /* ScreenshotLegalFixtures.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0C0DE000000000000002A /* ScreenshotLegalFixtures.swift */; };
+		A1C0C0DE0000000000000029 /* LegalDocumentStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0C0DE0000000000000028 /* LegalDocumentStore.swift */; };
+		A1C0C0DE0000000000000027 /* DeleteAccountScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0C0DE0000000000000026 /* DeleteAccountScreen.swift */; };
+		A1C0C0DE0000000000000025 /* LegalDocumentScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0C0DE0000000000000024 /* LegalDocumentScreen.swift */; };
 		F3981DBDFEC268A6B1D19D41 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D724F9AC0077635E90869BDD /* RootView.swift */; };
 /* End PBXBuildFile section */
 
@@ -70,6 +76,11 @@
 		81AA2598E2189D8B1F3B5720 /* RenterScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RenterScreens.swift; sourceTree = "<group>"; };
 		90869CE125FCD22FD5450526 /* NotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationManager.swift; sourceTree = "<group>"; };
 		95B87581576C44D745F473DF /* LegalAndSupportScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegalAndSupportScreens.swift; sourceTree = "<group>"; };
+		A1C0C0DE0000000000000022 /* TermsOfServiceScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TermsOfServiceScreen.swift; sourceTree = "<group>"; };
+		A1C0C0DE000000000000002A /* ScreenshotLegalFixtures.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotLegalFixtures.swift; sourceTree = "<group>"; };
+		A1C0C0DE0000000000000028 /* LegalDocumentStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegalDocumentStore.swift; sourceTree = "<group>"; };
+		A1C0C0DE0000000000000026 /* DeleteAccountScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeleteAccountScreen.swift; sourceTree = "<group>"; };
+		A1C0C0DE0000000000000024 /* LegalDocumentScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegalDocumentScreen.swift; sourceTree = "<group>"; };
 		A1C0C0DE0000000000000001 /* AppIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = AppIcon.icon; sourceTree = "<group>"; };
 		A1C0C0DE0000000000000003 /* AppIconWordmark.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = AppIconWordmark.icon; sourceTree = "<group>"; };
 		A1C0C0DE0000000000000005 /* MoreScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoreScreens.swift; sourceTree = "<group>"; };
@@ -77,6 +88,7 @@
 		A1C0C0DE0000000000000009 /* HostHomeScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostHomeScreens.swift; sourceTree = "<group>"; };
 		A1C0C0DE000000000000000B /* ModeSwitchOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModeSwitchOverlay.swift; sourceTree = "<group>"; };
 		A1C0C0DE000000000000000D /* CheckoutResumeScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CheckoutResumeScreens.swift; sourceTree = "<group>"; };
+		A1C0C0DE0000000000000020 /* RenterVerificationScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RenterVerificationScreens.swift; sourceTree = "<group>"; };
 		A1C0C0DE000000000000000F /* TripsSavedScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TripsSavedScreens.swift; sourceTree = "<group>"; };
 		A1C0C0DE0000000000000011 /* Manrope-Variable.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Manrope-Variable.ttf"; sourceTree = "<group>"; };
 		A1C0C0DE0000000000000013 /* HayameFont.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HayameFont.swift; sourceTree = "<group>"; };
@@ -127,6 +139,7 @@
 				C35FF516F27CD52298E15051 /* AppState.swift */,
 				374D26C81A3EC27AE6793B1C /* HayameIOSApp.swift */,
 				0B01B8766BE90C8F9BC7AA65 /* ScreenshotRootView.swift */,
+				A1C0C0DE000000000000002A /* ScreenshotLegalFixtures.swift */,
 				D3269842B43FB8CAB9542F5D /* ThemeManager.swift */,
 			);
 			path = App;
@@ -193,6 +206,7 @@
 			isa = PBXGroup;
 			children = (
 				A1C0C0DE000000000000000D /* CheckoutResumeScreens.swift */,
+				A1C0C0DE0000000000000020 /* RenterVerificationScreens.swift */,
 				A1C0C0DE0000000000000005 /* MoreScreens.swift */,
 				A1C0C0DE000000000000000F /* TripsSavedScreens.swift */,
 				A1C0C0DE0000000000000016 /* ListingCards.swift */,
@@ -211,6 +225,9 @@
 				EDDD74C69D95930539578828 /* AdminScreens.swift */,
 				D93B8C2E51A6F70429E1B845 /* AnalyticsConsentSheet.swift */,
 				95B87581576C44D745F473DF /* LegalAndSupportScreens.swift */,
+				A1C0C0DE0000000000000022 /* TermsOfServiceScreen.swift */,
+				A1C0C0DE0000000000000026 /* DeleteAccountScreen.swift */,
+				A1C0C0DE0000000000000024 /* LegalDocumentScreen.swift */,
 				D724F9AC0077635E90869BDD /* RootView.swift */,
 				EF07E8B98C809F2333ACF8E0 /* SplashScreen.swift */,
 			);
@@ -231,6 +248,7 @@
 			children = (
 				C82D1F6A47B0E93518D7A226 /* AnalyticsService.swift */,
 				4E5B38248DE6D925A12AC4E5 /* APIClient.swift */,
+				A1C0C0DE0000000000000028 /* LegalDocumentStore.swift */,
 				7939F5F4C58306B8B9C7A871 /* DatabaseReferenceData.swift */,
 				3B80380492FACA470622D08F /* HomeLocationManager.swift */,
 				FB435EFA51DC752EDC48C64D /* InAppBrowserAuthenticator.swift */,
@@ -336,6 +354,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A1C0C0DE000000000000000E /* CheckoutResumeScreens.swift in Sources */,
+				A1C0C0DE0000000000000021 /* RenterVerificationScreens.swift in Sources */,
 				A1C0C0DE0000000000000010 /* TripsSavedScreens.swift in Sources */,
 				A1C0C0DE0000000000000014 /* HayameFont.swift in Sources */,
 				A1C0C0DE0000000000000017 /* ListingCards.swift in Sources */,
@@ -363,6 +382,11 @@
 				AACF7916269FF138234FE1DE /* HostScreens.swift in Sources */,
 				3356F4B2A5A20A8C7056F6BB /* InAppBrowserAuthenticator.swift in Sources */,
 				DA39E78681979B4160CB9FB2 /* LegalAndSupportScreens.swift in Sources */,
+				A1C0C0DE0000000000000023 /* TermsOfServiceScreen.swift in Sources */,
+				A1C0C0DE000000000000002B /* ScreenshotLegalFixtures.swift in Sources */,
+				A1C0C0DE0000000000000029 /* LegalDocumentStore.swift in Sources */,
+				A1C0C0DE0000000000000027 /* DeleteAccountScreen.swift in Sources */,
+				A1C0C0DE0000000000000025 /* LegalDocumentScreen.swift in Sources */,
 				1C2772E9C70DAD52F03C75E8 /* MockDataService.swift in Sources */,
 				8DF66CF558B08006BDB51042 /* Models.swift in Sources */,
 				2FB9D38448C3276E9C41BEA9 /* NotificationManager.swift in Sources */,

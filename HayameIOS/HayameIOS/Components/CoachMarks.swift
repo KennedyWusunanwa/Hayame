@@ -47,6 +47,10 @@ final class CoachMarkCenter: ObservableObject {
 
     private var frames: [String: CGRect] = [:]
     private var pending: [String: Task<Void, Never>] = [:]
+    /// Tours asked for by screens that are still showing, so they can start
+    /// once whatever is covering the app (see `setHeld`) goes away.
+    private var requested: [String: CoachTour] = [:]
+    private var held = false
     private var seen: Set<String>
     private var welcomeDone: Bool
     /// Screenshot runs keep tips out of the way unless asked for.
@@ -108,6 +112,8 @@ final class CoachMarkCenter: ObservableObject {
 
     func request(_ tour: CoachTour) {
         guard tipsEnabled, !suppressed, !seen.contains(tour.id) else { return }
+        requested[tour.id] = tour
+        guard !held else { return }
         pending[tour.id]?.cancel()
         pending[tour.id] = Task { [weak self] in
             try? await Task.sleep(nanoseconds: 900_000_000)
@@ -117,6 +123,7 @@ final class CoachMarkCenter: ObservableObject {
     }
 
     func cancel(_ tourID: String) {
+        requested[tourID] = nil
         pending[tourID]?.cancel()
         pending[tourID] = nil
         if active?.tour.id == tourID {
@@ -127,9 +134,27 @@ final class CoachMarkCenter: ObservableObject {
         }
     }
 
+    /// Tips wait while something covers the whole app (the Terms of Service
+    /// agreement): a tip showing now is put away without being marked as seen,
+    /// and the tours of the screens underneath start when the hold ends.
+    func setHeld(_ value: Bool) {
+        guard held != value else { return }
+        held = value
+        if value {
+            pending.values.forEach { $0.cancel() }
+            pending = [:]
+            if active != nil {
+                active = nil
+                activeFrame = nil
+            }
+        } else {
+            requested.values.forEach { request($0) }
+        }
+    }
+
     private func start(_ tour: CoachTour) {
         pending[tour.id] = nil
-        guard active == nil, tipsEnabled, !seen.contains(tour.id) else { return }
+        guard !held, active == nil, tipsEnabled, !seen.contains(tour.id) else { return }
         let screen = Self.screenBounds.insetBy(dx: 0, dy: 44)
         let steps = tour.steps.filter { step in
             guard let frame = frames[step.target], frame.width > 1, frame.height > 1 else { return false }

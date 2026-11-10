@@ -170,8 +170,10 @@ fun BookingScreen(
     onOpenConversation: (String) -> Unit,
     onBookingCompleted: () -> Unit,
     onPaystackCallbackConsumed: () -> Unit,
+    onVerificationRequired: () -> Unit = {},
 ) {
     val pendingCheckout by viewModel.pendingCheckout.collectAsState()
+    val renterVerification by viewModel.renterVerification.collectAsState()
     val carState by viewModel.carDetailState.collectAsState()
     val locations by viewModel.locations.collectAsState()
     val bookingDraft by viewModel.bookingDraft.collectAsState()
@@ -486,6 +488,32 @@ fun BookingScreen(
                 )
             }
 
+            // Renters pass an identity check before paying. Their selections are kept as the
+            // saved-checkout draft, so the booking can be finished once they are approved.
+            fun openVerificationInsteadOfPaying() {
+                viewModel.setBookingDraft(
+                    carId = carId,
+                    startDate = startDate.toApiDate(),
+                    endDate = endDate.toApiDate(),
+                    region = region.trim(),
+                    city = city.trim(),
+                    address = address.trim(),
+                    tripMode = tripMode?.rawValue,
+                    deliveryAddress = deliveryAddress.trim(),
+                    deliveryTime = deliveryTime.trim(),
+                    contactPhone = contactPhone.trim(),
+                    deliveryNotes = deliveryNotes.trim(),
+                    carTitle = car.title?.trim().orEmpty(),
+                    carImageUrl = car.image_url ?: car.car_photos.orEmpty().firstNotNullOfOrNull { it.url },
+                    dailyPrice = pricePerDay,
+                    step = currentStep.ordinal,
+                )
+                isProcessingPayment = false
+                awaitingPaymentReturn = false
+                paymentMessage = null
+                onVerificationRequired()
+            }
+
             fun beginPayment() {
                 val normalizedRegion = region.trim()
                 val normalizedCity = city.trim()
@@ -546,6 +574,11 @@ fun BookingScreen(
                     }
                 }
 
+                if (renterVerification.blocksBooking) {
+                    openVerificationInsteadOfPaying()
+                    return
+                }
+
                 isProcessingPayment = true
                 paymentMessage = null
                 viewModel.setBookingDraft(
@@ -590,6 +623,8 @@ fun BookingScreen(
                         errorPulse += 1
                         viewModel.refreshSavedCheckout(force = true)
                     },
+                    // The server asked for the identity check after all (403 verification_required).
+                    onVerificationRequired = { openVerificationInsteadOfPaying() },
                 )
             }
 
@@ -693,7 +728,13 @@ fun BookingScreen(
                         }
                     }
 
-                    CheckoutStep.REVIEW -> goTo(CheckoutStep.PAYMENT)
+                    CheckoutStep.REVIEW -> {
+                        if (isAuthenticated && renterVerification.blocksBooking) {
+                            openVerificationInsteadOfPaying()
+                        } else {
+                            goTo(CheckoutStep.PAYMENT)
+                        }
+                    }
 
                     CheckoutStep.PAYMENT -> beginPayment()
                 }

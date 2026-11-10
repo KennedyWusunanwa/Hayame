@@ -8,6 +8,7 @@ import retrofit2.http.DELETE
 import retrofit2.http.GET
 import retrofit2.http.HTTP
 import retrofit2.http.Header
+import retrofit2.http.Headers
 import retrofit2.http.Multipart
 import retrofit2.http.PATCH
 import retrofit2.http.POST
@@ -269,4 +270,41 @@ interface HayameApi {
         @Header("Authorization") auth: String,
         @Path("announcementId") announcementId: String,
     ): AnnouncementSeenResponse
+
+    @GET("api/renter-verification")
+    suspend fun getRenterVerification(
+        @Header("Authorization") auth: String,
+    ): RenterVerificationEnvelope
+
+    @POST("api/renter-verification")
+    suspend fun submitRenterVerification(
+        @Header("Authorization") auth: String,
+        @Body body: RenterVerificationSubmitRequest,
+    ): RenterVerificationEnvelope
+
+    /** The Terms of Service. Works signed out; with a token it also says whether this user accepted. */
+    @Headers("Cache-Control: no-cache")
+    @GET("api/terms")
+    suspend fun getTerms(
+        @Header("Authorization") auth: String? = null,
+    ): TermsEnvelope
+
+    @POST("api/terms/accept")
+    suspend fun acceptTerms(
+        @Header("Authorization") auth: String,
+        @Body body: TermsAcceptRequest,
+    ): TermsAcceptEnvelope
+
+    /** A policy document: "protection", "cancellation" or "privacy". Public, no token needed. */
+    @GET("api/legal/{slug}")
+    suspend fun getLegalDocument(
+        @Path("slug") slug: String,
+    ): LegalDocumentEnvelope
+
+    /** Asks for the signed-in account to be deleted. A person at Hayame carries it out. */
+    @POST("api/account/deletion-request")
+    suspend fun requestAccountDeletion(
+        @Header("Authorization") auth: String,
+        @Body body: AccountDeletionRequest,
+    ): AccountDeletionEnvelope
 }

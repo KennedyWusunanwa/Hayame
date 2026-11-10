@@ -977,3 +977,156 @@ data class CheckoutAbandonDto(
 data class CheckoutBookingIdRequest(
     val bookingId: String,
 )
+
+// MARK: Renter identity verification ---------------------------------------------------------------
+
+@Serializable
+data class RenterVerificationEnvelope(
+    val data: RenterVerificationDto? = null,
+    val message: String? = null,
+)
+
+/**
+ * Where the signed-in renter stands with the identity check. Every field is optional so an
+ * older or partial server response never fails to parse; [canBook] is the one booking looks at.
+ */
+@Serializable
+data class RenterVerificationDto(
+    val status: String? = null,
+    val required: Boolean? = null,
+    val canBook: Boolean? = null,
+    val submittedAt: String? = null,
+    val reviewedAt: String? = null,
+    val rejectionReason: String? = null,
+)
+
+@Serializable
+data class RenterVerificationSubmitRequest(
+    val face_path: String,
+    val licence_front_path: String,
+    val licence_back_path: String,
+)
+
+// MARK: Terms of Service -------------------------------------------------------------------------
+
+@Serializable
+data class TermsEnvelope(
+    val data: TermsDto? = null,
+    val message: String? = null,
+)
+
+/**
+ * The agreement text (one copy on the server for web, iOS and Android) plus where this user
+ * stands. Every field is optional so a partial response never fails to parse; [accepted] is
+ * null when the request was made signed out.
+ */
+@Serializable
+data class TermsDto(
+    val version: String? = null,
+    val title: String? = null,
+    val lastUpdated: String? = null,
+    val sections: List<TermsSectionDto>? = null,
+    val required: Boolean? = null,
+    val accepted: Boolean? = null,
+    val acceptedAt: String? = null,
+)
+
+@Serializable
+data class TermsSectionDto(
+    val title: String? = null,
+    val paragraphs: List<String>? = null,
+)
+
+@Serializable
+data class TermsAcceptRequest(
+    val version: String,
+    val platform: String = "android",
+)
+
+@Serializable
+data class TermsAcceptEnvelope(
+    val data: TermsAcceptDto? = null,
+    val message: String? = null,
+)
+
+@Serializable
+data class TermsAcceptDto(
+    val accepted: Boolean? = null,
+    val version: String? = null,
+    val acceptedAt: String? = null,
+)
+
+// MARK: Policy documents (Protection, Cancellation, Privacy) ---------------------------------------
+
+@Serializable
+data class LegalDocumentEnvelope(
+    val data: LegalDocumentDto? = null,
+    val message: String? = null,
+)
+
+/**
+ * One policy document written as questions and answers (one copy on the server for web, iOS
+ * and Android). Every field is optional so a partial response never fails to parse.
+ */
+@Serializable
+data class LegalDocumentDto(
+    val slug: String? = null,
+    val eyebrow: String? = null,
+    val title: String? = null,
+    /** Already formatted for display, e.g. "10 November 2026". */
+    val lastUpdated: String? = null,
+    val summary: String? = null,
+    val highlights: List<LegalHighlightDto>? = null,
+    /** Only the cancellation policy has one. */
+    val table: LegalTableDto? = null,
+    val groups: List<LegalGroupDto>? = null,
+    val contact: String? = null,
+)
+
+@Serializable
+data class LegalHighlightDto(
+    val title: String? = null,
+    val body: String? = null,
+)
+
+/** The first column of every row is the row's label. */
+@Serializable
+data class LegalTableDto(
+    val title: String? = null,
+    val caption: String? = null,
+    val columns: List<String>? = null,
+    val rows: List<List<String>>? = null,
+)
+
+@Serializable
+data class LegalGroupDto(
+    val title: String? = null,
+    val questions: List<LegalQuestionDto>? = null,
+)
+
+@Serializable
+data class LegalQuestionDto(
+    val q: String? = null,
+    /** The answer, one entry per paragraph. */
+    val a: List<String>? = null,
+)
+
+// MARK: Account deletion ---------------------------------------------------------------------------
+
+@Serializable
+data class AccountDeletionRequest(
+    val platform: String = "android",
+)
+
+@Serializable
+data class AccountDeletionEnvelope(
+    val data: AccountDeletionDto? = null,
+    val message: String? = null,
+)
+
+@Serializable
+data class AccountDeletionDto(
+    val requested: Boolean? = null,
+    val openTrips: Int? = null,
+    val message: String? = null,
+)

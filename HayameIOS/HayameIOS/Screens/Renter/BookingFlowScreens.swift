@@ -38,6 +38,10 @@ struct BookingSheet: View {
     @State private var successBookingID: String?
     /// Bumped on a failed check so the bottom bar shakes.
     @State private var shakeCount = 0
+    /// The identity check, shown when the renter is not approved to book yet.
+    @State private var showVerification = false
+    /// True while the latest verification status is fetched before paying.
+    @State private var isCheckingVerification = false
 
     init(car: Car, startDate: Date, endDate: Date, region: String, city: String, address: String, blockedDates: Set<Date> = []) {
         self.car = car
@@ -394,6 +398,11 @@ struct BookingSheet: View {
                 }
             )
         }
+        .sheet(isPresented: $showVerification, onDismiss: handleVerificationDismissed) {
+            RenterVerificationSheet(context: .booking(carTitle: car.displayTitle))
+                .environmentObject(appState)
+        }
+        .termsAgreementCover()
         .onDisappear {
             persistDraftIfNeeded()
         }
@@ -1125,7 +1134,7 @@ struct BookingSheet: View {
 
                 Button(action: handlePrimaryAction) {
                     HStack(spacing: 8) {
-                        if isProcessingPayment && currentStep == .payment {
+                        if (isProcessingPayment && currentStep == .payment) || isCheckingVerification {
                             ProgressView()
                                 .tint(.white)
                                 .controlSize(.small)
@@ -1134,7 +1143,7 @@ struct BookingSheet: View {
                             .contentTransition(.opacity)
                             .lineLimit(1)
                             .minimumScaleFactor(0.75)
-                        if !isProcessingPayment {
+                        if !isProcessingPayment && !isCheckingVerification {
                             Image(systemName: currentStep == .payment ? "lock.fill" : "arrow.right")
                                 .font(.hayame(size: 14, weight: .bold))
                         }
@@ -1147,7 +1156,7 @@ struct BookingSheet: View {
                     .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                 }
                 .buttonStyle(HayamePressableStyle(scale: 0.96))
-                .disabled(isProcessingPayment)
+                .disabled(isProcessingPayment || isCheckingVerification)
                 .layoutPriority(1)
             }
         }
@@ -1357,10 +1366,61 @@ struct BookingSheet: View {
             moveTo(.review)
 
         case .review:
-            moveTo(.payment)
+            if appState.renterVerificationBlocksBooking {
+                Task { await continueToPaymentIfVerified() }
+            } else {
+                moveTo(.payment)
+            }
 
         case .payment:
             Task { await payWithPaystack() }
+        }
+    }
+
+    // MARK: Identity check
+    //
+    // The server only accepts a booking from a renter whose licence has been
+    // approved. When the app knows that is not the case yet, it saves the
+    // selections and opens the verification screen instead of letting the
+    // payment fail. An unknown status never stops the renter here.
+
+    /// Review -> Pay for a renter the app believes is not approved: re-check
+    /// first (the approval may have just landed), then either move on or open
+    /// the verification screen.
+    @MainActor
+    private func continueToPaymentIfVerified() async {
+        guard !isCheckingVerification else { return }
+        isCheckingVerification = true
+        await appState.refreshRenterVerification(force: true)
+        isCheckingVerification = false
+        if appState.renterVerificationBlocksBooking {
+            presentVerification()
+        } else if currentStep == .review {
+            moveTo(.payment)
+        }
+    }
+
+    /// Keeps everything chosen so far, then shows the identity check.
+    @MainActor
+    private func presentVerification() {
+        appState.saveCheckoutDraft(currentDraft())
+        HayameHaptics.warning()
+        withAnimation(HayameMotion.snappy) {
+            paymentMessage = nil
+        }
+        showVerification = true
+    }
+
+    /// Closing the verification sheet while the photos are under review ends
+    /// the checkout too: the booking is saved and waits on Home and Trips.
+    /// If they were approved while it was open, carry on to payment.
+    private func handleVerificationDismissed() {
+        if appState.renterVerificationBlocksBooking {
+            if appState.renterVerification?.status == .pending {
+                dismiss()
+            }
+        } else if appState.renterVerification?.canBook == true, currentStep == .review {
+            moveTo(.payment)
         }
     }
 
@@ -1370,6 +1430,17 @@ struct BookingSheet: View {
         isProcessingPayment = true
         paymentMessage = nil
         defer { isProcessingPayment = false }
+
+        // Not approved to book yet (as far as the app knows): confirm with the
+        // server, and if it still stands, go to the identity check instead of
+        // starting a payment the server would refuse.
+        if appState.renterVerificationBlocksBooking {
+            await appState.refreshRenterVerification(force: true)
+            if appState.renterVerificationBlocksBooking {
+                presentVerification()
+                return
+            }
+        }
 
         do {
             let checkout = try await appState.beginBookingPayment(
@@ -1407,6 +1478,23 @@ struct BookingSheet: View {
                     }
                 }
                 throw error
+            }
+        } catch let apiError as APIError where apiError.isRenterVerificationRequired {
+            // The server asked for the identity check (AppState has noted the
+            // status it reported): same guided step as the check above.
+            presentVerification()
+        } catch let apiError as APIError where apiError.isTermsRequired {
+            // The server wants the current Terms of Service accepted first:
+            // keep the selections and show the agreement over this sheet. Once
+            // accepted, the renter is back here and can pay.
+            appState.saveCheckoutDraft(currentDraft())
+            if await appState.handleTermsRequired() {
+                HayameHaptics.warning()
+            } else {
+                // The terms could not be loaded: say why the payment stopped.
+                fail(apiError.message.isEmpty
+                    ? "Please accept the Terms of Service to continue. Check your connection and try again."
+                    : apiError.message)
             }
         } catch {
             let message = AppState.userFacingMessage(error, fallback: "Something went wrong. Please try again.")

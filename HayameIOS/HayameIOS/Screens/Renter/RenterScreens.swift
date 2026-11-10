@@ -331,9 +331,114 @@ struct ScreenshotRenterRouteView: View {
                     appState.hostTab = route == .hostHome ? .dashboard : .profile
                 }
 
+        case .verification, .verificationPending, .verificationRejected, .verificationApproved:
+            RenterVerificationSheet(context: route == .verificationPending ? .booking(carTitle: screenshotCar.displayTitle) : .standalone)
+                .onAppear { applyVerificationFixture() }
+
+        case .verificationHome:
+            renterTab(.home)
+                .onAppear { applyVerificationFixture() }
+
+        case .terms:
+            TermsOfServiceScreen(mode: .agreement)
+                .onAppear { applyTermsFixture(mustAccept: true) }
+
+        case .termsRead:
+            NavigationStack {
+                TermsOfServiceScreen(mode: .readOnly)
+            }
+            .onAppear { applyTermsFixture(mustAccept: false) }
+
+        case .termsError:
+            // No fixture: the unloaded state with Retry.
+            NavigationStack {
+                TermsOfServiceScreen(mode: .readOnly)
+            }
+            .onAppear(perform: useDemoProfileForScreenshots)
+
+        case .termsGate:
+            // The agreement as the app shows it: over the whole signed-in app.
+            RootView()
+                .onAppear { applyTermsFixture(mustAccept: true) }
+
+        case .legalProtection, .legalProtectionQuestion:
+            legalDocument(.protection)
+
+        case .legalCancellation, .legalCancellationTable, .legalCancellationQuestions:
+            legalDocument(.cancellation)
+
+        case .legalPrivacy, .legalPrivacySearch:
+            legalDocument(.privacy)
+
+        case .deleteAccount, .deleteAccountDone:
+            // The sheet as it opens from Settings.
+            NavigationStack {
+                SettingsScreen()
+            }
+            .onAppear(perform: useDemoProfileForScreenshots)
+            .sheet(isPresented: .constant(true)) {
+                DeleteAccountSheet()
+                    .environmentObject(appState)
+            }
+
         case .splash, .authLogin, .authSignup:
             EmptyView()
         }
+    }
+
+    /// A policy document as it opens from More: pushed, with a back button.
+    private func legalDocument(_ kind: LegalDocumentKind) -> some View {
+        NavigationStack(path: .constant([kind])) {
+            Color.clear
+                .navigationTitle("More")
+                .navigationBarTitleDisplayMode(.inline)
+                .navigationDestination(for: LegalDocumentKind.self) { kind in
+                    LegalDocumentScreen(kind: kind)
+                }
+        }
+        .onAppear(perform: useDemoProfileForScreenshots)
+    }
+
+    /// The real Terms of Service text (copied from the server's source into
+    /// `ScreenshotLegalFixtures`) for the `terms*` screenshot routes.
+    private func applyTermsFixture(mustAccept: Bool) {
+        useDemoProfileForScreenshots()
+        let dto = ScreenshotLegalFixtures.terms
+        let sections = (dto?.sections ?? []).enumerated().map { index, section in
+            TermsSection(id: index, title: section.title ?? "", paragraphs: section.paragraphs)
+        }
+        appState.applyScreenshotTerms(
+            TermsDocument(
+                version: dto?.version ?? "2026-11-10",
+                title: dto?.title ?? "Terms of Service",
+                lastUpdated: dto?.lastUpdated,
+                sections: sections,
+                required: true,
+                accepted: !mustAccept,
+                acceptedAt: mustAccept ? nil : Date().addingTimeInterval(-2 * 24 * 60 * 60)
+            ),
+            mustAccept: mustAccept
+        )
+    }
+
+    /// An identity-check status for the verification screenshot routes.
+    private func applyVerificationFixture() {
+        useDemoProfileForScreenshots()
+        let status: RenterVerificationStatus
+        switch route {
+        case .verificationPending: status = .pending
+        case .verificationRejected: status = .rejected
+        case .verificationApproved: status = .approved
+        default: status = .unverified
+        }
+        appState.applyScreenshotRenterVerification(RenterVerification(
+            status: status,
+            required: true,
+            canBook: status == .approved,
+            submittedAt: status == .unverified ? nil : Date().addingTimeInterval(-40 * 60),
+            reviewedAt: nil,
+            rejectionReason: status == .rejected ? "The back of your licence was blurry. Please retake it in good light." : nil
+        ))
     }
 
     /// Demo host data (bookings, reviews, listings) for the host screenshot routes.
@@ -674,6 +779,13 @@ struct RenterHomeScreen: View {
                     .coachMark("home.categories")
                     .coachTour(.home)
 
+                if appState.isAuthenticated,
+                   let verification = appState.renterVerification,
+                   verification.needsSubmission {
+                    RenterVerificationPromptCard(verification: verification)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
+
                 if let resumable = appState.resumableCheckout {
                     ResumeCheckoutCard(resumable: resumable) {
                         resumeTarget = resumable
@@ -815,6 +927,7 @@ struct RenterHomeScreen: View {
             }
             .padding(16)
             .animation(HayameMotion.settle, value: appState.resumableCheckout)
+            .animation(HayameMotion.settle, value: appState.renterVerification)
             .animation(HayameMotion.settle, value: selectedCategory)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

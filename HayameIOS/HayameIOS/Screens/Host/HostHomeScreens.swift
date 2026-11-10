@@ -545,6 +545,14 @@ struct HostProfileScreen: View {
                     HayameNavRow(icon: "calendar.badge.clock", tint: HayameTheme.warning, title: "Cancellation policy", subtitle: "Refund tiers and timing") {
                         CancellationPolicyScreen()
                     }
+                    HayameRowDivider()
+                    HayameNavRow(icon: "hand.raised.fill", tint: HayameTheme.mutedText, title: "Privacy", subtitle: "How we handle your data") {
+                        PrivacyScreen()
+                    }
+                    HayameRowDivider()
+                    HayameNavRow(icon: "doc.text.fill", tint: HayameTheme.brandBlue, title: "Terms of Service", subtitle: "The agreement for using Hayame") {
+                        TermsOfServiceScreen(mode: .readOnly)
+                    }
                 }
                 .hayameAppear(index: 6)
 
@@ -579,6 +587,9 @@ struct HostProfileScreen: View {
                             .overlay(Capsule().strokeBorder(HayameTheme.danger.opacity(0.25), lineWidth: 1))
                     }
                     .buttonStyle(HayamePressableStyle())
+
+                    DeleteAccountLink()
+                        .padding(.top, -4)
 
                     Text("Hayame \(AppVersion.display)")
                         .font(.hayame(size: 11, weight: .medium))

@@ -73,6 +73,19 @@
             </intent-filter>
         </activity-alias>
 
+        <!-- Lets the phone's camera app save a renter verification photo into the app's
+             private cache (ui/screens/RenterVerificationScreens.kt). Not exported; access is
+             granted per capture. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
         <service
             android:name=".push.HayameFirebaseMessagingService"
             android:exported="false">

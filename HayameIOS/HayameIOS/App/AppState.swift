@@ -80,6 +80,20 @@ final class AppState: ObservableObject {
     /// Selections saved on this device before any payment was attempted.
     @Published var checkoutDraft: CheckoutDraft?
     @Published var pendingCheckoutLoadState: ViewLoadState = .idle
+    /// The renter's identity check as the server last reported it. Nil means
+    /// unknown (signed out, not loaded yet, or an older server); unknown never
+    /// blocks a booking here, the server is the real gate.
+    @Published private(set) var renterVerification: RenterVerification?
+    @Published private(set) var renterVerificationLoadState: ViewLoadState = .idle
+    /// Set when something outside the booking flow (a tapped push) asks for the
+    /// verification screen; RootView presents it.
+    @Published var showRenterVerificationScreen = false
+    /// The Terms of Service as the server last sent them. Nil means not loaded
+    /// (or an older server without them).
+    @Published private(set) var termsDocument: TermsDocument?
+    /// True when the server's latest answer says this signed-in user has not
+    /// accepted the current terms yet. See `mustAcceptTerms`.
+    @Published private(set) var termsAcceptanceRequired = false
     /// Bumped whenever a checkout is paid, so any sheet still showing it can close.
     @Published var lastCompletedCheckoutBookingID: String?
     @Published var notificationPreferences = NotificationPreferences.defaults
@@ -113,6 +127,19 @@ final class AppState: ObservableObject {
     private let exploreLayoutModeKey = "hayame.explore_layout_mode"
     private let checkoutDraftKey = "hayame.checkout_draft"
     private var lastPendingCheckoutRefresh: Date?
+    private var lastRenterVerificationRefresh: Date?
+    /// True when the latest status request failed: the last known status stays
+    /// on screen, but it no longer blocks a booking.
+    private var renterVerificationIsStale = false
+    private var lastTermsRefresh: Date?
+    /// Bumped per terms request so an older reply never replaces a newer one.
+    private var termsRequestGeneration = 0
+    /// The last terms request failed for a reason worth retrying (not a 404).
+    private var termsRefreshNeedsRetry = false
+    /// What this user accepted in this session, so a status reply that was
+    /// already on its way cannot put the agreement back up.
+    private var acceptedTermsVersion: String?
+    private var acceptedTermsDate: Date?
 
     private var authToken: String?
     private var refreshToken: String?
@@ -277,6 +304,8 @@ final class AppState: ObservableObject {
             Task { @MainActor in
                 await self.refreshActiveAnnouncements()
                 await self.refreshPendingCheckout()
+                await self.refreshRenterVerification()
+                await self.refreshTermsOfService()
                 await self.refreshOnForeground()
             }
         }
@@ -681,6 +710,8 @@ final class AppState: ObservableObject {
         pendingCheckout = nil
         pendingCheckoutLoadState = .idle
         checkoutDraft = nil
+        resetRenterVerification()
+        resetTermsOfService()
         hostReviews = []
         listingReviewsByCarID = [:]
         conversations = []
@@ -738,6 +769,8 @@ final class AppState: ObservableObject {
         favoriteCarIDs = []
         renterBookings = []
         hostBookings = []
+        resetRenterVerification()
+        resetTermsOfService()
         hostReviews = []
         listingReviewsByCarID = [:]
         conversations = []
@@ -786,6 +819,8 @@ final class AppState: ObservableObject {
         favoriteCarIDs = []
         renterBookings = []
         hostBookings = []
+        resetRenterVerification()
+        resetTermsOfService()
         hostReviews = []
         listingReviewsByCarID = [:]
         conversations = []
@@ -1371,6 +1406,18 @@ final class AppState: ObservableObject {
             return
         }
 
+        // An identity decision: refresh it, and after a rejection open the
+        // screen so the renter can see why and send new photos.
+        if route.type == "renter_verification" {
+            Task { @MainActor in
+                await self.refreshRenterVerification(force: true)
+            }
+            if isAuthenticated, route.verificationStatus == "rejected" {
+                showRenterVerificationScreen = true
+            }
+            return
+        }
+
         if let conversationID = route.conversationID {
             openConversationInInbox(
                 conversationID: conversationID,
@@ -1744,7 +1791,16 @@ final class AppState: ObservableObject {
             syncErrorMessage = nil
             return checkoutSession
         } catch {
-            syncErrorMessage = errorMessage(error, fallback: "Unable to start Paystack checkout.")
+            if let apiError = error as? APIError, apiError.isRenterVerificationRequired {
+                // Not a failure to show as an error: the checkout sends the
+                // renter to the identity check instead.
+                noteRenterVerificationRequired(apiError)
+            } else if let apiError = error as? APIError, apiError.isTermsRequired {
+                // Not an error to show either: the checkout puts the Terms of
+                // Service agreement up instead (see `handleTermsRequired`).
+            } else {
+                syncErrorMessage = errorMessage(error, fallback: "Unable to start Paystack checkout.")
+            }
             throw error
         }
     }
@@ -1787,7 +1843,13 @@ final class AppState: ObservableObject {
                 )
             }
             let paymentStatus = finalized.data?.payment_status?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-            guard paymentStatus == "paid" else {
+            let bookingStatus = finalized.data?.status?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            // A booking the webhook already moved to the host (or confirmed) is
+            // paid, even if the row came back without payment_status.
+            let bookingIsPaid = paymentStatus == "paid"
+                || bookingStatus == "awaiting_host"
+                || bookingStatus == "confirmed"
+            guard bookingIsPaid else {
                 throw APIError(message: "Payment not completed yet. Finish payment in secure checkout before verifying.")
             }
             AnalyticsService.shared.track(AnalyticsEvent.bookingCompleted, [
@@ -1807,6 +1869,397 @@ final class AppState: ObservableObject {
             paymentFlowNoticeIsError = true
             throw error
         }
+    }
+
+    // MARK: - Renter verification
+
+    /// True only when the server's latest answer says this renter may not book
+    /// yet. Unknown or out-of-date status never blocks: the server decides.
+    var renterVerificationBlocksBooking: Bool {
+        guard isAuthenticated, !renterVerificationIsStale, let verification = renterVerification else { return false }
+        return !verification.canBook
+    }
+
+    /// Loads the identity-check status. Throttled so launch, foregrounding and
+    /// polling do not each fire a request; `force` skips the throttle. A failed
+    /// request leaves booking open (see `renterVerificationBlocksBooking`).
+    func refreshRenterVerification(force: Bool = false) async {
+        #if DEBUG
+        if Self.isScreenshotMode { return }
+        #endif
+        guard isAuthenticated, authToken != nil else {
+            resetRenterVerification()
+            return
+        }
+        if !force, let last = lastRenterVerificationRefresh, Date().timeIntervalSince(last) < 30 {
+            return
+        }
+        lastRenterVerificationRefresh = Date()
+        let userID = currentUser.id
+        if renterVerification == nil {
+            renterVerificationLoadState = .loading
+        }
+        do {
+            let envelope = try await withAuthenticatedToken { token in
+                try await api.getRenterVerification(baseURL: apiBaseURL, token: token)
+            }
+            // The account changed while the request was in flight.
+            guard isAuthenticated, currentUser.id == userID else { return }
+            applyRenterVerification(envelope.data)
+        } catch {
+            guard isAuthenticated, currentUser.id == userID else { return }
+            if isCancellation(error) {
+                if renterVerification == nil { renterVerificationLoadState = .idle }
+                lastRenterVerificationRefresh = nil
+                return
+            }
+            renterVerificationIsStale = true
+            if let apiError = error as? APIError, apiError.statusCode == 404 {
+                // An older server without this feature: nothing to show or gate.
+                renterVerification = nil
+            }
+            renterVerificationLoadState = renterVerification == nil
+                ? .error("We couldn't load your verification status. Please try again.")
+                : .loaded
+        }
+    }
+
+    /// Uploads one identity photo (JPEG) and returns its storage path.
+    func uploadRenterVerificationPhoto(kind: RenterVerificationPhotoKind, fileData: Data) async throws -> String {
+        do {
+            return try await withAuthenticatedToken { token in
+                try await api.uploadRenterVerificationPhoto(
+                    token: token,
+                    userID: currentUser.id,
+                    kind: kind,
+                    fileData: fileData
+                )
+            }
+        } catch let apiError as APIError where apiError.statusCode != 401 {
+            // Storage errors are technical; never show them as they are.
+            throw APIError(
+                message: "We couldn't upload your photos. Please try again.",
+                statusCode: apiError.statusCode
+            )
+        }
+    }
+
+    /// Sends the three uploaded photos for review. On success the status
+    /// becomes "pending".
+    func submitRenterVerification(facePath: String, licenceFrontPath: String, licenceBackPath: String) async throws {
+        let userID = currentUser.id
+        let envelope = try await withAuthenticatedToken { token in
+            try await api.submitRenterVerification(
+                baseURL: apiBaseURL,
+                token: token,
+                facePath: facePath,
+                licenceFrontPath: licenceFrontPath,
+                licenceBackPath: licenceBackPath
+            )
+        }
+        guard isAuthenticated, currentUser.id == userID else { return }
+        lastRenterVerificationRefresh = Date()
+        if envelope.data?.status != nil || envelope.data?.canBook != nil {
+            applyRenterVerification(envelope.data)
+        } else {
+            // Accepted, but the reply carried no status: it is under review.
+            renterVerification = RenterVerification(
+                status: .pending,
+                required: true,
+                canBook: false,
+                submittedAt: Date(),
+                reviewedAt: nil,
+                rejectionReason: nil
+            )
+            renterVerificationIsStale = false
+            renterVerificationLoadState = .loaded
+        }
+    }
+
+    /// The server refused a booking with `verification_required`. Remember
+    /// what it said so the verification screen opens in the right state even
+    /// if the status request itself is failing.
+    func noteRenterVerificationRequired(_ error: APIError) {
+        guard error.isRenterVerificationRequired else { return }
+        let status = error.verificationStatus
+            .flatMap { RenterVerificationStatus(rawValue: $0.lowercased()) }
+        var verification = renterVerification ?? RenterVerification(
+            status: .unverified,
+            required: true,
+            canBook: false,
+            submittedAt: nil,
+            reviewedAt: nil,
+            rejectionReason: nil
+        )
+        if let status, status != .approved {
+            verification.status = status
+        } else if verification.status == .approved {
+            verification.status = .unverified
+        }
+        verification.required = true
+        verification.canBook = false
+        renterVerification = verification
+        renterVerificationIsStale = false
+        renterVerificationLoadState = .loaded
+        // Pick up the full record (rejection reason, dates) when it can be read.
+        Task { await refreshRenterVerification(force: true) }
+    }
+
+    private func applyRenterVerification(_ dto: RenterVerificationDTO?) {
+        let status = dto?.status.flatMap { RenterVerificationStatus(rawValue: $0.lowercased()) }
+        guard let dto, status != nil || dto.canBook != nil else {
+            // Nothing usable came back: treat as unknown and do not gate.
+            renterVerification = nil
+            renterVerificationIsStale = true
+            renterVerificationLoadState = .error("We couldn't load your verification status. Please try again.")
+            return
+        }
+        let required = dto.required ?? true
+        let canBook = dto.canBook ?? (status == .approved || !required)
+        renterVerification = RenterVerification(
+            status: status ?? (canBook ? .approved : .unverified),
+            required: required,
+            canBook: canBook,
+            submittedAt: Self.parseTimestamp(dto.submittedAt),
+            reviewedAt: Self.parseTimestamp(dto.reviewedAt),
+            rejectionReason: dto.rejectionReason
+        )
+        renterVerificationIsStale = false
+        renterVerificationLoadState = .loaded
+    }
+
+    /// Nil when the value is missing or not a timestamp (never "now").
+    private static func parseTimestamp(_ value: String?) -> Date? {
+        guard let value, !value.isEmpty else { return nil }
+        return iso8601WithFractional.date(from: value) ?? iso8601Basic.date(from: value)
+    }
+
+    private func resetRenterVerification() {
+        renterVerification = nil
+        renterVerificationLoadState = .idle
+        renterVerificationIsStale = false
+        lastRenterVerificationRefresh = nil
+        showRenterVerificationScreen = false
+    }
+
+    #if DEBUG
+    /// Screenshot runs only: shows the verification screens in a given state.
+    func applyScreenshotRenterVerification(_ verification: RenterVerification?) {
+        guard Self.isScreenshotMode else { return }
+        renterVerification = verification
+        renterVerificationIsStale = false
+        renterVerificationLoadState = verification == nil ? .idle : .loaded
+    }
+    #endif
+
+    // MARK: - Terms of Service
+
+    /// True when the server's latest answer says this signed-in user has not
+    /// accepted the current terms: the agreement covers the app until they do.
+    /// Unknown (request failed, older server, no text) never blocks here; the
+    /// server refuses bookings on its own.
+    var mustAcceptTerms: Bool {
+        guard isAuthenticated, termsAcceptanceRequired, let document = termsDocument else { return false }
+        return !document.sections.isEmpty && !document.version.isEmpty
+    }
+
+    /// Loads the Terms of Service and, when signed in, whether this user has
+    /// accepted them. Throttled like the identity check; `force` skips the
+    /// throttle. Guests are only served when a screen asks (`allowSignedOut`).
+    /// A failed request never puts the agreement up.
+    func refreshTermsOfService(force: Bool = false, allowSignedOut: Bool = false) async {
+        #if DEBUG
+        if Self.isScreenshotMode { return }
+        #endif
+        let signedIn = isAuthenticated && authToken?.isEmpty == false
+        guard signedIn || allowSignedOut else { return }
+        if !force, let last = lastTermsRefresh, Date().timeIntervalSince(last) < 30 {
+            return
+        }
+        lastTermsRefresh = Date()
+        termsRequestGeneration += 1
+        let generation = termsRequestGeneration
+        let userID = currentUser.id
+        // Same account, same sign-in state, and no newer request since.
+        func isCurrent() -> Bool {
+            generation == termsRequestGeneration
+                && currentUser.id == userID
+                && (isAuthenticated && authToken?.isEmpty == false) == signedIn
+        }
+        do {
+            let envelope: TermsEnvelopeDTO
+            if signedIn {
+                envelope = try await withAuthenticatedToken { token in
+                    try await api.getTerms(baseURL: apiBaseURL, token: token)
+                }
+            } else {
+                envelope = try await api.getTerms(baseURL: apiBaseURL, token: nil)
+            }
+            guard isCurrent() else { return }
+            termsRefreshNeedsRetry = false
+            applyTerms(envelope.data, signedIn: signedIn)
+        } catch {
+            guard isCurrent() else { return }
+            if isCancellation(error) {
+                lastTermsRefresh = nil
+                return
+            }
+            if let apiError = error as? APIError, apiError.statusCode == 404 {
+                // An older server without this feature: nothing to show or gate.
+                termsDocument = nil
+                termsAcceptanceRequired = false
+                termsRefreshNeedsRetry = false
+                return
+            }
+            // Anything else: keep what the server last said. Before its first
+            // answer that is "unknown", which leaves the app open.
+            termsRefreshNeedsRetry = signedIn
+        }
+    }
+
+    /// Records that this user accepts the terms on screen. Throws an
+    /// `APIError` to show next to the button; when the text changed in the
+    /// meantime (`isTermsOutdated`) the new text has been loaded already.
+    func acceptTerms() async throws {
+        guard isAuthenticated, let document = termsDocument, !document.version.isEmpty else {
+            throw APIError(message: "We couldn't load the Terms of Service. Please try again.")
+        }
+        let userID = currentUser.id
+        do {
+            let envelope = try await withAuthenticatedToken { token in
+                try await api.acceptTerms(baseURL: apiBaseURL, token: token, version: document.version)
+            }
+            guard isAuthenticated, currentUser.id == userID else { return }
+            if envelope.data?.accepted == false {
+                throw APIError(message: "We couldn't save your acceptance. Please try again.")
+            }
+            let acceptedAt = Self.parseTimestamp(envelope.data?.acceptedAt) ?? Date()
+            acceptedTermsVersion = document.version
+            acceptedTermsDate = acceptedAt
+            if var current = termsDocument, current.version == document.version {
+                current.accepted = true
+                current.acceptedAt = acceptedAt
+                termsDocument = current
+                termsAcceptanceRequired = false
+            }
+        } catch let apiError as APIError where apiError.isTermsOutdated {
+            guard isAuthenticated, currentUser.id == userID else { throw apiError }
+            await refreshTermsOfService(force: true)
+            throw APIError(
+                message: "These terms were updated a moment ago. Please read the new version, then accept.",
+                statusCode: apiError.statusCode,
+                code: apiError.code
+            )
+        }
+    }
+
+    /// The server refused a booking with `terms_required`. Loads the current
+    /// text and puts the agreement up. Returns false when there is nothing to
+    /// show (the text could not be loaded), so the caller can show the error.
+    @discardableResult
+    func handleTermsRequired() async -> Bool {
+        guard isAuthenticated else { return false }
+        // The server's refusal outranks anything remembered from this session.
+        acceptedTermsVersion = nil
+        acceptedTermsDate = nil
+        await refreshTermsOfService(force: true)
+        guard var document = termsDocument, !document.sections.isEmpty, !document.version.isEmpty else {
+            return false
+        }
+        if document.accepted != false {
+            document.accepted = false
+            document.acceptedAt = nil
+            termsDocument = document
+        }
+        termsAcceptanceRequired = true
+        return mustAcceptTerms
+    }
+
+    private func applyTerms(_ dto: TermsDTO?, signedIn: Bool) {
+        let sections: [TermsSection] = (dto?.sections ?? []).enumerated().compactMap { index, section in
+            let title = (section.title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let paragraphs = section.paragraphs
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+            guard !title.isEmpty || !paragraphs.isEmpty else { return nil }
+            return TermsSection(id: index, title: title, paragraphs: paragraphs)
+        }
+        guard let dto, !sections.isEmpty else {
+            // Nothing readable came back: treat as unknown and do not gate.
+            termsDocument = nil
+            termsAcceptanceRequired = false
+            return
+        }
+        let version = dto.version ?? ""
+        var accepted = signedIn ? dto.accepted : nil
+        var acceptedAt = signedIn ? Self.parseTimestamp(dto.acceptedAt) : nil
+        if signedIn, accepted != true, !version.isEmpty, version == acceptedTermsVersion {
+            // Accepted moments ago in this session; this reply predates it.
+            accepted = true
+            acceptedAt = acceptedTermsDate
+        }
+        if accepted != true { acceptedAt = nil }
+        let required = dto.required ?? false
+        termsDocument = TermsDocument(
+            version: version,
+            title: dto.title ?? "Terms of Service",
+            lastUpdated: dto.lastUpdated,
+            sections: sections,
+            required: required,
+            accepted: accepted,
+            acceptedAt: acceptedAt
+        )
+        // Only an explicit "required and not accepted" for a signed-in user,
+        // with a version that can be accepted, puts the agreement up.
+        termsAcceptanceRequired = signedIn && required && accepted == false && !version.isEmpty
+    }
+
+    private func resetTermsOfService() {
+        termsDocument = nil
+        termsAcceptanceRequired = false
+        lastTermsRefresh = nil
+        termsRefreshNeedsRetry = false
+        acceptedTermsVersion = nil
+        acceptedTermsDate = nil
+        // Any reply still on its way belongs to the previous session.
+        termsRequestGeneration += 1
+    }
+
+    #if DEBUG
+    /// Screenshot runs only: shows the Terms of Service with fixture text.
+    func applyScreenshotTerms(_ document: TermsDocument?, mustAccept: Bool) {
+        guard Self.isScreenshotMode else { return }
+        termsDocument = document
+        termsAcceptanceRequired = mustAccept && document != nil
+    }
+    #endif
+
+    // MARK: - Account deletion
+
+    /// Sends the request to delete this account. The account is not removed at
+    /// once (the team does that within 30 days), so the caller signs the user
+    /// out after showing the confirmation. Throws an `APIError` to show inline.
+    func requestAccountDeletion() async throws -> AccountDeletionResult {
+        let fallback = "We couldn't send your request. Please try again or email support."
+        #if DEBUG
+        if Self.isScreenshotMode {
+            try? await Task.sleep(nanoseconds: 600_000_000)
+            return .screenshotFixture
+        }
+        #endif
+        guard isAuthenticated else {
+            throw APIError(message: "Please log in to delete your account.", statusCode: 401)
+        }
+        let envelope = try await withAuthenticatedToken { token in
+            try await api.requestAccountDeletion(baseURL: apiBaseURL, token: token)
+        }
+        guard let data = envelope.data, data.requested == true else {
+            throw APIError(message: envelope.data?.message ?? fallback)
+        }
+        return AccountDeletionResult(
+            openTrips: max(0, data.openTrips ?? 0),
+            message: data.message ?? "We have your request. Your account will be deleted within 30 days."
+        )
     }
 
     // MARK: - Resumable checkout
@@ -2540,6 +2993,8 @@ final class AppState: ObservableObject {
                 hostApplicationStatus = nil
                 hostAccessState = .unknown
                 ownedCars = []
+                resetRenterVerification()
+                resetTermsOfService()
                 resetAnnouncementState()
                 hasSyncedOwnedCarsOnce = false
                 stopPolling()
@@ -2857,6 +3312,8 @@ final class AppState: ObservableObject {
         case "listing_status":
             await syncOwnedCars()
             await syncPublicCars()
+        case "renter_verification":
+            await refreshRenterVerification(force: true)
         default:
             await syncBookings()
             await syncConversations()
@@ -2905,6 +3362,10 @@ final class AppState: ObservableObject {
         isSyncingRemote = true
         defer { isSyncingRemote = false }
 
+        // Alongside the rest, so the agreement (when one is due) does not wait
+        // for every other sync to finish first.
+        async let termsRefresh: Void = refreshTermsOfService(force: true)
+
         await refreshReferenceData()
         await syncPublicCars()
         await loadNotificationPreferences()
@@ -2916,6 +3377,8 @@ final class AppState: ObservableObject {
         await syncHostApplication()
         await syncHostReviews()
         await refreshPendingCheckout(force: true)
+        await refreshRenterVerification(force: true)
+        await termsRefresh
     }
 
     private func loadNotificationPreferences() async {
@@ -3912,6 +4375,16 @@ final class AppState: ObservableObject {
                 let hasPendingListing = self.ownedCars.contains { $0.approvalStatus.lowercased() != "approved" }
                 if self.hostModeEnabled || hasPendingListing {
                     await self.syncOwnedCars()
+                }
+                // While photos are under review, notice the decision even if
+                // the push never arrives (the refresh throttles itself).
+                if self.renterVerification?.status == .pending {
+                    await self.refreshRenterVerification()
+                }
+                // The terms could not be read earlier (no signal at launch):
+                // try again quietly (the refresh throttles itself).
+                if self.termsRefreshNeedsRetry {
+                    await self.refreshTermsOfService()
                 }
             }
         }

@@ -7,11 +7,31 @@ struct APIError: Error, LocalizedError {
     /// "email_not_confirmed", "rate_limited". Lets the UI act on the specific
     /// failure instead of pattern-matching prose.
     let code: String?
+    /// Sent with `code == "verification_required"`: where the renter's identity
+    /// check stands ("unverified", "pending", "rejected").
+    let verificationStatus: String?
 
-    init(message: String, statusCode: Int? = nil, code: String? = nil) {
+    init(message: String, statusCode: Int? = nil, code: String? = nil, verificationStatus: String? = nil) {
         self.message = message
         self.statusCode = statusCode
         self.code = code
+        self.verificationStatus = verificationStatus
+    }
+
+    /// The server refused a booking because the renter's identity is not approved yet.
+    var isRenterVerificationRequired: Bool {
+        code == "verification_required"
+    }
+
+    /// The server refused a booking because this user has not accepted the
+    /// current Terms of Service.
+    var isTermsRequired: Bool {
+        code == "terms_required"
+    }
+
+    /// The Terms version sent with an acceptance is no longer the current one.
+    var isTermsOutdated: Bool {
+        code == "terms_outdated"
     }
 
     var errorDescription: String? {
@@ -22,6 +42,7 @@ struct APIError: Error, LocalizedError {
 private struct APIErrorEnvelope: Decodable {
     let message: String?
     let code: String?
+    let verificationStatus: String?
 }
 
 private struct SupabaseAuthErrorEnvelope: Decodable {
@@ -201,6 +222,204 @@ struct PaystackInitDTO: Decodable {
 struct PaystackFinalizeEnvelopeDTO: Decodable {
     let data: BookingDTO?
     let conversationId: String?
+}
+
+/// `GET`/`POST /api/renter-verification`. Every field is optional and read
+/// leniently so a missing or renamed field never fails the whole response.
+struct RenterVerificationDTO: Decodable {
+    let status: String?
+    let required: Bool?
+    let canBook: Bool?
+    let submittedAt: String?
+    let reviewedAt: String?
+    let rejectionReason: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case status, required, canBook, submittedAt, reviewedAt, rejectionReason
+        case canBookSnake = "can_book"
+        case submittedAtSnake = "submitted_at"
+        case reviewedAtSnake = "reviewed_at"
+        case rejectionReasonSnake = "rejection_reason"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try? decoder.container(keyedBy: CodingKeys.self)
+        func string(_ keys: CodingKeys...) -> String? {
+            for key in keys {
+                if let value = try? container?.decodeIfPresent(String.self, forKey: key) {
+                    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !trimmed.isEmpty { return trimmed }
+                }
+            }
+            return nil
+        }
+        func bool(_ keys: CodingKeys...) -> Bool? {
+            for key in keys {
+                if let value = try? container?.decodeIfPresent(Bool.self, forKey: key) { return value }
+                if let value = try? container?.decodeIfPresent(String.self, forKey: key) {
+                    switch value.lowercased() {
+                    case "true", "1": return true
+                    case "false", "0": return false
+                    default: break
+                    }
+                }
+            }
+            return nil
+        }
+        status = string(.status)
+        required = bool(.required)
+        canBook = bool(.canBook, .canBookSnake)
+        submittedAt = string(.submittedAt, .submittedAtSnake)
+        reviewedAt = string(.reviewedAt, .reviewedAtSnake)
+        rejectionReason = string(.rejectionReason, .rejectionReasonSnake)
+    }
+}
+
+struct RenterVerificationEnvelopeDTO: Decodable {
+    let data: RenterVerificationDTO?
+
+    private enum CodingKeys: String, CodingKey { case data }
+
+    init(from decoder: Decoder) throws {
+        let container = try? decoder.container(keyedBy: CodingKeys.self)
+        data = try? container?.decodeIfPresent(RenterVerificationDTO.self, forKey: .data)
+    }
+}
+
+/// `GET /api/terms` and `POST /api/terms/accept`. Every field is optional and
+/// read leniently so a missing or renamed field never fails the whole response.
+struct TermsSectionDTO: Decodable {
+    let title: String?
+    let paragraphs: [String]
+
+    private enum CodingKeys: String, CodingKey { case title, paragraphs }
+
+    init(from decoder: Decoder) throws {
+        let container = try? decoder.container(keyedBy: CodingKeys.self)
+        title = try? container?.decodeIfPresent(String.self, forKey: .title)
+        if let list = try? container?.decodeIfPresent([String?].self, forKey: .paragraphs) {
+            paragraphs = list.compactMap { $0 }
+        } else if let single = try? container?.decodeIfPresent(String.self, forKey: .paragraphs) {
+            paragraphs = [single]
+        } else {
+            paragraphs = []
+        }
+    }
+}
+
+struct TermsDTO: Decodable {
+    let version: String?
+    let title: String?
+    let lastUpdated: String?
+    let sections: [TermsSectionDTO]
+    let required: Bool?
+    let accepted: Bool?
+    let acceptedAt: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case version, title, lastUpdated, sections, required, accepted, acceptedAt
+        case lastUpdatedSnake = "last_updated"
+        case acceptedAtSnake = "accepted_at"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try? decoder.container(keyedBy: CodingKeys.self)
+        func string(_ keys: CodingKeys...) -> String? {
+            for key in keys {
+                if let value = try? container?.decodeIfPresent(String.self, forKey: key) {
+                    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !trimmed.isEmpty { return trimmed }
+                }
+                // A numeric version ("3") is still a version.
+                if let value = try? container?.decodeIfPresent(Int.self, forKey: key) {
+                    return String(value)
+                }
+            }
+            return nil
+        }
+        func bool(_ key: CodingKeys) -> Bool? {
+            if let value = try? container?.decodeIfPresent(Bool.self, forKey: key) { return value }
+            if let value = try? container?.decodeIfPresent(String.self, forKey: key) {
+                switch value.lowercased() {
+                case "true", "1": return true
+                case "false", "0": return false
+                default: break
+                }
+            }
+            return nil
+        }
+        version = string(.version)
+        title = string(.title)
+        lastUpdated = string(.lastUpdated, .lastUpdatedSnake)
+        let rawSections = try? container?.decodeIfPresent([TermsSectionDTO?].self, forKey: .sections)
+        sections = (rawSections ?? []).compactMap { $0 }
+        required = bool(.required)
+        accepted = bool(.accepted)
+        acceptedAt = string(.acceptedAt, .acceptedAtSnake)
+    }
+}
+
+struct TermsEnvelopeDTO: Decodable {
+    let data: TermsDTO?
+
+    private enum CodingKeys: String, CodingKey { case data }
+
+    init(from decoder: Decoder) throws {
+        let container = try? decoder.container(keyedBy: CodingKeys.self)
+        data = try? container?.decodeIfPresent(TermsDTO.self, forKey: .data)
+    }
+}
+
+/// `POST /api/account/deletion-request`. Read leniently, like the terms.
+struct AccountDeletionDTO: Decodable {
+    let requested: Bool?
+    let openTrips: Int?
+    let message: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case requested, openTrips, message
+        case openTripsSnake = "open_trips"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try? decoder.container(keyedBy: CodingKeys.self)
+        requested = try? container?.decodeIfPresent(Bool.self, forKey: .requested)
+        let trips = try? container?.decodeIfPresent(Int.self, forKey: .openTrips)
+        let tripsSnake = try? container?.decodeIfPresent(Int.self, forKey: .openTripsSnake)
+        openTrips = trips ?? tripsSnake
+        let text = (try? container?.decodeIfPresent(String.self, forKey: .message))?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        message = (text?.isEmpty == false) ? text : nil
+    }
+}
+
+struct AccountDeletionEnvelopeDTO: Decodable {
+    let data: AccountDeletionDTO?
+
+    private enum CodingKeys: String, CodingKey { case data }
+
+    init(from decoder: Decoder) throws {
+        let container = try? decoder.container(keyedBy: CodingKeys.self)
+        data = try? container?.decodeIfPresent(AccountDeletionDTO.self, forKey: .data)
+    }
+}
+
+/// The three photos a renter sends for the identity check.
+enum RenterVerificationPhotoKind: String, CaseIterable, Identifiable {
+    case face
+    case licenceFront
+    case licenceBack
+
+    var id: String { rawValue }
+
+    /// File name stem in the private ID bucket: `<userID>/<stem>-<unixms>.jpg`.
+    var storageStem: String {
+        switch self {
+        case .face: return "renter-face"
+        case .licenceFront: return "renter-licence-front"
+        case .licenceBack: return "renter-licence-back"
+        }
+    }
 }
 
 struct PendingCheckoutEnvelopeDTO: Decodable {
@@ -981,6 +1200,119 @@ struct APIClient {
             returnPublicURL: false
         )
         return path
+    }
+
+    // MARK: - Renter verification
+
+    /// Uploads one identity photo to the private ID bucket and returns its
+    /// storage path. The path starts with the user's id, as the bucket requires.
+    func uploadRenterVerificationPhoto(
+        token: String,
+        userID: String,
+        kind: RenterVerificationPhotoKind,
+        fileData: Data
+    ) async throws -> String {
+        let millis = Int(Date().timeIntervalSince1970 * 1000)
+        let path = "\(userID)/\(kind.storageStem)-\(millis).jpg"
+        let bucket = configuredBucketName(primaryKeys: ["HAYAMESupabaseHostIDBucket"], fallback: "host-ids")
+        _ = try await uploadSupabaseStorageObject(
+            token: token,
+            bucket: bucket,
+            path: path,
+            fileData: fileData,
+            mimeType: "image/jpeg",
+            returnPublicURL: false
+        )
+        return path
+    }
+
+    func getRenterVerification(baseURL: String, token: String) async throws -> RenterVerificationEnvelopeDTO {
+        try await request(
+            path: "/api/renter-verification",
+            method: .GET,
+            body: nil as EmptyResponse?,
+            baseURL: baseURL,
+            token: token
+        )
+    }
+
+    func submitRenterVerification(
+        baseURL: String,
+        token: String,
+        facePath: String,
+        licenceFrontPath: String,
+        licenceBackPath: String
+    ) async throws -> RenterVerificationEnvelopeDTO {
+        struct Payload: Encodable {
+            let face_path: String
+            let licence_front_path: String
+            let licence_back_path: String
+        }
+        return try await request(
+            path: "/api/renter-verification",
+            method: .POST,
+            body: Payload(face_path: facePath, licence_front_path: licenceFrontPath, licence_back_path: licenceBackPath),
+            baseURL: baseURL,
+            token: token
+        )
+    }
+
+    // MARK: - Terms of Service
+
+    /// Works signed out too; with a token the reply also says whether this
+    /// user has accepted the current version.
+    func getTerms(baseURL: String, token: String?) async throws -> TermsEnvelopeDTO {
+        try await request(
+            path: "/api/terms",
+            method: .GET,
+            body: nil as EmptyResponse?,
+            baseURL: baseURL,
+            token: token
+        )
+    }
+
+    func acceptTerms(baseURL: String, token: String, version: String) async throws -> TermsEnvelopeDTO {
+        struct Payload: Encodable {
+            let version: String
+            let platform: String
+        }
+        return try await request(
+            path: "/api/terms/accept",
+            method: .POST,
+            body: Payload(version: version, platform: "ios"),
+            baseURL: baseURL,
+            token: token
+        )
+    }
+
+    // MARK: - Policy documents
+
+    /// Protection, Cancellation or Privacy. Public: no token needed.
+    func getLegalDocument(baseURL: String, slug: String) async throws -> LegalDocumentEnvelopeDTO {
+        try await request(
+            path: "/api/legal/\(slug)",
+            method: .GET,
+            body: nil as EmptyResponse?,
+            baseURL: baseURL,
+            token: nil
+        )
+    }
+
+    // MARK: - Account deletion
+
+    /// Asks for the signed-in account to be deleted. Nothing is removed at
+    /// once: the team closes the account within 30 days.
+    func requestAccountDeletion(baseURL: String, token: String) async throws -> AccountDeletionEnvelopeDTO {
+        struct Payload: Encodable {
+            let platform: String
+        }
+        return try await request(
+            path: "/api/account/deletion-request",
+            method: .POST,
+            body: Payload(platform: "ios"),
+            baseURL: baseURL,
+            token: token
+        )
     }
 
     // MARK: - Bookings
@@ -2402,10 +2734,12 @@ struct APIClient {
                         statusCode: http.statusCode,
                         contentType: http.value(forHTTPHeaderField: "Content-Type")
                     ) ?? "Request failed with status \(http.statusCode)"
+                let envelope = decodeErrorEnvelope(from: data)
                 throw APIError(
                     message: message,
                     statusCode: http.statusCode,
-                    code: decodeErrorCode(from: data)
+                    code: envelope?.code,
+                    verificationStatus: envelope?.verificationStatus
                 )
             } catch {
                 if retryable && attempt + 1 < retryLimit && shouldRetry(error: error) {
@@ -2541,14 +2875,14 @@ struct APIClient {
         }
     }
 
-    /// Reads only the machine-readable `code`. Unlike the message, this is never
-    /// displayed, so it needs no sanitizing — but it must stay confined to the
-    /// small allowlist the UI knows how to act on.
-    private func decodeErrorCode(from data: Data) -> String? {
-        guard let envelope = try? decoder.decode(APIErrorEnvelope.self, from: data),
-              let code = envelope.code,
-              !code.isEmpty else { return nil }
-        return code
+    /// Reads only the machine-readable fields (`code`, `verificationStatus`).
+    /// Unlike the message, these are never displayed, so they need no
+    /// sanitizing; the UI only acts on the few values it knows.
+    private func decodeErrorEnvelope(from data: Data) -> (code: String?, verificationStatus: String?)? {
+        guard let envelope = try? decoder.decode(APIErrorEnvelope.self, from: data) else { return nil }
+        let code = envelope.code.flatMap { $0.isEmpty ? nil : $0 }
+        let status = envelope.verificationStatus.flatMap { $0.isEmpty ? nil : $0 }
+        return (code, status)
     }
 
     private func decodeError(from data: Data, statusCode: Int, contentType: String? = nil) -> String? {

@@ -565,3 +565,20 @@ enum HayameScreenshotMode {
         #endif
     }()
 }
+
+extension View {
+    /// Screenshot runs can't scroll: `-HAYAME_SCROLL_END` opens long pages
+    /// (More, Settings) at their end. Does nothing in release builds.
+    @ViewBuilder
+    func screenshotStartsAtEnd() -> some View {
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-HAYAME_SCROLL_END") {
+            defaultScrollAnchor(.bottom)
+        } else {
+            self
+        }
+        #else
+        self
+        #endif
+    }
+}

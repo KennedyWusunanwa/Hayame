@@ -46,6 +46,7 @@ import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.CameraAlt
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.DirectionsCar
 import androidx.compose.material.icons.outlined.Email
@@ -405,6 +406,7 @@ fun HostProfileScreen(
     onOpenContact: () -> Unit = {},
     onOpenProtection: () -> Unit = {},
     onOpenCancellation: () -> Unit = {},
+    onOpenTerms: () -> Unit = {},
     onTurnOffHostMode: () -> Unit = onBack,
     onOpenCars: () -> Unit = {},
     onOpenBookings: () -> Unit = {},
@@ -567,6 +569,8 @@ fun HostProfileScreen(
                             NavRow(Icons.Outlined.Shield, colors.success, "Protection", "What's covered on every trip", onOpenProtection)
                             RowDivider()
                             NavRow(Icons.Outlined.CalendarMonth, colors.warning, "Cancellation policy", "Refund tiers and timing", onOpenCancellation)
+                            RowDivider()
+                            NavRow(Icons.Outlined.Description, colors.brandBlue, "Terms of Service", "The agreement for using Hayame", onOpenTerms)
                         }
                     }
                 }

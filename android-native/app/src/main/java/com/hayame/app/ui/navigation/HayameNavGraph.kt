@@ -82,9 +82,11 @@ import androidx.navigation.navArgument
 import com.hayame.app.ui.screens.AdminShellScreen
 import com.hayame.app.ui.screens.BecomeHostScreen
 import com.hayame.app.ui.screens.BookingScreen
-import com.hayame.app.ui.screens.CancellationPolicyScreen
 import com.hayame.app.ui.screens.CarDetailScreen
 import com.hayame.app.ui.screens.ContactScreen
+import com.hayame.app.ui.screens.DeleteAccountScreen
+import com.hayame.app.ui.screens.LegalDocumentKind
+import com.hayame.app.ui.screens.LegalDocumentScreen
 import com.hayame.app.ui.screens.ConversationScreen
 import com.hayame.app.ui.screens.GuestProfileScreen
 import com.hayame.app.ui.screens.HostApplicationPendingScreen
@@ -99,16 +101,17 @@ import com.hayame.app.ui.screens.LoginScreen
 import com.hayame.app.ui.screens.MainShell
 import com.hayame.app.ui.screens.ProfileOverviewScreen
 import com.hayame.app.ui.screens.ResumableCheckoutUi
+import com.hayame.app.ui.screens.RenterVerificationScreen
 import com.hayame.app.ui.screens.ResumeCheckoutScreen
 import com.hayame.app.ui.screens.SettingsScreen
 import com.hayame.app.ui.screens.MarketingPagesScreen
 import com.hayame.app.ui.screens.MessagesScreen
-import com.hayame.app.ui.screens.PrivacyScreen
-import com.hayame.app.ui.screens.ProtectionScreen
 import com.hayame.app.ui.screens.RenterDashboardScreen
 import com.hayame.app.ui.screens.SignupScreen
 import com.hayame.app.ui.screens.SplashScreen
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import com.hayame.app.ui.screens.SupportLegalScreen
+import com.hayame.app.ui.screens.TermsScreen
 import com.hayame.app.ui.components.HostModeSwitchOverlay
 import com.hayame.app.ui.viewmodel.AppViewModel
 import com.hayame.app.ui.theme.LocalHayameColors
@@ -212,9 +215,29 @@ fun HayameNavApp(
             is ResumableCheckoutUi.Draft -> navController.navigate(NavRoutes.booking(resumable.draft.carId))
         }
     }
+    // The identity check renters pass before booking. Opened from More, the Home prompt,
+    // the checkout gate, a refused hold and a "not approved" push.
+    val openRenterVerification: () -> Unit = {
+        navController.navigate(NavRoutes.RenterVerification) { launchSingleTop = true }
+    }
+    val renterVerificationScreenRequested by viewModel.renterVerificationScreenRequested.collectAsState()
+    LaunchedEffect(renterVerificationScreenRequested, bootstrapping, isAuthenticated, currentRoute) {
+        if (!renterVerificationScreenRequested || bootstrapping || !isAuthenticated) return@LaunchedEffect
+        // Wait for the splash to hand over, so Back from the screen lands in the app.
+        if (currentRoute == null || currentRoute == NavRoutes.Splash) return@LaunchedEffect
+        viewModel.consumeRenterVerificationScreenRequest()
+        navController.navigate(NavRoutes.RenterVerification) { launchSingleTop = true }
+    }
     val latestCurrentRoute by rememberUpdatedState(currentRoute)
     val hostStatus = (me?.host_application_status ?: me?.host_status ?: "").lowercase()
-    val canShowAnnouncement = hasAppAccess && when (currentRoute) {
+    // The agreement screen (drawn by the activity above everything here) is up: keep what
+    // is underneath quiet until it has been accepted.
+    val termsState by viewModel.terms.collectAsState()
+    val termsGateActive = isAuthenticated && termsState.mustAccept && termsState.document != null
+    val openTerms: () -> Unit = {
+        navController.navigate(NavRoutes.Terms) { launchSingleTop = true }
+    }
+    val canShowAnnouncement = hasAppAccess && !termsGateActive && when (currentRoute) {
         NavRoutes.MainRoute -> visibleMainTab == MainTab.HOME
         NavRoutes.HostShell -> visibleHostTab == HostMainTab.DASHBOARD
         else -> false
@@ -303,7 +326,8 @@ fun HayameNavApp(
             return@LaunchedEffect
         }
 
-        if (!hasAppAccess && currentRoute !in authRoutes) {
+        // Signed out, the read-only Terms of Service opened from sign-up stay reachable.
+        if (!hasAppAccess && currentRoute !in authRoutes && currentRoute != NavRoutes.Terms) {
             val destination = authRouteOverride ?: NavRoutes.Login
             authRouteOverride = null
             navController.navigate(destination) {
@@ -482,7 +506,12 @@ fun HayameNavApp(
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            // Screen readers read the agreement, not the app hidden behind it.
+            .then(if (termsGateActive) Modifier.clearAndSetSemantics {} else Modifier),
+    ) {
         Scaffold(
             modifier = Modifier.pointerInput(Unit) {
                 detectTapGestures(onTap = {
@@ -572,6 +601,7 @@ fun HayameNavApp(
                         SignupScreen(
                             viewModel = viewModel,
                             onBackToLogin = { navController.popBackStack() },
+                            onOpenTerms = openTerms,
                         )
                     }
                     composable(
@@ -616,6 +646,25 @@ fun HayameNavApp(
                             onOpenProfileOverview = { navController.navigate(NavRoutes.ProfileOverview) },
                             appearanceHighlightNonce = appearanceHighlightNonce,
                             onResumeCheckout = openResumableCheckout,
+                            onOpenVerification = openRenterVerification,
+                            onOpenTerms = openTerms,
+                        )
+                    }
+                    composable(NavRoutes.RenterVerification) {
+                        RenterVerificationScreen(
+                            viewModel = viewModel,
+                            onBack = { navController.popBackStack() },
+                            // Approved with a booking waiting: reopen it in place of this screen.
+                            onContinueBooking = { resumable ->
+                                val destination = when (resumable) {
+                                    is ResumableCheckoutUi.Held -> NavRoutes.ResumeCheckout
+                                    is ResumableCheckoutUi.Draft -> NavRoutes.booking(resumable.draft.carId)
+                                }
+                                navController.navigate(destination) {
+                                    popUpTo(NavRoutes.RenterVerification) { inclusive = true }
+                                    launchSingleTop = true
+                                }
+                            },
                         )
                     }
                     composable(NavRoutes.ResumeCheckout) {
@@ -668,6 +717,8 @@ fun HayameNavApp(
                             onOpenCancellation = { navController.navigate(NavRoutes.Cancellation) },
                             onOpenPrivacy = { navController.navigate(NavRoutes.Privacy) },
                             onOpenAuth = { navController.navigate(NavRoutes.Login) },
+                            onOpenTerms = openTerms,
+                            onOpenDeleteAccount = { navController.navigate(NavRoutes.DeleteAccount) { launchSingleTop = true } },
                         )
                     }
                     composable(NavRoutes.Dashboard) {
@@ -710,6 +761,7 @@ fun HayameNavApp(
                             onOpenReviews = { navController.navigate(NavRoutes.HostReviews) },
                             onOpenSettings = { navController.navigate(NavRoutes.settings(false)) },
                             onEditProfile = { navController.navigate(NavRoutes.Profile) },
+                            onOpenTerms = openTerms,
                         )
                     }
                     composable(
@@ -748,6 +800,15 @@ fun HayameNavApp(
                                 }
                             },
                             onPaystackCallbackConsumed = onPaystackCallbackConsumed,
+                            // The renter's selections are saved as a draft, so the checkout is
+                            // swapped for the verification screen; the draft reopens it later
+                            // from Home, Trips, the listing or the verification screen itself.
+                            onVerificationRequired = {
+                                navController.navigate(NavRoutes.RenterVerification) {
+                                    popUpTo(NavRoutes.Booking + "/{carId}") { inclusive = true }
+                                    launchSingleTop = true
+                                }
+                            },
                         )
                     }
                     composable(NavRoutes.Messages) {
@@ -904,19 +965,54 @@ fun HayameNavApp(
                             onOpenProtection = { navController.navigate(NavRoutes.Protection) },
                             onOpenCancellation = { navController.navigate(NavRoutes.Cancellation) },
                             onOpenMarketing = { navController.navigate(NavRoutes.Marketing) },
+                            onOpenTerms = openTerms,
                         )
+                    }
+                    composable(NavRoutes.Terms) {
+                        TermsScreen(viewModel = viewModel, onBack = { navController.popBackStack() })
                     }
                     composable(NavRoutes.Contact) {
                         ContactScreen(onBack = { navController.popBackStack() })
                     }
-                    composable(NavRoutes.Privacy) {
-                        PrivacyScreen(onBack = { navController.popBackStack() })
+                    // Protection, Cancellation and Privacy share one screen; the text comes from the server.
+                    listOf(
+                        NavRoutes.Protection to LegalDocumentKind.PROTECTION,
+                        NavRoutes.Cancellation to LegalDocumentKind.CANCELLATION,
+                        NavRoutes.Privacy to LegalDocumentKind.PRIVACY,
+                    ).forEach { (route, kind) ->
+                        composable(route) {
+                            LegalDocumentScreen(
+                                viewModel = viewModel,
+                                kind = kind,
+                                onBack = { navController.popBackStack() },
+                                onOpenContact = { navController.navigate(NavRoutes.Contact) { launchSingleTop = true } },
+                                onOpenDocument = { other ->
+                                    // One document replaces the other, so Back returns to where reading started.
+                                    navController.navigate(legalDocumentRoute(other)) {
+                                        popUpTo(route) { inclusive = true }
+                                        launchSingleTop = true
+                                    }
+                                },
+                                onOpenTerms = openTerms,
+                                onOpenDeleteAccount = if (kind == LegalDocumentKind.PRIVACY && isAuthenticated) {
+                                    { navController.navigate(NavRoutes.DeleteAccount) { launchSingleTop = true } }
+                                } else {
+                                    null
+                                },
+                            )
+                        }
                     }
-                    composable(NavRoutes.Protection) {
-                        ProtectionScreen(onBack = { navController.popBackStack() })
-                    }
-                    composable(NavRoutes.Cancellation) {
-                        CancellationPolicyScreen(onBack = { navController.popBackStack() })
+                    composable(NavRoutes.DeleteAccount) {
+                        DeleteAccountScreen(
+                            viewModel = viewModel,
+                            onBack = { navController.popBackStack() },
+                            // Signing out sends the app back to the sign-in screen; this page
+                            // is closed first so it is not waiting underneath for the next user.
+                            onFinished = {
+                                navController.popBackStack()
+                                viewModel.finishAccountDeletion()
+                            },
+                        )
                     }
                     composable(NavRoutes.Marketing) {
                         MarketingPagesScreen(onBack = { navController.popBackStack() })
@@ -999,4 +1095,10 @@ private fun resolvedDestination(entry: NavBackStackEntry?): String? {
         NavRoutes.HostAvailability + "/{carId}" -> arguments?.getString("carId")?.let(NavRoutes::hostAvailability)
         else -> route
     }
+}
+
+private fun legalDocumentRoute(kind: LegalDocumentKind): String = when (kind) {
+    LegalDocumentKind.PROTECTION -> NavRoutes.Protection
+    LegalDocumentKind.CANCELLATION -> NavRoutes.Cancellation
+    LegalDocumentKind.PRIVACY -> NavRoutes.Privacy
 }

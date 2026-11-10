@@ -3,6 +3,8 @@ package com.hayame.app.core.repo
 import com.hayame.app.BuildConfig
 import com.hayame.app.core.network.NetworkClient
 import com.hayame.app.core.session.SessionStore
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.decodeFromString
@@ -37,7 +39,13 @@ class StorageRepository(
 
     private val httpClient = OkHttpClient.Builder().build()
 
-    suspend fun uploadAvatar(userId: String, file: File): String {
+    // These make blocking network calls, so they always hop to the IO dispatcher:
+    // called straight from viewModelScope (main thread) they would otherwise throw
+    // NetworkOnMainThreadException and the upload would fail every time.
+    suspend fun uploadAvatar(userId: String, file: File): String =
+        withContext(Dispatchers.IO) { uploadAvatarBlocking(userId, file) }
+
+    private suspend fun uploadAvatarBlocking(userId: String, file: File): String {
         val auth = sessionStore.authHeader() ?: throw IllegalStateException("Unauthorized")
         val path = "$userId/avatar-${System.currentTimeMillis()}-${UUID.randomUUID()}.${file.extension.ifBlank { "jpg" }}"
         val buckets = buildList {
@@ -71,7 +79,10 @@ class StorageRepository(
         throw IllegalStateException("Unable to upload avatar")
     }
 
-    suspend fun findLatestAvatarUrl(userId: String): String? {
+    suspend fun findLatestAvatarUrl(userId: String): String? =
+        withContext(Dispatchers.IO) { findLatestAvatarUrlBlocking(userId) }
+
+    private suspend fun findLatestAvatarUrlBlocking(userId: String): String? {
         val auth = sessionStore.authHeader() ?: return null
         val normalizedUserId = userId.trim()
         if (normalizedUserId.isBlank()) return null
@@ -100,7 +111,10 @@ class StorageRepository(
         return null
     }
 
-    suspend fun uploadHostId(userId: String, side: String, file: File): String {
+    suspend fun uploadHostId(userId: String, side: String, file: File): String =
+        withContext(Dispatchers.IO) { uploadHostIdBlocking(userId, side, file) }
+
+    private suspend fun uploadHostIdBlocking(userId: String, side: String, file: File): String {
         val auth = sessionStore.authHeader() ?: throw IllegalStateException("Unauthorized")
         val normalizedSide = if (side.lowercase() == "back") "back" else "front"
         val path = "$userId/$normalizedSide-${System.currentTimeMillis()}-${UUID.randomUUID()}.${file.extension.ifBlank { "jpg" }}"
@@ -113,6 +127,25 @@ class StorageRepository(
         )
         return path
     }
+
+    /**
+     * Uploads one renter verification photo (a prepared JPEG) to the private ID bucket.
+     * [kind] is `face`, `licence-front` or `licence-back`. Returns the storage path, which
+     * always sits in the renter's own folder as the server requires.
+     */
+    suspend fun uploadRenterVerificationPhoto(userId: String, kind: String, file: File): String =
+        withContext(Dispatchers.IO) {
+            val auth = sessionStore.authHeader() ?: throw IllegalStateException("Unauthorized")
+            val path = "$userId/renter-$kind-${System.currentTimeMillis()}.jpg"
+            uploadObject(
+                authHeader = auth,
+                bucket = BuildConfig.SUPABASE_HOST_ID_BUCKET.ifBlank { "host-ids" },
+                objectPath = path,
+                file = file,
+                isPublic = false,
+            )
+            path
+        }
 
     private fun uploadObject(
         authHeader: String,
