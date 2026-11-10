@@ -1,6 +1,6 @@
 import "server-only";
 import { headers } from "next/headers";
-import { getAdminNotificationRecipients, buildAdminActivityEmail, sendEmailSafe } from "@/lib/email";
+import { buildAdminActivityEmail, getAdminAlertRecipients, sendToEachSafe } from "@/lib/email";
 import { describeAction, type AdminSeverity } from "@/lib/admin-actions-catalog";
 import { getCurrentAdmin, type AdminIdentity } from "@/lib/admin-identity";
 import { ROLE_META } from "@/lib/admin-permissions";
@@ -32,19 +32,6 @@ export async function getRequestMeta() {
   } catch {
     return { ip: null, userAgent: null };
   }
-}
-
-/** Every admin who should hear about important actions: active team accounts plus the env inboxes. */
-async function getNotificationEmails(): Promise<string[]> {
-  const emails = new Set(getAdminNotificationRecipients().map((e) => e.toLowerCase()));
-  try {
-    const db = createSupabaseAdminClient() as any;
-    const { data } = await db.from("admin_users").select("email").eq("active", true);
-    for (const row of data ?? []) if (row.email) emails.add(String(row.email).toLowerCase());
-  } catch {
-    // table not created yet: env recipients only
-  }
-  return Array.from(emails).filter((e) => e.includes("@"));
 }
 
 /**
@@ -89,7 +76,7 @@ export async function logAdminAction(input: LogAdminActionInput) {
     if (error) console.error("[admin-audit] insert failed", error.message);
 
     if (severity === "info" || input.silent) return;
-    const to = await getNotificationEmails();
+    const to = await getAdminAlertRecipients();
     if (to.length === 0) return;
     const template = buildAdminActivityEmail({
       severity,
@@ -103,7 +90,8 @@ export async function logAdminAction(input: LogAdminActionInput) {
       targetId: input.targetId ?? null,
       details: input.metadata ?? null,
     });
-    await sendEmailSafe({ to, subject: template.subject, html: template.html, text: template.text });
+    // One copy each, so a single bad address cannot hide the alert from everyone.
+    await sendToEachSafe(to, { subject: template.subject, html: template.html, text: template.text });
   } catch (error) {
     console.error("[admin-audit] failed", error);
   }

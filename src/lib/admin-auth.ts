@@ -21,7 +21,10 @@ import { getCurrentAdmin, rootIdentity, type AdminIdentity } from "@/lib/admin-i
 import { can, isAdminRole, type Permission } from "@/lib/admin-permissions";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
-const SESSION_TTL_SECONDS = 60 * 60 * 12;
+// 30 days, so admins stay signed in on their own phone and laptop. The session
+// is still re-checked against the admin account on every request, so
+// deactivating an admin ends their session at once.
+const SESSION_TTL_SECONDS = 60 * 60 * 24 * 30;
 const MAX_FAILED_ATTEMPTS = 5;
 const LOCK_MINUTES = 15;
 const IP_FAILURE_LIMIT = 10;
