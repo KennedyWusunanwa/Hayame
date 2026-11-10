@@ -1,6 +1,6 @@
 import "server-only";
 import { headers } from "next/headers";
-import { getAdminNotificationRecipients, buildAdminActivityEmail, sendEmailSafe } from "@/lib/email";
+import { getAdminNotificationRecipients, buildAdminActivityEmail, sendToEachSafe } from "@/lib/email";
 import { describeAction, type AdminSeverity } from "@/lib/admin-actions-catalog";
 import { getCurrentAdmin, type AdminIdentity } from "@/lib/admin-identity";
 import { ROLE_META } from "@/lib/admin-permissions";
@@ -103,7 +103,8 @@ export async function logAdminAction(input: LogAdminActionInput) {
       targetId: input.targetId ?? null,
       details: input.metadata ?? null,
     });
-    await sendEmailSafe({ to, subject: template.subject, html: template.html, text: template.text });
+    // One copy each, so a single bad address cannot hide the alert from everyone.
+    await sendToEachSafe(to, { subject: template.subject, html: template.html, text: template.text });
   } catch (error) {
     console.error("[admin-audit] failed", error);
   }

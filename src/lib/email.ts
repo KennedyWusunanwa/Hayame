@@ -1,5 +1,6 @@
 import "server-only";
 import { Resend } from "resend";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import {
   ANDROID_APK_URL,
   ANDROID_PLAY_STORE_URL,
@@ -1195,20 +1196,79 @@ export function buildAdminBroadcastEmail(params: {
  * Sends an internal notice to the configured admin inbox(es). Never throws;
  * failures are logged so they cannot break the user-facing request.
  */
+/**
+ * Sends the same email to each address separately. One message addressed to
+ * several people is dropped as a whole when a single address is on the mail
+ * provider's suppression list (a mailbox that bounced once), which silently
+ * hid admin alerts from everyone. Sent one by one, a bad address only loses
+ * its own copy.
+ */
+export async function sendToEachSafe(
+  recipients: string[],
+  input: Omit<SendEmailInput, "to">,
+) {
+  const unique = Array.from(
+    new Set(recipients.map((value) => value.trim().toLowerCase()).filter((value) => value.includes("@"))),
+  );
+  if (unique.length === 0) return { skipped: true };
+  const results = await Promise.all(
+    unique.map((to) =>
+      sendEmailSafe({
+        ...input,
+        to,
+        idempotencyKey: input.idempotencyKey
+          ? `${input.idempotencyKey}:${to}`
+          : undefined,
+      }),
+    ),
+  );
+  const failed = (result: any) => !result || result.skipped || result.error;
+  const delivered = results.filter((result) => !failed(result)).length;
+  if (delivered === 0) {
+    return (results.find((result: any) => result?.skipped) ?? {
+      error: (results[0] as any)?.error ?? true,
+    }) as { skipped?: boolean; error?: unknown };
+  }
+  return { delivered, attempted: unique.length };
+}
+
+/**
+ * Everyone who should receive office alerts: the configured inboxes plus every
+ * active admin account, so an alert still reaches a person if the shared
+ * inbox is not working.
+ */
+export async function getAdminAlertRecipients(): Promise<string[]> {
+  const emails = new Set(
+    getAdminNotificationRecipients().map((value) => value.toLowerCase()),
+  );
+  try {
+    const db = createSupabaseAdminClient() as any;
+    const { data } = await db
+      .from("admin_users")
+      .select("email")
+      .eq("active", true);
+    for (const row of data ?? []) {
+      if (row.email) emails.add(String(row.email).toLowerCase());
+    }
+  } catch {
+    // No admin table or no service role: configured inboxes only.
+  }
+  return Array.from(emails).filter((value) => value.includes("@"));
+}
+
 export async function sendAdminNotificationSafe(params: {
   template: { subject: string; html: string; text: string };
   idempotencyKey?: string;
   replyTo?: string | string[];
 }) {
-  const recipients = getAdminNotificationRecipients();
+  const recipients = await getAdminAlertRecipients();
   if (recipients.length === 0) {
     console.warn("[email] No admin notification recipients configured.", {
       subject: params.template.subject,
     });
     return { skipped: true };
   }
-  return sendEmailSafe({
-    to: recipients,
+  return sendToEachSafe(recipients, {
     replyTo: params.replyTo,
     subject: params.template.subject,
     html: params.template.html,
