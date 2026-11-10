@@ -228,6 +228,7 @@ private struct SignupScreenView: View {
     @State private var region = MockDataService.defaultRegion
     @State private var city = "Accra"
     @State private var showSignupConfirmationAlert = false
+    @State private var showTerms = false
 
     let goToLogin: () -> Void
     let onContinueAsGuest: () -> Void
@@ -311,6 +312,19 @@ private struct SignupScreenView: View {
                     isDisabled: appState.isSyncingRemote || !canSubmit
                 )
 
+                // The link is handled here rather than opened as a web address.
+                Text("By creating an account you agree to the Hayame [Terms of Service](hayame://terms).")
+                    .font(.hayame(size: 12, weight: .medium))
+                    .foregroundStyle(HayameTheme.mutedText)
+                    .tint(HayameTheme.brandBlue)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity)
+                    .environment(\.openURL, OpenURLAction { _ in
+                        showTerms = true
+                        return .handled
+                    })
+
                 HStack(spacing: 4) {
                     Text("Already registered?")
                         .font(.hayame(size: 13))
@@ -345,6 +359,10 @@ private struct SignupScreenView: View {
         .onChange(of: appState.signupConfirmationPromptMessage) { _, newValue in
             guard newValue != nil else { return }
             showSignupConfirmationAlert = true
+        }
+        .sheet(isPresented: $showTerms) {
+            TermsOfServiceSheet()
+                .environmentObject(appState)
         }
         .alert("Confirm your email", isPresented: $showSignupConfirmationAlert) {
             Button("Go to log in") {

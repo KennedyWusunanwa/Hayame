@@ -402,6 +402,12 @@ struct CheckoutResumeSheet: View {
     @State private var isAbandoning = false
     @State private var successBookingID: String?
     @State private var didFinish = false
+    /// The identity check, shown when the server refuses to resume or pay
+    /// because the renter is not approved to book yet.
+    @State private var showVerification = false
+    /// Set when the server refused to resume until the Terms of Service are
+    /// accepted: the checks run again as soon as they are.
+    @State private var retryAfterTerms = false
 
     private let checkTitles = ["Listing still available", "Dates still free", "Price confirmed"]
 
@@ -496,6 +502,16 @@ struct CheckoutResumeSheet: View {
         .sheet(item: $editTarget, onDismiss: handleEditDismissed) { item in
             BookingSheet(car: item.car, draft: item.draft)
                 .environmentObject(appState)
+        }
+        .sheet(isPresented: $showVerification) {
+            RenterVerificationSheet(context: .booking(carTitle: checkout.carTitle))
+                .environmentObject(appState)
+        }
+        .termsAgreementCover()
+        .onChange(of: appState.mustAcceptTerms) { _, mustAccept in
+            guard !mustAccept, retryAfterTerms else { return }
+            retryAfterTerms = false
+            Task { await verify() }
         }
         .confirmationDialog("Abandon this booking?", isPresented: $showAbandonConfirm, titleVisibility: .visible) {
             Button("Abandon booking", role: .destructive) { Task { await abandon() } }
@@ -843,6 +859,15 @@ struct CheckoutResumeSheet: View {
                 return
             }
             withAnimation(HayameMotion.settle) { phase = .failed(message) }
+            if let apiError = error as? APIError, apiError.isRenterVerificationRequired {
+                appState.noteRenterVerificationRequired(apiError)
+                showVerification = true
+            }
+            if let apiError = error as? APIError, apiError.isTermsRequired {
+                // The agreement goes up over this sheet; once it is accepted
+                // the checks run again on their own.
+                retryAfterTerms = await appState.handleTermsRequired()
+            }
         }
     }
 
@@ -888,6 +913,20 @@ struct CheckoutResumeSheet: View {
                 ? "Payment wasn't completed. Your booking is still saved — try again when you're ready."
                 : "\(message) Your booking is still saved — try again when you're ready."
             HayameHaptics.error()
+            if let apiError = error as? APIError, apiError.isRenterVerificationRequired {
+                // Not approved to book yet: guide them to the identity check.
+                appState.noteRenterVerificationRequired(apiError)
+                showVerification = true
+                return
+            }
+            if let apiError = error as? APIError, apiError.isTermsRequired {
+                // The agreement goes up over this sheet; after accepting, the
+                // renter taps Pay again.
+                if await appState.handleTermsRequired() {
+                    paymentMessage = nil
+                }
+                return
+            }
             // The hold may have expired or been superseded: re-run the checks so
             // the next tap starts from a fresh, valid state.
             if let apiError = error as? APIError, [400, 404, 409].contains(apiError.statusCode ?? 0) {

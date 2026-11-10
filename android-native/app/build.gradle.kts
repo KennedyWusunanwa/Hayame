@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -17,8 +19,8 @@ android {
         applicationId = "com.hayame.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "1.0.4"
+        versionCode = 3
+        versionName = "2.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -44,10 +46,32 @@ android {
         buildConfigField("String", "SUPABASE_HOST_ID_BUCKET", "\"$supabaseHostIdBucket\"")
     }
 
+    // Release signing. The key and its passwords live outside the repository;
+    // android-native/keystore.properties (git-ignored) points at them. Without
+    // that file the release build is left unsigned rather than failing.
+    val keystoreProps = Properties().apply {
+        val file = rootProject.file("keystore.properties")
+        if (file.exists()) file.inputStream().use { load(it) }
+    }
+    signingConfigs {
+        if (keystoreProps.getProperty("storeFile") != null) {
+            create("release") {
+                storeFile = file(keystoreProps.getProperty("storeFile"))
+                storePassword = keystoreProps.getProperty("storePassword")
+                keyAlias = keystoreProps.getProperty("keyAlias")
+                keyPassword = keystoreProps.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            isMinifyEnabled = true
-            isShrinkResources = true
+            signingConfig = signingConfigs.findByName("release")
+            // -PHAYAME_NO_MINIFY builds a release without code shrinking, for a
+            // build that has not yet been run through a minified test pass.
+            val shrink = !project.hasProperty("HAYAME_NO_MINIFY")
+            isMinifyEnabled = shrink
+            isShrinkResources = shrink
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",

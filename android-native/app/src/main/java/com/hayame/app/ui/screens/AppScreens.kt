@@ -108,6 +108,7 @@ import androidx.compose.material.icons.outlined.Place
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.CreditCard
 import androidx.compose.material.icons.outlined.DarkMode
+import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.DirectionsCar
 import androidx.compose.material.icons.outlined.FavoriteBorder
@@ -270,6 +271,7 @@ import com.hayame.app.ui.theme.Warning
 import com.hayame.app.ui.viewmodel.BookingDraft
 import com.hayame.app.ui.viewmodel.AppViewModel
 import com.hayame.app.ui.viewmodel.ListingSubmissionResult
+import com.hayame.app.ui.viewmodel.RenterVerificationStatus
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.serialization.json.buildJsonArray
@@ -465,6 +467,7 @@ fun LoginScreen(
 fun SignupScreen(
     viewModel: AppViewModel,
     onBackToLogin: () -> Unit,
+    onOpenTerms: () -> Unit = {},
 ) {
     val colors = LocalHayameColors.current
     var firstName by rememberSaveable { mutableStateOf("") }
@@ -520,6 +523,32 @@ fun SignupScreen(
                 region = region,
             )
         }
+
+        Text(
+            text = androidx.compose.ui.text.buildAnnotatedString {
+                append("By creating an account you agree to the Hayame ")
+                pushLink(
+                    androidx.compose.ui.text.LinkAnnotation.Clickable(
+                        tag = "terms",
+                        styles = androidx.compose.ui.text.TextLinkStyles(
+                            style = androidx.compose.ui.text.SpanStyle(
+                                color = colors.brandBlue,
+                                fontWeight = FontWeight.SemiBold,
+                            ),
+                        ),
+                        linkInteractionListener = { onOpenTerms() },
+                    ),
+                )
+                append("Terms of Service")
+                pop()
+                append(".")
+            },
+            modifier = Modifier.fillMaxWidth(),
+            color = colors.mutedText,
+            fontSize = 12.sp,
+            lineHeight = 18.sp,
+            textAlign = TextAlign.Center,
+        )
 
         Row(
             modifier = Modifier.align(Alignment.CenterHorizontally),
@@ -639,6 +668,8 @@ fun MainShell(
     onOpenSettings: (highlightAppearance: Boolean) -> Unit = {},
     onOpenProfileOverview: () -> Unit = {},
     onResumeCheckout: (ResumableCheckoutUi) -> Unit = {},
+    onOpenVerification: () -> Unit = {},
+    onOpenTerms: () -> Unit = {},
 ) {
     var tab by rememberSaveable { mutableStateOf(initialTab) }
     var homeSearchToken by rememberSaveable { mutableStateOf(0) }
@@ -752,6 +783,7 @@ fun MainShell(
                     onOpenMore = { tab = MainTab.MORE },
                     onOpenAuth = onOpenAuth,
                     onResumeCheckout = onResumeCheckout,
+                    onOpenVerification = onOpenVerification,
                     onApplySearchToExplore = { search, carType, region, city, brand, model, minPrice, maxPrice, instantOnly, transmission, fuel, deliveryOnly, acOnly ->
                         homeSearchQuery = search
                         homeSearchCarType = carType
@@ -821,6 +853,8 @@ fun MainShell(
                     onOpenAuth = onOpenAuth,
                     onOpenSettings = onOpenSettings,
                     onOpenProfileOverview = onOpenProfileOverview,
+                    onOpenVerification = onOpenVerification,
+                    onOpenTerms = onOpenTerms,
                 )
             }
         }
@@ -843,6 +877,7 @@ fun HostShell(
     onOpenReviews: () -> Unit,
     onOpenSettings: () -> Unit = {},
     onEditProfile: () -> Unit = {},
+    onOpenTerms: () -> Unit = {},
 ) {
     var tab by rememberSaveable { mutableStateOf(HostMainTab.DASHBOARD) }
     val conversationsState by viewModel.conversationsState.collectAsState()
@@ -945,6 +980,7 @@ fun HostShell(
                         onOpenContact = onOpenContact,
                         onOpenProtection = onOpenProtection,
                         onOpenCancellation = onOpenCancellation,
+                        onOpenTerms = onOpenTerms,
                         onTurnOffHostMode = onExitHostMode,
                         onOpenCars = { tab = HostMainTab.CARS },
                         onOpenBookings = { tab = HostMainTab.BOOKINGS },
@@ -1045,6 +1081,7 @@ private fun HomeTab(
     onOpenAuth: () -> Unit,
     onApplySearchToExplore: (String, String, String, String, String, String, Int, Float, Boolean, String, String, Boolean, Boolean) -> Unit,
     onResumeCheckout: (ResumableCheckoutUi) -> Unit = {},
+    onOpenVerification: () -> Unit = {},
 ) {
     CoachTour(
         id = "home",
@@ -1057,6 +1094,11 @@ private fun HomeTab(
     )
     val resumableCheckout = rememberResumableCheckout(viewModel)
     val isAuthenticatedForCheckout by viewModel.isAuthenticated.collectAsState()
+    val renterVerification by viewModel.renterVerification.collectAsState()
+    // Only renters the server will stop at checkout, and who still have something to do.
+    val showVerificationPrompt = isAuthenticatedForCheckout && renterVerification.blocksBooking &&
+        (renterVerification.status == RenterVerificationStatus.UNVERIFIED ||
+            renterVerification.status == RenterVerificationStatus.REJECTED)
     LaunchedEffect(isAuthenticatedForCheckout) { viewModel.refreshSavedCheckout() }
     val carsState by viewModel.carsState.collectAsState()
     val favoritesState by viewModel.favoritesState.collectAsState()
@@ -1467,6 +1509,14 @@ private fun HomeTab(
                             }
                         }
                     }
+                }
+            }
+            if (showVerificationPrompt) {
+                item(key = "verify-identity") {
+                    RenterVerificationPromptCard(
+                        status = renterVerification.status,
+                        onClick = onOpenVerification,
+                    )
                 }
             }
             if (resumableCheckout != null) {
@@ -7292,6 +7342,7 @@ fun SupportLegalScreen(
     onOpenProtection: () -> Unit = {},
     onOpenCancellation: () -> Unit = {},
     onOpenMarketing: () -> Unit = {},
+    onOpenTerms: () -> Unit = {},
 ) {
     val colors = LocalHayameColors.current
     Scaffold(
@@ -7314,6 +7365,8 @@ fun SupportLegalScreen(
                         ActionRow("Contact", Icons.Outlined.MailOutline, onOpenContact)
                         HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = colors.border)
                         ActionRow("Privacy", Icons.Outlined.Person, onOpenPrivacy)
+                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = colors.border)
+                        ActionRow("Terms of Service", Icons.Outlined.Description, onOpenTerms)
                         HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = colors.border)
                         ActionRow("Protection", Icons.Outlined.Shield, onOpenProtection)
                         HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = colors.border)

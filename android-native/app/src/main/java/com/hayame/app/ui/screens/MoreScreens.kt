@@ -39,6 +39,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -61,6 +62,7 @@ import androidx.compose.material.icons.outlined.CameraAlt
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.DarkMode
+import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.PhoneAndroid
 import androidx.compose.material.icons.outlined.Dashboard
 import androidx.compose.material.icons.outlined.DirectionsCar
@@ -173,6 +175,8 @@ internal fun MoreTab(
     onOpenAdmin: () -> Unit = {},
     onOpenSettings: (highlightAppearance: Boolean) -> Unit = {},
     onOpenProfileOverview: () -> Unit = {},
+    onOpenVerification: () -> Unit = {},
+    onOpenTerms: () -> Unit = {},
 ) {
     CoachTour(
         id = "more",
@@ -189,6 +193,7 @@ internal fun MoreTab(
     val bookingsState by viewModel.bookingsState.collectAsState()
     val favoritesState by viewModel.favoritesState.collectAsState()
     val conversationsState by viewModel.conversationsState.collectAsState()
+    val renterVerification by viewModel.renterVerification.collectAsState()
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     var isRefreshing by remember { mutableStateOf(false) }
@@ -202,6 +207,7 @@ internal fun MoreTab(
             viewModel.loadBookings()
             viewModel.loadFavorites()
             viewModel.loadConversations()
+            viewModel.refreshRenterVerification()
         }
     }
 
@@ -218,6 +224,7 @@ internal fun MoreTab(
                 viewModel.loadBookings()
                 viewModel.loadFavorites()
                 viewModel.loadConversations()
+                viewModel.refreshRenterVerification(force = true)
             }
             scope.launch {
                 delay(900)
@@ -333,6 +340,16 @@ internal fun MoreTab(
                 }
             }
 
+            if (isAuthenticated) {
+                item(key = "identity") {
+                    StaggeredAppear(index = 2) {
+                        GroupCard(title = "Identity") {
+                            RenterVerificationRow(state = renterVerification, onClick = onOpenVerification)
+                        }
+                    }
+                }
+            }
+
             item(key = "hosting") {
                 StaggeredAppear(index = 2) {
                     GroupCard(title = "Hosting") {
@@ -369,6 +386,8 @@ internal fun MoreTab(
                         NavRow(Icons.Outlined.CalendarMonth, colors.warning, "Cancellation policy", "Refund tiers and timing", onOpenCancellation)
                         RowDivider()
                         NavRow(Icons.Outlined.Public, colors.mutedText, "Privacy", "How we handle your data", onOpenPrivacy)
+                        RowDivider()
+                        NavRow(Icons.Outlined.Description, colors.brandBlue, "Terms of Service", "The agreement for using Hayame", onOpenTerms)
                     }
                 }
             }
@@ -602,6 +621,8 @@ fun SettingsScreen(
     onOpenCancellation: () -> Unit,
     onOpenPrivacy: () -> Unit,
     onOpenAuth: () -> Unit,
+    onOpenTerms: () -> Unit = {},
+    onOpenDeleteAccount: () -> Unit = {},
 ) {
     val coachMarks = LocalCoachMarks.current
     val settingsContext = LocalContext.current
@@ -768,6 +789,8 @@ fun SettingsScreen(
                 item(key = "about") {
                     StaggeredAppear(index = 5) {
                         GroupCard(title = "About") {
+                            NavRow(Icons.Outlined.Description, colors.brandBlue, "Terms of Service", null, onOpenTerms)
+                            RowDivider()
                             NavRow(Icons.Outlined.Public, colors.mutedText, "Privacy policy", null, onOpenPrivacy)
                             RowDivider()
                             NavRow(Icons.Outlined.CalendarMonth, colors.warning, "Cancellation policy", null, onOpenCancellation)
@@ -785,6 +808,11 @@ fun SettingsScreen(
                     item(key = "signout") {
                         StaggeredAppear(index = 6) {
                             SignOutButton { viewModel.logout() }
+                        }
+                    }
+                    item(key = "delete-account") {
+                        StaggeredAppear(index = 7) {
+                            DeleteAccountLink(onClick = onOpenDeleteAccount)
                         }
                     }
                 }
@@ -1451,6 +1479,32 @@ internal fun SignOutButton(onClick: () -> Unit) {
             Spacer(Modifier.width(8.dp))
             Text("Sign out", color = colors.danger, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyLarge)
         }
+    }
+}
+
+/** The quiet way into "Delete account", under Sign out at the very end of Settings. */
+@Composable
+private fun DeleteAccountLink(onClick: () -> Unit) {
+    val colors = LocalHayameColors.current
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        TextButton(onClick = onClick, modifier = Modifier.heightIn(min = 48.dp)) {
+            Text(
+                "Delete account",
+                color = colors.danger,
+                fontWeight = FontWeight.SemiBold,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+        Text(
+            "Ask us to delete your account and personal information.",
+            color = colors.mutedText,
+            style = MaterialTheme.typography.bodySmall,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(horizontal = 24.dp),
+        )
     }
 }
 

@@ -790,6 +790,68 @@ struct CheckoutDraft: Hashable, Codable {
     var updatedAt: Date
 }
 
+/// Where a renter's identity check stands.
+enum RenterVerificationStatus: String, Hashable {
+    case unverified
+    case pending
+    case approved
+    case rejected
+}
+
+/// The renter's identity check as the server last reported it. `canBook` is
+/// the only thing that decides whether a booking may go ahead.
+struct RenterVerification: Hashable {
+    var status: RenterVerificationStatus
+    /// False when the server has verification switched off.
+    var required: Bool
+    var canBook: Bool
+    var submittedAt: Date?
+    var reviewedAt: Date?
+    var rejectionReason: String?
+
+    /// Still has photos to send (first time, or again after a rejection).
+    var needsSubmission: Bool {
+        !canBook && (status == .unverified || status == .rejected)
+    }
+}
+
+/// One numbered part of the Terms of Service.
+struct TermsSection: Hashable, Identifiable {
+    let id: Int
+    var title: String
+    var paragraphs: [String]
+}
+
+/// The Terms of Service as the server last sent them. The text lives on the
+/// server (one copy for web, iOS and Android).
+struct TermsDocument: Hashable {
+    var version: String
+    var title: String
+    /// Already formatted by the server, e.g. "10 November 2026".
+    var lastUpdated: String?
+    var sections: [TermsSection]
+    /// False when the server has the agreement switched off.
+    var required: Bool
+    /// Nil when signed out (or the server did not say).
+    var accepted: Bool?
+    var acceptedAt: Date?
+}
+
+/// The server's answer to a request to delete the account.
+struct AccountDeletionResult: Hashable {
+    /// Trips still open (as renter or host); the account closes after them.
+    var openTrips: Int
+    /// The server's own words for what happens next.
+    var message: String
+
+    #if DEBUG
+    static let screenshotFixture = AccountDeletionResult(
+        openTrips: 0,
+        message: "We have your request. Your account will be deleted within 30 days. Check your email for confirmation."
+    )
+    #endif
+}
+
 /// Whatever the renter can pick back up: a server-held checkout wins over a
 /// local draft because it already carries a booking id and the live price.
 enum ResumableCheckout: Hashable, Identifiable {

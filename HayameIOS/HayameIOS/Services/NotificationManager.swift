@@ -25,6 +25,8 @@ struct PushNotificationRoute: Equatable {
     let type: String?
     /// Listing the push is about (admin approved or rejected it).
     let carID: String?
+    /// For "renter_verification": the admin's decision, "approved" or "rejected".
+    let verificationStatus: String?
 }
 
 @MainActor
@@ -173,7 +175,10 @@ final class NotificationManager: NSObject, ObservableObject {
         let type = pushString(forKey: "type", in: userInfo)?.lowercased()
         let carID = pushString(forKey: "carId", in: userInfo) ?? pushString(forKey: "listingId", in: userInfo)
 
-        guard conversationID != nil || bookingID != nil || announcementID != nil || carID != nil else { return nil }
+        let isRenterVerification = type == "renter_verification"
+        let verificationStatus = isRenterVerification ? pushString(forKey: "status", in: userInfo)?.lowercased() : nil
+
+        guard conversationID != nil || bookingID != nil || announcementID != nil || carID != nil || isRenterVerification else { return nil }
         return PushNotificationRoute(
             conversationID: conversationID,
             bookingID: bookingID,
@@ -185,7 +190,8 @@ final class NotificationManager: NSObject, ObservableObject {
             announcementCategory: announcementCategory,
             announcementCTAURL: announcementCTAURL,
             type: type,
-            carID: carID
+            carID: carID,
+            verificationStatus: verificationStatus
         )
     }
 

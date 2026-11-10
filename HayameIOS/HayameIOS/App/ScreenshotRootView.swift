@@ -36,6 +36,24 @@ enum ScreenshotRoute: String, CaseIterable, Identifiable {
     case chatThread = "chat-thread"
     case hostReviews = "host-reviews"
     case hostReviewsEmpty = "host-reviews-empty"
+    case verification
+    case verificationPending = "verification-pending"
+    case verificationRejected = "verification-rejected"
+    case verificationApproved = "verification-approved"
+    case verificationHome = "verification-home"
+    case terms
+    case termsRead = "terms-read"
+    case termsError = "terms-error"
+    case termsGate = "terms-gate"
+    case legalProtection = "legal-protection"
+    case legalProtectionQuestion = "legal-protection-question"
+    case legalCancellation = "legal-cancellation"
+    case legalCancellationTable = "legal-cancellation-table"
+    case legalCancellationQuestions = "legal-cancellation-questions"
+    case legalPrivacy = "legal-privacy"
+    case legalPrivacySearch = "legal-privacy-search"
+    case deleteAccount = "delete-account"
+    case deleteAccountDone = "delete-account-done"
 
     var id: String { rawValue }
 

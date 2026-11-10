@@ -34,6 +34,7 @@ struct RootView: View {
                 }
             }
             .animation(HayameMotion.settle, value: showHostShell)
+            .accessibilityHidden(appState.mustAcceptTerms)
 
             if let targetsHost = modeSwitchTargetsHost {
                 HayameModeSwitchOverlay(targetsHost: targetsHost)
@@ -54,8 +55,17 @@ struct RootView: View {
                 }
                 .padding(20)
             }
+
+            // A signed-in user who has not accepted the current Terms of
+            // Service sees the agreement over everything until they do.
+            if appState.mustAcceptTerms {
+                TermsOfServiceScreen(mode: .agreement)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .zIndex(40)
+            }
         }
         .background(HayameTheme.pageBackground.ignoresSafeArea())
+        .animation(HayameMotion.settle, value: appState.mustAcceptTerms)
         .simultaneousGesture(TapGesture().onEnded { dismissKeyboard() })
         .dismissKeyboardOnBackgroundTap()
         .animation(.easeInOut(duration: 0.38), value: modeSwitchTargetsHost)
@@ -94,6 +104,21 @@ struct RootView: View {
         }
         .onAppear {
             resolveDeepLinkedCar(id: appState.pendingCarDeepLinkID)
+            CoachMarkCenter.shared.setHeld(appState.mustAcceptTerms)
+        }
+        .onChange(of: appState.mustAcceptTerms) { _, mustAccept in
+            // First-use tips wait underneath the agreement, and so does a
+            // shared car link that was opened in the meantime.
+            CoachMarkCenter.shared.setHeld(mustAccept)
+            if mustAccept {
+                dismissKeyboard()
+            } else {
+                resolveDeepLinkedCar(id: appState.pendingCarDeepLinkID)
+            }
+        }
+        .sheet(isPresented: $appState.showRenterVerificationScreen) {
+            RenterVerificationSheet()
+                .environmentObject(appState)
         }
         .fullScreenCover(item: $deepLinkedCar, onDismiss: {
             appState.pendingCarDeepLinkID = nil
@@ -126,13 +151,15 @@ struct RootView: View {
             deepLinkedCar = nil
             return
         }
+        // Held until the Terms of Service agreement is out of the way.
+        guard !appState.mustAcceptTerms else { return }
         if let existing = appState.cars.first(where: { $0.id == id }) {
             deepLinkedCar = existing
             return
         }
         Task {
             await appState.refreshCarDetail(carID: id)
-            guard appState.pendingCarDeepLinkID == id else { return }
+            guard appState.pendingCarDeepLinkID == id, !appState.mustAcceptTerms else { return }
             if let fetched = appState.cars.first(where: { $0.id == id }) {
                 deepLinkedCar = fetched
             } else {

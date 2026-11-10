@@ -12,13 +12,20 @@ import com.hayame.app.core.network.DisputeCreateRequest
 import com.hayame.app.core.network.DisputeMutationEnvelope
 import com.hayame.app.core.network.DisputesEnvelope
 import com.hayame.app.core.network.HayameApi
+import com.hayame.app.core.network.LegalDocumentDto
+import com.hayame.app.core.network.NetworkClient
 import com.hayame.app.core.network.PaystackFinalizeEnvelope
 import com.hayame.app.core.network.PaystackFinalizeRequest
 import com.hayame.app.core.network.PaystackInitEnvelope
 import com.hayame.app.core.network.PaystackInitiateRequest
+import com.hayame.app.core.network.RenterVerificationDto
+import com.hayame.app.core.network.RenterVerificationSubmitRequest
 import com.hayame.app.core.network.ReviewCreateRequest
 import com.hayame.app.core.network.ReviewMutationEnvelope
 import com.hayame.app.core.network.ReviewsEnvelope
+import com.hayame.app.core.network.TermsAcceptDto
+import com.hayame.app.core.network.TermsAcceptRequest
+import com.hayame.app.core.network.TermsDto
 import com.hayame.app.core.session.SessionStore
 
 class BookingRepository(
@@ -83,6 +90,62 @@ class BookingRepository(
 
     suspend fun abandonCheckout(bookingId: String): CheckoutAbandonDto? {
         return authedCall { auth -> api.abandonCheckout(auth, CheckoutBookingIdRequest(bookingId)) }.data
+    }
+
+    /** The renter's identity check; null when the server sent no data. */
+    suspend fun getRenterVerification(): RenterVerificationDto? {
+        return authedCall { auth -> api.getRenterVerification(auth) }.data
+    }
+
+    suspend fun submitRenterVerification(
+        facePath: String,
+        licenceFrontPath: String,
+        licenceBackPath: String,
+    ): RenterVerificationDto? {
+        return authedCall { auth ->
+            api.submitRenterVerification(
+                auth = auth,
+                body = RenterVerificationSubmitRequest(
+                    face_path = facePath,
+                    licence_front_path = licenceFrontPath,
+                    licence_back_path = licenceBackPath,
+                ),
+            )
+        }.data
+    }
+
+    /**
+     * The Terms of Service; null when the server sent no data. Signed in, the answer also says
+     * whether this user has accepted the current version. Signed out it is the text only.
+     */
+    suspend fun getTerms(): TermsDto? {
+        return if (sessionStore.authHeader() != null) {
+            authedCall { auth -> api.getTerms(auth) }.data
+        } else {
+            api.getTerms(auth = null).data
+        }
+    }
+
+    suspend fun acceptTerms(version: String): TermsAcceptDto? {
+        return authedCall { auth ->
+            api.acceptTerms(auth = auth, body = TermsAcceptRequest(version = version))
+        }.data
+    }
+
+    /** A policy document from the server; null when it sent no data. Public, no token. */
+    suspend fun getLegalDocument(slug: String): LegalDocumentDto? {
+        return api.getLegalDocument(slug).data
+    }
+
+    /** The copy of a policy document kept on this device from the last successful load. */
+    suspend fun cachedLegalDocument(slug: String): LegalDocumentDto? {
+        val raw = sessionStore.legalDocumentJson(slug) ?: return null
+        return runCatching { NetworkClient.json.decodeFromString(LegalDocumentDto.serializer(), raw) }.getOrNull()
+    }
+
+    suspend fun cacheLegalDocument(slug: String, document: LegalDocumentDto) {
+        runCatching { NetworkClient.json.encodeToString(LegalDocumentDto.serializer(), document) }
+            .onSuccess { sessionStore.setLegalDocumentJson(slug, it) }
     }
 
     suspend fun approveBooking(bookingId: String) {

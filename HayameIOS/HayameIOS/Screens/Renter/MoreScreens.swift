@@ -47,6 +47,13 @@ struct MoreScreen: View {
                     .coachTour(.more)
                     .hayameAppear(index: 1)
 
+                if appState.isAuthenticated {
+                    HayameGroupCard(title: "Identity") {
+                        RenterVerificationRow()
+                    }
+                    .hayameAppear(index: 2)
+                }
+
                 hostingCard
                     .hayameAppear(index: 2)
 
@@ -67,6 +74,7 @@ struct MoreScreen: View {
             .padding(16)
             .animation(HayameMotion.settle, value: isProfileLoading)
         }
+        .screenshotStartsAtEnd()
         .background(HayameTheme.pageBackground)
         .toolbar(.hidden, for: .navigationBar)
         .refreshable { await appState.refreshAllRemoteData() }
@@ -289,6 +297,10 @@ struct MoreScreen: View {
             HayameNavRow(icon: "hand.raised.fill", tint: HayameTheme.mutedText, title: "Privacy", subtitle: "How we handle your data") {
                 PrivacyScreen()
             }
+            HayameRowDivider()
+            HayameNavRow(icon: "doc.text.fill", tint: HayameTheme.brandBlue, title: "Terms of Service", subtitle: "The agreement for using Hayame") {
+                TermsOfServiceScreen(mode: .readOnly)
+            }
         }
     }
 
@@ -323,6 +335,9 @@ struct MoreScreen: View {
                         .overlay(Capsule().strokeBorder(HayameTheme.danger.opacity(0.25), lineWidth: 1))
                 }
                 .buttonStyle(HayamePressableStyle())
+
+                DeleteAccountLink()
+                    .padding(.top, -4)
             }
 
             Text("Hayame \(AppVersion.display)")
@@ -383,6 +398,13 @@ struct ProfileScreen: View {
 
                 detailsCard
                     .hayameAppear(index: 3)
+
+                if appState.isAuthenticated {
+                    HayameGroupCard(title: "Identity") {
+                        RenterVerificationRow()
+                    }
+                    .hayameAppear(index: 4)
+                }
 
                 HayameGroupCard(title: "Hosting") {
                     HostingSection()
@@ -697,6 +719,10 @@ struct SettingsScreen: View {
                             PrivacyScreen()
                         }
                         HayameRowDivider()
+                        HayameNavRow(icon: "doc.text.fill", tint: HayameTheme.brandBlue, title: "Terms of Service", subtitle: nil) {
+                            TermsOfServiceScreen(mode: .readOnly)
+                        }
+                        HayameRowDivider()
                         HayameNavRow(icon: "calendar.badge.clock", tint: HayameTheme.warning, title: "Cancellation policy", subtitle: nil) {
                             CancellationPolicyScreen()
                         }
@@ -728,10 +754,15 @@ struct SettingsScreen: View {
                         }
                         .buttonStyle(HayamePressableStyle())
                         .hayameAppear(index: 6)
+
+                        DeleteAccountLink()
+                            .padding(.top, -8)
+                            .hayameAppear(index: 7)
                     }
                 }
                 .padding(16)
             }
+            .screenshotStartsAtEnd()
             .background(HayameTheme.pageBackground.ignoresSafeArea())
             .overlay(alignment: .bottom) {
                 if showTipsReplayedToast {

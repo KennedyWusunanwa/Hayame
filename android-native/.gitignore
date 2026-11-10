@@ -7,3 +7,6 @@ local.properties
 captures/
 *.iml
 app/google-services.json
+keystore.properties
+*.jks
+*.keystore

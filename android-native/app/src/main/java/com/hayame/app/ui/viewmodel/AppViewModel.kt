@@ -11,6 +11,7 @@ import com.hayame.app.core.network.CarsMetaDto
 import com.hayame.app.core.network.CarPhotoItemDto
 import com.hayame.app.core.network.ConversationDto
 import com.hayame.app.core.network.HostApplicationRequest
+import com.hayame.app.core.network.LegalDocumentDto
 import com.hayame.app.core.network.MessageDto
 import com.hayame.app.core.network.MobileMeDto
 import com.hayame.app.core.network.NotificationPreferencesDto
@@ -18,7 +19,9 @@ import com.hayame.app.core.network.PaystackFinalizeRequest
 import com.hayame.app.core.network.PaystackInitDto
 import com.hayame.app.core.network.PendingCheckoutDto
 import com.hayame.app.core.network.ProfileUpsertRequest
+import com.hayame.app.core.network.RenterVerificationDto
 import com.hayame.app.core.network.ReviewDto
+import com.hayame.app.core.network.TermsDto
 import com.hayame.app.core.network.preferredAvatarRaw
 import com.hayame.app.core.network.withAvatarFallback
 import com.hayame.app.core.repo.AuthRepository
@@ -47,6 +50,9 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import retrofit2.HttpException
 import java.io.File
@@ -88,6 +94,85 @@ sealed interface SavedCheckoutResumeResult {
     data class Completed(val bookingId: String, val conversationId: String?) : SavedCheckoutResumeResult
     data class Failed(val message: String, val gone: Boolean) : SavedCheckoutResumeResult
 }
+
+/** Where the renter stands with the identity check every renter passes before booking. */
+enum class RenterVerificationStatus {
+    /** Not loaded yet, or the server could not be reached. Never blocks booking. */
+    UNKNOWN,
+    UNVERIFIED,
+    PENDING,
+    APPROVED,
+    REJECTED,
+}
+
+data class RenterVerificationUiState(
+    val status: RenterVerificationStatus = RenterVerificationStatus.UNKNOWN,
+    /** False when the server has verification switched off. */
+    val required: Boolean = true,
+    /** The server's single answer on whether a booking may go ahead. */
+    val canBook: Boolean = true,
+    val submittedAt: String? = null,
+    val reviewedAt: String? = null,
+    val rejectionReason: String? = null,
+    val isLoading: Boolean = false,
+) {
+    /**
+     * True only when the server has told us this renter may not book yet. An unknown
+     * status never blocks: the server stays the real gate.
+     */
+    val blocksBooking: Boolean
+        get() = status != RenterVerificationStatus.UNKNOWN && !canBook
+}
+
+/** Progress of sending the three verification photos. [step] 1-3 = uploading that photo, 4 = sending for review. */
+data class RenterVerificationSubmitState(
+    val inProgress: Boolean = false,
+    val step: Int = 0,
+    val error: String? = null,
+)
+
+/**
+ * The Terms of Service as last loaded from the server. [mustAccept] is true only when the
+ * server has said this signed-in user has to accept the current version; a failed or empty
+ * load never sets it, so the app is never blocked on a guess (the server still refuses
+ * bookings from users who have not accepted).
+ */
+data class TermsUiState(
+    /** Only ever a document with at least one section. */
+    val document: TermsDto? = null,
+    val isLoading: Boolean = false,
+    /** The last load failed and there is nothing to show. */
+    val loadFailed: Boolean = false,
+    val mustAccept: Boolean = false,
+)
+
+data class TermsAcceptState(
+    val inProgress: Boolean = false,
+    val error: String? = null,
+    /** The version on screen was replaced by a newer one while the user was reading. */
+    val updatedWhileReading: Boolean = false,
+)
+
+/**
+ * One policy document (Protection, Cancellation or Privacy) as last loaded. The copy saved on
+ * the device shows first; the server's copy replaces it when it arrives.
+ */
+data class LegalDocumentUiState(
+    /** Only ever a document with at least one question. */
+    val document: LegalDocumentDto? = null,
+    val isLoading: Boolean = false,
+    /** The last load failed and there is nothing to show. */
+    val loadFailed: Boolean = false,
+    /** The last load failed, so what is on screen is the copy saved on this device. */
+    val showingSavedCopy: Boolean = false,
+)
+
+/** Where the request to delete the account stands. [receivedMessage] is the server's answer. */
+data class AccountDeletionUiState(
+    val inProgress: Boolean = false,
+    val error: String? = null,
+    val receivedMessage: String? = null,
+)
 
 data class ListingSubmissionResult(
     val createdCar: CarDto? = null,
@@ -244,6 +329,42 @@ class AppViewModel(
     val lastCompletedCheckoutBookingId: StateFlow<String?> = _lastCompletedCheckoutBookingId.asStateFlow()
 
     private var lastSavedCheckoutRefreshMillis = 0L
+
+    /** Identity check every renter passes before booking (see RenterVerificationScreens.kt). */
+    private val _renterVerification = MutableStateFlow(RenterVerificationUiState())
+    val renterVerification: StateFlow<RenterVerificationUiState> = _renterVerification.asStateFlow()
+
+    private val _renterVerificationSubmit = MutableStateFlow(RenterVerificationSubmitState())
+    val renterVerificationSubmit: StateFlow<RenterVerificationSubmitState> = _renterVerificationSubmit.asStateFlow()
+
+    /** Set when something outside the screen (a push tap, a refused hold) wants the verification screen opened. */
+    private val _renterVerificationScreenRequested = MutableStateFlow(false)
+    val renterVerificationScreenRequested: StateFlow<Boolean> = _renterVerificationScreenRequested.asStateFlow()
+
+    private var lastRenterVerificationRefreshMillis = 0L
+    private var renterVerificationVersion = 0L
+
+    /** Terms of Service every signed-in user accepts (see TermsScreens.kt). */
+    private val _terms = MutableStateFlow(TermsUiState())
+    val terms: StateFlow<TermsUiState> = _terms.asStateFlow()
+
+    private val _termsAccept = MutableStateFlow(TermsAcceptState())
+    val termsAccept: StateFlow<TermsAcceptState> = _termsAccept.asStateFlow()
+
+    /** Policy documents by slug (see LegalDocumentScreens.kt). */
+    private val _legalDocuments = MutableStateFlow<Map<String, LegalDocumentUiState>>(emptyMap())
+    val legalDocuments: StateFlow<Map<String, LegalDocumentUiState>> = _legalDocuments.asStateFlow()
+    private val legalDocumentRequestVersions = mutableMapOf<String, Long>()
+
+    /** The "Delete account" request (see DeleteAccountScreens.kt). */
+    private val _accountDeletion = MutableStateFlow(AccountDeletionUiState())
+    val accountDeletion: StateFlow<AccountDeletionUiState> = _accountDeletion.asStateFlow()
+
+    private var lastTermsRefreshMillis = 0L
+    private var termsRequestVersion = 0L
+    /** A booking call was refused with terms_required: trust that over a cached "not required". */
+    private var termsRefusedByServer = false
+    private val uploadedVerificationPaths = mutableMapOf<String, String>()
     private val draftJson = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
     private var pendingAnnouncements: List<AppAnnouncementDto> = emptyList()
@@ -268,6 +389,7 @@ class AppViewModel(
                 loadMyCars()
                 loadCars(mapOf("sort" to "new_listings", "limit" to "48"))
             }
+            "renter_verification" -> refreshRenterVerification(force = true)
             else -> {
                 loadBookings()
                 refreshConversations()
@@ -291,6 +413,8 @@ class AppViewModel(
         loadMyCars()
         loadBookings()
         refreshConversations()
+        refreshRenterVerification()
+        refreshTerms()
     }
 
     fun dismissSnackbar() {
@@ -384,6 +508,8 @@ class AppViewModel(
         loadNotificationPreferences()
         refreshActiveAnnouncements()
         refreshSavedCheckout(force = true)
+        refreshRenterVerification(force = true)
+        refreshTerms(force = true)
     }
 
     fun login(
@@ -485,6 +611,9 @@ class AppViewModel(
             _pendingCheckout.value = null
             _savedCheckout.value = null
             _savedCheckoutLoading.value = false
+            clearRenterVerification()
+            clearTerms()
+            _accountDeletion.value = AccountDeletionUiState()
             _notificationPreferences.value = defaultNotificationPreferences
             _pendingBookingFocus.value = null
             _pendingHostTab.value = null
@@ -728,6 +857,7 @@ class AppViewModel(
         callbackUrl: String,
         onReady: (PaystackInitDto) -> Unit,
         onError: (String) -> Unit = {},
+        onVerificationRequired: () -> Unit = {},
     ) {
         viewModelScope.launch {
             val tripDays = runCatching {
@@ -781,7 +911,24 @@ class AppViewModel(
                 )
                 onReady(init)
             }.onFailure {
-                val message = it.readableMessage("Unable to start booking")
+                val refusal = it.forbiddenBody()
+                if (refusal != null && noteVerificationRequired(refusal)) {
+                    // The server wants the identity check first: guide the renter
+                    // there instead of showing a dead-end error.
+                    onVerificationRequired()
+                    return@onFailure
+                }
+                if (refusal != null && noteTermsRequired(refusal)) {
+                    // The agreement screen now covers the app; once it is accepted the renter
+                    // is back on this checkout and can pay. No snackbar underneath it.
+                    onError(extractApiMessage(refusal) ?: TermsRequiredMessage)
+                    return@onFailure
+                }
+                val message = if (refusal != null) {
+                    extractApiMessage(refusal) ?: "Unable to start booking"
+                } else {
+                    it.readableMessage("Unable to start booking")
+                }
                 _snackbar.value = message
                 onError(message)
             }
@@ -797,7 +944,13 @@ class AppViewModel(
             runCatching { bookingRepository.finalizePaystack(request) }
                 .onSuccess { result ->
                     val paymentStatus = result.data?.payment_status?.trim()?.lowercase()
-                    if (paymentStatus != "paid") {
+                    val bookingStatus = result.data?.status?.trim()?.lowercase()
+                    // A booking the webhook already moved to the host (or confirmed)
+                    // is paid, even if the row came back without payment_status.
+                    val bookingIsPaid = paymentStatus == "paid" ||
+                        bookingStatus == "awaiting_host" ||
+                        bookingStatus == "confirmed"
+                    if (!bookingIsPaid) {
                         onError("Payment not completed yet. Finish payment in secure checkout before verifying.")
                         return@onSuccess
                     }
@@ -1006,6 +1159,18 @@ class AppViewModel(
                     }
                 }
                 .onFailure { error ->
+                    val refusal = error.forbiddenBody()
+                    if (refusal != null) {
+                        if (noteVerificationRequired(refusal)) requestRenterVerificationScreen()
+                        noteTermsRequired(refusal)
+                        onResult(
+                            SavedCheckoutResumeResult.Failed(
+                                extractApiMessage(refusal) ?: "We couldn't resume your booking. Please try again.",
+                                gone = false,
+                            ),
+                        )
+                        return@onFailure
+                    }
                     val gone = (error as? HttpException)?.code() == 404
                     if (gone) _savedCheckout.value = null
                     onResult(
@@ -1054,7 +1219,14 @@ class AppViewModel(
                 )
                 onReady(init)
             }.onFailure {
-                val message = it.readableMessage("Unable to start payment")
+                val refusal = it.forbiddenBody()
+                val message = if (refusal != null) {
+                    if (noteVerificationRequired(refusal)) requestRenterVerificationScreen()
+                    noteTermsRequired(refusal)
+                    extractApiMessage(refusal) ?: "Unable to start payment"
+                } else {
+                    it.readableMessage("Unable to start payment")
+                }
                 onError(message)
             }
         }
@@ -1100,6 +1272,420 @@ class AppViewModel(
 
     fun showMessage(message: String) {
         _snackbar.value = message
+    }
+
+    // MARK: Renter identity verification --------------------------------------------------------
+
+    /**
+     * Loads the renter's verification status. Lightly throttled so sign-in, foregrounding
+     * and screens do not each fire a request; [force] skips the throttle. A failed request
+     * (offline, or an older server without the endpoint) leaves the status as it was, which
+     * is UNKNOWN until the first answer, so booking is never blocked on a guess.
+     */
+    fun refreshRenterVerification(force: Boolean = false) {
+        if (!_isAuthenticated.value) return
+        val now = System.currentTimeMillis()
+        if (!force && now - lastRenterVerificationRefreshMillis < 10_000L) return
+        lastRenterVerificationRefreshMillis = now
+        val version = ++renterVerificationVersion
+        _renterVerification.value = _renterVerification.value.copy(isLoading = true)
+        viewModelScope.launch {
+            val result = runCatching { bookingRepository.getRenterVerification() }
+            // A newer load, a submit or a sign-out happened meanwhile: this answer is stale.
+            if (version != renterVerificationVersion) return@launch
+            val dto = result.getOrNull()
+            if (dto != null) {
+                applyRenterVerification(dto)
+            } else {
+                _renterVerification.value = _renterVerification.value.copy(isLoading = false)
+            }
+        }
+    }
+
+    private fun applyRenterVerification(dto: RenterVerificationDto) {
+        val status = parseRenterVerificationStatus(dto.status)
+        val previous = _renterVerification.value
+        _renterVerification.value = RenterVerificationUiState(
+            status = status,
+            required = dto.required ?: true,
+            canBook = dto.canBook ?: (status == RenterVerificationStatus.APPROVED || dto.required == false),
+            submittedAt = dto.submittedAt,
+            reviewedAt = dto.reviewedAt,
+            rejectionReason = dto.rejectionReason?.trim()?.takeIf { it.isNotBlank() },
+            isLoading = false,
+        )
+        if (status != previous.status && !_renterVerificationSubmit.value.inProgress) {
+            _renterVerificationSubmit.value = RenterVerificationSubmitState()
+        }
+    }
+
+    private fun parseRenterVerificationStatus(raw: String?): RenterVerificationStatus {
+        return when (raw?.trim()?.lowercase()) {
+            "unverified" -> RenterVerificationStatus.UNVERIFIED
+            "pending" -> RenterVerificationStatus.PENDING
+            "approved" -> RenterVerificationStatus.APPROVED
+            "rejected" -> RenterVerificationStatus.REJECTED
+            else -> RenterVerificationStatus.UNKNOWN
+        }
+    }
+
+    /**
+     * Reads a 403 body from a booking call. Returns true (and records that this renter
+     * cannot book yet) when the server refused because the identity check is missing.
+     */
+    private fun noteVerificationRequired(body: String): Boolean {
+        val json = runCatching { draftJson.parseToJsonElement(body).jsonObject }.getOrNull() ?: return false
+        val code = runCatching { json["code"]?.jsonPrimitive?.contentOrNull }.getOrNull()
+        if (code != "verification_required") return false
+        val reported = parseRenterVerificationStatus(
+            runCatching { json["verificationStatus"]?.jsonPrimitive?.contentOrNull }.getOrNull(),
+        )
+        val current = _renterVerification.value
+        renterVerificationVersion += 1
+        _renterVerification.value = current.copy(
+            status = when {
+                reported != RenterVerificationStatus.UNKNOWN -> reported
+                current.status == RenterVerificationStatus.UNKNOWN ||
+                    current.status == RenterVerificationStatus.APPROVED -> RenterVerificationStatus.UNVERIFIED
+                else -> current.status
+            },
+            required = true,
+            canBook = false,
+            isLoading = false,
+        )
+        refreshRenterVerification(force = true)
+        return true
+    }
+
+    fun requestRenterVerificationScreen() {
+        _renterVerificationScreenRequested.value = true
+    }
+
+    fun consumeRenterVerificationScreenRequest() {
+        _renterVerificationScreenRequested.value = false
+    }
+
+    fun dismissRenterVerificationError() {
+        val current = _renterVerificationSubmit.value
+        if (!current.inProgress && current.error != null) {
+            _renterVerificationSubmit.value = RenterVerificationSubmitState()
+        }
+    }
+
+    /**
+     * Uploads the three prepared photos to the private ID bucket and sends them for review.
+     * Runs in the view model so it survives rotation; photos that already uploaded are not
+     * sent again when the renter retries after a failure.
+     */
+    fun submitRenterVerification(face: File, licenceFront: File, licenceBack: File) {
+        if (_renterVerificationSubmit.value.inProgress) return
+        _renterVerificationSubmit.value = RenterVerificationSubmitState(inProgress = true, step = 1)
+        viewModelScope.launch {
+            runCatching {
+                // Confirms the session first (refreshing an expired token), and stops
+                // early when another device already sent photos for review.
+                val latest = runCatching { bookingRepository.getRenterVerification() }.getOrNull()
+                val latestStatus = parseRenterVerificationStatus(latest?.status)
+                if (latest != null &&
+                    (latestStatus == RenterVerificationStatus.PENDING || latestStatus == RenterVerificationStatus.APPROVED)
+                ) {
+                    return@runCatching latest
+                }
+
+                val userId = _me.value?.user?.id?.takeIf { it.isNotBlank() }
+                    ?: loadMeWithAvatarFallback().also { _me.value = it }.user.id
+                val uploads = listOf(
+                    "face" to face,
+                    "licence-front" to licenceFront,
+                    "licence-back" to licenceBack,
+                )
+                val paths = uploads.mapIndexed { index, (kind, file) ->
+                    _renterVerificationSubmit.value = RenterVerificationSubmitState(inProgress = true, step = index + 1)
+                    val cacheKey = "$userId|$kind|${file.absolutePath}|${file.length()}|${file.lastModified()}"
+                    uploadedVerificationPaths[cacheKey]
+                        ?: storageRepository.uploadRenterVerificationPhoto(userId = userId, kind = kind, file = file)
+                            .also { uploadedVerificationPaths[cacheKey] = it }
+                }
+                _renterVerificationSubmit.value = RenterVerificationSubmitState(inProgress = true, step = 4)
+                bookingRepository.submitRenterVerification(
+                    facePath = paths[0],
+                    licenceFrontPath = paths[1],
+                    licenceBackPath = paths[2],
+                )
+            }.onSuccess { dto ->
+                listOf(face, licenceFront, licenceBack).forEach { file -> runCatching { file.delete() } }
+                // Signed out while the photos were on their way: nothing to show.
+                if (!_isAuthenticated.value) return@onSuccess
+                uploadedVerificationPaths.clear()
+                renterVerificationVersion += 1
+                _renterVerificationSubmit.value = RenterVerificationSubmitState()
+                if (dto != null && parseRenterVerificationStatus(dto.status) != RenterVerificationStatus.UNKNOWN) {
+                    applyRenterVerification(dto)
+                } else {
+                    _renterVerification.value = _renterVerification.value.copy(
+                        status = RenterVerificationStatus.PENDING,
+                        rejectionReason = null,
+                        isLoading = false,
+                    )
+                }
+                AnalyticsService.track("renter_verification_submitted")
+                refreshRenterVerification(force = true)
+            }.onFailure { error ->
+                if (!_isAuthenticated.value) return@onFailure
+                _renterVerificationSubmit.value = RenterVerificationSubmitState(
+                    error = error.readableMessage(
+                        "We couldn't send your photos. Check your connection and try again. Your photos are still here.",
+                    ),
+                )
+                // A 409 means photos are already under review: pick that up.
+                refreshRenterVerification(force = true)
+            }
+        }
+    }
+
+    private fun clearRenterVerification() {
+        renterVerificationVersion += 1
+        lastRenterVerificationRefreshMillis = 0L
+        uploadedVerificationPaths.clear()
+        _renterVerification.value = RenterVerificationUiState()
+        _renterVerificationSubmit.value = RenterVerificationSubmitState()
+        _renterVerificationScreenRequested.value = false
+    }
+
+    // MARK: Terms of Service --------------------------------------------------------------------
+
+    /**
+     * Loads the agreement text and, when signed in, whether this user has accepted it.
+     * Lightly throttled like [refreshRenterVerification]; [force] skips the throttle. Fails
+     * open: a failed request, a 404 from an older server or a document with no sections
+     * never asks for acceptance, and never takes away a document already on screen.
+     */
+    fun refreshTerms(force: Boolean = false) {
+        val now = System.currentTimeMillis()
+        if (!force && now - lastTermsRefreshMillis < 10_000L) return
+        lastTermsRefreshMillis = now
+        val version = ++termsRequestVersion
+        _terms.value = _terms.value.copy(isLoading = true)
+        viewModelScope.launch {
+            val result = runCatching { bookingRepository.getTerms() }
+            // A newer load, an accept or a sign-in/sign-out happened meanwhile: this answer is stale.
+            if (version != termsRequestVersion) return@launch
+            val answer = result.getOrNull()
+            val dto = answer?.withReadableSections()
+            if (dto != null) {
+                applyTerms(dto)
+            } else {
+                val current = _terms.value
+                // An answer without text can still say there is nothing left to accept.
+                val cleared = answer != null && (answer.accepted == true || answer.required == false)
+                if (cleared) termsRefusedByServer = false
+                _terms.value = current.copy(
+                    isLoading = false,
+                    loadFailed = current.document == null,
+                    mustAccept = current.mustAccept && !cleared,
+                )
+            }
+        }
+    }
+
+    private fun applyTerms(dto: TermsDto) {
+        val signedIn = _isAuthenticated.value
+        val previous = _terms.value
+        val accepted = dto.accepted == true
+        if (accepted) termsRefusedByServer = false
+        val mustAccept = signedIn && !accepted && (dto.required == true || termsRefusedByServer)
+        _terms.value = TermsUiState(document = dto, mustAccept = mustAccept)
+        val versionChanged = previous.document != null && previous.document.version != dto.version
+        val accept = _termsAccept.value
+        if (!accept.inProgress) {
+            _termsAccept.value = when {
+                !mustAccept -> TermsAcceptState()
+                versionChanged && previous.mustAccept -> TermsAcceptState(updatedWhileReading = true)
+                else -> accept
+            }
+        }
+    }
+
+    /** Posts the acceptance of the version on screen. Runs here so it survives rotation. */
+    fun acceptTerms() {
+        if (_termsAccept.value.inProgress || !_isAuthenticated.value) return
+        val document = _terms.value.document ?: return
+        _termsAccept.value = _termsAccept.value.copy(inProgress = true, error = null)
+        viewModelScope.launch {
+            runCatching { bookingRepository.acceptTerms(document.version.orEmpty()) }
+                .onSuccess { result ->
+                    // Signed out while the request was on its way: nothing to show.
+                    if (!_isAuthenticated.value) return@onSuccess
+                    termsRequestVersion += 1
+                    termsRefusedByServer = false
+                    _termsAccept.value = TermsAcceptState()
+                    val latest = _terms.value.document ?: document
+                    _terms.value = TermsUiState(
+                        document = latest.copy(accepted = true, acceptedAt = result?.acceptedAt ?: latest.acceptedAt),
+                    )
+                    AnalyticsService.track("terms_accepted")
+                }
+                .onFailure { error ->
+                    if (!_isAuthenticated.value) return@onFailure
+                    if ((error as? HttpException)?.code() == 409) {
+                        // The version on screen is no longer the current one: show the new text.
+                        _termsAccept.value = TermsAcceptState(
+                            error = "We have updated these terms. Please read the latest version, then accept.",
+                        )
+                        refreshTerms(force = true)
+                    } else {
+                        _termsAccept.value = TermsAcceptState(
+                            error = if (error is HttpException) {
+                                error.readableMessage("We couldn't save your acceptance. Please try again.")
+                            } else {
+                                "We couldn't save your acceptance. Check your connection and try again."
+                            },
+                            updatedWhileReading = _termsAccept.value.updatedWhileReading,
+                        )
+                    }
+                }
+        }
+    }
+
+    /**
+     * Reads a 403 body from a booking call. Returns true when the server refused because the
+     * Terms of Service are not accepted, and puts the agreement screen up: at once when the
+     * text is already loaded, otherwise as soon as it arrives.
+     */
+    private fun noteTermsRequired(body: String): Boolean {
+        val json = runCatching { draftJson.parseToJsonElement(body).jsonObject }.getOrNull() ?: return false
+        val code = runCatching { json["code"]?.jsonPrimitive?.contentOrNull }.getOrNull()
+        if (code != "terms_required") return false
+        termsRefusedByServer = true
+        val current = _terms.value
+        if (current.document != null && _isAuthenticated.value) {
+            _terms.value = current.copy(
+                document = current.document.copy(accepted = false, acceptedAt = null),
+                mustAccept = true,
+            )
+        }
+        refreshTerms(force = true)
+        return true
+    }
+
+    private fun clearTerms() {
+        termsRequestVersion += 1
+        lastTermsRefreshMillis = 0L
+        termsRefusedByServer = false
+        // The text is the same for everyone; only this user's acceptance is forgotten.
+        val document = _terms.value.document?.copy(accepted = null, acceptedAt = null)
+        _terms.value = TermsUiState(document = document)
+        _termsAccept.value = TermsAcceptState()
+    }
+
+    // MARK: Policy documents --------------------------------------------------------------------
+
+    /**
+     * Loads one policy document ("protection", "cancellation" or "privacy"). The copy saved
+     * on this device shows at once when nothing is on screen yet, then the server's copy
+     * replaces it and is saved for next time. A failed load never takes away a document that
+     * is already showing.
+     */
+    fun loadLegalDocument(slug: String) {
+        val key = slug.trim().lowercase()
+        if (key.isEmpty()) return
+        val version = (legalDocumentRequestVersions[key] ?: 0L) + 1L
+        legalDocumentRequestVersions[key] = version
+        updateLegalDocument(key) { it.copy(isLoading = true, loadFailed = false) }
+        viewModelScope.launch {
+            if (_legalDocuments.value[key]?.document == null) {
+                val saved = runCatching { bookingRepository.cachedLegalDocument(key) }.getOrNull()?.withQuestions()
+                if (saved != null && legalDocumentRequestVersions[key] == version) {
+                    updateLegalDocument(key) { if (it.document == null) it.copy(document = saved) else it }
+                }
+            }
+            val fresh = runCatching { bookingRepository.getLegalDocument(key) }.getOrNull()?.withQuestions()
+            // A newer load of the same document started meanwhile: this answer is stale.
+            if (legalDocumentRequestVersions[key] != version) return@launch
+            if (fresh != null) {
+                updateLegalDocument(key) { LegalDocumentUiState(document = fresh) }
+                bookingRepository.cacheLegalDocument(key, fresh)
+            } else {
+                updateLegalDocument(key) {
+                    it.copy(
+                        isLoading = false,
+                        loadFailed = it.document == null,
+                        showingSavedCopy = it.document != null,
+                    )
+                }
+            }
+        }
+    }
+
+    private fun updateLegalDocument(slug: String, change: (LegalDocumentUiState) -> LegalDocumentUiState) {
+        val all = _legalDocuments.value
+        _legalDocuments.value = all + (slug to change(all[slug] ?: LegalDocumentUiState()))
+    }
+
+    /** Drops empty groups and questions; null when nothing readable is left. */
+    private fun LegalDocumentDto.withQuestions(): LegalDocumentDto? {
+        val readable = groups.orEmpty().mapNotNull { group ->
+            val questions = group.questions.orEmpty().mapNotNull { question ->
+                val paragraphs = question.a.orEmpty().map { it.trim() }.filter { it.isNotEmpty() }
+                val text = question.q?.trim().orEmpty()
+                if (text.isEmpty() || paragraphs.isEmpty()) null else question.copy(q = text, a = paragraphs)
+            }
+            if (questions.isEmpty()) null else group.copy(questions = questions)
+        }
+        return if (readable.isEmpty()) null else copy(groups = readable)
+    }
+
+    // MARK: Account deletion --------------------------------------------------------------------
+
+    /**
+     * Sends the request to delete this account. Runs here so it survives rotation. Nothing
+     * is signed out until the user has read the answer and taps Done ([finishAccountDeletion]).
+     */
+    fun requestAccountDeletion() {
+        val current = _accountDeletion.value
+        if (current.inProgress || current.receivedMessage != null || !_isAuthenticated.value) return
+        _accountDeletion.value = AccountDeletionUiState(inProgress = true)
+        viewModelScope.launch {
+            runCatching { authRepository.requestAccountDeletion() }
+                .onSuccess { result ->
+                    if (!_isAuthenticated.value) return@onSuccess
+                    if (result?.requested == false) {
+                        _accountDeletion.value = AccountDeletionUiState(
+                            error = result.message?.trim()?.takeIf { it.isNotEmpty() }
+                                ?: "We couldn't send your request. Please try again.",
+                        )
+                        return@onSuccess
+                    }
+                    _accountDeletion.value = AccountDeletionUiState(
+                        receivedMessage = result?.message?.trim()?.takeIf { it.isNotEmpty() }
+                            ?: "We have your request. Your account will be deleted within 30 days.",
+                    )
+                }
+                .onFailure { error ->
+                    if (!_isAuthenticated.value) return@onFailure
+                    _accountDeletion.value = AccountDeletionUiState(
+                        error = if (error is HttpException) {
+                            error.readableMessage("We couldn't send your request. Please try again.")
+                        } else {
+                            "We couldn't send your request. Check your connection and try again."
+                        },
+                    )
+                }
+        }
+    }
+
+    /** Leaving the screen before anything was sent: forget a failed attempt. */
+    fun dismissAccountDeletionError() {
+        val current = _accountDeletion.value
+        if (!current.inProgress && current.receivedMessage == null && current.error != null) {
+            _accountDeletion.value = AccountDeletionUiState()
+        }
+    }
+
+    /** The request was received and read: sign out of this device. */
+    fun finishAccountDeletion() {
+        if (_accountDeletion.value.receivedMessage == null) return
+        logout()
     }
 
     fun loadNotificationPreferences() {
@@ -1862,6 +2448,28 @@ private fun Throwable.isCancellation(): Boolean {
     if (this is java.util.concurrent.CancellationException) return true
     val msg = message?.trim()?.lowercase()
     return msg == "canceled" || msg == "cancelled"
+}
+
+/**
+ * The raw body of a 403 from our API, or null for anything else. An error body can only be
+ * read once, so callers that need both the `code` and the `message` read it through here.
+ */
+private const val TermsRequiredMessage = "Please accept the Terms of Service to book."
+
+/** Drops blank sections and paragraphs; null when nothing readable is left. */
+private fun TermsDto.withReadableSections(): TermsDto? {
+    val readable = sections.orEmpty().mapNotNull { section ->
+        val title = section.title?.trim().orEmpty()
+        val paragraphs = section.paragraphs.orEmpty().map { it.trim() }.filter { it.isNotEmpty() }
+        if (title.isEmpty() && paragraphs.isEmpty()) null else section.copy(title = title, paragraphs = paragraphs)
+    }
+    return if (readable.isEmpty()) null else copy(sections = readable)
+}
+
+private fun Throwable.forbiddenBody(): String? {
+    val http = this as? HttpException ?: return null
+    if (http.code() != 403) return null
+    return runCatching { http.response()?.errorBody()?.string()?.trim() }.getOrNull().orEmpty()
 }
 
 private fun Throwable.readableMessage(fallback: String): String {

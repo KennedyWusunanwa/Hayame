@@ -50,6 +50,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -67,6 +68,7 @@ import com.google.firebase.FirebaseApp
 import com.google.firebase.messaging.FirebaseMessaging
 import com.hayame.app.core.analytics.AnalyticsService
 import com.hayame.app.ui.navigation.HayameNavApp
+import com.hayame.app.ui.screens.TermsAgreementGate
 import com.hayame.app.ui.theme.HayameTheme
 import com.hayame.app.ui.theme.LocalHayameColors
 import com.hayame.app.ui.navigation.HostMainTab
@@ -151,6 +153,16 @@ class MainActivity : ComponentActivity() {
                 kotlinx.coroutines.delay(900)
                 showAnalyticsConsent = AnalyticsService.needsConsentDecision()
             }
+            // The agreement waits for the launch animation to hand over to the app.
+            val isAuthenticated by viewModel.isAuthenticated.collectAsState()
+            val termsState by viewModel.terms.collectAsState()
+            var launchSettled by rememberSaveable { mutableStateOf(false) }
+            LaunchedEffect(Unit) {
+                kotlinx.coroutines.delay(2_000)
+                launchSettled = true
+            }
+            val showTermsGate = launchSettled && !bootstrapping && isAuthenticated &&
+                termsState.mustAccept && termsState.document != null
 
             HayameTheme(darkTheme = darkMode) {
                 val colors = LocalHayameColors.current
@@ -202,6 +214,20 @@ class MainActivity : ComponentActivity() {
 
                     // First-use tips sit above the app and below the theme-switch veil.
                     CoachMarkOverlay(controller = coachMarks)
+
+                    // Terms of Service: covers the app (tips included) until a signed-in
+                    // user has accepted the current version. Back leaves the app instead
+                    // of closing it.
+                    AnimatedVisibility(
+                        visible = showTermsGate,
+                        enter = fadeIn(tween(220)),
+                        exit = fadeOut(tween(260)),
+                    ) {
+                        TermsAgreementGate(
+                            viewModel = viewModel,
+                            onBack = { moveTaskToBack(true) },
+                        )
+                    }
 
                     AnimatedVisibility(
                         visible = showAppearanceTransition,
@@ -276,6 +302,23 @@ class MainActivity : ComponentActivity() {
         if (intent?.getStringExtra("pushType") == "listing_status") {
             viewModel.loadMyCars()
             viewModel.requestHostTab(HostMainTab.CARS)
+            return
+        }
+
+        // An identity check decision: pick up the new status, and take a renter whose
+        // photos were not accepted straight to the screen where they can send new ones.
+        // "type"/"status" are the raw data keys the system passes on when it showed the
+        // notification itself (app in the background).
+        val pushType = intent?.getStringExtra("pushType") ?: intent?.getStringExtra("type")
+        if (pushType == "renter_verification") {
+            val decision = (intent?.getStringExtra("verificationStatus") ?: intent?.getStringExtra("status"))
+                ?.trim()
+                ?.lowercase()
+            viewModel.refreshRenterVerification(force = true)
+            if (decision == "rejected") viewModel.requestRenterVerificationScreen()
+            // Handled once: a rotation re-reads this intent and must not reopen the screen.
+            intent?.removeExtra("pushType")
+            intent?.removeExtra("type")
             return
         }
 

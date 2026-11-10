@@ -11,10 +11,13 @@ import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.hayame.app.core.network.HayameApi
 import com.hayame.app.core.network.RefreshRequest
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
+import java.io.File
 
 private val Context.dataStore by preferencesDataStore(name = "hayame_session")
 
@@ -155,6 +158,39 @@ class SessionStore(private val context: Context) {
 
     suspend fun setCheckoutDraftJson(json: String?) {
         context.dataStore.edit { prefs -> putOrRemove(prefs, Keys.checkoutDraft, json) }
+    }
+
+    /**
+     * Last copy of a policy document ("protection", "cancellation", "privacy") that loaded,
+     * kept as a small JSON file in the cache directory so the page opens at once and offline.
+     * The text is public and the same for everyone, so signing out leaves it in place.
+     */
+    suspend fun legalDocumentJson(slug: String): String? = withContext(Dispatchers.IO) {
+        runCatching { legalDocumentFile(slug)?.takeIf { it.isFile }?.readText() }
+            .getOrNull()
+            ?.takeIf { it.isNotBlank() }
+    }
+
+    suspend fun setLegalDocumentJson(slug: String, json: String) {
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val file = legalDocumentFile(slug) ?: return@runCatching
+                file.parentFile?.mkdirs()
+                // Written beside the file and renamed, so a half-written copy is never read.
+                val pending = File(file.parentFile, file.name + ".tmp")
+                pending.writeText(json)
+                if (!pending.renameTo(file)) {
+                    file.writeText(json)
+                    pending.delete()
+                }
+            }
+        }
+    }
+
+    private fun legalDocumentFile(slug: String): File? {
+        val safe = slug.trim().lowercase().filter { it in 'a'..'z' || it == '-' }
+        if (safe.isEmpty()) return null
+        return File(File(context.cacheDir, "legal-documents"), "$safe.json")
     }
 
     suspend fun authHeader(): String? = current().accessToken?.let { "Bearer $it" }

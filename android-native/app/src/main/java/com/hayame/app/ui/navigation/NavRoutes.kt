@@ -37,6 +37,9 @@ object NavRoutes {
     const val SettingsRoute = "settings?highlight={highlight}"
     const val ProfileOverview = "profile_overview"
     const val ResumeCheckout = "resume_checkout"
+    const val RenterVerification = "renter_verification"
+    const val Terms = "terms"
+    const val DeleteAccount = "delete_account"
 
     fun main(tab: MainTab? = null): String = if (tab == null) {
         Main
