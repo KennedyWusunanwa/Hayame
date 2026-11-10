@@ -1,3 +1,4 @@
+import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import { AdminShell, type ShellNavGroup } from "@/components/admin/admin-shell";
 import { getCurrentAdmin } from "@/lib/admin-identity";
@@ -8,6 +9,26 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { signOutAction } from "@/app/admin/shell-actions";
 
 export const dynamic = "force-dynamic";
+
+// Makes the admin console installable on a phone as its own app.
+export const metadata: Metadata = {
+  title: "Hayame Admin",
+  manifest: "/admin/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    title: "Hayame Admin",
+    statusBarStyle: "black-translucent",
+  },
+  icons: { apple: "/apple-touch-icon.png" },
+  robots: { index: false, follow: false },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#0A2B54",
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+};
 
 async function pendingApplications() {
   try {

@@ -133,8 +133,11 @@ function getAdminNotice(searchParams: { notice?: string; count?: string }): {
 
 async function loginAction(formData: FormData) {
   "use server";
-  const identifier = String(formData.get("username") ?? "");
-  const password = String(formData.get("password") ?? "");
+  // Field names differ from the customer sign-in form on purpose: both live on
+  // the same address, and identical names make password managers treat the
+  // admin login and the customer login as one saved password.
+  const identifier = String(formData.get("admin_identifier") ?? "");
+  const password = String(formData.get("admin_passcode") ?? "");
   if (!identifier || !password) redirectToAdmin({ error: "invalid" });
 
   const result = await signInAdmin(identifier, password);
@@ -497,8 +500,10 @@ export default async function AdminPage({
                 </label>
                 <input
                   id="admin-id"
-                  name="username"
-                  autoComplete="username"
+                  name="admin_identifier"
+                  autoComplete="section-admin username"
+                  autoCapitalize="none"
+                  spellCheck={false}
                   className="mt-1.5 w-full rounded-xl border border-border bg-white px-3.5 py-2.5 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
                   required
                 />
@@ -509,9 +514,9 @@ export default async function AdminPage({
                 </label>
                 <input
                   id="admin-pw"
-                  name="password"
+                  name="admin_passcode"
                   type="password"
-                  autoComplete="current-password"
+                  autoComplete="section-admin current-password"
                   className="mt-1.5 w-full rounded-xl border border-border bg-white px-3.5 py-2.5 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
                   required
                 />

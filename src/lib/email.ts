@@ -1237,10 +1237,14 @@ export async function sendToEachSafe(
  * active admin account, so an alert still reaches a person if the shared
  * inbox is not working.
  */
+/** The team inbox that receives every office alert. */
+const ADMIN_ALERT_INBOX = "hayameofficial@gmail.com";
+
 export async function getAdminAlertRecipients(): Promise<string[]> {
   const emails = new Set(
     getAdminNotificationRecipients().map((value) => value.toLowerCase()),
   );
+  emails.add(ADMIN_ALERT_INBOX);
   try {
     const db = createSupabaseAdminClient() as any;
     const { data } = await db
